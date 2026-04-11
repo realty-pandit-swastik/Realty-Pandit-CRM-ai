@@ -635,3 +635,33 @@ export class MatchingEngine {
         return msg;
     }
 }
+
+/**
+ * Build MatchCriteria from a Lead record (new normalized demand table).
+ * Replaces building criteria from Contact demand fields.
+ */
+export function buildMatchCriteriaFromLead(lead: {
+    intent?: string | null;
+    demand_type_slug?: string | null;
+    budget_min?: any;
+    budget_max?: any;
+    preferred_location?: string | null;
+    demand_bhk?: number | null;
+    preferred_lat?: number | null;
+    preferred_lng?: number | null;
+    type_id?: string | null;
+    category_id?: string | null;
+}): MatchCriteria {
+    return {
+        intent: lead.intent || undefined,
+        property_type: lead.demand_type_slug || undefined,
+        type_id: lead.type_id || undefined,
+        category_id: lead.category_id || undefined,
+        budget_min: lead.budget_min ? Number(lead.budget_min) : undefined,
+        budget_max: lead.budget_max ? Number(lead.budget_max) : undefined,
+        preferred_location: lead.preferred_location || undefined,
+        bhk: lead.demand_bhk || undefined,
+        preferred_lat: lead.preferred_lat || undefined,
+        preferred_lng: lead.preferred_lng || undefined,
+    };
+}

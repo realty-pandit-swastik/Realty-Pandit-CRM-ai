@@ -1,7 +1,7 @@
 
 import { Router } from 'express';
 import { LeadScoreService } from '../services/lead_score';
-import { MatchingEngine } from '../services/matching_engine';
+import { MatchingEngine, buildMatchCriteriaFromLead } from '../services/matching_engine';
 import prisma from '../db';
 import { normalizePhone } from '../utils/phone';
 import { authMiddleware } from '../middleware/auth';
@@ -380,6 +380,41 @@ router.post('/', async (req: any, res) => {
                 .catch(err => console.warn('[Leads] Partner WA failed:', (err as Error).message));
         }
 
+        // Also write to Lead table (new normalized demand table)
+        try {
+            await prisma.lead.create({
+                data: {
+                    contact_phone: phoneNumber,
+                    tenant_id: tenant.id,
+                    intent: intent || null,
+                    source: 'manual',
+                    budget_min: budget_min ? parseFloat(budget_min) : null,
+                    budget_max: budget_max ? parseFloat(budget_max) : null,
+                    demand_bhk: demand_bhk ? Number(demand_bhk) : null,
+                    demand_type_slug: property_type || null,
+                    preferred_location: preferred_location || null,
+                    preferred_lat: preferred_lat ? Number(preferred_lat) : null,
+                    preferred_lng: preferred_lng ? Number(preferred_lng) : null,
+                    category_id: category_id || null,
+                    sub_category_id: sub_category_id || null,
+                    type_id: type_id || null,
+                    lead_status: isPartnerReferral ? 'warm' : 'cold',
+                    lifecycle_stage: 'NEW',
+                    assigned_agent_id: resolvedAgentId,
+                    created_by: req.agent.id,
+                    lead_type: lead_type || null,
+                    referral_partner_id: resolvedPartnerId || null,
+                    referral_partner_name: referral_partner_name || null,
+                    referral_partner_phone: referral_partner_phone || null,
+                    notes: isTemporaryPhone ? `${notes ? notes + ' | ' : ''}[Partner referral — phone not provided yet]` : (notes || null),
+                    timeline: timeline || null,
+                },
+            });
+        } catch (leadErr) {
+            // Non-fatal: log but don't block the response
+            console.error('[leads.ts] Failed to write Lead record:', leadErr);
+        }
+
         res.status(201).json(contact);
     } catch (error: any) {
         if (error?.code === 'P2002') {
@@ -469,18 +504,33 @@ router.post('/:phone/match', async (req, res) => {
             return res.status(404).json({ error: 'Lead not found' });
         }
 
-        const criteria = {
-            intent: contact.intent,
-            property_type: contact.property_type,
-            type_id: contact.type_id,
-            category_id: contact.category_id,
-            budget_min: contact.budget_min ? Number(contact.budget_min) : null,
-            budget_max: contact.budget_max ? Number(contact.budget_max) : null,
-            preferred_location: contact.preferred_location,
-            preferred_lat: contact.preferred_lat,
-            preferred_lng: contact.preferred_lng,
-            bhk: contact.demand_bhk,
-        };
+        // Try Lead table first (new path)
+        const latestLead = await prisma.lead.findFirst({
+            where: {
+                contact_phone: phone,
+                lifecycle_stage: { notIn: ['CLOSED_WON', 'CLOSED_LOST'] },
+            },
+            orderBy: { updated_at: 'desc' },
+        });
+
+        let criteria: any;
+        if (latestLead) {
+            criteria = buildMatchCriteriaFromLead(latestLead);
+        } else {
+            // Fallback: build from Contact fields (backward compat)
+            criteria = {
+                intent: contact.intent,
+                property_type: contact.property_type,
+                type_id: contact.type_id,
+                category_id: contact.category_id,
+                budget_min: contact.budget_min ? Number(contact.budget_min) : null,
+                budget_max: contact.budget_max ? Number(contact.budget_max) : null,
+                preferred_location: contact.preferred_location,
+                preferred_lat: contact.preferred_lat,
+                preferred_lng: contact.preferred_lng,
+                bhk: contact.demand_bhk,
+            };
+        }
 
         const matches = await matchingEngine.findMatches(criteria, 5);
 
