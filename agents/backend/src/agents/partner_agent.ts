@@ -545,7 +545,7 @@ export class PartnerAgentHandler implements BaseAgent {
                 where: { phone_number: buyerPhone },
                 update: {
                     name: req.customer_name || undefined,
-                    contact_type: 'BUYER_TENANT',
+                    contact_type: req.intent === 'rent_lease' ? 'TENANT' : 'BUYER',
                     intent: req.intent === 'rent_lease' ? 'rent' : 'buy',
                     property_type: req.property_type || undefined,
                     budget_min: budget?.min || undefined,
@@ -561,7 +561,7 @@ export class PartnerAgentHandler implements BaseAgent {
                     phone_number: buyerPhone,
                     tenant_id: tenant.id,
                     name: req.customer_name || `${partnerProfile.name}'s Customer`,
-                    contact_type: 'BUYER_TENANT',
+                    contact_type: req.intent === 'rent_lease' ? 'TENANT' : 'BUYER',
                     intent: req.intent === 'rent_lease' ? 'rent' : 'buy',
                     property_type: req.property_type || undefined,
                     budget_min: budget?.min || undefined,

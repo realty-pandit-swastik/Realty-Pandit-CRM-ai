@@ -239,7 +239,12 @@ export class AdminAgent implements BaseAgent {
             _count: true,
         });
 
-        const typeBreakdown = contactsByType.map(t => `  ${t.contact_type}: ${t._count}`).join('\n');
+        const TYPE_LABELS: Record<string, string> = {
+            BUYER: 'Buyers', TENANT: 'Tenants', LANDLORD: 'Landlords',
+            PARTNER_AGENT: 'Partner Agents', REAL_ESTATE_BUILDER: 'Builders',
+            MANAGEMENT: 'Team Members', UNKNOWN: 'Unclassified'
+        };
+        const typeBreakdown = contactsByType.map(t => `  ${TYPE_LABELS[t.contact_type] || t.contact_type}: ${t._count}`).join('\n');
 
         return {
             action: 'reply',

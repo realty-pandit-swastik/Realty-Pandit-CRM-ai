@@ -28,7 +28,7 @@ export interface CampaignConfig {
 }
 
 export interface AudienceFilter {
-    contact_type?: string;         // BUYER_TENANT, SELLER_LANDLORD, etc.
+    contact_type?: string | { in: string[] };  // BUYER, TENANT, LANDLORD, etc.
     city?: string;                 // Location contains city
     property_type?: string;        // flat, house, plot
     budget_min?: number;
@@ -305,7 +305,7 @@ export class MarketingAgent {
         return this.quickBroadcast(
             message,
             {
-                contact_type: 'BUYER_TENANT',
+                contact_type: { in: ['BUYER', 'TENANT'] },
                 city: project.city,
             },
             'whatsapp',

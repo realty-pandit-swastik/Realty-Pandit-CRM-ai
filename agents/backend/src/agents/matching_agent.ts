@@ -54,7 +54,7 @@ export class MatchingAgent implements BaseAgent {
         const msg = message.toLowerCase();
 
         const criteria: MatchCriteria = {
-            intent: contact.intent || (contact.contact_type === 'BUYER_TENANT' ? 'BUYER' : null),
+            intent: contact.intent || (contact.contact_type === 'BUYER' ? 'buy' : contact.contact_type === 'TENANT' ? 'rent' : null),
             property_type: contact.property_type,
             budget_min: contact.budget_min,
             budget_max: contact.budget_max,

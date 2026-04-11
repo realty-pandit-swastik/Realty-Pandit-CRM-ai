@@ -1,5 +1,5 @@
 /**
- * Sales Agent — Handles BUYER_TENANT and SELLER_LANDLORD contacts.
+ * Sales Agent — Handles BUYER, TENANT, and LANDLORD contacts.
  *
  * Consolidates buyer.ts + seller.ts into a single agent that adapts behavior
  * based on contact_type and intent. Implements BaseAgent interface.
@@ -38,8 +38,8 @@ export class SalesAgent implements BaseAgent {
         const { contact, message, roleContext, currentTransaction } = context;
 
         // Transaction-aware routing: use roleContext if available, fall back to contact_type
-        const isDemand = roleContext === 'DEMAND' || contact.contact_type === 'BUYER_TENANT';
-        const isSupply = roleContext === 'SUPPLY' || contact.contact_type === 'SELLER_LANDLORD';
+        const isDemand = roleContext === 'DEMAND' || contact.contact_type === 'BUYER' || contact.contact_type === 'TENANT';
+        const isSupply = roleContext === 'SUPPLY' || contact.contact_type === 'LANDLORD';
 
         logger.info(`[SalesAgent] Handling ${isDemand ? 'demand' : 'supply'} message for ${contact.phone_number}` +
             (currentTransaction ? ` (TX: ${currentTransaction.id.substring(0, 8)}, status: ${currentTransaction.status})` : ' (no TX)'));
@@ -90,10 +90,13 @@ export class SalesAgent implements BaseAgent {
                 logger.info(`[SalesAgent] INTAKE: Classified intent: ${intent}`);
             }
 
-            // If intent is OTHER but contact is already BUYER_TENANT, force to BUYER to break the loop
-            if (intent !== 'BUYER' && intent !== 'TENANT' && contact.contact_type === 'BUYER_TENANT') {
+            // If intent is OTHER but contact type is known, force to match contact_type to break the loop
+            if (intent !== 'BUYER' && contact.contact_type === 'BUYER') {
                 intent = 'BUYER';
-                logger.info(`[SalesAgent] INTAKE: Forced intent to BUYER (contact_type is BUYER_TENANT, classifyIntent returned ${intent})`);
+                logger.info(`[SalesAgent] Forced intent to BUYER (contact_type is BUYER)`);
+            } else if (intent !== 'TENANT' && contact.contact_type === 'TENANT') {
+                intent = 'TENANT';
+                logger.info(`[SalesAgent] Forced intent to TENANT (contact_type is TENANT)`);
             }
 
             if (intent === 'BUYER' || intent === 'TENANT') {
