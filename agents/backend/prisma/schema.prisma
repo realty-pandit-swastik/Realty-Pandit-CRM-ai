@@ -868,7 +868,7 @@ model Lead {
   contact       Contact @relation(fields: [contact_phone], references: [phone_number])
 
   // Intent
-  intent String // "buy" | "rent"
+  intent String? // "buy" | "rent" | null = not yet determined
   source String @default("manual") // whatsapp, website, 99acres, manual, etc.
 
   // Demand Requirements
