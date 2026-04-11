@@ -52,7 +52,7 @@ export class PendingMessageQueue {
                 select: { name: true, contact_type: true },
             });
 
-            const contextLabel = contact?.contact_type === 'SELLER_LANDLORD' ? 'listing' : 'search';
+            const contextLabel = contact?.contact_type === 'LANDLORD' ? 'listing' : 'search';
 
             await whatsapp.sendTemplate(phone, 'rp_reopen_session', {
                 name: contact?.name || '',

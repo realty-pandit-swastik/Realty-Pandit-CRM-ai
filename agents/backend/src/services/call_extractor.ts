@@ -10,7 +10,7 @@ import logger from '../utils/logger';
 
 export interface ExtractedCallData {
     intent: 'BUY' | 'RENT' | 'SELL' | 'LEASE' | 'OTHER';
-    role: 'BUYER_TENANT' | 'SELLER_LANDLORD' | 'UNKNOWN';
+    role: 'BUYER' | 'TENANT' | 'LANDLORD' | 'UNKNOWN';
     propertyType?: string; // flat, house, plot, office, etc.
     bhk?: string; // 1, 2, 3, 4, 5+
     location?: string;
@@ -106,7 +106,7 @@ Please extract the following information and respond ONLY with valid JSON (no ma
 
 {
   "intent": "BUY | RENT | SELL | LEASE | OTHER",
-  "role": "BUYER_TENANT | SELLER_LANDLORD | UNKNOWN",
+  "role": "BUYER | TENANT | LANDLORD | UNKNOWN",
   "propertyType": "string or null (e.g., flat, house, villa, plot, office, shop)",
   "bhk": "string or null (e.g., 1, 2, 3, 4, 5+, Studio)",
   "location": "string or null (specific area, city, locality)",
@@ -123,7 +123,7 @@ Please extract the following information and respond ONLY with valid JSON (no ma
 
 EXTRACTION RULES:
 - Intent: Identify if caller wants to BUY, RENT, SELL, or LEASE property
-- Role: BUYER_TENANT if looking for property, SELLER_LANDLORD if listing property
+- Role: BUYER if buying, TENANT if renting, LANDLORD if listing their own property
 - Location: Extract specific area/locality names (e.g., "Sector 150 Noida", "Gurgaon", "South Delhi")
 - Budget: Convert to lakhs (e.g., "50 lakh", "1.5 crore" = 150 lakhs)
 - Urgency: Based on timeline mentioned (e.g., "urgent" = IMMEDIATE, "in 2 months" = WITHIN_3_MONTHS)

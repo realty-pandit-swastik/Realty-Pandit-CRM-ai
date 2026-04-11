@@ -66,7 +66,7 @@ export class FollowupScheduler {
             const staleContacts = await prisma.contact.findMany({
                 where: {
                     lead_status: { in: ['warm', 'hot'] },
-                    contact_type: { in: ['BUYER_TENANT', 'SELLER_LANDLORD'] },
+                    contact_type: { in: ['BUYER', 'TENANT', 'LANDLORD'] },
                     last_interaction: { lt: cutoffDate },
                     // Don't follow up on contacts that already have a pending follow-up task
                     NOT: {
@@ -175,8 +175,9 @@ export class FollowupScheduler {
         - Last interaction was more than 48 hours ago
 
         GOAL: Send a friendly, personalized follow-up message to re-engage this contact.
-        - If BUYER_TENANT: Ask if they found what they were looking for, mention new listings
-        - If SELLER_LANDLORD: Ask about their property listing, offer updates on market interest
+        - If BUYER: Ask if they found a property to purchase, mention new matching listings
+        - If TENANT: Ask if they found a rental property, mention new matching rentals
+        - If LANDLORD: Ask about their property listing, offer updates on buyer/tenant interest
         - Keep it SHORT (2-3 sentences max)
         - Be warm but not pushy
         - Include their name if available: ${contact.name || 'N/A'}

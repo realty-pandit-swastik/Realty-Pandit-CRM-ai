@@ -38,7 +38,7 @@ export async function ensureOwner(phone: string, tenantId: string): Promise<stri
                 tenant_id: tenantId,
                 name: 'Unknown',
                 source: 'system',
-                contact_type: 'SELLER_LANDLORD',
+                contact_type: 'LANDLORD',
             },
             update: {},
         });

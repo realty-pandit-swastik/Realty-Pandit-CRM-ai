@@ -108,8 +108,8 @@ export async function processInboundMessage(data: InboundMessageData): Promise<v
         await leadScoreService.initScore(contact.phone_number, contact.tenant_id);
     } else if (
         contact.contact_type === 'UNKNOWN' ||
-        contact.contact_type === 'BUYER_TENANT' ||
-        contact.contact_type === 'SELLER_LANDLORD' ||
+        ['BUYER', 'TENANT'].includes(contact.contact_type) ||
+        (contact.contact_type === 'LANDLORD') ||
         (contact.contact_type === 'MANAGEMENT' && !contact.name)
     ) {
         // Re-check: contact may be a team member, partner, or builder that was misclassified
@@ -231,7 +231,7 @@ How can I help you find your perfect property today? 🏡`;
         }
 
         // Check if message triggers a new inventory workflow
-        if (['SELLER_LANDLORD', 'PARTNER_AGENT', 'REAL_ESTATE_BUILDER', 'MANAGEMENT'].includes(contact.contact_type)) {
+        if (['LANDLORD', 'PARTNER_AGENT', 'REAL_ESTATE_BUILDER', 'MANAGEMENT'].includes(contact.contact_type)) {
             const lowerText = normalizedText;
             const isInventoryTrigger = INVENTORY_TRIGGER_WORDS.some(kw => lowerText.includes(kw));
             if (isInventoryTrigger) {
@@ -300,7 +300,7 @@ How can I help you find your perfect property today? 🏡`;
         }
 
         // Check if message triggers a new buyer workflow
-        if (['BUYER_TENANT', 'UNKNOWN'].includes(contact.contact_type)) {
+        if (['BUYER', 'TENANT', 'UNKNOWN'].includes(contact.contact_type)) {
             const lowerText = normalizedText;
             const isBuyerTrigger = BUYER_TRIGGER_WORDS.some(kw => lowerText.includes(kw));
             if (isBuyerTrigger) {

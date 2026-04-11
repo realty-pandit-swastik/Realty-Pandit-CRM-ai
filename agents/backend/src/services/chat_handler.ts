@@ -359,7 +359,7 @@ IMPORTANT:
                 contact = await prisma.contact.create({
                     data: {
                         phone_number: normalizedPhone,
-                        contact_type: 'BUYER_TENANT',
+                        contact_type: 'BUYER',  // Default for chat-based contact creation — intent clarified later
                         source: 'website_chat',
                         last_channel: 'website',
                     },

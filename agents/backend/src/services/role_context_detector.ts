@@ -84,19 +84,19 @@ export async function detectRoleContext(
         }
 
         // ─── Step 4: Contact type fallback ────────────────────────
-        if (contactType === 'BUYER_TENANT') {
+        if (contactType === 'BUYER' || contactType === 'TENANT') {
             return {
                 role: 'DEMAND',
                 confidence: 0.7,
-                reasoning: 'Contact type is BUYER_TENANT (no active transactions)',
+                reasoning: `Contact type is ${contactType} (no active transactions)`,
             };
         }
 
-        if (contactType === 'SELLER_LANDLORD') {
+        if (contactType === 'LANDLORD') {
             return {
                 role: 'SUPPLY',
                 confidence: 0.7,
-                reasoning: 'Contact type is SELLER_LANDLORD (no active transactions)',
+                reasoning: 'Contact type is LANDLORD (no active transactions)',
             };
         }
 
@@ -171,20 +171,20 @@ function resolveRoleFromTransactions(
 
     // Both demand AND supply → use contact_type to disambiguate
     if (activeAsDemand.length > 0 && activeAsSupply.length > 0) {
-        if (contactType === 'BUYER_TENANT') {
+        if (contactType === 'BUYER' || contactType === 'TENANT') {
             return {
                 role: 'DEMAND',
                 confidence: 0.7,
                 active_transaction_id: activeAsDemand[0].id,
-                reasoning: `Has both demand (${activeAsDemand.length}) and supply (${activeAsSupply.length}) transactions; contact_type favors DEMAND`,
+                reasoning: `Has both demand and supply; contact_type ${contactType} favors DEMAND`,
             };
         }
-        if (contactType === 'SELLER_LANDLORD' || contactType === 'PARTNER_AGENT') {
+        if (contactType === 'LANDLORD' || contactType === 'PARTNER_AGENT') {
             return {
                 role: 'SUPPLY',
                 confidence: 0.7,
                 active_transaction_id: activeAsSupply[0].id,
-                reasoning: `Has both roles; contact_type favors SUPPLY`,
+                reasoning: `Has both roles; contact_type ${contactType} favors SUPPLY`,
             };
         }
         // Ambiguous — most recent transaction wins
