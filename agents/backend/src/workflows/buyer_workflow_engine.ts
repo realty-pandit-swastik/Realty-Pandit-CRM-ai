@@ -206,7 +206,7 @@ export class BuyerWorkflowEngine extends WorkflowEngine {
             where: { phone_number: buyerPhone },
             update: {
                 name: answers.buyer_name as string || undefined,
-                contact_type: 'BUYER_TENANT',
+                contact_type: 'BUYER',
                 intent,
                 property_type: answers.buyer_property_type as string || undefined,
                 budget_min: budget ? budget.min : undefined,
@@ -234,7 +234,7 @@ export class BuyerWorkflowEngine extends WorkflowEngine {
                 phone_number: buyerPhone,
                 tenant_id: tenant.id,
                 name: answers.buyer_name as string || undefined,
-                contact_type: 'BUYER_TENANT',
+                contact_type: 'BUYER',
                 intent,
                 property_type: answers.buyer_property_type as string || undefined,
                 budget_min: budget ? budget.min : undefined,

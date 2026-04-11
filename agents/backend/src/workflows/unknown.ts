@@ -47,7 +47,7 @@ export class UnknownIdentificationWorkflow {
         // Set intent from confidence classification
         if (classification.intent) {
             updateData.intent = classification.intent;
-        } else if (contactType === 'BUYER_TENANT' || contactType === 'SELLER_LANDLORD') {
+        } else if (contactType === 'BUYER' || contactType === 'TENANT' || contactType === 'LANDLORD') {
             const intent = await this.llmService.classifyIntent(message);
             if (intent === 'BUYER') updateData.intent = 'buy';
             else if (intent === 'TENANT') updateData.intent = 'rent';
@@ -64,8 +64,9 @@ export class UnknownIdentificationWorkflow {
 
         // Step 3: Return acknowledgment
         const acknowledgments: Record<string, string> = {
-            BUYER_TENANT: "Welcome! I understand you're looking for a property. Let me help you find the perfect one.",
-            SELLER_LANDLORD: "Welcome! I understand you have a property to sell or rent out. Let me help you list it.",
+            BUYER: "Welcome! I understand you're looking to buy a property. Let me help you find the perfect one.",
+            TENANT: "Welcome! I understand you're looking to rent a property. Let me help you find the perfect one.",
+            LANDLORD: "Welcome! I understand you have a property to sell or rent out. Let me help you list it.",
             PARTNER_AGENT: "Welcome, partner! I see you're a property dealer. Let me know if you have properties to list or buyers to match.",
             MANAGEMENT: "Welcome, boss! How can I assist you today?"
         };

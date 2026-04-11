@@ -509,11 +509,11 @@ router.post('/inventory/bulk-upload', checkPermission('bulk_upload'), upload.sin
                         phone_number: ownerPhone,
                         tenant_id: tenant.id,
                         name: row.owner_name || null,
-                        contact_type: 'SELLER_LANDLORD',
+                        contact_type: 'LANDLORD',
                         source: 'bulk_upload'
                     },
                     update: {
-                        contact_type: 'SELLER_LANDLORD'
+                        contact_type: 'LANDLORD'
                     }
                 });
 

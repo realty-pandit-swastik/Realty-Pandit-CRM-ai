@@ -64,7 +64,7 @@ router.post('/webhook', async (req, res) => {
                 name: leadName || null,
                 email: leadEmail || null,
                 source: 'magicbricks',
-                contact_type: 'BUYER_TENANT',
+                contact_type: 'BUYER',
                 intent,
                 preferred_location: location,
                 property_type: property_type || null,

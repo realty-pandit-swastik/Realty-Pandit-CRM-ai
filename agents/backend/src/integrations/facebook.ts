@@ -109,7 +109,7 @@ router.post('/webhook', async (req: Request, res: Response) => {
                             name,
                             email,
                             source: 'facebook',
-                            contact_type: 'BUYER_TENANT',
+                            contact_type: 'BUYER',
                             intent: 'buy',
                             preferred_location: city,
                             budget_max: budget ? parseFloat(String(budget).replace(/[^\d.]/g, '')) : null,

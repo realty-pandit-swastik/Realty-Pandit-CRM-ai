@@ -87,12 +87,12 @@ router.post('/', authMiddleware, checkPermission('edit_inventory'), async (req, 
         if (!legacyCategory) legacyCategory = 'residential';
         if (!legacyType) legacyType = 'flat';
 
-        // Upsert contact as SELLER_LANDLORD
+        // Upsert contact as LANDLORD
         await prisma.contact.upsert({
             where: { phone_number: phone },
             update: {
                 name: owner_name || undefined,
-                contact_type: 'SELLER_LANDLORD',
+                contact_type: 'LANDLORD',
                 last_channel: 'admin',
                 last_interaction: new Date(),
             },
@@ -100,7 +100,7 @@ router.post('/', authMiddleware, checkPermission('edit_inventory'), async (req, 
                 phone_number: phone,
                 name: owner_name || null,
                 source: 'admin_created',
-                contact_type: 'SELLER_LANDLORD',
+                contact_type: 'LANDLORD',
                 intent,
                 tenant_id: tenant.id,
                 last_channel: 'admin',
@@ -611,7 +611,7 @@ router.post('/:id/share-to-client', authMiddleware, async (req, res) => {
         }
         if (!canShare) return res.status(403).json({ error: 'Not authorized to share this property' });
 
-        // Upsert contact as BUYER_TENANT
+        // Upsert contact as BUYER
         const existingContact = await prisma.contact.findUnique({ where: { phone_number: normalized } });
         await prisma.contact.upsert({
             where: { phone_number: normalized },
@@ -624,7 +624,7 @@ router.post('/:id/share-to-client', authMiddleware, async (req, res) => {
                 phone_number: normalized,
                 name: client_name || null,
                 source: 'manual',
-                contact_type: 'BUYER_TENANT',
+                contact_type: 'BUYER',
                 tenant_id: agent.tenant_id,
                 last_channel: 'whatsapp',
                 last_interaction: new Date()
@@ -819,12 +819,12 @@ router.post('/:id/transfer-ownership', authMiddleware, checkPermission('manage_i
         const previousOwnerPhone = inventory.owner_phone;
         const previousOwnerName = (inventory.owner as any)?.name || null;
 
-        // Upsert new owner as BUYER_TENANT contact
+        // Upsert new owner as BUYER contact
         await prisma.contact.upsert({
             where: { phone_number: newPhone },
             update: {
                 name: new_owner_name || undefined,
-                contact_type: 'BUYER_TENANT',
+                contact_type: 'BUYER',
                 last_channel: 'admin',
                 last_interaction: new Date(),
             },
@@ -832,7 +832,7 @@ router.post('/:id/transfer-ownership', authMiddleware, checkPermission('manage_i
                 phone_number: newPhone,
                 name: new_owner_name || null,
                 source: 'admin_created',
-                contact_type: 'BUYER_TENANT',
+                contact_type: 'BUYER',
                 intent: 'buy',
                 tenant_id: tenant.id,
                 last_channel: 'admin',

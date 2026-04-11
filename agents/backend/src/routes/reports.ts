@@ -392,7 +392,7 @@ router.get('/lead/last-contact', async (req: Request, res: Response) => {
         EXTRACT(DAY FROM NOW() - MAX(i.created_at)) as days_since_contact
       FROM contacts c
       LEFT JOIN interactions i ON i.phone_number = c.phone_number
-      WHERE c.contact_type IN ('BUYER_TENANT', 'SELLER_LANDLORD')
+      WHERE c.contact_type IN ('BUYER', 'TENANT', 'LANDLORD')
       GROUP BY c.phone_number, c.name, c.lead_status, c.source
       HAVING MAX(i.created_at) IS NOT NULL
       ORDER BY days_since_contact DESC
@@ -412,7 +412,7 @@ router.get('/lead/summary', async (req: Request, res: Response) => {
     const fromDate = parseDate(from as string);
     const toDate = parseDate(to as string);
 
-    const query: any = { contact_type: { in: ['BUYER_TENANT', 'SELLER_LANDLORD'] } };
+    const query: any = { contact_type: { in: ['BUYER', 'TENANT', 'LANDLORD'] } };
     if (fromDate || toDate) {
       query.created_at = {};
       if (fromDate) query.created_at.gte = fromDate;
@@ -689,7 +689,7 @@ router.get('/customer/converted-not-sold', async (req: Request, res: Response) =
     const customers = await prisma.contact.findMany({
       where: {
         lifecycle_stage: { in: ['QUALIFIED', 'MATCHED', 'VISIT_SCHEDULED', 'VISITED', 'NEGOTIATION'] },
-        contact_type: 'BUYER_TENANT',
+        contact_type: { in: ['BUYER', 'TENANT'] },
       },
       include: {
         assigned_agent: { select: { name: true } },

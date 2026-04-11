@@ -99,7 +99,7 @@ router.patch('/contacts/:phone', async (req, res) => {
     const { phone } = req.params;
     const { contact_type } = req.body;
 
-    const validTypes = ['BUYER_TENANT', 'SELLER_LANDLORD', 'PARTNER_AGENT', 'MANAGEMENT', 'UNKNOWN'];
+    const validTypes = ['BUYER', 'TENANT', 'LANDLORD', 'PARTNER_AGENT', 'REAL_ESTATE_BUILDER', 'MANAGEMENT', 'UNKNOWN'];
     if (contact_type && !validTypes.includes(contact_type)) {
         return res.status(400).json({ error: `Invalid contact_type. Must be one of: ${validTypes.join(', ')}` });
     }
@@ -215,7 +215,7 @@ router.post('/contacts/ensure', async (req, res) => {
                 phone_number: normalized,
                 name: name || null,
                 source: 'manual',
-                contact_type: reqContactType || 'BUYER_TENANT',
+                contact_type: reqContactType || 'UNKNOWN',
                 tenant_id,
                 last_interaction: new Date(),
             }

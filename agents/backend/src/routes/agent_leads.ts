@@ -33,7 +33,7 @@ router.get('/buyer-leads', async (req: Request, res: Response) => {
         const intent = req.query.intent as string | undefined;
 
         const where: any = {
-            contact_type: 'BUYER_TENANT',
+            contact_type: { in: ['BUYER', 'TENANT'] },
         };
 
         // If agent is not super_boss/manager, only show their assigned leads

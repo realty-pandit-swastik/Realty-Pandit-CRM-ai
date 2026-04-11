@@ -224,7 +224,7 @@ export class HousingPoller {
                 name:             mergedName ?? null,
                 email:            mergedEmail ?? null,
                 source:           'housing',
-                contact_type:     'BUYER_TENANT',
+                contact_type:     'BUYER',
                 intent,
                 preferred_location: location,
                 tenant_id:        tenantId,

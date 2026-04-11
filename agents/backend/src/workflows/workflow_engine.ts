@@ -588,7 +588,7 @@ export class WorkflowEngine {
                 phone_number: ownerPhone,
                 tenant_id: tenant.id,
                 name: ownerName || null,
-                contact_type: 'SELLER_LANDLORD',
+                contact_type: 'LANDLORD',
                 lead_status: 'NEW',
             },
         });
@@ -607,7 +607,7 @@ export class WorkflowEngine {
                     phone_number: uploaderPhone,
                     tenant_id: tenant.id,
                     name: uploaderName || null,
-                    contact_type: 'SELLER_LANDLORD',
+                    contact_type: 'LANDLORD',
                     source: source === 'whatsapp' ? 'whatsapp' : 'website',
                     lead_status: 'NEW',
                 },

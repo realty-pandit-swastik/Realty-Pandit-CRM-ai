@@ -62,7 +62,7 @@ router.post('/webhook', async (req, res) => {
                 name: leadName || null,
                 email: leadEmail || null,
                 source: 'housing',
-                contact_type: 'BUYER_TENANT',
+                contact_type: 'BUYER',
                 intent,
                 preferred_location: loc,
                 budget_min: budget_min ? parseFloat(String(budget_min)) : null,

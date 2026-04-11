@@ -415,7 +415,7 @@ export class NinetyNineAcresPoller {
                 name: mergedName ?? null,
                 email: mergedEmail ?? null,
                 source: '99acres',
-                contact_type: 'BUYER_TENANT',
+                contact_type: 'BUYER',
                 intent,
                 preferred_location: location,
                 budget_max: budgetMax,

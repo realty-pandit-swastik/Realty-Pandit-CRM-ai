@@ -75,7 +75,7 @@ router.get('/recent-external', async (req: any, res) => {
         const isPrivileged = PRIVILEGED_ROLES.includes(req.agent.role);
 
         const where: any = {
-            contact_type: { notIn: ['SELLER_LANDLORD', 'MANAGEMENT', 'PARTNER_AGENT'] },
+            contact_type: { notIn: ['LANDLORD', 'MANAGEMENT', 'PARTNER_AGENT'] },
         };
 
         // Role-based visibility

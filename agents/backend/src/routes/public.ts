@@ -535,7 +535,7 @@ router.post('/lead-requirements', validate(leadRequirementsSchema), async (req, 
                 name: name || undefined,
                 email: email || undefined,
                 intent: intent === 'rent_lease' ? 'rent' : 'buy',
-                contact_type: 'BUYER_TENANT',
+                contact_type: (intent === 'rent' || intent === 'rent_lease') ? 'TENANT' : 'BUYER',
                 demand_category: category,
                 demand_type_slug: type_slug,
                 demand_budget_type: budget_type || (intent === 'buy' ? 'one_time' : 'per_month'),
@@ -553,7 +553,7 @@ router.post('/lead-requirements', validate(leadRequirementsSchema), async (req, 
                 name: name || null,
                 email: email || null,
                 source: source || 'website',
-                contact_type: 'BUYER_TENANT',
+                contact_type: (intent === 'rent' || intent === 'rent_lease') ? 'TENANT' : 'BUYER',
                 intent: intent === 'rent_lease' ? 'rent' : 'buy',
                 demand_category: category,
                 demand_type_slug: type_slug,
@@ -659,7 +659,7 @@ router.post('/schedule-visit', validate(scheduleVisitSchema), async (req, res) =
                 name,
                 email: email || null,
                 source: 'website',
-                contact_type: 'BUYER_TENANT',
+                contact_type: 'BUYER',
                 intent: 'buy',
                 tenant_id: tenant.id,
                 last_channel: 'website',
@@ -784,7 +784,7 @@ router.post('/save-property', async (req, res) => {
             update: { name: name || undefined, last_channel: 'website', last_interaction: new Date() },
             create: {
                 phone_number: phone, name: name || null, source: 'website',
-                contact_type: 'BUYER_TENANT', intent: 'buy',
+                contact_type: 'BUYER', intent: 'buy',
                 tenant_id: tenant.id, last_channel: 'website', last_interaction: new Date()
             }
         });
@@ -826,7 +826,7 @@ router.post('/share-property-whatsapp', async (req, res) => {
             update: { name, last_channel: 'website', last_interaction: new Date() },
             create: {
                 phone_number: phone, name, source: 'website',
-                contact_type: 'BUYER_TENANT', intent: 'buy',
+                contact_type: 'BUYER', intent: 'buy',
                 tenant_id: tenant.id, last_channel: 'website', last_interaction: new Date()
             }
         });
@@ -1018,13 +1018,13 @@ router.post('/post-property', validate(postPropertySchema), async (req, res) => 
             return res.status(500).json({ error: 'System not configured' });
         }
 
-        // Upsert contact as SELLER_LANDLORD
+        // Upsert contact as LANDLORD
         const contact = await prisma.contact.upsert({
             where: { phone_number: phone },
             update: {
                 name: owner_name || undefined,
                 email: email || undefined,
-                contact_type: 'SELLER_LANDLORD',
+                contact_type: 'LANDLORD',
                 last_channel: 'website',
                 last_interaction: new Date()
             },
@@ -1033,7 +1033,7 @@ router.post('/post-property', validate(postPropertySchema), async (req, res) => 
                 name: owner_name || null,
                 email: email || null,
                 source: 'website',
-                contact_type: 'SELLER_LANDLORD',
+                contact_type: 'LANDLORD',
                 intent: intent,
                 tenant_id: tenant.id,
                 last_channel: 'website',
@@ -1380,7 +1380,7 @@ router.post('/project-enquiry', validate(leadSchema), async (req, res) => {
                     tenant_id: tenant.id,
                     name: name,
                     email: email,
-                    contact_type: 'BUYER_TENANT',
+                    contact_type: 'BUYER',
                     source: 'website_project_enquiry'
                 }
             });

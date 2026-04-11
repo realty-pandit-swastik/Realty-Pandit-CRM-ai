@@ -1112,7 +1112,7 @@ router.post('/deals', authenticateAgent, validate(partnerCreateDealSchema), asyn
                     phone_number: phone,
                     tenant_id: tenant.id,
                     name: customer_name,
-                    contact_type: 'BUYER_TENANT',
+                    contact_type: type === 'RENT' ? 'TENANT' : 'BUYER',
                     source: 'partner_deal',
                 },
                 update: { name: customer_name },
@@ -1125,7 +1125,7 @@ router.post('/deals', authenticateAgent, validate(partnerCreateDealSchema), asyn
                     phone_number: `partner_lead_${Date.now()}`,
                     tenant_id: tenant.id,
                     name: customer_name,
-                    contact_type: 'BUYER_TENANT',
+                    contact_type: type === 'RENT' ? 'TENANT' : 'BUYER',
                     source: 'partner_deal',
                 },
             });

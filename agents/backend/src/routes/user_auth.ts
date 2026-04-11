@@ -128,11 +128,11 @@ router.post('/verify-otp', async (req, res) => {
         });
 
         if (!contact) {
-            // Create new contact with type BUYER_TENANT
+            // Create new contact with type BUYER
             contact = await prisma.contact.create({
                 data: {
                     phone_number: normalizedPhone,
-                    contact_type: 'BUYER_TENANT',
+                    contact_type: 'BUYER',
                     source: 'website_login',
                     last_channel: 'website',
                 },

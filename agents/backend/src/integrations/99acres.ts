@@ -90,7 +90,7 @@ router.post('/webhook', async (req, res) => {
                 name: mergedName ?? null,
                 email: mergedEmail ?? null,
                 source: '99acres',
-                contact_type: 'BUYER_TENANT',
+                contact_type: 'BUYER',
                 intent,
                 preferred_location: location,
                 property_type: property_type || null,
