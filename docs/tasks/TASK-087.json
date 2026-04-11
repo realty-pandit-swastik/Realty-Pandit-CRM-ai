@@ -1,0 +1,56 @@
+{
+  "task_id": "TASK-087",
+  "title": "Input Validation with Zod Schemas",
+  "status": "completed",
+  "priority": "critical",
+  "classification": "Security",
+  "domain": ["Backend", "Validation", "Security"],
+  "created_at": "2026-02-12T00:00:00+05:30",
+  "completed_at": "2026-02-12T00:00:00+05:30",
+  "goal": "Implement comprehensive input validation using Zod schemas for all API endpoints to prevent invalid data, injection attacks, and ensure data integrity.",
+  "dependencies": ["TASK-086"],
+  "sub_tasks": [
+    {
+      "id": "TASK-087-1",
+      "title": "Create Auth Validators",
+      "status": "completed",
+      "output": "Zod schemas for login, register, refreshToken, and setup endpoints in auth.validator.ts"
+    },
+    {
+      "id": "TASK-087-2",
+      "title": "Create Public API Validators",
+      "status": "completed",
+      "output": "Zod schemas for contact, newsletter, schedule-visit, post-property endpoints in public.validator.ts"
+    },
+    {
+      "id": "TASK-087-3",
+      "title": "Create Call Intelligence Validators",
+      "status": "completed",
+      "output": "Zod schemas for call upload and submission in calls.validator.ts"
+    },
+    {
+      "id": "TASK-087-4",
+      "title": "Create Validate Middleware",
+      "status": "completed",
+      "output": "Generic validate middleware function in validators/index.ts to apply Zod schemas to request body/query/params"
+    }
+  ],
+  "files_touched": [
+    "agents/backend/src/validators/auth.validator.ts",
+    "agents/backend/src/validators/public.validator.ts",
+    "agents/backend/src/validators/calls.validator.ts",
+    "agents/backend/src/validators/index.ts"
+  ],
+  "acceptance_criteria": [
+    "All authentication endpoints have Zod validation schemas",
+    "All public API endpoints have Zod validation schemas",
+    "Call intelligence endpoints have Zod validation schemas",
+    "Validate middleware properly integrates with Express routes",
+    "Clear validation error messages returned to clients",
+    "Email validation for all email fields",
+    "Phone number validation where applicable",
+    "Required field enforcement"
+  ],
+  "result_summary": "Complete input validation system using Zod schemas. All major endpoint categories covered: auth (login, register, refresh, setup), public API (contact, newsletter, schedule-visit, post-property), and call intelligence (upload, submit). Generic validate middleware created for easy integration. Prevents injection attacks, ensures data integrity, and provides clear error messages for invalid input.",
+  "next_recommended_tasks": ["TASK-088"]
+}

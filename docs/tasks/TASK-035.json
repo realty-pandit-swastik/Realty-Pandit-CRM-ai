@@ -1,0 +1,24 @@
+{
+  "task_id": "TASK-035",
+  "title": "Management Dashboard (Frontend Login + Role UI)",
+  "status": "completed",
+  "priority": "high",
+  "classification": "Feature",
+  "domain": ["Frontend", "Backend"],
+  "created_at": "2026-02-10T00:00:00+05:30",
+  "completed_at": "2026-02-10T00:00:00+05:30",
+  "goal": "Build frontend authentication flow with login page, role-aware dashboard layout, team management, and reports views.",
+  "dependencies": ["TASK-033", "TASK-034"],
+  "files_touched": [
+    "agents/frontend/src/contexts/AuthContext.tsx",
+    "agents/frontend/src/components/LoginPage.tsx",
+    "agents/frontend/src/components/DashboardLayout.tsx",
+    "agents/frontend/src/components/TeamManagement.tsx",
+    "agents/frontend/src/components/ReportsView.tsx",
+    "agents/frontend/src/App.tsx",
+    "agents/frontend/src/main.tsx",
+    "agents/frontend/src/api/client.ts",
+    "agents/backend/src/routes/api.ts"
+  ],
+  "result_summary": "Created AuthContext (JWT in localStorage, login/setup/logout, hasPermission). LoginPage with login + first-time setup toggle. DashboardLayout with role-aware sidebar nav (Chats, Inventory, Team, Reports - visibility based on permissions). TeamManagement with agent table and add-member form (super_boss/manager only). ReportsView with stat cards (total contacts, new today, interactions, active properties, hot leads) and contact type breakdown bar chart. Protected all /api routes with authMiddleware. Added GET /api/agents and GET /api/dashboard/stats endpoints."
+}

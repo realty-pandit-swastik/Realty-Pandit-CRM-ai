@@ -1,0 +1,49 @@
+{
+    "task_id": "TASK-002",
+    "title": "Implement Buyer Workflow Logic",
+    "status": "completed",
+    "priority": "high",
+    "classification": "Feature",
+    "domain": [
+        "Buyer",
+        "Logic Transfer",
+        "WhatsApp"
+    ],
+    "created_at": "2026-02-06T22:05:00+05:30",
+    "goal": "Implement the core logic for the Buyer Journey: Intake -> Qualification -> Matching.",
+    "context": {
+        "trigger": "Incoming WhatsApp message with 'Buy' intent.",
+        "ssot_interaction": "Read/Write contact state."
+    },
+    "dependencies": [
+        "TASK-001"
+    ],
+    "sub_tasks": [
+        {
+            "id": "TASK-002-A",
+            "workflow": "Logic Transfer",
+            "output": "Define state machine for Buyer Qualification (Budget -> Location -> Type)."
+        },
+        {
+            "id": "TASK-002-B",
+            "workflow": "Script",
+            "output": "Create Q&A scripts for qualification."
+        }
+    ],
+    "files_touched": [
+        "agents/buyer_workflow/index.ts",
+        "agents/script_workflow/buyer_scripts.json"
+    ],
+    "decisions": [
+        "Use a simple state machine for qualification flow.",
+        "Store partial state in Redis until qualification is complete."
+    ],
+    "acceptance_criteria": [
+        "Bot asks for Budget, Location, and Type sequentially.",
+        "Contact status updates to 'Warm' upon completion."
+    ],
+    "result_summary": "Buyer Workflow initialized with state machine and qualification scripts.",
+    "next_recommended_tasks": [
+        "TASK-003"
+    ]
+}

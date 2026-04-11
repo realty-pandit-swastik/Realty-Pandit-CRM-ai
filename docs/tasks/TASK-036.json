@@ -1,0 +1,17 @@
+{
+  "task_id": "TASK-036",
+  "title": "Management WhatsApp Commands",
+  "status": "completed",
+  "priority": "medium",
+  "classification": "Feature",
+  "domain": ["Backend"],
+  "created_at": "2026-02-10T00:00:00+05:30",
+  "completed_at": "2026-02-10T00:00:00+05:30",
+  "goal": "Create ManagementCommandWorkflow for handling WhatsApp commands from management users and wire it into MessageRouter.",
+  "dependencies": ["TASK-028", "TASK-034"],
+  "files_touched": [
+    "agents/backend/src/workflows/management.ts",
+    "agents/backend/src/services/message_router.ts"
+  ],
+  "result_summary": "Created ManagementCommandWorkflow with WhatsApp commands: 'leads'/'today' (today's lead summary with new/hot/total counts), 'report'/'stats' (daily report with interactions, new contacts, active properties, contact type breakdown), 'team' (agent list with roles, status, lead counts), 'help' (command menu). Default fallback uses LLM for general management queries. Wired into MessageRouter replacing the placeholder MANAGEMENT case."
+}

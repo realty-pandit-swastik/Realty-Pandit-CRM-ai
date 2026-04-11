@@ -1,0 +1,50 @@
+{
+    "task_id": "TASK-005",
+    "title": "Integrate WhatsApp Webhook with Buyer Workflow",
+    "status": "completed",
+    "priority": "critical",
+    "classification": "Integration",
+    "domain": [
+        "Backend",
+        "WhatsApp",
+        "Buyer"
+    ],
+    "created_at": "2026-02-06T22:25:00+05:30",
+    "goal": "Connect the incoming WhatsApp webhook messages to the Buyer Agent's logic engine and send responses back.",
+    "context": {
+        "flow": "Webhook -> Backend -> WhatsAppService -> BuyerWorkflow -> Response",
+        "ssot": "Must check/create Contact in DB before processing."
+    },
+    "dependencies": [
+        "TASK-002",
+        "TASK-004"
+    ],
+    "sub_tasks": [
+        {
+            "id": "TASK-005-A",
+            "workflow": "Backend",
+            "output": "WhatsAppService class to handle Cloud API interactions."
+        },
+        {
+            "id": "TASK-005-B",
+            "workflow": "Backend",
+            "output": "Updated webhook route to orchestrate the flow."
+        }
+    ],
+    "files_touched": [
+        "agents/backend/src/services/whatsapp.ts",
+        "agents/backend/src/routes/webhooks.ts"
+    ],
+    "decisions": [
+        "Use mock WhatsApp API calls for now (log only).",
+        "Identify users by phone number (SSOT)."
+    ],
+    "acceptance_criteria": [
+        "Incoming message triggers BuyerWorkflow.handle().",
+        "Response from BuyerWorkflow is 'sent' (logged) via WhatsAppService."
+    ],
+    "result_summary": "Implemented WhatsAppService and connected Webhook to Buyer Logic and SSOT.",
+    "next_recommended_tasks": [
+        "TASK-006"
+    ]
+}

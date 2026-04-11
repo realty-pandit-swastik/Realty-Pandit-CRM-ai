@@ -1,0 +1,56 @@
+{
+  "task_id": "TASK-090",
+  "title": "Error Handler & Request Logger Middleware",
+  "status": "completed",
+  "priority": "high",
+  "classification": "Observability",
+  "domain": ["Backend", "Logging", "Error Handling"],
+  "created_at": "2026-02-12T00:00:00+05:30",
+  "completed_at": "2026-02-12T00:00:00+05:30",
+  "goal": "Implement centralized error handling with custom error classes and request logging middleware with unique request IDs for request tracing.",
+  "dependencies": ["TASK-089"],
+  "sub_tasks": [
+    {
+      "id": "TASK-090-1",
+      "title": "Create Custom Error Classes",
+      "status": "completed",
+      "output": "Implemented AppError base class and specialized errors: ValidationError (400), AuthError (401), ForbiddenError (403), NotFoundError (404)"
+    },
+    {
+      "id": "TASK-090-2",
+      "title": "Implement Global Error Handler",
+      "status": "completed",
+      "output": "Created errorHandler middleware that catches all errors, logs them via Winston, and returns appropriate HTTP responses"
+    },
+    {
+      "id": "TASK-090-3",
+      "title": "Create Request Logger Middleware",
+      "status": "completed",
+      "output": "Implemented requestLogger that generates unique request IDs (UUID), tracks response time, and logs all requests with metadata"
+    },
+    {
+      "id": "TASK-090-4",
+      "title": "Add X-Request-Id Header",
+      "status": "completed",
+      "output": "Request logger attaches X-Request-Id header to all responses for distributed tracing"
+    }
+  ],
+  "files_touched": [
+    "agents/backend/src/middleware/error_handler.ts",
+    "agents/backend/src/middleware/request_logger.ts",
+    "agents/backend/src/app.ts"
+  ],
+  "acceptance_criteria": [
+    "Custom error classes for common HTTP error codes",
+    "Global error handler catches all errors",
+    "Operational errors (AppError) logged as warnings",
+    "Unexpected errors logged as errors with stack traces",
+    "Request logger generates UUID for each request",
+    "X-Request-Id header in all responses",
+    "Request duration tracked and logged",
+    "All requests logged with method, path, status, IP, user agent",
+    "Different log levels based on response status (info for 2xx/3xx, warn for 4xx, error for 5xx)"
+  ],
+  "result_summary": "Comprehensive error handling and request logging system. Custom error classes provide type-safe error handling with appropriate HTTP status codes. Global error handler ensures consistent error responses and logging. Request logger tracks every request with unique UUID, enabling distributed tracing and debugging. Response time monitoring helps identify performance issues.",
+  "next_recommended_tasks": ["TASK-091"]
+}

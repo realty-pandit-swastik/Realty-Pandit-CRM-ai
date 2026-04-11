@@ -1,0 +1,39 @@
+{
+  "id": "TASK-042",
+  "title": "Media Upload System (Self-Hosted VPS)",
+  "phase": 4,
+  "status": "completed",
+  "priority": "high",
+  "depends_on": ["TASK-037"],
+  "description": "Self-hosted media upload system on VPS (Hostinger 100GB NVMe). Uses multer for multipart uploads and sharp for image optimization. Generates 3 variants per image: original (WebP), medium (800x600), thumbnail (400x300). No external dependency (Cloudinary/S3). Migration path to AWS S3 when needed.",
+  "files_created": [
+    "agents/backend/src/services/storage.ts"
+  ],
+  "files_modified": [
+    "agents/backend/src/routes/inventory.ts",
+    "agents/backend/src/app.ts",
+    "agents/backend/src/services/whatsapp.ts",
+    "agents/website/src/app/properties/[id]/page.tsx"
+  ],
+  "dependencies_added": [
+    "multer", "@types/multer",
+    "sharp", "@types/sharp"
+  ],
+  "endpoints": [
+    "POST /inventory/:id/upload - Upload images (max 10, multipart/form-data)",
+    "DELETE /inventory/:id/media/:filename - Delete media file + variants",
+    "GET /inventory/:id/media - List all media with variant URLs"
+  ],
+  "features": [
+    "Auto-converts all uploads to WebP for smaller file size",
+    "3 variants: original, medium (800x600), thumbnail (400x300)",
+    "Max 10MB per file, jpeg/png/webp only",
+    "Static file serving via /uploads with 7-day cache",
+    "WhatsApp media download via downloadMedia(mediaId)",
+    "Lightbox gallery on property detail page with prev/next navigation",
+    "Disk usage monitoring via getDiskUsageMB()"
+  ],
+  "storage_path": "/uploads/properties/{inventoryId}/{timestamp}.webp",
+  "migration_note": "To move to AWS: swap StorageService internals to use S3 SDK, keep same interface",
+  "completed_at": "2026-02-10"
+}

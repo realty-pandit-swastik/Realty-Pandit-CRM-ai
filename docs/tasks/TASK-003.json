@@ -1,0 +1,47 @@
+{
+    "task_id": "TASK-003",
+    "title": "Implement Channel Fallback Logic",
+    "status": "completed",
+    "priority": "medium",
+    "classification": "Logic",
+    "domain": [
+        "Orchestration",
+        "Voice",
+        "WhatsApp"
+    ],
+    "created_at": "2026-02-06T22:10:00+05:30",
+    "goal": "Define and implement the logic for switching between channels (Voice -> WhatsApp) when interactions fail.",
+    "context": {
+        "rule": "IF voice call fails (no answer/busy), THEN wait 15 mins AND send WhatsApp follow-up.",
+        "constraint": "Do not spam. Max 1 fallback attempt per day."
+    },
+    "dependencies": [
+        "TASK-001"
+    ],
+    "sub_tasks": [
+        {
+            "id": "TASK-003-A",
+            "workflow": "Logic Transfer",
+            "output": "Code the 'Voice Failure' event listener."
+        },
+        {
+            "id": "TASK-003-B",
+            "workflow": "WhatsApp",
+            "output": "Create 'Missed Call' message template."
+        }
+    ],
+    "files_touched": [
+        "agents/voice_vapi/fallback.ts",
+        "agents/whatsapp/templates.json"
+    ],
+    "decisions": [
+        "Fallback delay set to 15 minutes.",
+        "Fallback channel is always WhatsApp (cost-effective)."
+    ],
+    "acceptance_criteria": [
+        "Simulated missed call triggers a scheduled WhatsApp message.",
+        "System logs the fallback event in 'interactions' table."
+    ],
+    "result_summary": "Implemented mock event listener for voice failures and created corresponding WhatsApp templates.",
+    "next_recommended_tasks": []
+}

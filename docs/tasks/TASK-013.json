@@ -1,0 +1,56 @@
+{
+    "task_id": "TASK-013",
+    "title": "Implement Robust Inventory Onboarding Workflow",
+    "status": "completed",
+    "result_summary": "Implemented channel-agnostic Inventory State Machine (13 steps), Session Store (InMemory), and API Endpoints. Verified with test script.",
+    "files_touched": [
+        "agents/backend/src/workflows/inventory_machine.ts",
+        "agents/backend/src/routes/inventory.ts",
+        "agents/backend/src/scripts/test_inventory_flow.ts"
+    ],
+    "priority": "high",
+    "classification": "Feature",
+    "domain": [
+        "Backend",
+        "Workflow",
+        "API"
+    ],
+    "created_at": "2026-02-07T01:30:00+05:30",
+    "goal": "Implement the authoritative, channel-agnostic, state-driven Inventory Onboarding Workflow as defined in the updated requirements.",
+    "context": {
+        "source": "Chat/Chatgpt.txt (Lines 1000+)",
+        "requirement": "Replace simple Seller logic with a deterministic State Machine backed by API endpoints and Session persistence."
+    },
+    "dependencies": [
+        "TASK-011"
+    ],
+    "sub_tasks": [
+        {
+            "id": "TASK-013-A",
+            "output": "Setup Session Store (Redis/In-Memory Adapter)"
+        },
+        {
+            "id": "TASK-013-B",
+            "output": "Implement Core API: /conversation/start, /conversation/message"
+        },
+        {
+            "id": "TASK-013-C",
+            "output": "Implement Inventory API: /inventory/session/start, /inventory/step, /inventory/confirm, /inventory/commit"
+        },
+        {
+            "id": "TASK-013-D",
+            "output": "Implement State Machine Logic (Greeting -> Intent -> Property Specs -> Summary)"
+        },
+        {
+            "id": "TASK-013-E",
+            "output": "Verify with Simulation (Mock Inputs)"
+        }
+    ],
+    "acceptance_criteria": [
+        "API /conversation/start returns correct initial state",
+        "API /inventory/step correctly transitions states (e.g., CATEGORY -> TYPE)",
+        "Draft inventory is stored temporarily before commit",
+        "Commit endpoint writes to Postgres SSOT",
+        "Flow works identically for mocked WhatsApp/Voice inputs"
+    ]
+}

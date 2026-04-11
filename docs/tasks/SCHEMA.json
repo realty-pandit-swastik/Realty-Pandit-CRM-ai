@@ -1,0 +1,116 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "Task Object Schema",
+    "type": "object",
+    "required": [
+        "task_id",
+        "title",
+        "status",
+        "priority",
+        "classification",
+        "domain",
+        "created_at",
+        "goal"
+    ],
+    "properties": {
+        "task_id": {
+            "type": "string",
+            "pattern": "^TASK-\\d{3}$"
+        },
+        "title": {
+            "type": "string"
+        },
+        "status": {
+            "type": "string",
+            "enum": [
+                "planned",
+                "in_progress",
+                "blocked",
+                "completed",
+                "abandoned"
+            ]
+        },
+        "priority": {
+            "type": "string",
+            "enum": [
+                "low",
+                "medium",
+                "high",
+                "critical"
+            ]
+        },
+        "classification": {
+            "type": "string"
+        },
+        "domain": {
+            "type": "array",
+            "items": {
+                "type": "string"
+            }
+        },
+        "created_at": {
+            "type": "string",
+            "format": "date-time"
+        },
+        "completed_at": {
+            "type": "string",
+            "format": "date-time"
+        },
+        "goal": {
+            "type": "string"
+        },
+        "context": {
+            "type": "object"
+        },
+        "dependencies": {
+            "type": "array",
+            "items": {
+                "type": "string"
+            }
+        },
+        "sub_tasks": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "id": {
+                        "type": "string"
+                    },
+                    "workflow": {
+                        "type": "string"
+                    },
+                    "output": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "files_touched": {
+            "type": "array",
+            "items": {
+                "type": "string"
+            }
+        },
+        "decisions": {
+            "type": "array",
+            "items": {
+                "type": "string"
+            }
+        },
+        "acceptance_criteria": {
+            "type": "array",
+            "items": {
+                "type": "string"
+            }
+        },
+        "result_summary": {
+            "type": "string"
+        },
+        "next_recommended_tasks": {
+            "type": "array",
+            "items": {
+                "type": "string"
+            }
+        }
+    }
+}

@@ -1,0 +1,545 @@
+/**
+ * Sales Agent — Handles BUYER_TENANT and SELLER_LANDLORD contacts.
+ *
+ * Consolidates buyer.ts + seller.ts into a single agent that adapts behavior
+ * based on contact_type and intent. Implements BaseAgent interface.
+ *
+ * States: INTAKE → QUALIFICATION → MATCHING → NEGOTIATION
+ */
+
+import { BaseAgent, AgentContext, AgentResponse, TransactionData } from './types';
+import { MatchingAgent } from './matching_agent';
+import { LLMService } from '../services/llm';
+import { SystemPromptService } from '../services/system_prompt';
+import { createTransaction, findExistingTransaction, CreateTransactionInput, linkSupplyToTransaction } from '../services/transaction_service';
+import { transitionTransaction } from '../services/transaction_state_machine';
+import { TransactionStatus, TransactionType } from '@prisma/client';
+import prisma from '../db';
+import logger from '../utils/logger';
+
+const STATES = {
+    INTAKE: 'INTAKE',
+    QUALIFICATION: 'QUALIFICATION',
+    MATCHING: 'MATCHING',
+    NEGOTIATION: 'NEGOTIATION',
+} as const;
+
+export class SalesAgent implements BaseAgent {
+    readonly name = 'sales' as const;
+    private llmService: LLMService;
+    private matchingAgent: MatchingAgent;
+
+    constructor() {
+        this.llmService = new LLMService();
+        this.matchingAgent = new MatchingAgent();
+    }
+
+    async handle(context: AgentContext): Promise<AgentResponse> {
+        const { contact, message, roleContext, currentTransaction } = context;
+
+        // Transaction-aware routing: use roleContext if available, fall back to contact_type
+        const isDemand = roleContext === 'DEMAND' || contact.contact_type === 'BUYER_TENANT';
+        const isSupply = roleContext === 'SUPPLY' || contact.contact_type === 'SELLER_LANDLORD';
+
+        logger.info(`[SalesAgent] Handling ${isDemand ? 'demand' : 'supply'} message for ${contact.phone_number}` +
+            (currentTransaction ? ` (TX: ${currentTransaction.id.substring(0, 8)}, status: ${currentTransaction.status})` : ' (no TX)'));
+
+        if (isDemand) {
+            return this.handleBuyer(context);
+        } else {
+            return this.handleSeller(context);
+        }
+    }
+
+    // ─── Buyer/Tenant Flow ──────────────────────────────────────
+
+    private async handleBuyer(context: AgentContext): Promise<AgentResponse> {
+        const { contact, message, currentTransaction } = context;
+
+        // Determine current state from lead_status
+        const state = contact.lead_status === 'cold' ? STATES.INTAKE : STATES.QUALIFICATION;
+
+        // INTAKE: Extract data + classify intent + create Transaction + auto-match if ready
+        if (state === STATES.INTAKE) {
+            const msg = message.toLowerCase();
+
+            // FIRST: Extract buyer data from the very first message (budget, location, type)
+            const extractedData = this.extractBuyerData(msg, message, contact);
+            if (Object.keys(extractedData).length > 0) {
+                try {
+                    await prisma.contact.update({
+                        where: { phone_number: contact.phone_number },
+                        data: extractedData,
+                    });
+                    logger.info(`[SalesAgent] INTAKE: Extracted buyer data: ${JSON.stringify(extractedData)}`);
+                    Object.assign(contact, extractedData);
+                } catch (err) {
+                    logger.error('[SalesAgent] INTAKE data update failed:', err);
+                }
+            }
+
+            // Infer intent from extracted data if possible (skip LLM call)
+            let intent: string;
+            if (extractedData.budget_max) {
+                // Budget-based heuristic: <= 5 lakh likely rent, > 5 lakh likely buy
+                intent = extractedData.budget_max <= 500000 ? 'TENANT' : 'BUYER';
+                logger.info(`[SalesAgent] INTAKE: Inferred intent ${intent} from budget ${extractedData.budget_max}`);
+            } else {
+                // Fall back to LLM classification
+                intent = await this.llmService.classifyIntent(message);
+                logger.info(`[SalesAgent] INTAKE: Classified intent: ${intent}`);
+            }
+
+            // If intent is OTHER but contact is already BUYER_TENANT, force to BUYER to break the loop
+            if (intent !== 'BUYER' && intent !== 'TENANT' && contact.contact_type === 'BUYER_TENANT') {
+                intent = 'BUYER';
+                logger.info(`[SalesAgent] INTAKE: Forced intent to BUYER (contact_type is BUYER_TENANT, classifyIntent returned ${intent})`);
+            }
+
+            if (intent === 'BUYER' || intent === 'TENANT') {
+                // Create a Transaction if none exists
+                let txMetadata: Record<string, any> = { classified_intent: intent };
+                if (!currentTransaction) {
+                    try {
+                        const txResult = await createTransaction({
+                            tenant_id: contact.tenant_id,
+                            demand_contact_id: contact.phone_number,
+                            type: intent === 'TENANT' ? 'RENT' as TransactionType : 'SALE' as TransactionType,
+                            source: context.channel,
+                            demand_property_type: contact.property_type || undefined,
+                            demand_location: contact.preferred_location || undefined,
+                            demand_budget_min: contact.budget_min || undefined,
+                            demand_budget_max: contact.budget_max || undefined,
+                        }, contact.phone_number, context.channel);
+
+                        if (!txResult.isDuplicate) {
+                            logger.info(`[SalesAgent] Created Transaction ${txResult.transaction.id.substring(0, 8)} for ${contact.phone_number}`);
+                            txMetadata.transaction_id = txResult.transaction.id;
+                            txMetadata.transaction_created = true;
+                        } else {
+                            logger.info(`[SalesAgent] Continuing existing Transaction ${txResult.transaction.id.substring(0, 8)}`);
+                            txMetadata.transaction_id = txResult.transaction.id;
+                            txMetadata.transaction_continued = true;
+                        }
+                    } catch (err) {
+                        logger.error('[SalesAgent] Transaction creation failed (non-blocking):', err);
+                    }
+                }
+
+                // Check if we already have enough data to trigger matching immediately
+                const hasEnoughForMatch = contact.preferred_location || contact.budget_max;
+                if (hasEnoughForMatch) {
+                    logger.info(`[SalesAgent] INTAKE: Enough data for immediate matching (loc: ${contact.preferred_location || 'N/A'}, budget: ${contact.budget_max || 'N/A'}) — skipping LLM response`);
+
+                    // Auto-trigger matching
+                    const matchResult = await this.matchingAgent.handle(context);
+
+                    return {
+                        ...matchResult,
+                        next_state: STATES.QUALIFICATION,
+                        metadata: {
+                            ...txMetadata,
+                            ...matchResult.metadata,
+                            lead_status: 'warm',
+                            intent: intent,
+                            preferred_location: contact.preferred_location,
+                            budget_max: contact.budget_max,
+                            property_type: contact.property_type,
+                        },
+                    };
+                }
+
+                // Not enough data — generate LLM response asking for details
+                const systemPrompt = txMetadata.transaction_id
+                    ? await SystemPromptService.getBuyerPromptWithTransaction(
+                        { lead_status: 'cold', intent, missing_info: 'Budget, Location, Type', language: contact.preferred_language },
+                        currentTransaction || { id: txMetadata.transaction_id, type: intent === 'TENANT' ? 'RENT' : 'SALE', status: 'NEW', demand_contact_id: contact.phone_number },
+                    )
+                    : await SystemPromptService.getBuyerPrompt({
+                        lead_status: 'cold',
+                        intent: intent,
+                        missing_info: 'Budget, Location, Type',
+                    });
+                const reply = await this.llmService.generateResponseWithHistory(
+                    systemPrompt, message, contact.phone_number,
+                );
+
+                return {
+                    action: 'reply',
+                    reply_script: reply,
+                    next_state: STATES.QUALIFICATION,
+                    quality_hint: 'confident',
+                    metadata: {
+                        ...txMetadata,
+                        lead_status: 'warm',
+                        intent: intent,
+                        preferred_location: contact.preferred_location,
+                        budget_max: contact.budget_max,
+                        property_type: contact.property_type,
+                    },
+                };
+            }
+        }
+
+        // QUALIFICATION: Gather details, auto-trigger matching when ready
+        if (state === STATES.QUALIFICATION) {
+            const msg = message.toLowerCase();
+
+            // Extract data from current message to fill gaps
+            const extractedData = this.extractBuyerData(msg, message, contact);
+
+            // Update contact with any newly extracted data
+            if (Object.keys(extractedData).length > 0) {
+                try {
+                    await prisma.contact.update({
+                        where: { phone_number: contact.phone_number },
+                        data: extractedData,
+                    });
+                    logger.info(`[SalesAgent] Updated buyer data: ${JSON.stringify(extractedData)}`);
+                    // Merge into contact for immediate use
+                    Object.assign(contact, extractedData);
+                } catch (err) {
+                    logger.error('[SalesAgent] Buyer data update failed:', err);
+                }
+            }
+
+            // Check if buyer selected a specific property (1, 2, 3)
+            const propertyNumber = /^\d$/.test(msg.trim()) ? parseInt(msg.trim()) : null;
+            if (propertyNumber) {
+                return this.matchingAgent.handle(context);
+            }
+
+            // Check for "more" results request
+            if (msg === 'more' || msg.includes('next') || msg.includes('aur dikhao') || msg.includes('aur batao')) {
+                return this.matchingAgent.handle(context);
+            }
+
+            // AUTO-TRIGGER matching: If buyer has at least location OR budget, search properties
+            const hasLocation = contact.preferred_location;
+            const hasBudget = contact.budget_max;
+            const hasEnoughForMatch = hasLocation || hasBudget;
+
+            if (hasEnoughForMatch) {
+                logger.info(`[SalesAgent] Buyer qualified (location: ${hasLocation || 'N/A'}, budget: ${hasBudget || 'N/A'}) — auto-triggering MatchingAgent`);
+
+                // Update transaction if exists
+                if (currentTransaction && currentTransaction.status === 'NEW') {
+                    try {
+                        await prisma.transaction.update({
+                            where: { id: currentTransaction.id },
+                            data: {
+                                demand_property_type: contact.property_type || currentTransaction.demand_property_type,
+                                demand_location: contact.preferred_location || currentTransaction.demand_location,
+                                demand_budget_min: contact.budget_min || currentTransaction.demand_budget_min,
+                                demand_budget_max: contact.budget_max || currentTransaction.demand_budget_max,
+                                demand_bedrooms: currentTransaction.demand_bedrooms,
+                            },
+                        });
+
+                        await transitionTransaction(
+                            currentTransaction.id,
+                            TransactionStatus.MATCHED,
+                            contact.phone_number,
+                            context.channel,
+                            { trigger: 'sales_agent_matching', contact_data: { property_type: contact.property_type, location: contact.preferred_location } },
+                        );
+                        logger.info(`[SalesAgent] Transaction ${currentTransaction.id.substring(0, 8)} → MATCHED`);
+                    } catch (err) {
+                        logger.error('[SalesAgent] Transaction update/transition failed (non-blocking):', err);
+                    }
+                }
+
+                // Run matching and return results directly
+                const matchResult = await this.matchingAgent.handle(context);
+
+                // If properties found, return them. If not, the matchingAgent already has a fallback message.
+                return matchResult;
+            }
+
+            // Not enough data yet — ask for missing info using AI
+            const missingParts: string[] = [];
+            if (!contact.preferred_location) missingParts.push('Location');
+            if (!contact.budget_max) missingParts.push('Budget');
+            if (!contact.property_type) missingParts.push('Property Type');
+
+            const systemPrompt = currentTransaction
+                ? await SystemPromptService.getBuyerPromptWithTransaction(
+                    { lead_status: 'qualifying', intent: contact.intent || 'BUYER', missing_info: missingParts.join(', '), language: contact.preferred_language },
+                    currentTransaction,
+                )
+                : await SystemPromptService.getBuyerPrompt({
+                    lead_status: 'qualifying',
+                    intent: contact.intent || 'BUYER',
+                    missing_info: missingParts.join(', '),
+                });
+            const reply = await this.llmService.generateResponseWithHistory(
+                systemPrompt, message, contact.phone_number,
+            );
+
+            return {
+                action: 'reply',
+                reply_script: reply,
+                quality_hint: 'confident',
+            };
+        }
+
+        // Fallback: Generate AI response for any unhandled state
+        const fallbackPrompt = await SystemPromptService.getBuyerPrompt({
+            lead_status: contact.lead_status || 'cold',
+            intent: contact.intent || 'BUYER',
+            missing_info: 'Budget, Location, Type',
+        });
+        const fallbackReply = await this.llmService.generateResponseWithHistory(
+            fallbackPrompt, message, contact.phone_number,
+        );
+
+        return {
+            action: 'reply',
+            reply_script: fallbackReply,
+            quality_hint: 'uncertain',
+        };
+    }
+
+    // ─── Buyer Data Extraction ─────────────────────────────────
+
+    private extractBuyerData(msg: string, rawMessage: string, contact: any): Record<string, any> {
+        const data: Record<string, any> = {};
+
+        // Extract budget (₹20000, 20k, 50 lakh, 1 crore, etc.)
+        if (!contact.budget_max) {
+            // Monthly rent: "20000", "20k", "15000 per month"
+            const rentMatch = msg.match(/(\d+)\s*k\b/) || msg.match(/(\d{4,6})\s*(?:per month|monthly|rent|tak)?/);
+            if (rentMatch) {
+                const val = parseInt(rentMatch[1]);
+                const amount = msg.includes('k') ? val * 1000 : val;
+                if (amount >= 5000 && amount <= 500000) { // Rent range
+                    data.budget_max = amount;
+                    if (!contact.budget_min) data.budget_min = Math.round(amount * 0.7);
+                }
+            }
+
+            // Sale: "50 lakh", "1 crore", "1.5 cr" — only if rent didn't already match
+            if (!data.budget_max) {
+                const saleMatch = msg.match(/(\d+\.?\d*)\s*(lakh|lac|crore|cr)\b/i);
+                if (saleMatch) {
+                    const val = parseFloat(saleMatch[1]);
+                    const unit = saleMatch[2].toLowerCase();
+                    const amount = unit.startsWith('cr') ? val * 10000000 : val * 100000;
+                    data.budget_max = amount;
+                    if (!contact.budget_min) data.budget_min = Math.round(amount * 0.7);
+                }
+            }
+        }
+
+        // Extract location (known areas + sector pattern)
+        if (!contact.preferred_location) {
+            const knownAreas = [
+                'noida', 'greater noida', 'gurgaon', 'gurugram', 'faridabad',
+                'ghaziabad', 'delhi', 'mumbai', 'bangalore', 'pune', 'hyderabad', 'chennai',
+                'vaishali', 'indirapuram', 'vasundhara', 'kaushambi', 'raj nagar',
+                'crossing republik', 'gaur city', 'panchsheel',
+                'dwarka', 'rohini', 'laxmi nagar', 'saket', 'nehru place',
+            ];
+            const cities = [
+                'noida', 'greater noida', 'gurgaon', 'gurugram', 'ghaziabad',
+                'delhi', 'faridabad', 'mumbai', 'bangalore', 'pune', 'hyderabad', 'chennai',
+            ];
+            for (const area of knownAreas) {
+                if (msg.includes(area)) {
+                    let location = area;
+                    // Check if "sector X" follows immediately after the area name
+                    const afterArea = msg.substring(msg.indexOf(area) + area.length);
+                    const sectorMatch = afterArea.match(/\s*(?:sector|sec)\s*(\d+)/i);
+                    if (sectorMatch) {
+                        location += ' sector ' + sectorMatch[1];
+                    }
+                    // If area is a sub-locality, append parent city
+                    if (!cities.includes(area)) {
+                        for (const city of cities) {
+                            if (msg.includes(city) && city !== area) {
+                                location += ', ' + city;
+                                break;
+                            }
+                        }
+                    }
+                    data.preferred_location = location;
+                    break;
+                }
+            }
+            // Also check for standalone "sector X" pattern
+            if (!data.preferred_location) {
+                const sectorPattern = msg.match(/sector\s*(\d+)/i);
+                if (sectorPattern) {
+                    let loc = 'sector ' + sectorPattern[1];
+                    for (const city of cities) {
+                        if (msg.includes(city)) { loc += ', ' + city; break; }
+                    }
+                    data.preferred_location = loc;
+                }
+            }
+        }
+
+        // Extract property type
+        if (!contact.property_type) {
+            const typeMap: Record<string, string> = {
+                'flat': 'flat', 'apartment': 'flat', 'falt': 'flat', 'flats': 'flat',
+                'house': 'house', 'villa': 'house', 'kothi': 'house', 'bungalow': 'house',
+                'plot': 'plot', 'land': 'plot', 'zameen': 'plot',
+                'office': 'office', 'shop': 'shop', 'showroom': 'shop',
+            };
+            for (const [keyword, type] of Object.entries(typeMap)) {
+                if (msg.includes(keyword)) {
+                    data.property_type = type;
+                    break;
+                }
+            }
+        }
+
+        // Extract BHK
+        const bhkMatch = msg.match(/(\d)\s*(?:bhk|bkh|bk|bed)/i);
+        if (bhkMatch && !contact.property_type) {
+            data.property_type = 'flat'; // BHK implies flat
+        }
+
+        return data;
+    }
+
+    // ─── Seller/Landlord Flow ───────────────────────────────────
+
+    private async handleSeller(context: AgentContext): Promise<AgentResponse> {
+        const { contact, message, currentTransaction } = context;
+        const msg = message.toLowerCase();
+
+        // Track what data we've collected for metadata
+        const collectedData: Record<string, any> = {};
+
+        // Extract property type from message if missing
+        let propertyType = contact.property_type;
+        if (!propertyType) {
+            const typeMap: Record<string, string> = {
+                'flat': 'flat', 'apartment': 'flat',
+                'house': 'house', 'villa': 'house', 'bungalow': 'house',
+                'plot': 'plot', 'land': 'plot',
+                'office': 'office', 'shop': 'shop',
+            };
+            for (const [keyword, type] of Object.entries(typeMap)) {
+                if (msg.includes(keyword)) {
+                    propertyType = type;
+                    collectedData.property_type = type;
+                    break;
+                }
+            }
+        }
+
+        // Extract location if property type known but location isn't
+        let location = contact.preferred_location;
+        if (propertyType && !location) {
+            const hasPropertyKeyword = ['flat', 'house', 'plot', 'sell', 'rent', 'office', 'shop']
+                .some(k => msg.includes(k));
+            if (!hasPropertyKeyword && message.trim().length > 1) {
+                location = message;
+                collectedData.preferred_location = message;
+            }
+        }
+
+        // Determine if we should upgrade lifecycle
+        let nextLifecycle: string | undefined;
+        if (propertyType && location && contact.lead_status === 'cold') {
+            collectedData.lead_status = 'warm';
+            collectedData.ai_summary = `Seller: ${propertyType} in ${location}. Price info: ${message}`;
+            nextLifecycle = 'QUALIFIED';
+
+            // Create Inventory + link supply to matching Transactions
+            try {
+                // Find or create Owner record for this seller
+                let owner = await prisma.owner.findUnique({ where: { contact_phone: contact.phone_number } });
+                if (!owner) {
+                    owner = await prisma.owner.create({
+                        data: {
+                            scope: 'INTERNAL',
+                            contact_phone: contact.phone_number,
+                            status: 'ACTIVE',
+                        },
+                    });
+                    logger.info(`[SalesAgent] Created Owner for seller ${contact.phone_number}`);
+                }
+
+                const inventory = await prisma.inventory.create({
+                    data: {
+                        tenant_id: contact.tenant_id,
+                        owner_id: owner.id,
+                        type: propertyType,
+                        category: 'residential',
+                        intent: contact.intent === 'rent' ? 'rent' : 'sell',
+                        location: location,
+                        owner_phone: contact.phone_number,
+                        status: 'active',
+                    },
+                });
+                collectedData.inventory_id = inventory.id;
+                logger.info(`[SalesAgent] Created Inventory ${inventory.id.substring(0, 8)} for seller ${contact.phone_number}`);
+
+                // Find matching demand transactions waiting for supply
+                const matchingDemandTxs = await prisma.transaction.findMany({
+                    where: {
+                        tenant_id: contact.tenant_id,
+                        status: TransactionStatus.NEW,
+                        supply_contact_id: null,
+                        demand_property_type: propertyType,
+                        ...(location ? { demand_location: { contains: location, mode: 'insensitive' as any } } : {}),
+                    },
+                    take: 5,
+                });
+
+                // Link this seller as supply to matching transactions
+                for (const demandTx of matchingDemandTxs) {
+                    try {
+                        await linkSupplyToTransaction(
+                            demandTx.id,
+                            contact.phone_number,
+                            inventory.id,
+                            contact.phone_number,
+                        );
+                        logger.info(`[SalesAgent] Linked seller ${contact.phone_number} as supply to TX ${demandTx.id.substring(0, 8)}`);
+                    } catch (linkErr) {
+                        logger.error(`[SalesAgent] Supply link failed for TX ${demandTx.id}:`, linkErr);
+                    }
+                }
+
+                if (matchingDemandTxs.length > 0) {
+                    collectedData.matched_transactions = matchingDemandTxs.length;
+                }
+            } catch (invErr) {
+                logger.error('[SalesAgent] Inventory creation failed (non-blocking):', invErr);
+            }
+        }
+
+        // Use TX-enhanced prompt if transaction exists
+        const systemPrompt = currentTransaction
+            ? await SystemPromptService.getSellerPromptWithTransaction(
+                { lead_status: contact.lead_status, intent: contact.intent || 'sell', property_type: propertyType, preferred_location: location, language: contact.preferred_language },
+                currentTransaction,
+            )
+            : await SystemPromptService.getSellerPrompt({
+                lead_status: contact.lead_status,
+                intent: contact.intent || 'sell',
+                property_type: propertyType,
+                preferred_location: location,
+                price_discussed: contact.lead_status === 'warm' || contact.lead_status === 'hot' ? 'Yes' : 'No',
+            });
+
+        const reply = await this.llmService.generateResponseWithHistory(
+            systemPrompt, message, contact.phone_number,
+        );
+
+        return {
+            action: 'reply',
+            reply_script: reply,
+            quality_hint: 'confident',
+            metadata: {
+                ...collectedData,
+                ...(nextLifecycle && { lifecycle_stage: nextLifecycle }),
+            },
+        };
+    }
+}

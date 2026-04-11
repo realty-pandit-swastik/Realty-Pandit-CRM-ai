@@ -1,0 +1,50 @@
+{
+    "task_id": "TASK-004",
+    "title": "Implement Backend API Server",
+    "status": "completed",
+    "priority": "critical",
+    "classification": "Infrastructure",
+    "domain": [
+        "Backend",
+        "Connection"
+    ],
+    "created_at": "2026-02-06T22:20:00+05:30",
+    "goal": "Initialize the Express.js server to act as the central runtime, exposing webhooks for WhatsApp and Voice bots.",
+    "context": {
+        "architecture": "Central API Gateway that routes webhooks to specific agent logic.",
+        "requirement": "Must connect to the Postgres DB established in TASK-001."
+    },
+    "dependencies": [
+        "TASK-001"
+    ],
+    "sub_tasks": [
+        {
+            "id": "TASK-004-A",
+            "workflow": "Backend",
+            "output": "Basic Express server setup with CORS and JSON parsing."
+        },
+        {
+            "id": "TASK-004-B",
+            "workflow": "Backend",
+            "output": "Webhook routes for WhatsApp and Vapi."
+        }
+    ],
+    "files_touched": [
+        "agents/backend/src/server.ts",
+        "agents/backend/src/app.ts",
+        "agents/backend/src/routes/webhooks.ts"
+    ],
+    "decisions": [
+        "Use Express.js for simplicity and speed.",
+        "Centralize routing in `routes/` directory."
+    ],
+    "acceptance_criteria": [
+        "Server starts on port 3000 (or env port).",
+        "POST /webhooks/whatsapp returns 200 OK.",
+        "Prisma Client connects successfully."
+    ],
+    "result_summary": "Express server initialized with Webhooks and Prisma connection.",
+    "next_recommended_tasks": [
+        "TASK-005"
+    ]
+}

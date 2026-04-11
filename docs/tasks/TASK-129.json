@@ -1,0 +1,40 @@
+{
+  "id": "TASK-129",
+  "title": "WhatsApp Builder Onboarding Workflow",
+  "phase": 13,
+  "status": "completed",
+  "priority": "high",
+  "depends_on": ["TASK-126"],
+  "description": "AI-powered conversational onboarding flow for builders via WhatsApp. Collects builder information step-by-step and creates Owner + Subscription records with automatic contact updates.",
+  "files_created": [
+    "agents/backend/src/workflows/builder_onboarding.ts"
+  ],
+  "files_modified": [],
+  "features": [
+    "Intent detection for builder registration keywords",
+    "Check existing builder registration to prevent duplicates",
+    "Multi-step conversation flow (company name → contact person → email → city → plan selection)",
+    "Session management for onboarding state",
+    "AI-powered data extraction from messages",
+    "Plan selection (1-4 mapping to FREE/BASIC/PRO/PREMIUM)",
+    "Owner creation with REAL_ESTATE_BUILDER type",
+    "Subscription creation with selected plan",
+    "Contact record updates with company name",
+    "Success message with dashboard link",
+    "Session completion tracking",
+    "Error handling and retry logic",
+    "Cancel/restart capability"
+  ],
+  "acceptance_criteria": [
+    "Builder can register via WhatsApp conversation",
+    "All required data collected step-by-step",
+    "Owner + Subscription created correctly",
+    "Session state managed properly",
+    "Dashboard link provided on success",
+    "Duplicate registration prevented",
+    "Error messages clear and actionable"
+  ],
+  "result_summary": "Complete WhatsApp builder onboarding workflow with AI-powered conversation flow. Collects builder details through natural conversation, creates Owner and Subscription records, and provides dashboard access. Ready for integration with message router.",
+  "completed_at": "2026-02-14",
+  "notes": "Requires BuilderOnboardingSession model in schema (or can use existing sessionStore service)"
+}

@@ -1,0 +1,17 @@
+{
+  "task_id": "TASK-038",
+  "title": "Public Property API (Backend)",
+  "status": "completed",
+  "priority": "high",
+  "classification": "Feature",
+  "domain": ["Backend"],
+  "created_at": "2026-02-10T00:00:00+05:30",
+  "completed_at": "2026-02-10T00:00:00+05:30",
+  "goal": "Create public API routes for property listings, detail, stats, and lead capture — no auth required.",
+  "dependencies": [],
+  "files_touched": [
+    "agents/backend/src/routes/public.ts",
+    "agents/backend/src/app.ts"
+  ],
+  "result_summary": "Created /public routes: GET /public/properties (paginated, filterable by location/type/category/intent/price range, sortable), GET /public/properties/:id (with owner name), GET /public/stats (total properties/locations/clients), POST /public/contact (lead capture: upserts Contact with source='website', creates Interaction with channel='website'). Registered as public route in app.ts (no auth)."
+}

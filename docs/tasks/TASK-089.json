@@ -1,0 +1,53 @@
+{
+  "task_id": "TASK-089",
+  "title": "Winston Logging System",
+  "status": "completed",
+  "priority": "high",
+  "classification": "Observability",
+  "domain": ["Backend", "Logging", "Monitoring"],
+  "created_at": "2026-02-12T00:00:00+05:30",
+  "completed_at": "2026-02-12T00:00:00+05:30",
+  "goal": "Implement production-grade structured logging using Winston with log levels, daily rotation, and separate error logs for debugging and monitoring.",
+  "dependencies": [],
+  "sub_tasks": [
+    {
+      "id": "TASK-089-1",
+      "title": "Create Winston Logger Configuration",
+      "status": "completed",
+      "output": "Configured Winston with JSON format, timestamps, error stack traces, and service metadata"
+    },
+    {
+      "id": "TASK-089-2",
+      "title": "Configure Daily Rotating File Transport",
+      "status": "completed",
+      "output": "Added winston-daily-rotate-file for error logs (30 days retention, 20MB max) and combined logs (14 days, 50MB max)"
+    },
+    {
+      "id": "TASK-089-3",
+      "title": "Add Console Transport for Development",
+      "status": "completed",
+      "output": "Colorized console logging in development mode with human-readable format"
+    },
+    {
+      "id": "TASK-089-4",
+      "title": "Set Dynamic Log Levels",
+      "status": "completed",
+      "output": "Log level configurable via LOG_LEVEL env var, defaults to 'info' in production, 'debug' in development"
+    }
+  ],
+  "files_touched": [
+    "agents/backend/src/utils/logger.ts"
+  ],
+  "acceptance_criteria": [
+    "Winston logger properly configured with JSON format",
+    "Separate rotating logs for errors (error-%DATE%.log, 30 day retention)",
+    "Combined logs for all levels (combined-%DATE%.log, 14 day retention)",
+    "Console logging in development with colorized output",
+    "Log level configurable via environment variable",
+    "Timestamp included in all log entries",
+    "Error stack traces captured",
+    "Service metadata attached to all logs"
+  ],
+  "result_summary": "Production-grade logging system implemented with Winston. Daily rotating file transports ensure logs don't fill disk space (30 days for errors, 14 days for combined). Structured JSON logging in production enables log aggregation tools. Colorized console output in development for better DX. Configurable log levels support different environments.",
+  "next_recommended_tasks": ["TASK-090"]
+}

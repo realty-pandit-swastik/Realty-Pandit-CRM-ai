@@ -1,0 +1,25 @@
+{
+  "id": "TASK-054",
+  "title": "Proactive AI Follow-ups",
+  "phase": 6,
+  "status": "completed",
+  "priority": "medium",
+  "depends_on": ["TASK-049", "TASK-050"],
+  "description": "FollowupScheduler service that runs hourly, finds warm/hot contacts with no interaction in 48+ hours, and sends personalized AI-generated follow-up messages via WhatsApp. Messages are generated using conversation history for context-aware re-engagement.",
+  "files_created": [
+    "agents/backend/src/services/followup_scheduler.ts"
+  ],
+  "files_modified": [
+    "agents/backend/src/server.ts"
+  ],
+  "features": [
+    "Hourly check for stale warm/hot contacts (48h threshold)",
+    "Max 20 follow-ups per run to prevent spam",
+    "Personalized messages using contact context + conversation history",
+    "Different follow-up strategies for BUYER_TENANT vs SELLER_LANDLORD",
+    "Creates TaskFollowup records to prevent duplicate follow-ups",
+    "Logs all follow-up interactions in SSOT",
+    "Auto-starts on server boot"
+  ],
+  "completed_at": "2026-02-10"
+}

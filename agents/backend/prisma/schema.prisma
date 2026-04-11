@@ -1,0 +1,2137 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------
+// 1. TENANTS (Property Dealers)
+// ---------------------------------------------------------
+model Tenant {
+  id            String   @id @default(uuid())
+  business_name String
+  owner_name    String
+  primary_phone String
+  email         String?
+  website       String?
+  timezone      String   @default("Asia/Kolkata")
+  status        String   @default("active") // active, suspended
+  created_at    DateTime @default(now())
+  updated_at    DateTime @updatedAt
+
+  contacts      Contact[]
+  interactions  Interaction[]
+  agents        Agent[]
+  tasks         TaskFollowup[]
+  whatsapp_msgs WhatsAppMessage[]
+  voice_calls   VoiceCall[]
+  emails        Email[]
+  inventory     Inventory[]
+  staff_calls   StaffCall[]
+  appointments  Appointment[] // Calendar system appointments
+  transactions  Transaction[] // Property deal transactions
+
+  @@map("tenants")
+}
+
+// ---------------------------------------------------------
+// 2. CONTACTS (Single Source of Truth)
+// ---------------------------------------------------------
+model Contact {
+  phone_number String @id // E.164 format. PRIMARY IDENTITY.
+
+  tenant_id String
+  tenant    Tenant @relation(fields: [tenant_id], references: [id])
+
+  name   String?
+  email  String?
+  source String  @default("manual") // website, whatsapp, voice, manual, 99acres, magicbricks, housing
+
+  // Contact Classification (PHASE 12: Extended with REAL_ESTATE_BUILDER)
+  // Note: PARTNER_AGENT = External marketplace agents
+  contact_type ContactType @default(UNKNOWN)
+
+  // Qualification Data
+  intent               String? // buy, sell, rent, commercial
+  property_type        String? // flat, house, plot
+  budget_min           Decimal?
+  budget_max           Decimal?
+  preferred_location   String?
+  demand_bhk           Int? // Buyer desired BHK (1,2,3,4,5)
+  demand_main_category String? // "residential" | "commercial"
+  timeline             String? // immediate, 1-3 months
+
+  // PHASE 7: Extended Lead Capture Fields
+  demand_category    String? // residential, commercial, agricultural
+  demand_type_slug   String? // flat, 1bhk, 2bhk, shop, office, plot, etc.
+  demand_budget_type String? // one_time (buy), per_month (rent/lease)
+  demand_amenities   Json? // Array of desired amenities
+
+  // Area requirements
+  area_min           Float?    // Minimum area requirement
+  area_max           Float?    // Maximum area requirement
+  area_unit          String?   // "sqft" or "sqmtr"
+
+  // Classification IDs (linked to PropertyCategory / SubCategory / PropertyType)
+  category_id      String? // FK to PropertyCategory
+  sub_category_id  String? // FK to PropertySubCategory
+  type_id          String? // FK to PropertyType
+
+  // Geo location of preferred area (from Google Maps Places Autocomplete)
+  preferred_lat    Float? // Latitude - used for radius-based property matching
+  preferred_lng    Float? // Longitude - used for radius-based property matching
+
+  // State Management
+  lead_status       String  @default("cold") // cold, warm, hot, closed, lost
+  lifecycle_stage   String  @default("NEW") // NEW, QUALIFIED, MATCHED, VISIT_SCHEDULED, VISITED, NEGOTIATION, CLOSED_WON, CLOSED_LOST
+  assigned_agent_id String?
+  assigned_agent    Agent?  @relation(fields: [assigned_agent_id], references: [id])
+
+  // Lead Verification (auto-created for external leads, null for legacy contacts)
+  verification_status  String?    // UNVERIFIED | VERIFIED | REJECTED | CONVERTED_PARTNER
+  verification_reason  String?    // JUST_BROWSING | BANKER_VALUER | WRONG_NUMBER | DUPLICATE | SPAM | PARTNER_AGENT | OTHER
+  verification_remarks String?    @db.Text
+  verified_by          String?    // Agent ID who verified
+  verified_at          DateTime?
+
+  // Partner Referral Tracking
+  lead_type              String? // DIRECT_OWNER | PARTNER_REFERRAL
+  referral_partner_id    String? // PartnerAgent.id (if registered partner)
+  referral_partner_name  String? // Free text name (if unregistered partner)
+  referral_partner_phone String? // Phone for retroactive linking when partner registers
+
+  last_channel     String? // whatsapp, voice
+  last_interaction DateTime?
+  next_action_at   DateTime?
+  next_action_type String? // whatsapp_missed_call, etc.
+
+  // WhatsApp Session Tracking
+  last_wa_inbound DateTime? // Last inbound WhatsApp message timestamp (for 24h session window)
+
+  // AI Context
+  ai_summary         String? @db.Text
+  notes              String? @db.Text
+  preferred_language String? // english, hindi, hinglish
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  interactions          Interaction[]
+  tasks                 TaskFollowup[]
+  whatsapp_msgs         WhatsAppMessage[]
+  voice_calls           VoiceCall[]
+  emails                Email[]
+  lead_score            LeadScore?
+  inventory             Inventory[]
+  key_holder_properties Inventory[]           @relation("KeyHolderProperties")
+  owned_properties      Inventory[]           @relation("OwnedProperties")
+  scheduled_visits      ScheduledVisit[]
+  appointments          Appointment[] // Calendar system appointments
+  partner_profile       PartnerAgent?
+  sessions              ConversationSession[]
+  staff_calls           StaffCall[]
+  owner                 Owner? // PHASE 12: Unified ownership
+  builder_leads         BuilderLead[] // PHASE 12: Builder project leads
+  demand_transactions   Transaction[]         @relation("DemandTransactions")
+  supply_transactions   Transaction[]         @relation("SupplyTransactions")
+  work_tasks            Task[] // SSOT: Work tasks (project management) linked to this contact
+  property_shares       PropertyShare[] // Properties shared with this contact
+  saved_properties      SavedProperty[] // Properties saved/favorited by this contact
+  shortlisted_properties LeadPropertyShortlist[] // Properties in lead's consideration journey
+
+  @@index([tenant_id, phone_number])
+  @@index([contact_type])
+  @@index([lead_status])
+  @@index([lifecycle_stage])
+  @@index([next_action_at])
+  @@index([contact_type, lead_status])
+  @@index([last_interaction])
+  @@index([assigned_agent_id])
+  @@map("contacts")
+}
+
+enum ContactType {
+  BUYER_TENANT // Buyers or tenants looking for properties
+  SELLER_LANDLORD // Sellers or landlords listing properties
+  PARTNER_AGENT // External marketplace agents
+  REAL_ESTATE_BUILDER // Builders with projects (PHASE 12)
+  MANAGEMENT // Internal management contacts
+  UNKNOWN // Unclassified contacts
+}
+
+// ---------------------------------------------------------
+// 3. INTERACTIONS (Unified Log)
+// ---------------------------------------------------------
+model Interaction {
+  id String @id @default(uuid())
+
+  tenant_id String
+  tenant    Tenant @relation(fields: [tenant_id], references: [id])
+
+  phone_number String
+  contact      Contact @relation(fields: [phone_number], references: [phone_number])
+
+  channel    String // whatsapp, voice, email, website
+  direction  String // inbound, outbound
+  event_type String // message, call, form_submit
+
+  content  String? @db.Text
+  metadata Json? // duration, message_id, etc.
+
+  created_at DateTime @default(now())
+
+  @@index([tenant_id, phone_number, created_at])
+  @@index([channel, direction, created_at])
+  @@map("interactions")
+}
+
+// ---------------------------------------------------------
+// 4. WHATSAPP MESSAGES
+// ---------------------------------------------------------
+model WhatsAppMessage {
+  id String @id @default(uuid())
+
+  tenant_id String
+  tenant    Tenant @relation(fields: [tenant_id], references: [id])
+
+  phone_number String
+  contact      Contact @relation(fields: [phone_number], references: [phone_number])
+
+  wa_message_id String? @unique
+  direction     String // inbound, outbound
+  message_type  String // text, image, template
+  body          String? @db.Text
+  media_url     String?
+  status        String  @default("sent") // sent, delivered, read, failed
+
+  created_at DateTime @default(now())
+
+  @@map("whatsapp_messages")
+}
+
+// ---------------------------------------------------------
+// 5. VOICE CALLS
+// ---------------------------------------------------------
+model VoiceCall {
+  id String @id @default(uuid())
+
+  tenant_id String
+  tenant    Tenant @relation(fields: [tenant_id], references: [id])
+
+  phone_number String
+  contact      Contact @relation(fields: [phone_number], references: [phone_number])
+
+  call_sid        String? @unique
+  direction       String // inbound, outbound
+  call_status     String // answered, missed, failed
+  duration        Int? // seconds
+  recording_url   String?
+  transcript      String? @db.Text
+  ai_call_summary String? @db.Text
+
+  started_at DateTime  @default(now())
+  ended_at   DateTime?
+
+  @@map("voice_calls")
+}
+
+// ---------------------------------------------------------
+// 6. EMAILS
+// ---------------------------------------------------------
+model Email {
+  id String @id @default(uuid())
+
+  tenant_id String
+  tenant    Tenant @relation(fields: [tenant_id], references: [id])
+
+  phone_number String?
+  contact      Contact? @relation(fields: [phone_number], references: [phone_number])
+
+  // Email Addresses
+  from_email String
+  to_email   String
+  cc         String? @db.Text // Comma-separated
+  bcc        String? @db.Text // Comma-separated
+
+  // Content
+  subject String?
+  body    String? @db.Text
+  html    String? @db.Text
+
+  // Direction & Status
+  direction String // inbound, outbound
+  status    String @default("pending") // pending, sent, delivered, failed, bounced
+
+  // Email Metadata
+  message_id  String? @unique
+  in_reply_to String? // For threading
+  references  String? // Email thread references
+  attachments Json? // Array of attachment URLs
+
+  // AI Processing
+  ai_processed  Boolean @default(false)
+  ai_response   String? @db.Text
+  ai_confidence Float?
+
+  // Timestamps
+  sent_at      DateTime?
+  delivered_at DateTime?
+  opened_at    DateTime?
+  created_at   DateTime  @default(now())
+  updated_at   DateTime  @updatedAt
+
+  @@index([from_email])
+  @@index([to_email])
+  @@index([message_id])
+  @@index([created_at])
+  @@map("emails")
+}
+
+// ---------------------------------------------------------
+// 7. TASKS & FOLLOWUPS
+// ---------------------------------------------------------
+model TaskFollowup {
+  id String @id @default(uuid())
+
+  tenant_id String
+  tenant    Tenant @relation(fields: [tenant_id], references: [id])
+
+  phone_number String
+  contact      Contact @relation(fields: [phone_number], references: [phone_number])
+
+  task_type    String // call, whatsapp, site_visit
+  status       String    @default("pending") // pending, completed, skipped
+  scheduled_at DateTime
+  executed_at  DateTime?
+
+  created_at DateTime @default(now())
+
+  @@index([scheduled_at, status])
+  @@map("tasks_followups")
+}
+
+// ---------------------------------------------------------
+// 8. AGENTS (Human)
+// ---------------------------------------------------------
+model Agent {
+  id        String @id @default(uuid())
+  tenant_id String
+  tenant    Tenant @relation(fields: [tenant_id], references: [id])
+
+  name       String
+  email      String  @unique
+  phone          String? // Required for new members; nullable for backward compat
+  personal_email String? // Personal Gmail - used for SubUserName matching from 99acres
+  role       String  @default("employee") // super_boss, manager, employee
+  department String? // property_sales, operations, management, software_sales
+  status     String  @default("active")
+
+  // Authentication
+  password_hash       String?
+  refresh_token       String?
+  last_login_at       DateTime?
+  setup_token         String?   @unique
+  setup_token_expires DateTime?
+
+  // Management Hierarchy
+  reports_to_id String?
+  reports_to    Agent?  @relation("AgentHierarchy", fields: [reports_to_id], references: [id])
+  subordinates  Agent[] @relation("AgentHierarchy")
+
+  assigned_leads           Contact[]
+  assigned_properties      Inventory[]    @relation("AssignedProperties")
+  uploaded_inventory       Inventory[]    @relation("UploadedInventory")
+  reference_inventory      Inventory[]    @relation("ReferenceInventory")
+  staff_calls              StaffCall[]
+  appointments             Appointment[] // Calendar system appointments
+  executive_transactions   Transaction[]  @relation("ExecutiveTransactions")
+  coordinated_transactions Transaction[]  @relation("CoordinatorTransactions")
+  managed_partners         PartnerAgent[] @relation("ManagedPartners")
+  property_shares          PropertyShare[] // Properties shared by this agent with clients
+
+  created_at       DateTime  @default(now())
+  updated_at       DateTime  @updatedAt
+  last_assigned_at DateTime? // Round-robin lead distribution tracking
+
+  @@index([role, status, last_assigned_at])
+  @@map("agents")
+}
+
+// ---------------------------------------------------------
+// 9. INVENTORY (Properties) - EXTENDED FOR MARKETPLACE
+// ---------------------------------------------------------
+model Inventory {
+  id String @id @default(uuid())
+
+  tenant_id String
+  tenant    Tenant @relation(fields: [tenant_id], references: [id])
+
+  // PHASE 12: Unified ownership model
+  // Owner can be INTERNAL (staff-managed) or EXTERNAL (agent/builder)
+  owner_id String
+  owner    Owner  @relation(fields: [owner_id], references: [id], onDelete: Cascade)
+
+  // Legacy: Keep owner_phone for backward compatibility with direct contact lookup
+  owner_phone String
+  contact     Contact @relation(fields: [owner_phone], references: [phone_number])
+
+  // --- ASSIGNMENT & KEY MANAGEMENT ---
+  // Internal sales agent assigned to handle this property
+  assigned_agent_id String?
+  assigned_agent    Agent?  @relation("AssignedProperties", fields: [assigned_agent_id], references: [id])
+
+  // Key holder contact (person who holds the physical keys)
+  key_holder_contact_id String?
+  key_holder_contact    Contact? @relation("KeyHolderProperties", fields: [key_holder_contact_id], references: [phone_number])
+
+  // Key holder details (who physically holds the property key)
+  key_holder_type  KeyHolderType?
+  key_holder_name  String? // Name of key holder (for EXTERNAL type)
+  key_holder_phone String? // Phone of key holder (for EXTERNAL type)
+
+  // Owner contact ID (for easy reference, already have owner_phone)
+  owner_contact_id String?
+  owner_contact    Contact? @relation("OwnedProperties", fields: [owner_contact_id], references: [phone_number])
+
+  // --- HIERARCHICAL CLASSIFICATION (PHASE 7) ---
+  category_id        String?
+  sub_category_id    String?
+  type_id            String?
+  configuration_id   String?
+  usage_type_id      String?
+  investment_type_id String?
+
+  property_category      PropertyCategory?      @relation(fields: [category_id], references: [id])
+  property_sub_category  PropertySubCategory?   @relation(fields: [sub_category_id], references: [id])
+  property_type_link     PropertyType?          @relation(fields: [type_id], references: [id])
+  property_configuration PropertyConfiguration? @relation(fields: [configuration_id], references: [id])
+  usage_type             UsageType?             @relation(fields: [usage_type_id], references: [id])
+  investment_type        InvestmentType?        @relation(fields: [investment_type_id], references: [id])
+
+  // Legacy fields (kept for backward compatibility, will be DEPRECATED)
+  category String // residential, commercial
+  type     String // flat, house, plot, office, shop
+
+  // Specs (JSON for flexibility)
+  specs    Json? // { bedrooms: 2, bathrooms: 2, area: 1200, unit: "sqft" }
+  features Json? // { parking: true, lift: true }
+
+  // Property Details
+  description  String? @db.Text // Free-text property description
+  furnishing   String? // unfurnished, semi_furnished, fully_furnished
+  floor_number Int?
+  total_floors Int?
+  facing       String? // north, south, east, west, north_east, etc.
+  property_age String? // new, 1-3years, 3-5years, 5-10years, 10+years
+
+  // Structured Address
+  flat_no        String? // "A-1201", "B-304"
+  plot_no        String? // "Plot 42" or building name
+  apartment_name String? // "Gaur City 2", "ATS Pristine"
+  state          String? // Indian state: "Uttar Pradesh"
+  district       String? // City/District: "Gautam Buddh Nagar"
+  sub_locality   String? // Sub-locality/neighborhood: "Sector 150", "Bani Park"
+  locality       String? // Locality/Area: "Noida", "Greater Noida"
+  pincode        String? // 6-digit: "201310"
+  full_address   String? // Computed: "Sector 150, Gautam Buddh Nagar, Uttar Pradesh - 201310"
+
+  location String? // Legacy: kept for backward compat, auto-populated from structured fields
+
+  // Geo-coordinates for Google Maps integration
+  latitude  Float? // Geocoded latitude for map pins
+  longitude Float? // Geocoded longitude for map pins
+
+  price      Decimal?
+  price_unit String? // Lakh, Crore/Cr
+
+  // --- DUAL PRICING (Redesign v2) ---
+  customer_price Decimal? // Owner's actual asking price (internal only, never shown publicly)
+  display_price  Decimal? // Price shown on website (our price to showcase)
+
+  // --- CITY (replaces district label, both kept for backward compat) ---
+  city String? // City name (user-facing label for district)
+
+  status String @default("active") // active, sold, rented, withdrawn
+  intent String // sell, rent, rent_lease, lease
+
+  media_urls  String[] // Array of URLs
+  video_urls  String[] // Array of video URLs
+  media_score Int      @default(0) // 2=video+images, 1=images only, 0=no media (for sort ordering)
+
+  lead_reference String? // Who referred this lead/property (e.g. "Agent Rakesh told about this")
+
+  // --- FLAT PROPERTY TYPE (Redesign v2 - replaces hierarchical classification) ---
+  flat_property_type_id String?
+  flat_property_type    FlatPropertyType? @relation(fields: [flat_property_type_id], references: [id])
+
+  // --- OWNERSHIP & UPLOAD TRACKING (Redesign v2) ---
+  ownership_type OwnershipType? // OWNER, EXTERNAL_AGENT, AGENT_OWNER
+  upload_source  String? // website, admin, whatsapp, voice, mobile_app
+  uploader_phone String? // Phone of the person who uploaded (may differ from owner)
+  uploader_name  String? // Name of the uploader
+  uploader_email String? // Email of the uploader (for website users)
+
+  // Who uploaded this inventory record (for visibility/audit)
+  uploaded_by_agent_id String?
+  uploaded_by_agent    Agent?  @relation("UploadedInventory", fields: [uploaded_by_agent_id], references: [id])
+
+  // Reference agent who provided the lead (for AGENT_OWNER workflow)
+  reference_agent_phone String? // Phone number of agent who gave this property
+  reference_agent_id    String?
+  reference_agent       Agent?  @relation("ReferenceInventory", fields: [reference_agent_id], references: [id])
+
+  // --- SHARING & COLLABORATION ---
+  shared_with_ids String[] // Agent IDs this inventory is shared with for collaboration
+
+  // --- DISPLAY ID, SLUG & ENRICHMENT (v3 - Shortened Flow) ---
+  display_id     String? @unique // Human-readable ID: RP-DEL-RES-20431
+  slug           String? @unique // SEO-friendly URL slug: 2bhk-flat-sector-150-noida
+  completion_pct Int     @default(0) // How complete is the listing (0-100)
+  is_enriched    Boolean @default(false) // Whether post-save enrichment was done
+  renovated      Boolean @default(false) // Property has been renovated
+
+  documents    InventoryDocument[] // Attached documents (title deed, NOC, etc.)
+  appointments Appointment[] // Calendar system appointments
+  transactions Transaction[] // Deal transactions involving this property
+  work_tasks       Task[] // SSOT: Work tasks (project management) linked to this property
+  property_shares    PropertyShare[] // Shares of this property with clients
+  saved_properties   SavedProperty[] // Users who saved/favorited this property
+  shortlisted_by     LeadPropertyShortlist[] // Leads considering this property
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@index([location])
+  @@index([owner_id])
+  @@index([uploaded_by_agent_id])
+  @@index([reference_agent_id])
+  @@index([category_id, sub_category_id, type_id])
+  @@index([status, intent, created_at])
+  @@index([status, price])
+  @@index([state, district])
+  @@index([city])
+  @@index([flat_property_type_id])
+  @@index([latitude, longitude]) // Spatial indexing for map queries
+  @@index([display_id])
+  @@index([slug])
+  @@index([shared_with_ids]) // GIN index for array contains queries
+  @@map("inventory")
+}
+
+enum KeyHolderType {
+  UPLOADER // The agent who uploaded holds the key
+  OWNER // The property owner holds the key
+  EXTERNAL // An external agent/dealer holds the key
+}
+
+enum OwnershipType {
+  OWNER // Property owner directly uploading
+  EXTERNAL_AGENT // External dealer listing on behalf of owner
+  AGENT_OWNER // Internal team agent who also owns the property
+}
+
+// ---------------------------------------------------------
+// 9a. INVENTORY DOCUMENTS (Title deeds, NOC, layouts, etc.)
+// ---------------------------------------------------------
+model InventoryDocument {
+  id           String    @id @default(uuid())
+  inventory_id String
+  inventory    Inventory @relation(fields: [inventory_id], references: [id], onDelete: Cascade)
+
+  doc_type  String // title_deed, noc, layout_plan, sale_agreement, encumbrance, tax_receipt, other
+  title     String // User-given label: "NOC from Builder"
+  file_url  String // Storage path
+  file_name String // Original filename
+  mime_type String // application/pdf, image/jpeg, etc.
+  file_size Int? // Bytes
+
+  uploaded_via String   @default("web") // web, admin, whatsapp
+  created_at   DateTime @default(now())
+
+  @@index([inventory_id])
+  @@map("inventory_documents")
+}
+
+// ---------------------------------------------------------
+// 9a2. INVENTORY COUNTER (Sequential display ID generation)
+// ---------------------------------------------------------
+model InventoryCounter {
+  id         String   @id @default("singleton")
+  counter    Int      @default(20000)
+  updated_at DateTime @updatedAt
+
+  @@map("inventory_counters")
+}
+
+// ---------------------------------------------------------
+// 9b. FLAT PROPERTY TYPES (Redesign v2 - replaces hierarchical classification)
+// Single-level list: 11 Residential + 25 Commercial + 1 Agricultural = 37 types
+// ---------------------------------------------------------
+model FlatPropertyType {
+  id            String  @id @default(uuid())
+  name          String // "Residential Apartment", "Commercial Shops", etc.
+  slug          String  @unique
+  main_category String // "residential", "commercial", "agricultural"
+  icon          String?
+  display_order Int     @default(0)
+  is_active     Boolean @default(true)
+
+  // Inline validation rules (no sub-category lookup needed)
+  bhk_required       Boolean @default(false)
+  floor_required     Boolean @default(false)
+  plot_area_required Boolean @default(false)
+
+  // Backward compatibility: maps to legacy hierarchy slugs
+  legacy_category_slug String? // e.g., "residential"
+  legacy_type_slug     String? // e.g., "flat"
+
+  inventory Inventory[]
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@index([main_category, is_active])
+  @@map("flat_property_types")
+}
+
+enum CallStatus {
+  UPLOADING
+  PROCESSING
+  TRANSCRIBED
+  READY_FOR_REVIEW
+  APPROVED
+  REJECTED
+}
+
+// ---------------------------------------------------------
+// 17. MASTER DATA - PROPERTY CLASSIFICATION (PHASE 7)
+// ---------------------------------------------------------
+
+model PropertyCategory {
+  id            String  @id @default(uuid())
+  name          String // Residential, Commercial
+  slug          String  @unique // residential, commercial
+  description   String?
+  icon          String? // Icon identifier (e.g., "home", "building", "factory")
+  display_order Int     @default(0)
+  is_active     Boolean @default(true)
+  labels_json   Json? // Multi-language: { "en": "Residential", "hi": "" }
+
+  sub_categories PropertySubCategory[]
+  inventory      Inventory[]
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@map("master_categories")
+}
+
+model PropertySubCategory {
+  id String @id @default(uuid())
+
+  category_id String
+  category    PropertyCategory @relation(fields: [category_id], references: [id], onDelete: Cascade)
+
+  name             String // Apartment, Individual Housing
+  slug             String // apartment, individual_housing
+  icon             String?
+  display_order    Int     @default(0)
+  is_active        Boolean @default(true)
+  labels_json      Json? // Multi-language support
+  validation_rules Json? // { "bhk_required": true, "floor_required": true, "builtup_area_required": false }
+
+  property_types PropertyType[]
+  inventory      Inventory[]
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@unique([category_id, slug])
+  @@map("master_sub_categories")
+}
+
+model PropertyType {
+  id String @id @default(uuid())
+
+  sub_category_id String
+  sub_category    PropertySubCategory @relation(fields: [sub_category_id], references: [id], onDelete: Cascade)
+
+  name          String // Studio, 1 BHK, Villa
+  slug          String // studio, 1_bhk, villa
+  icon          String?
+  display_order Int     @default(0)
+  is_active     Boolean @default(true)
+  labels_json   Json? // Multi-language support
+
+  inventory Inventory[]
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@unique([sub_category_id, slug])
+  @@map("master_property_types")
+}
+
+model PropertyConfiguration {
+  id            String  @id @default(uuid())
+  name          String // 1 BHK, 2 BHK, 3 BHK, Furnished Office
+  slug          String  @unique
+  icon          String?
+  display_order Int     @default(0)
+  is_active     Boolean @default(true)
+  labels_json   Json? // Multi-language support
+
+  inventory Inventory[]
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@map("master_configurations")
+}
+
+// ---------------------------------------------------------
+// 18. USAGE TYPE & INVESTMENT TYPE (PHASE 7 - Classification)
+// ---------------------------------------------------------
+
+model UsageType {
+  id            String  @id @default(uuid())
+  name          String // Self-use, Investment, Rental Income
+  slug          String  @unique
+  icon          String?
+  display_order Int     @default(0)
+  is_active     Boolean @default(true)
+  labels_json   Json?
+
+  inventory Inventory[]
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@map("master_usage_types")
+}
+
+model InvestmentType {
+  id            String  @id @default(uuid())
+  name          String // Pre-launch, Under Construction, Ready to Move
+  slug          String  @unique
+  icon          String?
+  display_order Int     @default(0)
+  is_active     Boolean @default(true)
+  labels_json   Json?
+
+  inventory Inventory[]
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@map("master_investment_types")
+}
+
+// ---------------------------------------------------------
+// 10. PARTNER AGENTS (External Marketplace Agents)
+// ---------------------------------------------------------
+model PartnerAgent {
+  id           String  @id @default(uuid())
+  phone_number String  @unique
+  contact      Contact @relation(fields: [phone_number], references: [phone_number])
+
+  name         String
+  email        String?
+  company_name String?
+  city         String?
+
+  // Subscription & Package
+  package_type AgentPackage @default(FREE)
+  status       AgentStatus  @default(ACTIVE)
+
+  // Listing Limits
+  listing_limit  Int @default(10) // FREE=10, PRO=50, ADVANCE_PRO=unlimited (999)
+  priority_score Int @default(50) // Used in matching ranking
+
+  // Subscription Dates
+  subscription_start DateTime?
+  subscription_end   DateTime?
+
+  // Legacy fields (keep for backward compatibility)
+  agency_name     String?
+  partner_type    String? // HAS_PROPERTIES, HAS_BUYERS, BOTH
+  verified        Boolean  @default(false)
+  commission_rate Decimal?
+
+  // Partner category (individual vs company)
+  partner_category PartnerCategory @default(INDIVIDUAL)
+
+  // Managing internal agent (who onboarded & coordinates)
+  managing_agent_id String?
+  managing_agent    Agent?  @relation("ManagedPartners", fields: [managing_agent_id], references: [id])
+
+  // Company hierarchy (sub-agents under a company partner)
+  parent_partner_id String?
+  parent_partner    PartnerAgent?  @relation("PartnerHierarchy", fields: [parent_partner_id], references: [id])
+  sub_agents        PartnerAgent[] @relation("PartnerHierarchy")
+
+  // Mandatory business fields
+  business_name       String?
+  business_address    String?
+  registration_number String? // Udyam, GSTIN, etc.
+
+  // Authentication
+  password_hash String?
+
+  // Onboarding metadata
+  onboarded_by_agent_id String?
+  onboarded_at          DateTime?
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@index([phone_number])
+  @@index([package_type, status])
+  @@index([managing_agent_id])
+  @@index([parent_partner_id])
+  @@map("partner_agents")
+}
+
+enum AgentPackage {
+  FREE
+  PRO
+  ADVANCE_PRO
+}
+
+enum AgentStatus {
+  ACTIVE
+  SUSPENDED
+  EXPIRED
+  PENDING_PAYMENT
+}
+
+enum PartnerCategory {
+  INDIVIDUAL
+  COMPANY
+}
+
+// ---------------------------------------------------------
+// 11. LEAD SCORING
+// ---------------------------------------------------------
+model LeadScore {
+  phone_number String @id
+  tenant_id    String
+
+  intent_score      Int @default(0)
+  engagement_score  Int @default(0)
+  reliability_score Int @default(0)
+  urgency_score     Int @default(0)
+
+  total_score Int @default(0)
+
+  // Anti-Pattern Metrics
+  no_show_count   Int       @default(0)
+  last_no_show_at DateTime?
+
+  last_updated_at DateTime @updatedAt
+
+  contact Contact @relation(fields: [phone_number], references: [phone_number])
+
+  @@map("lead_scores")
+}
+
+// ---------------------------------------------------------
+// 12. CONVERSATION SESSIONS (Persistent Workflow State)
+// ---------------------------------------------------------
+model ConversationSession {
+  id           String  @id @default(uuid())
+  phone_number String
+  contact      Contact @relation(fields: [phone_number], references: [phone_number])
+
+  workflow String // buyer, seller, unknown, partner_agent, management
+  state    String // current workflow state (e.g. INTAKE, QUALIFICATION)
+  context  Json? // workflow-specific context data
+
+  active Boolean @default(true)
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@index([phone_number, active])
+  @@index([phone_number, active, workflow])
+  @@map("conversation_sessions")
+}
+
+// ---------------------------------------------------------
+// 12b. CHAT WORKFLOW SESSIONS (Web/Admin Chat-based Inventory Upload)
+// ---------------------------------------------------------
+model ChatWorkflowSession {
+  id       String  @id @default(uuid())
+  workflow String  @default("chat_inventory")
+  state    String // in_progress, awaiting_media, awaiting_documents, awaiting_confirm, awaiting_multi_select
+  context  Json? // ConversationalSession data
+  active   Boolean @default(true)
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@index([active])
+  @@index([active, workflow])
+  @@map("chat_workflow_sessions")
+}
+
+// ---------------------------------------------------------
+// 13. WEBSITE LEADS (Cookie/Popup Lead Capture)
+// ---------------------------------------------------------
+model WebsiteLead {
+  id String @id @default(uuid())
+
+  name     String?
+  phone    String?
+  email    String?
+  interest String? // buy, rent, sell, invest, browse
+
+  source     String  @default("popup") // popup, cookie, newsletter, contact_form
+  page_url   String?
+  user_agent String?
+  ip_address String?
+
+  // Cookie consent tracking
+  cookie_consent    Boolean   @default(false)
+  consent_timestamp DateTime?
+
+  // Conversion tracking
+  converted_to_contact Boolean @default(false)
+  contact_phone        String?
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@index([email])
+  @@index([phone])
+  @@map("website_leads")
+}
+
+// ---------------------------------------------------------
+// 14. NEWSLETTER SUBSCRIBERS
+// ---------------------------------------------------------
+model NewsletterSubscriber {
+  id     String  @id @default(uuid())
+  email  String  @unique
+  name   String?
+  status String  @default("active") // active, unsubscribed
+  source String  @default("website") // website, footer, popup
+
+  subscribed_at   DateTime  @default(now())
+  unsubscribed_at DateTime?
+
+  @@map("newsletter_subscribers")
+}
+
+// ---------------------------------------------------------
+// 15. SCHEDULED VISITS (Property Site Visits) - EXTENDED
+// ---------------------------------------------------------
+model ScheduledVisit {
+  id String @id @default(uuid())
+
+  // Link to Contact (SSOT pattern)
+  contact_id String
+  contact    Contact @relation(fields: [contact_id], references: [phone_number])
+
+  property_id    String
+  name           String?
+  phone          String?
+  email          String?
+  preferred_date DateTime?
+  preferred_time String?
+  message        String?
+  source         String? // website_chat, website_form, whatsapp, voice, manual
+
+  status String @default("pending") // pending, confirmed, completed, cancelled
+
+  // Agent appointment tracking
+  agent_id            String? // If property belongs to external agent
+  internal_handler_id String? // Assigned internal staff for coordination
+  buyer_info_masked   Boolean @default(false) // TRUE for FREE agent appointments
+
+  metadata Json? // Session ID, booking details, etc.
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@index([contact_id])
+  @@index([property_id])
+  @@index([agent_id])
+  @@map("scheduled_visits")
+}
+
+// ---------------------------------------------------------
+// CALENDAR APPOINTMENTS (Unified Calendar System)
+// ---------------------------------------------------------
+model Appointment {
+  id String @id @default(uuid())
+
+  // Link to Contact (SSOT pattern)
+  contact_id String
+  contact    Contact @relation(fields: [contact_id], references: [phone_number])
+
+  // Appointment Details
+  title       String
+  description String?         @db.Text
+  type        AppointmentType // property_visit, follow_up_call, meeting, site_visit, documentation, other
+
+  // Date & Time
+  scheduled_at DateTime
+  duration     Int       @default(30) // Duration in minutes
+  end_time     DateTime? // Calculated or manually set
+
+  // Assignment (Who handles this appointment)
+  assigned_to_agent_id String? // Internal agent/staff handling appointment
+  assigned_to_agent    Agent?  @relation(fields: [assigned_to_agent_id], references: [id])
+
+  // Property linkage (if applicable) - Builders/External agents access via property ownership
+  property_id String?
+  property    Inventory? @relation(fields: [property_id], references: [id])
+
+  // Transaction linkage (for deal-linked appointments)
+  transaction_id String?
+  transaction    Transaction? @relation("TransactionAppointments", fields: [transaction_id], references: [id])
+
+  // Status Management
+  status  AppointmentStatus @default(scheduled)
+  source  String? // website_chat, whatsapp, voice, manual, ai_bot
+  channel String? // whatsapp, voice, website
+
+  // WhatsApp Integration
+  reminder_sent         Boolean   @default(false)
+  reminder_sent_at      DateTime?
+  confirmation_received Boolean   @default(false)
+  whatsapp_message_id   String?
+
+  // Location (for physical meetings)
+  location String?
+
+  // Additional context
+  notes    String? @db.Text
+  metadata Json? // Session ID, booking details, AI context, etc.
+
+  // Tenant
+  tenant_id String
+  tenant    Tenant @relation(fields: [tenant_id], references: [id])
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@index([contact_id])
+  @@index([assigned_to_agent_id])
+  @@index([property_id])
+  @@index([transaction_id])
+  @@index([scheduled_at])
+  @@index([status])
+  @@map("appointments")
+}
+
+enum AppointmentType {
+  property_visit
+  follow_up_call
+  meeting
+  site_visit
+  documentation
+  negotiation
+  contract_signing
+  handover
+  other
+}
+
+enum AppointmentStatus {
+  scheduled
+  confirmed
+  in_progress
+  completed
+  cancelled
+  rescheduled
+  no_show
+}
+
+// ---------------------------------------------------------
+// 16. COMMISSIONS (For FREE Agents Only)
+// ---------------------------------------------------------
+model Commission {
+  id String @id @default(uuid())
+
+  // PHASE 12: Updated to reference unified Owner model
+  owner_id String
+  owner    Owner  @relation(fields: [owner_id], references: [id], onDelete: Cascade)
+
+  visit_id          String // Reference to ScheduledVisit or deal
+  property_id       String
+  transaction_id    String? // Link to Transaction (deal)
+  deal_value        Decimal? // Final deal amount
+  commission_rate   Decimal  @default(2.0) // Percentage (e.g., 2%)
+  commission_amount Decimal? // Calculated amount
+
+  status  String    @default("PENDING") // PENDING, APPROVED, PAID, DISPUTED
+  paid_at DateTime?
+
+  notes String? @db.Text
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@index([owner_id, status])
+  @@map("commissions")
+}
+
+// ---------------------------------------------------------
+// 17. STAFF CALL INTELLIGENCE (PHASE 8)
+// ---------------------------------------------------------
+model StaffCall {
+  id String @id @default(uuid())
+
+  tenant_id String
+  tenant    Tenant @relation(fields: [tenant_id], references: [id])
+
+  // Staff agent who made/received the call
+  staff_agent_id String
+  staff_agent    Agent  @relation(fields: [staff_agent_id], references: [id])
+
+  // Contact phone number (business call)
+  phone_number String
+  contact      Contact @relation(fields: [phone_number], references: [phone_number])
+
+  // Recording & Transcript
+  recording_url String? // Cloud storage URL
+  duration      Int? // seconds
+  transcript    String? @db.Text
+
+  // AI Extraction Results
+  ai_extraction    Json? // Full AI extracted data (intent, location, budget, etc.)
+  confidence_score Float? // 0.0 - 1.0
+
+  // Call Classification
+  call_type      String @default("BUSINESS") // BUSINESS, PERSONAL
+  classification String // INBOUND, OUTBOUND
+
+  // Processing Status
+  status CallStatus @default(UPLOADING)
+
+  // Human-in-the-Loop
+  staff_edited_data Json? // Staff edits/corrections
+  submitted_at      DateTime?
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@index([staff_agent_id])
+  @@index([phone_number])
+  @@index([status])
+  @@map("staff_calls")
+}
+
+// ---------------------------------------------------------
+// 18. OWNER & SUBSCRIPTION MODELS (PHASE 12 - Marketplace Transformation)
+// ---------------------------------------------------------
+
+model Owner {
+  id String @id @default(uuid())
+
+  // Ownership Scope & Type
+  scope        OwnerScope // INTERNAL or EXTERNAL
+  externalType ExternalOwnerType? // Required if EXTERNAL
+
+  // SSOT Link to Contact
+  contact_phone String  @unique
+  contact       Contact @relation(fields: [contact_phone], references: [phone_number], onDelete: Cascade)
+
+  // Status & Limits
+  status         OwnerStatus @default(PENDING_VERIFICATION)
+  listing_limit  Int         @default(10)
+  priority_score Int         @default(50)
+
+  // Relations
+  subscription Subscription?
+  inventory    Inventory[]
+  projects     Project[]
+  commissions  Commission[]
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@index([scope, externalType])
+  @@index([status])
+  @@map("owners")
+}
+
+enum OwnerScope {
+  INTERNAL
+  EXTERNAL
+}
+
+enum ExternalOwnerType {
+  INDIVIDUAL_AGENT
+  PROPERTY_AGENT
+  REAL_ESTATE_BUILDER
+}
+
+enum OwnerStatus {
+  ACTIVE
+  SUSPENDED
+  EXPIRED
+  PENDING_VERIFICATION
+}
+
+model Subscription {
+  id String @id @default(uuid())
+
+  owner_id String @unique
+  owner    Owner  @relation(fields: [owner_id], references: [id], onDelete: Cascade)
+
+  plan_type PlanType
+  status    SubscriptionStatus @default(ACTIVE)
+
+  start_date DateTime?
+  end_date   DateTime?
+  auto_renew Boolean   @default(false)
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@index([plan_type, status])
+  @@map("subscriptions")
+}
+
+enum PlanType {
+  FREE
+  BASIC
+  PRO
+  PREMIUM
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  EXPIRED
+  CANCELLED
+  PENDING_PAYMENT
+}
+
+// ---------------------------------------------------------
+// 19. PROJECT MODELS (PHASE 12 - Builder Support)
+// ---------------------------------------------------------
+
+model Project {
+  id String @id @default(uuid())
+
+  owner_id String
+  owner    Owner  @relation(fields: [owner_id], references: [id], onDelete: Cascade)
+
+  // Project Details
+  name            String
+  project_type    ProjectType
+  city            String
+  locality        String
+  google_map_link String?
+  rera_number     String?
+  possession_date DateTime?
+  project_status  ProjectStatus
+
+  // Descriptions
+  short_description String  @db.Text
+  long_description  String? @db.Text
+
+  // Listing Status
+  status ProjectListingStatus @default(DRAFT)
+
+  // Relations
+  units        ProjectUnit[]
+  media        ProjectMedia[]
+  leads        BuilderLead[]
+  appointments BuilderAppointment[]
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@index([owner_id])
+  @@index([city, locality])
+  @@index([status, project_status])
+  @@map("projects")
+}
+
+enum ProjectType {
+  RESIDENTIAL
+  COMMERCIAL
+  MIXED_USE
+}
+
+enum ProjectStatus {
+  UPCOMING
+  UNDER_CONSTRUCTION
+  READY_TO_MOVE
+  DELIVERED
+}
+
+enum ProjectListingStatus {
+  DRAFT
+  ACTIVE
+  PAUSED
+  SOLD_OUT
+  ARCHIVED
+}
+
+model ProjectUnit {
+  id         String  @id @default(uuid())
+  project_id String
+  project    Project @relation(fields: [project_id], references: [id], onDelete: Cascade)
+
+  // Unit Configuration & Pricing
+  configuration   String // "1 BHK", "2 BHK", "Office 500sqft"
+  area_min        Float?
+  area_max        Float?
+  price_min       Float?
+  price_max       Float?
+  available_units Int    @default(0)
+
+  is_active Boolean @default(true)
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@index([project_id])
+  @@map("project_units")
+}
+
+model ProjectMedia {
+  id         String  @id @default(uuid())
+  project_id String
+  project    Project @relation(fields: [project_id], references: [id], onDelete: Cascade)
+
+  media_type MediaType
+  url        String
+  title      String?
+
+  created_at DateTime @default(now())
+
+  @@index([project_id])
+  @@map("project_media")
+}
+
+enum MediaType {
+  IMAGE
+  VIDEO
+  FLOOR_PLAN
+  BROCHURE
+  MASTER_PLAN
+}
+
+// ---------------------------------------------------------
+// 20. BUILDER LEADS & APPOINTMENTS (PHASE 12)
+// ---------------------------------------------------------
+
+model BuilderLead {
+  id         String  @id @default(uuid())
+  project_id String
+  project    Project @relation(fields: [project_id], references: [id], onDelete: Cascade)
+
+  contact_phone String
+  contact       Contact @relation(fields: [contact_phone], references: [phone_number])
+
+  source        String // WEBSITE, WHATSAPP, CALL, CAMPAIGN
+  configuration String?
+  status        BuilderLeadStatus @default(NEW)
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  appointments BuilderAppointment[]
+
+  @@index([project_id])
+  @@index([contact_phone])
+  @@index([status])
+  @@map("builder_leads")
+}
+
+enum BuilderLeadStatus {
+  NEW
+  CONTACTED
+  VISIT_SCHEDULED
+  VISITED
+  NEGOTIATION
+  CONVERTED
+  LOST
+}
+
+model BuilderAppointment {
+  id String @id @default(uuid())
+
+  lead_id String
+  lead    BuilderLead @relation(fields: [lead_id], references: [id], onDelete: Cascade)
+
+  project_id String
+  project    Project @relation(fields: [project_id], references: [id], onDelete: Cascade)
+
+  visit_date DateTime
+  visit_time String
+  status     BuilderAppointmentStatus @default(SCHEDULED)
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@index([lead_id])
+  @@index([project_id])
+  @@index([visit_date])
+  @@map("builder_appointments")
+}
+
+enum BuilderAppointmentStatus {
+  SCHEDULED
+  CONFIRMED
+  VISITED
+  NO_SHOW
+  CANCELLED
+}
+
+// ---------------------------------------------------------
+// 21. AGENT ACTION LOG (Multi-Agent Audit Trail)
+// ---------------------------------------------------------
+model AgentActionLog {
+  id String @id @default(uuid())
+
+  agent_name String // master, sales, matching, appointment, etc.
+  task_type  String // classify, match, schedule, follow_up, respond, etc.
+
+  phone_number   String? // Contact involved (if any)
+  input_summary  String? @db.Text // What the agent received
+  output_summary String? @db.Text // What the agent returned
+
+  quality_score Float? // QA agent's score (0-10), filled async
+  duration_ms   Int? // How long the agent took (ms)
+
+  status        String  @default("success") // success, failed, escalated
+  error_message String? @db.Text
+
+  created_at DateTime @default(now())
+
+  @@index([agent_name])
+  @@index([phone_number])
+  @@index([created_at])
+  @@index([status])
+  @@index([agent_name, status, created_at])
+  @@map("agent_action_logs")
+}
+
+// ---------------------------------------------------------
+// 22. QA LOG (Quality Assurance Tracking)
+// ---------------------------------------------------------
+model QALog {
+  id String @id @default(uuid())
+
+  interaction_id String? // Reference to the Interaction being scored
+  phone_number   String // Contact involved
+  agent_name     String // Which agent produced this response
+
+  quality_score Float // 0-10 (10 = perfect)
+  issues        Json? // [{type: 'hallucination', detail: '...'}, {type: 'wrong_info', detail: '...'}]
+  sentiment     String? // positive, neutral, negative, frustrated
+
+  flagged     Boolean @default(false) // TRUE = needs human review
+  reviewed_by String? // Agent (human) who reviewed this
+
+  created_at DateTime @default(now())
+
+  @@index([phone_number])
+  @@index([agent_name])
+  @@index([flagged])
+  @@index([created_at])
+  @@map("qa_logs")
+}
+
+// ---------------------------------------------------------
+// 23. TRANSACTIONS (Property Deal Lifecycle)
+// ---------------------------------------------------------
+
+model Transaction {
+  id        String @id @default(uuid())
+  tenant_id String
+
+  // The 4 Pillars: Demand + Supply + Executive + Inventory
+  demand_contact_id  String // Buyer/Tenant phone (REQUIRED)
+  supply_contact_id  String? // Seller/Landlord/Agent phone (null until matched)
+  executive_agent_id String? // Internal sales executive (auto-assigned)
+  inventory_id       String? // Property reference (null until matched)
+
+  // PHASE 7: 3-Role Deal Structure
+  demand_handler_type  String? // PARTNER, TEAM_MEMBER, DIRECT
+  demand_handler_id    String? // PartnerAgent.id or Agent.id (null for DIRECT)
+  supply_handler_type  String? // PARTNER, TEAM_MEMBER
+  supply_handler_id    String? // PartnerAgent.id or Agent.id
+  coordinator_agent_id String? // Always an internal Agent - the middleman
+  deal_scenario        String? // PARTNER_INTERNAL, PARTNER_PARTNER, DIRECT_INTERNAL
+
+  // Deal Details
+  type     TransactionType // SALE or RENT
+  status   TransactionStatus @default(NEW)
+  priority Int               @default(0) // Higher = more important
+
+  // Demand Requirements Snapshot (from buyer/tenant at creation)
+  demand_property_type String? // flat, house, plot, commercial
+  demand_location      String? // Preferred locality/city
+  demand_budget_min    Float?
+  demand_budget_max    Float?
+  demand_bedrooms      String? // 1BHK, 2BHK, etc.
+  demand_notes         String? @db.Text
+
+  // PHASE 7: Extended Requirements Snapshot
+  demand_intent      String? // buy, rent_lease
+  demand_category    String? // residential, commercial, agricultural
+  demand_type_slug   String? // flat, 1bhk, 2bhk, shop, office, plot, etc.
+  demand_budget_type String? // one_time (buy), per_month (rent/lease)
+  demand_amenities   Json? // Array of desired amenities
+
+  // Outcome (filled on close)
+  final_price       Float? // Agreed price (on CLOSED_WON)
+  close_reason      String? // Why closed (won or lost)
+  commission_amount Float? // Commission earned
+
+  // Metadata
+  source          String             @default("whatsapp") // whatsapp, web, voice, admin
+  previous_status TransactionStatus? // For ON_HOLD recovery
+
+  created_at DateTime  @default(now())
+  updated_at DateTime  @updatedAt
+  closed_at  DateTime?
+
+  // Relations
+  demand_contact  Contact    @relation("DemandTransactions", fields: [demand_contact_id], references: [phone_number])
+  supply_contact  Contact?   @relation("SupplyTransactions", fields: [supply_contact_id], references: [phone_number])
+  executive_agent Agent?     @relation("ExecutiveTransactions", fields: [executive_agent_id], references: [id])
+  coordinator     Agent?     @relation("CoordinatorTransactions", fields: [coordinator_agent_id], references: [id])
+  inventory       Inventory? @relation(fields: [inventory_id], references: [id])
+  tenant          Tenant     @relation(fields: [tenant_id], references: [id])
+
+  logs         TransactionLog[]
+  appointments Appointment[]    @relation("TransactionAppointments")
+  queries      DealQuery[]
+
+  @@index([demand_contact_id])
+  @@index([supply_contact_id])
+  @@index([executive_agent_id])
+  @@index([coordinator_agent_id])
+  @@index([inventory_id])
+  @@index([status])
+  @@index([tenant_id, status])
+  @@index([deal_scenario])
+  @@index([demand_handler_type, demand_handler_id])
+  @@index([supply_handler_type, supply_handler_id])
+  @@map("transactions")
+}
+
+model TransactionLog {
+  id             String      @id @default(uuid())
+  transaction_id String
+  transaction    Transaction @relation(fields: [transaction_id], references: [id], onDelete: Cascade)
+
+  action       TransactionLogAction
+  old_status   TransactionStatus?
+  new_status   TransactionStatus?
+  performed_by String? // phone_number or agent_id of who triggered
+  channel      String? // whatsapp, web, voice, system
+  details      Json? // Flexible payload (notes, reason, metadata)
+
+  created_at DateTime @default(now())
+
+  @@index([transaction_id])
+  @@index([action])
+  @@index([created_at])
+  @@map("transaction_logs")
+}
+
+enum TransactionType {
+  SALE
+  RENT
+}
+
+enum TransactionStatus {
+  NEW
+  MATCHED
+  VISIT_SCHEDULED
+  VISITED
+  NEGOTIATION
+  CLOSED_WON
+  CLOSED_LOST
+  ON_HOLD
+}
+
+enum RoleContext {
+  DEMAND
+  SUPPLY
+  INTERNAL
+}
+
+enum TransactionLogAction {
+  CREATED
+  STATUS_CHANGED
+  EXECUTIVE_ASSIGNED
+  EXECUTIVE_CHANGED
+  APPOINTMENT_LINKED
+  APPOINTMENT_COMPLETED
+  NEGOTIATION_UPDATE
+  PARTY_NOTIFIED
+  DUPLICATE_BLOCKED
+  CLOSED
+  REOPENED
+  NOTE_ADDED
+  FOLLOWUP_SENT
+  OWNERSHIP_TRANSFERRED
+}
+
+// ---------------------------------------------------------
+// 24. CAMPAIGNS (Marketing Agent - Broadcasts & Drip Campaigns)
+// ---------------------------------------------------------
+
+// Campaign Templates - Reusable message templates
+model CampaignTemplate {
+  id String @id @default(uuid())
+
+  name     String // "Welcome Message", "Follow-up Reminder"
+  channel  String // whatsapp, email, sms, voice
+  category String? // welcome, followup, promotional, reminder, transactional
+
+  // Template content
+  subject   String? // For email
+  body      String  @db.Text // Template with {{variables}}
+  variables Json    @default("[]") // [{"name": "first_name", "required": true, "default": "Customer"}, ...]
+
+  // Performance tracking
+  avg_score      Float? // Average quality score from past usage
+  times_used     Int    @default(0)
+  avg_open_rate  Float? // For emails
+  avg_reply_rate Float? // For WhatsApp
+
+  created_by String? // Agent ID
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  campaigns Campaign[]
+
+  @@index([channel])
+  @@index([category])
+  @@map("campaign_templates")
+}
+
+model Campaign {
+  id String @id @default(uuid())
+
+  name    String // "Noida Flat Launch", "Follow-up Wave 3"
+  type    String @default("broadcast") // broadcast, drip, launch_promo, follow_up
+  channel String @default("whatsapp") // whatsapp, email, voice
+
+  // Template support (Phase 3.2)
+  template_id String?
+  template    CampaignTemplate? @relation(fields: [template_id], references: [id], onDelete: SetNull)
+
+  // Audience targeting (JSON filter criteria)
+  audience Json? // {city: "Noida", budget_min: 5000000, contact_type: "BUYER_TENANT", property_type: "flat"}
+
+  // Message content (can override template)
+  message String  @db.Text
+  subject String? // For email campaigns
+
+  // Execution state
+  status       String @default("draft") // draft, scheduled, sending, completed, cancelled
+  sent_count   Int    @default(0)
+  delivered    Int    @default(0)
+  responded    Int    @default(0)
+  failed_count Int    @default(0)
+
+  // Scheduling & Recurrence (Phase 3.2)
+  scheduled_at    DateTime?
+  completed_at    DateTime?
+  recurrence_rule String? // Cron format: "0 9 * * 1" (every Monday at 9am)
+
+  // A/B Testing (Phase 3.2)
+  ab_test_config Json? // {"enabled": true, "variants": [{"name": "A", "message": "...", "percentage": 50}, ...]}
+
+  // Creator
+  created_by String? // Agent ID who created this campaign
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@index([status])
+  @@index([type])
+  @@index([created_at])
+  @@index([template_id])
+  @@map("campaigns")
+}
+
+// ---------------------------------------------------------
+// 24.5. PROJECTS & TASKS (Phase 3.3 - Task Management)
+// ---------------------------------------------------------
+
+model WorkProject {
+  id          String    @id @default(uuid())
+  name        String
+  description String?
+  status      String    @default("ACTIVE") // ACTIVE, COMPLETED, ON_HOLD, CANCELLED
+  start_date  DateTime  @default(now())
+  end_date    DateTime?
+
+  // Team assignment
+  owner_id     String? // Agent ID
+  team_members Json? // Array of agent IDs with access
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  tasks Task[]
+
+  @@index([status])
+  @@index([owner_id])
+  @@map("work_projects")
+}
+
+model Task {
+  id String @id @default(uuid())
+
+  // Project association (optional)
+  project_id String?
+  project    WorkProject? @relation(fields: [project_id], references: [id], onDelete: SetNull)
+
+  // Task details
+  title       String
+  description String?  @db.Text
+  assigned_to String // Agent ID
+  due_date    DateTime
+  priority    String   @default("MEDIUM") // LOW, MEDIUM, HIGH, URGENT
+  status      String   @default("TODO") // TODO, IN_PROGRESS, DONE, BLOCKED
+
+  // Contact/property association (SSOT Integration)
+  contact_phone String?
+  contact       Contact? @relation(fields: [contact_phone], references: [phone_number], onDelete: SetNull)
+
+  property_id String?
+  property    Inventory? @relation(fields: [property_id], references: [id], onDelete: SetNull)
+
+  // Tags for categorization
+  tags String[] // ["follow-up", "payment", "documentation"]
+
+  // Workflow task extension
+  task_type      String    @default("GENERAL")  // GENERAL | QUALIFY_LEAD | SHARE_PROPERTIES | SCHEDULE_VISIT | VISIT_FEEDBACK | NEGOTIATE_DEAL
+  snooze_count   Int       @default(0)
+  snoozed_until  DateTime?
+  workflow_stage  Int?      // 1-5 (null for GENERAL tasks)
+  workflow_round  Int       @default(1)   // Loop iteration counter (for Stage 2-4 repeats)
+  parent_task_id  String?   // Previous task in the chain
+  deal_id         String?   // FK to Transaction (linked after Stage 1)
+  stage_metadata  Json?     // Stage-specific data (matches, feedback, shortlist snapshot, etc.)
+
+  // Completion tracking
+  completed_at DateTime?
+  completed_by String?
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@index([assigned_to])
+  @@index([status])
+  @@index([due_date])
+  @@index([project_id])
+  @@index([contact_phone]) // SSOT: Index for contact lookup
+  @@index([property_id]) // SSOT: Index for property lookup
+  @@index([task_type, status]) // Workflow queue lookup
+  @@index([deal_id])
+  @@index([parent_task_id])
+  @@index([contact_phone, task_type, status]) // Lead's active workflow tasks
+  @@map("tasks")
+}
+
+// ---------------------------------------------------------
+// 24b. LEAD PROPERTY SHORTLIST (Tracks properties through lead's consideration journey)
+// ---------------------------------------------------------
+model LeadPropertyShortlist {
+  id              String    @id @default(uuid())
+  tenant_id       String
+
+  contact_phone   String
+  contact         Contact   @relation(fields: [contact_phone], references: [phone_number])
+
+  inventory_id    String
+  inventory       Inventory @relation(fields: [inventory_id], references: [id])
+
+  deal_id         String?   // FK to Transaction
+
+  // Lifecycle status: SHARED -> SHORTLISTED -> VISIT_SCHEDULED -> VISITED -> INTERESTED/REJECTED/REVISIT -> SELECTED
+  status          String    @default("SHARED")
+
+  // Tracking timestamps
+  shared_at       DateTime  @default(now())
+  shortlisted_at  DateTime?
+  visited_at      DateTime?
+  feedback        String?   // Free text feedback from client
+  rejection_reason String?  // Why client rejected this property
+  selected_at     DateTime?
+
+  // Links to originating records
+  property_share_id String?  // FK to PropertyShare
+  appointment_id    String?  // FK to Appointment
+
+  // Which workflow round introduced this property
+  workflow_round    Int      @default(1)
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@unique([contact_phone, inventory_id, deal_id])
+  @@index([contact_phone, status])
+  @@index([deal_id, status])
+  @@index([inventory_id])
+  @@index([tenant_id])
+  @@map("lead_property_shortlists")
+}
+
+// ---------------------------------------------------------
+// 25. AUDIT REPORT (AI Boss - Daily Conversation Audit)
+// ---------------------------------------------------------
+model AuditReport {
+  id          String   @id @default(uuid())
+  report_date DateTime @default(now())
+
+  // Audit findings
+  total_conversations Int
+  total_flagged       Int
+  avg_quality_score   Float?
+
+  issues_found    Json // [{category, count, severity, examples[], suggestion}]
+  agent_breakdown Json? // {sales: {count, avg_score}, classifier: {...}, ...}
+  sentiment_stats Json? // {positive: N, neutral: N, negative: N, frustrated: N}
+
+  // Prompt Engineer actions
+  actions_taken Json? // [{prompt_key, section, content, reason}]
+  deployments   Int   @default(0)
+
+  // Boss status
+  email_sent    Boolean @default(false)
+  email_sent_to String?
+
+  created_at DateTime @default(now())
+
+  @@index([report_date])
+  @@map("audit_reports")
+}
+
+// ---------------------------------------------------------
+// 26. PROMPT OVERRIDE (AI-Learned Rules - Runtime Prompt Injection)
+// ---------------------------------------------------------
+model PromptOverride {
+  id String @id @default(uuid())
+
+  prompt_key String // core_behavior, buyer_prompt, seller_prompt, identification, partner_prompt
+  section    String // greeting_rules, language_rules, qualification_rules, response_format, classification_rules
+
+  content  String  @db.Text // The override/addition text
+  priority Int     @default(0) // Higher = applied later
+  active   Boolean @default(true)
+
+  // Audit trail
+  reason          String? @db.Text
+  audit_report_id String?
+  deployed_by     String  @default("prompt_engineer_agent")
+  version         Int     @default(1)
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@index([prompt_key, active])
+  @@index([created_at])
+  @@map("prompt_overrides")
+}
+
+// ---------------------------------------------------------
+// Pending WhatsApp Messages - Queue for LLM-generated messages
+// awaiting session re-open (24h window expired)
+// ---------------------------------------------------------
+model PendingMessage {
+  id           String   @id @default(uuid())
+  phone_number String
+  message      String   @db.Text
+  context      String? // "followup", "ai_response", etc.
+  status       String   @default("pending") // pending, sent, expired
+  created_at   DateTime @default(now())
+  expires_at   DateTime // Auto-expire after 48h
+
+  @@index([phone_number, status])
+  @@index([expires_at])
+  @@map("pending_messages")
+}
+
+// ---------------------------------------------------------
+// 27. WORKFLOW AUTOMATION (Phase 3.1)
+// ---------------------------------------------------------
+model Workflow {
+  id          String  @id @default(uuid())
+  name        String
+  description String?
+
+  // Trigger configuration
+  trigger String // LEAD_CREATED, STATUS_CHANGED, PROPERTY_ADDED, APPOINTMENT_SCHEDULED, APPOINTMENT_COMPLETED, INTERACTION_RECEIVED
+
+  // Conditions (AND logic) - JSON array of {field, operator, value}
+  // Example: [{"field": "lead_source", "operator": "equals", "value": "99acres"}, {"field": "budget", "operator": "greater_than", "value": "5000000"}]
+  conditions Json @default("[]")
+
+  // Actions (executed in order) - JSON array of {type, params}
+  // Types: ASSIGN_AGENT, SEND_WHATSAPP, SEND_EMAIL, CREATE_TASK, UPDATE_STATUS, SEND_VOICE_CALL
+  // Example: [{"type": "ASSIGN_AGENT", "params": {"agent_id": "xxx"}}, {"type": "SEND_WHATSAPP", "params": {"template": "welcome_message"}}]
+  actions Json @default("[]")
+
+  // Delay before execution (in minutes)
+  delay_minutes Int @default(0) // 0 = immediate, 60 = 1 hour, 1440 = 1 day
+
+  // Control flags
+  enabled  Boolean @default(true)
+  priority Int     @default(0) // Higher priority workflows execute first
+
+  // Execution limits
+  max_executions_per_day Int? // Prevent spam
+
+  // Audit trail
+  created_by String?
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  executions WorkflowExecution[]
+
+  @@index([trigger, enabled])
+  @@index([enabled, priority])
+  @@map("workflows")
+}
+
+model WorkflowExecution {
+  id String @id @default(uuid())
+
+  workflow_id String
+  workflow    Workflow @relation(fields: [workflow_id], references: [id], onDelete: Cascade)
+
+  // Trigger context (full event data at time of execution)
+  trigger_data Json
+
+  // Execution status
+  status        String // SUCCESS, FAILED, SKIPPED, PENDING
+  error_message String? @db.Text
+
+  // Actions executed (JSON array of {type, status, result})
+  actions_log Json @default("[]")
+
+  // Performance tracking
+  executed_at DateTime @default(now())
+  duration_ms Int?
+
+  @@index([workflow_id, status])
+  @@index([executed_at])
+  @@map("workflow_executions")
+}
+
+// =============================================
+// PHASE 16: ONBOARDING SESSION MODELS
+// =============================================
+
+model BuilderOnboardingSession {
+  id             String   @id @default(uuid())
+  phone_number   String
+  status         String   @default("IN_PROGRESS") // IN_PROGRESS, COMPLETED, CANCELLED
+  step           String   @default("COMPANY_NAME")
+  collected_data Json     @default("{}")
+  owner_id       String?
+  created_at     DateTime @default(now())
+  updated_at     DateTime @updatedAt
+
+  @@index([phone_number, status])
+  @@map("builder_onboarding_sessions")
+}
+
+model AgentOnboardingSession {
+  id             String   @id @default(uuid())
+  phone_number   String
+  status         String   @default("IN_PROGRESS") // IN_PROGRESS, COMPLETED, CANCELLED
+  step           String   @default("NAME")
+  collected_data Json     @default("{}")
+  owner_id       String?
+  created_at     DateTime @default(now())
+  updated_at     DateTime @updatedAt
+
+  @@index([phone_number, status])
+  @@map("agent_onboarding_sessions")
+}
+
+// =============================================
+// PHASE 7: DEAL MANAGEMENT SYSTEM
+// =============================================
+
+// Deal Queries - Partner/Coordinator communication on deals
+model DealQuery {
+  id             String      @id @default(uuid())
+  transaction_id String
+  transaction    Transaction @relation(fields: [transaction_id], references: [id], onDelete: Cascade)
+
+  // Who raised the query
+  raised_by_type String // partner_demand, partner_supply, coordinator
+  raised_by_id   String // PartnerAgent.id or Agent.id
+
+  subject String
+  message String @db.Text
+  status  String @default("OPEN") // OPEN, ANSWERED, CLOSED
+
+  // Response
+  answered_by_id String?
+  answer         String?   @db.Text
+  answered_at    DateTime?
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@index([transaction_id])
+  @@index([raised_by_id])
+  @@index([status])
+  @@map("deal_queries")
+}
+
+// Notification Preferences - Persist per agent/partner (replaces hardcoded defaults)
+model NotificationPreference {
+  id String @id @default(uuid())
+
+  // Polymorphic owner: either an Agent or PartnerAgent
+  owner_type String // agent, partner
+  owner_id   String
+
+  // Channel preferences
+  whatsapp_enabled Boolean @default(true)
+  email_enabled    Boolean @default(true)
+
+  // Event-specific preferences (flexible JSON)
+  // Example: { "deal_status_change": true, "visit_scheduled": true, "query_raised": true }
+  event_preferences Json @default("{}")
+
+  // Quiet hours
+  quiet_hours_enabled Boolean @default(true)
+  quiet_hours_start   String  @default("21:00")
+  quiet_hours_end     String  @default("08:00")
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@unique([owner_type, owner_id])
+  @@map("notification_preferences")
+}
+
+// ---------------------------------------------------------
+// NOTIFICATIONS (In-app + Push + audit trail for all channels)
+// ---------------------------------------------------------
+model Notification {
+  id             String   @id @default(uuid())
+  tenant_id      String
+  recipient_id   String   // agent ID, partner agent ID, or contact phone
+  recipient_type String   // "agent" | "partner" | "contact"
+  event          String   // e.g. "inventory_approved", "lead_assigned"
+  category       String   // "inventory" | "lead" | "deal" | "appointment" | "task" | "team" | "system"
+  title          String
+  body           String
+  data           Json?    // event-specific payload (inventory_id, lead_phone, etc.)
+  action_url     String?  // deep link for click-to-navigate (e.g. "#/inventory?id=xxx")
+  channels_sent  String[] // which channels delivered: ["whatsapp","email","push"]
+  read           Boolean  @default(false)
+  clicked        Boolean  @default(false)
+  created_at     DateTime @default(now())
+
+  @@index([recipient_id, read])
+  @@index([recipient_id, created_at])
+  @@index([event])
+  @@map("notifications")
+}
+
+model PushSubscription {
+  id          String   @id @default(uuid())
+  agent_id    String
+  endpoint    String   @unique
+  keys_p256dh String
+  keys_auth   String
+  user_agent  String?
+  created_at  DateTime @default(now())
+
+  @@index([agent_id])
+  @@map("push_subscriptions")
+}
+
+// ---------------------------------------------------------
+// PROPERTY SHARES (Track client-facing property shares)
+// ---------------------------------------------------------
+model PropertyShare {
+  id        String @id @default(uuid())
+  tenant_id String
+
+  inventory_id String
+  inventory    Inventory @relation(fields: [inventory_id], references: [id])
+
+  agent_id String
+  agent    Agent @relation(fields: [agent_id], references: [id])
+
+  client_phone String
+  contact      Contact @relation(fields: [client_phone], references: [phone_number])
+
+  channel       String // whatsapp_api, link_copy, email, sms
+  property_link String
+  whatsapp_sent Boolean @default(false)
+  link_clicked  Boolean @default(false)
+
+  created_at DateTime @default(now())
+
+  @@index([inventory_id])
+  @@index([agent_id])
+  @@index([client_phone])
+  @@index([created_at])
+  @@index([tenant_id, created_at])
+  @@map("property_shares")
+}
+
+// ---------------------------------------------------------
+// SAVED PROPERTIES (Favorites / Shortlist)
+// Tracks which contacts saved/favorited which properties
+// ---------------------------------------------------------
+model SavedProperty {
+  id String @id @default(uuid())
+
+  tenant_id String
+
+  contact_id String
+  contact    Contact @relation(fields: [contact_id], references: [phone_number])
+
+  inventory_id String
+  inventory    Inventory @relation(fields: [inventory_id], references: [id])
+
+  source String @default("website") // website, whatsapp, share
+
+  created_at DateTime @default(now())
+
+  @@unique([contact_id, inventory_id])
+  @@index([inventory_id])
+  @@index([contact_id])
+  @@map("saved_properties")
+}
+
+// ---------------------------------------------------------
+// IntegrationSync - tracks polling state for external APIs
+// ---------------------------------------------------------
+model IntegrationSync {
+  id             String    @id @default(uuid())
+  source         String    @unique   // '99acres', 'magicbricks', etc.
+  status         String    @default("idle") // idle | running | success | failed
+  last_success   DateTime?
+  last_attempt   DateTime?
+  last_error     String?
+  leads_fetched  Int       @default(0)
+  leads_new      Int       @default(0)
+  leads_updated  Int       @default(0)
+  total_syncs          Int       @default(0)
+  consecutive_failures Int       @default(0)
+  metadata       Json?
+  created_at     DateTime  @default(now())
+  updated_at     DateTime  @updatedAt
+
+  @@map("integration_syncs")
+}

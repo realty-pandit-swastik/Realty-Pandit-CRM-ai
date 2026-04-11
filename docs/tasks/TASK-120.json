@@ -1,0 +1,33 @@
+{
+  "id": "TASK-120",
+  "title": "Audio Storage Service (Cloudinary)",
+  "phase": 8,
+  "status": "completed",
+  "priority": "critical",
+  "depends_on": [],
+  "description": "Cloud audio storage service using Cloudinary for secure call recording storage and playback. Features multipart upload handling, signed URL generation for secure access, automatic deletion, and retention policy support.",
+  "files_created": [
+    "agents/backend/src/services/audio_storage.ts"
+  ],
+  "files_modified": [],
+  "features": [
+    "Cloudinary integration for audio file storage (stored as video resource type)",
+    "Multipart form upload handling with Express multer",
+    "Generates unique filenames: calls/{tenant_id}/{staff_id}/{timestamp}.webm",
+    "Signed URL generation with configurable expiry (default 1 hour, max 24 hours)",
+    "Secure playback URLs with authentication",
+    "Audio file deletion on call rejection",
+    "Support for retention policies (180-day lifecycle)",
+    "Error handling for upload failures",
+    "File metadata extraction (duration, format)"
+  ],
+  "acceptance_criteria": [
+    "Audio files upload to Cloudinary successfully",
+    "Signed URLs expire after specified time",
+    "Files can be deleted from cloud storage",
+    "Multipart uploads handled correctly",
+    "Zero TypeScript errors"
+  ],
+  "result_summary": "Complete audio storage service implemented with Cloudinary. Handles uploads, generates secure playback URLs, and manages file lifecycle. Integrated with staff call API endpoints. Production-ready with proper error handling.",
+  "completed_at": "2026-02-13"
+}

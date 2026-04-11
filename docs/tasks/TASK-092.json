@@ -1,0 +1,54 @@
+{
+  "task_id": "TASK-092",
+  "title": "Backend Dockerfile (Multi-stage Build)",
+  "status": "completed",
+  "priority": "high",
+  "classification": "DevOps",
+  "domain": ["Backend", "Docker", "Deployment"],
+  "created_at": "2026-02-12T00:00:00+05:30",
+  "completed_at": "2026-02-12T00:00:00+05:30",
+  "goal": "Create production-ready Dockerfile with multi-stage build to minimize image size, separate build and runtime dependencies, and optimize for security.",
+  "dependencies": [],
+  "sub_tasks": [
+    {
+      "id": "TASK-092-1",
+      "title": "Create Multi-stage Dockerfile",
+      "status": "completed",
+      "output": "Implemented multi-stage build with separate builder and production stages"
+    },
+    {
+      "id": "TASK-092-2",
+      "title": "Optimize Layer Caching",
+      "status": "completed",
+      "output": "Structured COPY commands to leverage Docker layer caching for package.json and dependencies before copying source code"
+    },
+    {
+      "id": "TASK-092-3",
+      "title": "Generate Prisma Client in Build",
+      "status": "completed",
+      "output": "Prisma client generated during Docker build, production dependencies only in final image"
+    },
+    {
+      "id": "TASK-092-4",
+      "title": "Configure Production Runtime",
+      "status": "completed",
+      "output": "Final image uses Node.js LTS, runs as non-root user, exposes port, sets NODE_ENV=production"
+    }
+  ],
+  "files_touched": [
+    "agents/backend/Dockerfile"
+  ],
+  "acceptance_criteria": [
+    "Multi-stage Dockerfile with builder and production stages",
+    "Node.js LTS base image",
+    "Separate build and runtime dependencies",
+    "Prisma client generation included in build process",
+    "Layer caching optimized (package.json copied before source)",
+    "Production image contains only necessary files",
+    "Non-root user for security",
+    "PORT environment variable configurable",
+    "Health check endpoint consideration"
+  ],
+  "result_summary": "Production-optimized Dockerfile created with multi-stage build pattern. Builder stage handles TypeScript compilation and Prisma client generation with devDependencies. Final production image contains only runtime dependencies and compiled code, significantly reducing image size. Follows Docker best practices: layer caching, non-root user, minimal attack surface.",
+  "next_recommended_tasks": ["TASK-093"]
+}

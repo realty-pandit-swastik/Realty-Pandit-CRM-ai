@@ -1,0 +1,42 @@
+{
+  "id": "TASK-118",
+  "title": "Post Project Wizard for Builders",
+  "phase": 15,
+  "status": "completed",
+  "priority": "high",
+  "depends_on": ["TASK-114", "TASK-115"],
+  "description": "Multi-step wizard form for builders to submit new projects with 5 steps: Basic Info, Unit Details, Media Upload, Additional Details, and Preview. Features localStorage draft persistence, dynamic unit builder, file upload support, comprehensive validation, and SSOT integration using local file storage.",
+  "files_created": [
+    "agents/website/src/app/post-project/page.tsx"
+  ],
+  "files_modified": [
+    "agents/backend/src/routes/public.ts",
+    "agents/website/src/lib/api.ts"
+  ],
+  "features": [
+    "5-step wizard with progress indicator",
+    "Step 1: Basic Info (name, type, city, location, builder, price range)",
+    "Step 2: Dynamic Unit Builder (add/remove units with BHK, size, price, status)",
+    "Step 3: Media Upload (images, videos, brochures, floor plans) - COMING SOON state",
+    "Step 4: Additional Details (amenities, description, possession date, RERA)",
+    "Step 5: Preview & Submit with all data review",
+    "localStorage draft persistence (auto-saves every 1 second)",
+    "Draft restoration on page load",
+    "Form validation at each step",
+    "Backend API endpoint POST /public/post-project with SSOT integration",
+    "Local file storage with multer (uploads/projects/{projectId}/)",
+    "Success state with dashboard link",
+    "Full dark mode support"
+  ],
+  "acceptance_criteria": [
+    "All 5 steps functional with proper validation",
+    "Draft persistence works across page reloads",
+    "Unit builder allows dynamic add/remove",
+    "Form submits to backend successfully",
+    "Backend saves to BuilderProject + Contact + Interaction (SSOT)",
+    "Zero TypeScript errors on build",
+    "Full dark mode compatibility"
+  ],
+  "result_summary": "Complete 5-step post project wizard implemented with all features. Draft persistence, dynamic unit builder, validation, and SSOT integration all functional. Media upload shows 'coming soon' placeholder. Backend endpoint integrated with local file storage. Builds with zero errors and full dark mode support.",
+  "completed_at": "2026-02-14"
+}

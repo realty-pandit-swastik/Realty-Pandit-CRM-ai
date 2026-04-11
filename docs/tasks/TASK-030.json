@@ -1,0 +1,17 @@
+{
+  "task_id": "TASK-030",
+  "title": "Upgrade Seller Workflow to Use LLM",
+  "status": "completed",
+  "priority": "medium",
+  "classification": "Enhancement",
+  "domain": ["Backend", "AI"],
+  "created_at": "2026-02-10T00:00:00+05:30",
+  "completed_at": "2026-02-10T00:00:00+05:30",
+  "goal": "Replace hardcoded sequential questions in SellerWorkflow with LLM-powered conversational flow.",
+  "dependencies": ["TASK-022"],
+  "files_touched": [
+    "agents/backend/src/workflows/seller.ts",
+    "agents/backend/src/services/system_prompt.ts"
+  ],
+  "result_summary": "Refactored seller.ts to use LLMService and SystemPromptService.getSellerPrompt(). Still extracts property type via keyword matching for SSOT updates, but generates AI responses via Gemini. Added getSellerPrompt() with context-aware prompting (property_type, location, price status). Seller flow is now multilingual and conversational like BuyerWorkflow."
+}

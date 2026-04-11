@@ -1,0 +1,51 @@
+{
+    "task_id": "TASK-007",
+    "title": "End-to-End System Verification",
+    "status": "completed",
+    "result_summary": "E2E Verified: Webhook received, Logged to DB (Contact+Interaction), Logic Executed.",
+    "files_touched": [
+        "agents/backend/src/scripts/simulate_webhook.ts",
+        "agents/backend/src/scripts/verify_db.ts"
+    ],
+    "priority": "critical",
+    "classification": "Verification",
+    "domain": [
+        "Backend",
+        "Testing"
+    ],
+    "created_at": "2026-02-06T22:35:00+05:30",
+    "goal": "Verify the functionality of the entire pipeline by simulating a real webhook event.",
+    "context": {
+        "pipeline": "Webhook -> Orchestrator -> SSOT -> Buyer Logic -> outbound message.",
+        "requirement": "Must prove that a new user is created in DB and logic responds correctly."
+    },
+    "dependencies": [
+        "TASK-004",
+        "TASK-005",
+        "TASK-006"
+    ],
+    "sub_tasks": [
+        {
+            "id": "TASK-007-A",
+            "workflow": "Testing",
+            "output": "Script to send mock POST request to localhost:3000/webhooks/whatsapp."
+        },
+        {
+            "id": "TASK-007-B",
+            "workflow": "Backend",
+            "output": "Verification of DB records (Contact and Interaction tables)."
+        }
+    ],
+    "decisions": [
+        "Use a standalone script for verification to keep it repeatable.",
+        "Verify against the local running Docker DB."
+    ],
+    "acceptance_criteria": [
+        "Mock webhook returns 200 OK.",
+        "Console logs show flow execution.",
+        "Database contains 1 new Contact and 1 new Interaction."
+    ],
+    "next_recommended_tasks": [
+        "TASK-008"
+    ]
+}

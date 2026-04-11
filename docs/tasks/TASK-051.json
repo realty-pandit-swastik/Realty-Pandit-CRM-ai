@@ -1,0 +1,20 @@
+{
+  "id": "TASK-051",
+  "title": "Smart Intent Router with Confidence Scores",
+  "phase": 6,
+  "status": "completed",
+  "priority": "high",
+  "depends_on": ["TASK-028", "TASK-049"],
+  "description": "Added classifyWithConfidence() to LLMService that returns { type, intent, confidence } with 0-100 score. Updated UnknownIdentificationWorkflow to use confidence-based classification — contacts below 60% confidence get clarifying questions instead of being mis-classified.",
+  "files_modified": [
+    "agents/backend/src/services/llm.ts",
+    "agents/backend/src/workflows/unknown.ts"
+  ],
+  "features": [
+    "classifyWithConfidence() returns JSON with type, intent, and confidence score",
+    "Confidence threshold at 60% — below triggers clarification",
+    "Intent extracted alongside type classification (single LLM call)",
+    "JSON parsing from LLM response with regex fallback"
+  ],
+  "completed_at": "2026-02-10"
+}

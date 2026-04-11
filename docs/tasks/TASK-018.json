@@ -1,0 +1,60 @@
+{
+    "task_id": "TASK-018",
+    "title": "Implement AI Core (Gemini Integration)",
+    "status": "completed",
+    "result_summary": "Integrated Gemini AI. Implemented Language Mirroring, Time-Aware Greeting, and Dynamic Questioning in Buyer & Inventory workflows.",
+    "files_touched": [
+        "src/services/llm.ts",
+        "src/services/system_prompt.ts",
+        "agents/buyer_workflow/index.ts",
+        "src/workflows/inventory_machine.ts"
+    ],
+    "priority": "high",
+    "classification": "Feature",
+    "domain": [
+        "AI",
+        "Backend",
+        "Logic"
+    ],
+    "created_at": "2026-02-07T09:30:00+05:30",
+    "goal": "Replace hardcoded logic with Gemini AI for Language Mirroring, Time-Aware Greeting, and Natural Intent Detection.",
+    "context": {
+        "source": "Chatgpt.txt Audit",
+        "requirement": "AI must mirror language (Line 505), greet based on time (Line 541), understand intent (Line 561)."
+    },
+    "dependencies": [
+        "TASK-004",
+        "TASK-005"
+    ],
+    "sub_tasks": [
+        {
+            "id": "TASK-018-A",
+            "output": "Install `@google/generative-ai` and configure API Key"
+        },
+        {
+            "id": "TASK-018-B",
+            "output": "Create `LLMService` wrapper for Gemini"
+        },
+        {
+            "id": "TASK-018-C",
+            "output": "Implement `SystemPromptService` (Language, Time, Role)"
+        },
+        {
+            "id": "TASK-018-D",
+            "output": "Update `BuyerWorkflow` to use LLM for Qualification"
+        },
+        {
+            "id": "TASK-018-E",
+            "output": "Update `InventoryMachine` to use LLM for Question Generation"
+        },
+        {
+            "id": "TASK-018-F",
+            "output": "Verify AI responses (Language Mirroring Test)"
+        }
+    ],
+    "acceptance_criteria": [
+        "System replies in Hindi if user speaks Hindi.",
+        "Greeting matches current time of day.",
+        "Buyer/Tenant intent is correctly classified by AI."
+    ]
+}

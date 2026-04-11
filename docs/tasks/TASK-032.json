@@ -1,0 +1,18 @@
+{
+  "task_id": "TASK-032",
+  "title": "Auth Service + JWT Implementation",
+  "status": "completed",
+  "priority": "high",
+  "classification": "Feature",
+  "domain": ["Backend"],
+  "created_at": "2026-02-10T00:00:00+05:30",
+  "completed_at": "2026-02-10T00:00:00+05:30",
+  "goal": "Create AuthService with register/login/verifyToken/refreshToken and JWT middleware with requireRole().",
+  "dependencies": ["TASK-031"],
+  "files_touched": [
+    "agents/backend/src/services/auth.ts",
+    "agents/backend/src/middleware/auth.ts",
+    "agents/backend/package.json"
+  ],
+  "result_summary": "Created AuthService (bcrypt password hashing, JWT 24h tokens, 7d refresh tokens). Created authMiddleware (Bearer token extraction, req.agent injection) and requireRole() middleware. Installed bcryptjs and jsonwebtoken with type definitions."
+}

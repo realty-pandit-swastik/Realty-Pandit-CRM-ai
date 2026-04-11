@@ -1,0 +1,2 @@
+-- AlterEnum
+ALTER TYPE "TransactionLogAction" ADD VALUE 'OWNERSHIP_TRANSFERRED';

@@ -1,0 +1,56 @@
+{
+    "task_id": "TASK-017",
+    "title": "System Polish: Reporting & Smart Logic",
+    "status": "completed",
+    "result_summary": "Implemented Smart Timing (15m delay) for missed calls. Added Spam Prevention in VoiceService. Added Daily Report cron job.",
+    "files_touched": [
+        "src/services/decision_engine.ts",
+        "src/services/voice.ts",
+        "src/services/scheduler.ts",
+        "prisma/schema.prisma"
+    ],
+    "priority": "medium",
+    "classification": "Feature",
+    "domain": [
+        "Backend",
+        "Scheduler",
+        "Logic"
+    ],
+    "created_at": "2026-02-07T09:05:00+05:30",
+    "goal": "Implement Daily Summary Reports, Spam Prevention, and Smart Timing as per Chatgpt.txt requirements.",
+    "context": {
+        "source": "Chat/Chatgpt.txt Gap Analysis",
+        "requirement": "Prevent spam (Line 158), 15-min delay (Line 153), Daily Report (Line 205)."
+    },
+    "dependencies": [
+        "TASK-010",
+        "TASK-015"
+    ],
+    "sub_tasks": [
+        {
+            "id": "TASK-017-A",
+            "output": "Implement `SmartTiming` in DecisionEngine (Schedule Missed Call follow-up +15m)"
+        },
+        {
+            "id": "TASK-017-B",
+            "output": "Implement `SpamGuard` in VoiceService (Check recent calls < 24h)"
+        },
+        {
+            "id": "TASK-017-C",
+            "output": "Implement `DailyReportService` (Aggregate stats: Leads, Calls, Deals)"
+        },
+        {
+            "id": "TASK-017-D",
+            "output": "Update Scheduler to run Daily Report at 9 PM"
+        },
+        {
+            "id": "TASK-017-E",
+            "output": "Verify Reporting and Timing logic"
+        }
+    ],
+    "acceptance_criteria": [
+        "Missed call follow-up is scheduled for future, not immediate.",
+        "Outbound call is blocked if a call occurred recently.",
+        "System logs a 'Daily Report Generated' event."
+    ]
+}

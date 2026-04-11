@@ -1,0 +1,45 @@
+{
+    "task_id": "TASK-020",
+    "title": "Update Dealer Dashboard with Lead Scores",
+    "status": "completed",
+    "priority": "medium",
+    "classification": "Frontend",
+    "domain": [
+        "Frontend",
+        "UI/UX"
+    ],
+    "created_at": "2026-02-07T12:15:00+05:30",
+    "goal": "Visualize Lead Scores and enable 'No-Show' reporting in the Dealer Dashboard.",
+    "context": {
+        "source": "Chatgpt.txt (Dealer Dashboard)",
+        "requirement": "Show Hot/Warm/Cold status, numeric scores, and No-Show controls."
+    },
+    "dependencies": [
+        "TASK-008",
+        "TASK-019"
+    ],
+    "sub_tasks": [
+        {
+            "id": "TASK-020-A",
+            "output": "Update Frontend API Client (`src/api.ts`) to fetch scores"
+        },
+        {
+            "id": "TASK-020-B",
+            "output": "Add Score Badges to `ContactList` UI"
+        },
+        {
+            "id": "TASK-020-C",
+            "output": "Implement 'Mark No-Show' Button & API Call"
+        },
+        {
+            "id": "TASK-020-D",
+            "output": "Verify UI updates with mock data"
+        }
+    ],
+    "acceptance_criteria": [
+        "Contacts list shows '🔥 HOT', '🟢 WARM', '❄️ COLD' badges.",
+        "Clicking a contact shows their detailed score breakdown.",
+        "Dealer can click 'Report No-Show' which calls the backend API.",
+        "UI refreshes score after No-Show penalty."
+    ]
+}

@@ -1,0 +1,41 @@
+{
+    "task_id": "TASK-011",
+    "title": "Implement Seller & Dealer Workflows",
+    "status": "completed",
+    "result_summary": "Implemented Seller Workflow (Qualify Flat/House -> Location -> Price). Added DealerService. Updated Webhook Router.",
+    "files_touched": [
+        "agents/backend/src/workflows/seller.ts",
+        "agents/backend/src/services/dealer.ts",
+        "agents/backend/src/routes/webhooks.ts",
+        "agents/backend/src/scripts/test_workflows.ts"
+    ],
+    "priority": "medium",
+    "classification": "Implementation",
+    "domain": [
+        "Backend",
+        "Business Logic"
+    ],
+    "created_at": "2026-02-06T23:45:00+05:30",
+    "goal": "Implement business logic for Sellers and Dealers actors.",
+    "context": {
+        "requirement": "Chatgpt.txt Line 56: 'Property Type (Buy / Sell...)', Line 436: 'Data Segregation... Multi-Dealer'",
+        "user_story": "As a seller, I want to list property. As a dealer, I want to manage leads."
+    },
+    "dependencies": [
+        "TASK-002"
+    ],
+    "sub_tasks": [
+        {
+            "id": "TASK-011-A",
+            "output": "Implement `SellerWorkflow` state machine"
+        },
+        {
+            "id": "TASK-011-B",
+            "output": "Implement `DealerWorkflow` logic"
+        },
+        {
+            "id": "TASK-011-C",
+            "output": "Integrate with WhatsApp/Voice routing"
+        }
+    ]
+}

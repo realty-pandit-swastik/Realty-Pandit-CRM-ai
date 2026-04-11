@@ -1,0 +1,17 @@
+{
+  "task_id": "TASK-041",
+  "title": "Website to WhatsApp Lead Bridge",
+  "status": "completed",
+  "priority": "high",
+  "classification": "Feature",
+  "domain": ["Website", "Backend"],
+  "created_at": "2026-02-10T00:00:00+05:30",
+  "completed_at": "2026-02-10T00:00:00+05:30",
+  "goal": "Build contact form that captures leads from website and creates SSOT contact for Panditji to follow up via WhatsApp.",
+  "dependencies": ["TASK-038"],
+  "files_touched": [
+    "agents/website/src/components/ContactForm.tsx",
+    "agents/website/src/app/contact/page.tsx"
+  ],
+  "result_summary": "Created ContactForm component (name, phone, email, message) that POSTs to /public/contact. Backend upserts Contact (source: 'website', type: 'UNKNOWN') and creates Interaction (channel: 'website', event_type: 'form_submit'). Shows success message 'Panditji will contact you on WhatsApp shortly'. Contact page (/contact) shows all contact methods (WhatsApp, Call, Email) with note about single number for all services."
+}

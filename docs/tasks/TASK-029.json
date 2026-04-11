@@ -1,0 +1,20 @@
+{
+  "task_id": "TASK-029",
+  "title": "Show Contact Type in Frontend",
+  "status": "completed",
+  "priority": "medium",
+  "classification": "Feature",
+  "domain": ["Frontend", "Backend"],
+  "created_at": "2026-02-10T00:00:00+05:30",
+  "completed_at": "2026-02-10T00:00:00+05:30",
+  "goal": "Display contact_type badges in ContactList and add manual classification dropdown in ChatView.",
+  "dependencies": ["TASK-023"],
+  "files_touched": [
+    "agents/frontend/src/components/ContactList.tsx",
+    "agents/frontend/src/components/ChatView.tsx",
+    "agents/frontend/src/App.tsx",
+    "agents/frontend/src/api/client.ts",
+    "agents/backend/src/routes/api.ts"
+  ],
+  "result_summary": "ContactList shows color-coded badges (Buyer=blue, Seller=green, Partner=purple, Mgmt=orange, ?=gray). ChatView has dropdown selector for manual contact_type override. Added PATCH /api/contacts/:phone endpoint with validation. Added updateContactType() to frontend API client."
+}

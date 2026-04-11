@@ -1,0 +1,47 @@
+{
+  "id": "TASK-127",
+  "title": "Agent API Routes",
+  "phase": 13,
+  "status": "completed",
+  "priority": "critical",
+  "depends_on": ["TASK-085", "TASK-086", "TASK-087"],
+  "description": "Complete partner agent-facing API with authentication, registration, dashboard, inventory management, lead access, appointment handling, and deal closing. Implements package-based differentiation (FREE vs PRO/ADVANCE_PRO) with data masking for FREE agents.",
+  "files_created": [
+    "agents/backend/src/routes/agent.ts"
+  ],
+  "files_modified": [
+    "agents/backend/src/app.ts"
+  ],
+  "features": [
+    "Authentication: Login OTP generation and verification",
+    "Registration: Agent registration with package selection",
+    "Dashboard: Stats for inventory, leads, appointments, deals closed, commission earned",
+    "Inventory Management: List agent's properties with filters",
+    "Lead Access: List leads with package-based data masking",
+    "FREE agents: Buyer phone/name masked, contact via Realty Pandit only",
+    "PRO/ADVANCE_PRO agents: Full buyer contact details visible",
+    "Appointment Handling: List appointments, update status",
+    "Deal Closing: Close deal with commission tracking for FREE agents",
+    "Agent-specific data filtering (only see own inventory/leads)",
+    "Permission engine integration",
+    "Proper validation and error handling",
+    "Winston logger integration",
+    "TypeScript types for all requests/responses"
+  ],
+  "acceptance_criteria": [
+    "All agent endpoints functional",
+    "OTP authentication working",
+    "Agent registration with package selection",
+    "Dashboard shows accurate statistics",
+    "Inventory listing with filters",
+    "Leads show masked data for FREE agents",
+    "Leads show full data for PRO/ADVANCE_PRO agents",
+    "Appointments filtered by agent's inventory",
+    "Close deal endpoint tracks commission for FREE agents",
+    "Permission engine validates all operations",
+    "Zero TypeScript errors",
+    "All routes integrated in app.ts"
+  ],
+  "result_summary": "Complete agent API with authentication, registration, dashboard, inventory, leads, appointments, and deal closing. Package-based access control ensures FREE agents see masked buyer data while PRO+ agents get full access. Commission tracking for FREE agents implemented. Production-ready for agent portal frontend.",
+  "completed_at": "2026-02-13"
+}

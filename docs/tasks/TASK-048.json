@@ -1,0 +1,23 @@
+{
+  "id": "TASK-048",
+  "title": "External Leads Dashboard",
+  "phase": 5,
+  "status": "completed",
+  "priority": "medium",
+  "depends_on": ["TASK-043"],
+  "description": "Frontend dashboard component showing leads grouped by source with color-coded cards and recent external leads table. Integrated into DashboardLayout as 'Ext. Leads' nav item (requires view_all_leads permission).",
+  "files_created": [
+    "agents/frontend/src/components/ExternalLeads.tsx"
+  ],
+  "files_modified": [
+    "agents/frontend/src/App.tsx",
+    "agents/frontend/src/components/DashboardLayout.tsx",
+    "agents/frontend/src/api/client.ts",
+    "agents/backend/src/routes/api.ts"
+  ],
+  "endpoints_added": [
+    "GET /api/leads/by-source - Contacts grouped by source with counts",
+    "GET /api/leads/recent-external - Recent external leads (non-whatsapp)"
+  ],
+  "completed_at": "2026-02-10"
+}

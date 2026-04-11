@@ -1,0 +1,23 @@
+{
+  "id": "TASK-043",
+  "title": "Generic Lead Ingestion API",
+  "phase": 5,
+  "status": "completed",
+  "priority": "high",
+  "depends_on": ["TASK-026"],
+  "description": "Generic REST API for external lead ingestion with API key authentication. Accepts leads from any source with standardized fields, creates Contact (SSOT), logs Interaction, initializes LeadScore.",
+  "files_created": [
+    "agents/backend/src/routes/external_leads.ts",
+    "agents/backend/src/middleware/apikey.ts"
+  ],
+  "files_modified": [
+    "agents/backend/src/app.ts"
+  ],
+  "endpoints": [
+    "POST /external/leads - Single lead ingestion",
+    "POST /external/leads/batch - Batch ingestion (up to 50)",
+    "GET /external/leads/status/:phone - Check lead status"
+  ],
+  "auth": "API Key via X-API-Key header, keys from EXTERNAL_API_KEYS env var (comma-separated)",
+  "completed_at": "2026-02-10"
+}

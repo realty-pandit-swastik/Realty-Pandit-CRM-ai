@@ -1,0 +1,41 @@
+{
+  "id": "TASK-130",
+  "title": "WhatsApp Builder Project Upload Workflow",
+  "phase": 13,
+  "status": "completed",
+  "priority": "high",
+  "depends_on": ["TASK-126", "TASK-129"],
+  "description": "AI-powered project creation via WhatsApp conversation. Builders can upload project details through natural language messages, and the system extracts structured data to create Project and ProjectUnit records.",
+  "files_created": [
+    "agents/backend/src/workflows/builder_inventory.ts"
+  ],
+  "files_modified": [],
+  "features": [
+    "Intent detection for project upload keywords",
+    "AI-powered data extraction from natural language",
+    "Structured extraction: project name, type, city, locality, RERA, price range, units",
+    "Confidence scoring for extraction quality (0-1 scale)",
+    "Project record creation with DRAFT status",
+    "Multiple unit configurations support (2BHK, 3BHK, etc.)",
+    "Price range parsing (handles 'L', 'lakhs', numeric formats)",
+    "ProjectUnit record creation for each configuration",
+    "Automatic slug generation from project name",
+    "Interaction logging for audit trail",
+    "Session management for upload flow",
+    "Success message with dashboard link to edit project",
+    "Support for re-upload (add another project)",
+    "Error handling with clear feedback"
+  ],
+  "acceptance_criteria": [
+    "Builder can describe project in natural language",
+    "AI extracts all required fields correctly",
+    "Project created with DRAFT status",
+    "Units created with correct configurations and prices",
+    "Confidence threshold prevents bad data (< 0.6 rejected)",
+    "Dashboard link provided for further editing",
+    "Error messages guide user to correct format"
+  ],
+  "result_summary": "Complete WhatsApp project upload workflow with AI extraction. Builders can add projects through conversational messages. System intelligently parses project details and creates structured records. Projects start as DRAFT for builder review via dashboard.",
+  "completed_at": "2026-02-14",
+  "example_message": "Godrej Garden City, Residential, Sector 27 Noida, 2BHK: 50-60L, 3BHK: 75-90L"
+}

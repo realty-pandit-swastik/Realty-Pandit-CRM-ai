@@ -1,0 +1,17 @@
+{
+  "task_id": "TASK-040",
+  "title": "Property Detail Page + SEO",
+  "status": "completed",
+  "priority": "high",
+  "classification": "Feature",
+  "domain": ["Website"],
+  "created_at": "2026-02-10T00:00:00+05:30",
+  "completed_at": "2026-02-10T00:00:00+05:30",
+  "goal": "Build property detail page with image gallery, specs, contact CTA, and full SEO setup.",
+  "dependencies": ["TASK-037", "TASK-038"],
+  "files_touched": [
+    "agents/website/src/app/properties/[id]/page.tsx",
+    "agents/website/src/app/sitemap.ts"
+  ],
+  "result_summary": "Created /properties/[id] dynamic page with: image gallery grid, intent/category badges, price display (INR format), specs grid (BHK, bath, area, listed date), features/amenities tags, sticky contact sidebar with ContactForm. Added sitemap.ts for SEO. OpenGraph metadata in layout. Full dark theme with Framer Motion animations."
+}

@@ -1,0 +1,45 @@
+{
+  "id": "TASK-056",
+  "title": "Seed Data - Full Classification Tree",
+  "phase": 7,
+  "status": "completed",
+  "priority": "critical",
+  "depends_on": ["TASK-055"],
+  "description": "Comprehensive seed data for property classification system. Populated all classification tables with real-world property types covering Residential (individual housing, apartment, plot/land, shared living) and Commercial (office, retail, industrial, hospitality) categories with 100+ master records.",
+  "files_created": [
+    "agents/backend/prisma/seed_master.ts"
+  ],
+  "files_modified": [
+    "agents/backend/package.json"
+  ],
+  "features": [
+    "Complete Residential classification tree",
+    "Individual Housing: Villa, Bungalow, Row House, Farmhouse, Studio Home",
+    "Apartment: 1/2/3/4/5BHK Flat, Penthouse, Duplex, Service Apartment",
+    "Plot/Land: Residential Plot, Agricultural Land, Commercial Plot",
+    "Shared Living: PG, Hostel, Co-living Space",
+    "Complete Commercial classification tree",
+    "Office: IT Office, Corporate Office, Co-working, Business Center",
+    "Retail: Shop, Showroom, Mall Space, Kiosk",
+    "Industrial: Warehouse, Factory, Cold Storage, Manufacturing Unit",
+    "Hospitality: Hotel, Restaurant, Banquet Hall, Resort",
+    "Property configurations: Studio, 1/2/3/4/5/6+ BHK",
+    "Usage types: Self-use, Investment, Commercial Use",
+    "Investment types: Buy-to-rent, Resale, New Launch, Under Construction",
+    "Multi-language labels (English + Hindi)",
+    "Display ordering for proper UI rendering",
+    "All entries marked as active"
+  ],
+  "acceptance_criteria": [
+    "100+ classification records seeded",
+    "Both Residential and Commercial covered",
+    "All subcategories have property types",
+    "Configurations cover common BHK options",
+    "Usage and investment types defined",
+    "Multi-language support implemented",
+    "Seed script runs without errors",
+    "Data persists correctly in database"
+  ],
+  "result_summary": "Complete property classification taxonomy seeded with 100+ records. Covers all major property categories (Residential, Commercial), subcategories (8 types), property types (40+ variants), configurations (7 BHK options), usage types (3), and investment types (4). Production-ready with multi-language support.",
+  "completed_at": "2026-02-12"
+}

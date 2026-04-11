@@ -1,0 +1,55 @@
+{
+  "task_id": "TASK-094",
+  "title": "Redis Caching Middleware",
+  "status": "completed",
+  "priority": "medium",
+  "classification": "Performance",
+  "domain": ["Backend", "Caching", "Performance"],
+  "created_at": "2026-02-12T00:00:00+05:30",
+  "completed_at": "2026-02-12T00:00:00+05:30",
+  "goal": "Implement Redis-based caching middleware for public API endpoints to reduce database load, improve response times, and handle traffic spikes.",
+  "dependencies": [],
+  "sub_tasks": [
+    {
+      "id": "TASK-094-1",
+      "title": "Create Cache Middleware Factory",
+      "status": "completed",
+      "output": "Implemented cache() middleware factory with configurable TTL and custom key generation"
+    },
+    {
+      "id": "TASK-094-2",
+      "title": "Implement Cache Hit/Miss Logic",
+      "status": "completed",
+      "output": "Cache middleware checks Redis for cached response, returns if found, otherwise intercepts res.json to cache response"
+    },
+    {
+      "id": "TASK-094-3",
+      "title": "Add X-Cache Header",
+      "status": "completed",
+      "output": "Responses include X-Cache: HIT or X-Cache: MISS header for cache debugging"
+    },
+    {
+      "id": "TASK-094-4",
+      "title": "Integrate with Redis Utils",
+      "status": "completed",
+      "output": "Cache middleware uses cacheGet/cacheSet from utils/redis for Redis operations"
+    }
+  ],
+  "files_touched": [
+    "agents/backend/src/middleware/cache.ts",
+    "agents/backend/src/utils/redis.ts"
+  ],
+  "acceptance_criteria": [
+    "Cache middleware works only for GET requests",
+    "Configurable TTL (time-to-live) per endpoint",
+    "Custom key generation function support",
+    "Default key generation from req.originalUrl",
+    "X-Cache header indicates HIT or MISS",
+    "Only successful responses (2xx) are cached",
+    "Graceful degradation if Redis unavailable",
+    "Cache invalidation support",
+    "Applies to public API endpoints (properties, locations, testimonials)"
+  ],
+  "result_summary": "Redis caching layer implemented for performance optimization. Cache middleware intelligently caches GET responses with configurable TTL. Public API endpoints (properties list, featured properties, locations) benefit from significantly reduced database queries and faster response times. X-Cache header enables monitoring cache effectiveness. Graceful fallback ensures service continuity if Redis fails.",
+  "next_recommended_tasks": ["TASK-095"]
+}

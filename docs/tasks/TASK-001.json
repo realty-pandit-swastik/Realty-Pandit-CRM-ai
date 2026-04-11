@@ -1,0 +1,57 @@
+{
+    "task_id": "TASK-001",
+    "title": "Implement Core SSOT Database Schema",
+    "status": "completed",
+    "priority": "critical",
+    "classification": "Infrastructure",
+    "domain": [
+        "Backend",
+        "SSOT"
+    ],
+    "created_at": "2026-02-06T22:00:00+05:30",
+    "goal": "Create the PostgreSQL database schema for the Single Source of Truth (SSOT) as defined in the architecture.",
+    "context": {
+        "architecture_rule": "Phone number is the Primary Key and Single Source of Truth.",
+        "tables_required": [
+            "tenants",
+            "contacts",
+            "interactions",
+            "whatsapp_messages",
+            "voice_calls",
+            "emails",
+            "tasks_followups",
+            "agents"
+        ]
+    },
+    "dependencies": [
+        "TASK-000"
+    ],
+    "sub_tasks": [
+        {
+            "id": "TASK-001-A",
+            "workflow": "Backend",
+            "output": "Prisma Schema file with all tables and relationships."
+        },
+        {
+            "id": "TASK-001-B",
+            "workflow": "Backend",
+            "output": "Migration script to apply schema to DB."
+        }
+    ],
+    "files_touched": [
+        "agents/backend/prisma/schema.prisma"
+    ],
+    "decisions": [
+        "Use PostgreSQL for reliability and analytics.",
+        "Phone number (E.164) is the PK for contacts table."
+    ],
+    "acceptance_criteria": [
+        "Schema matches the 'Chat/Chatgpt.txt' specification exactly.",
+        "Relationships (FK) are correctly enforced.",
+        "Indexes are added for performance on tenant_id and phone_number."
+    ],
+    "result_summary": "Prisma schema created with SSOT (Contact + Interactions) and all relation tables.",
+    "next_recommended_tasks": [
+        "TASK-002"
+    ]
+}

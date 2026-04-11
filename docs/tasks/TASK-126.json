@@ -1,0 +1,45 @@
+{
+  "id": "TASK-126",
+  "title": "Builder API Routes",
+  "phase": 14,
+  "status": "completed",
+  "priority": "critical",
+  "depends_on": ["TASK-116", "TASK-117", "TASK-118"],
+  "description": "Complete builder-facing API with authentication, project management, units CRUD, media upload, lead management, appointment handling, and dashboard statistics. All endpoints integrated with permission engine for role-based access control.",
+  "files_created": [
+    "agents/backend/src/routes/builder.ts"
+  ],
+  "files_modified": [
+    "agents/backend/src/app.ts"
+  ],
+  "features": [
+    "Authentication: Login OTP generation and verification",
+    "Project Management: Create, list, get, update projects",
+    "Project Status: Activate and pause projects",
+    "Units Management: Add, update, delete units within projects",
+    "Media Upload: Upload photos/videos for projects",
+    "Lead Management: List leads, get lead details, update lead status",
+    "Appointment Handling: List appointments, update appointment status",
+    "Dashboard Statistics: Total projects, active/paused projects, total units, sold/available units, total leads, total appointments, revenue metrics",
+    "Permission-based access control using permission engine",
+    "Builder-specific data filtering (only see own projects/leads)",
+    "Proper validation and error handling",
+    "Winston logger integration",
+    "TypeScript types for all requests/responses"
+  ],
+  "acceptance_criteria": [
+    "All 20+ builder endpoints functional",
+    "OTP authentication working",
+    "Project CRUD operations complete",
+    "Units can be added/updated/deleted",
+    "Media upload integrated",
+    "Leads filtered by builder's projects",
+    "Appointments filtered by builder's projects",
+    "Dashboard shows accurate statistics",
+    "Permission engine validates all operations",
+    "Zero TypeScript errors",
+    "All routes integrated in app.ts"
+  ],
+  "result_summary": "Complete builder API with 20+ endpoints covering authentication, project/unit management, media upload, lead/appointment handling, and dashboard analytics. Full permission engine integration ensures builders only access their own data. Production-ready for builder portal frontend.",
+  "completed_at": "2026-02-13"
+}

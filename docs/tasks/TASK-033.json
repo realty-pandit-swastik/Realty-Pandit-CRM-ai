@@ -1,0 +1,17 @@
+{
+  "task_id": "TASK-033",
+  "title": "Auth Routes (login, register, refresh, me, setup)",
+  "status": "completed",
+  "priority": "high",
+  "classification": "Feature",
+  "domain": ["Backend"],
+  "created_at": "2026-02-10T00:00:00+05:30",
+  "completed_at": "2026-02-10T00:00:00+05:30",
+  "goal": "Create authentication API routes for login, registration, token refresh, current user, and first-time setup.",
+  "dependencies": ["TASK-032"],
+  "files_touched": [
+    "agents/backend/src/routes/auth.ts",
+    "agents/backend/src/app.ts"
+  ],
+  "result_summary": "Created POST /auth/login (returns JWT + refreshToken + agent), POST /auth/register (super_boss only, creates agents with role validation), POST /auth/refresh (token rotation), GET /auth/me (current user with permissions and hierarchy), POST /auth/setup (first-time super_boss creation when no agents exist). Registered auth routes in app.ts."
+}

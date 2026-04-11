@@ -1,0 +1,40 @@
+{
+  "id": "TASK-117",
+  "title": "Builder Project Detail Page",
+  "phase": 15,
+  "status": "completed",
+  "priority": "high",
+  "depends_on": ["TASK-114", "TASK-115"],
+  "description": "Comprehensive project detail page for builder projects featuring image gallery with navigation, RERA certification badge, unit types table, floor plans, embedded Google Maps, Panditji AI Score, nearby places, enquiry modal, similar projects carousel, and social sharing capabilities.",
+  "files_created": [
+    "agents/website/src/app/projects/[id]/page.tsx"
+  ],
+  "files_modified": [
+    "agents/website/src/lib/api.ts"
+  ],
+  "features": [
+    "Image gallery with next/prev navigation and counter",
+    "RERA badge with verification number",
+    "Units table (BHK, Size, Price, Status) from project.units array",
+    "Floor plans section with downloadable links",
+    "Embedded Google Maps for project location",
+    "Panditji AI Score (0-10) with color-coded badge",
+    "Nearby Places (schools, hospitals, metro, shopping centers)",
+    "Modal-based enquiry form with success state",
+    "Share buttons (WhatsApp, Copy Link)",
+    "Similar Projects carousel",
+    "Full dark mode support",
+    "Fixed API signature mismatches for getSimilarProjects and submitProjectEnquiry"
+  ],
+  "acceptance_criteria": [
+    "All project details render correctly",
+    "Image gallery navigable with keyboard and mouse",
+    "Maps iframe loads with correct coordinates",
+    "Enquiry form validates and submits to backend",
+    "Similar projects load correctly",
+    "Zero TypeScript errors on build",
+    "Full dark mode compatibility"
+  ],
+  "result_summary": "Complete project detail page implemented with all requested features. Image gallery, units table, floor plans, maps, AI score, nearby places, enquiry form, and similar projects all functional. API signature issues resolved. Builds with zero errors and full dark mode support.",
+  "completed_at": "2026-02-14"
+}

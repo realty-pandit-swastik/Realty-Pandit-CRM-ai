@@ -1,0 +1,51 @@
+{
+    "task_id": "TASK-016",
+    "title": "Rich Media & Inventory Dashboard",
+    "status": "completed",
+    "result_summary": "Added sendImage to WhatsAppService. Exposed Inventory API. Implemented InventoryList frontend component. Build verified.",
+    "files_touched": [
+        "src/services/whatsapp.ts",
+        "src/routes/inventory.ts",
+        "frontend/src/components/InventoryList.tsx",
+        "frontend/src/App.tsx"
+    ],
+    "priority": "medium",
+    "classification": "Feature",
+    "domain": [
+        "Backend",
+        "Frontend",
+        "WhatsApp"
+    ],
+    "created_at": "2026-02-07T03:25:00+05:30",
+    "goal": "Enable sending rich media (brochures) via WhatsApp and providing visibility of Inventory in the Dashboard.",
+    "context": {
+        "source": "Project Report Gap Analysis & Chatgpt.txt",
+        "requirement": "Agents need to see what inventory exists, and system needs to send property details."
+    },
+    "dependencies": [
+        "TASK-014",
+        "TASK-008"
+    ],
+    "sub_tasks": [
+        {
+            "id": "TASK-016-A",
+            "output": "Update `WhatsAppService` with `sendMedia(to, url, caption)`"
+        },
+        {
+            "id": "TASK-016-B",
+            "output": "Expose `GET /api/inventory` endpoint in backend"
+        },
+        {
+            "id": "TASK-016-C",
+            "output": "Create `InventoryTable` component in React Dashboard"
+        },
+        {
+            "id": "TASK-016-D",
+            "output": "Verify: Open Dashboard -> See Inventory; Trigger `simulate_media` -> Receive Image"
+        }
+    ],
+    "acceptance_criteria": [
+        "Backend sends an image message to WhatsApp (or mock log)",
+        "Frontend Dashboard displays the list of properties from the DB"
+    ]
+}

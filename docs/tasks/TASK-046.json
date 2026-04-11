@@ -1,0 +1,28 @@
+{
+  "id": "TASK-046",
+  "title": "Housing.com Integration",
+  "phase": 5,
+  "status": "completed",
+  "priority": "high",
+  "depends_on": ["TASK-043"],
+  "description": "Webhook adapter for Housing.com leads. Maps Housing.com-specific fields (lead_name, lead_phone, project, intent_type) to SSOT Contact model.",
+  "files_created": [
+    "agents/backend/src/integrations/housing.ts"
+  ],
+  "files_modified": [
+    "agents/backend/src/app.ts"
+  ],
+  "endpoints": [
+    "POST /external/housing/webhook"
+  ],
+  "field_mapping": {
+    "lead_phone/phone": "phone_number",
+    "lead_name/name": "name",
+    "lead_email/email": "email",
+    "intent_type": "intent (buy/rent)",
+    "location+city": "preferred_location",
+    "budget_min": "budget_min",
+    "budget_max": "budget_max"
+  },
+  "completed_at": "2026-02-10"
+}

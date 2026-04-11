@@ -1,0 +1,18 @@
+{
+  "id": "TASK-052",
+  "title": "Partner Agent Dual-Mode Workflow",
+  "phase": 6,
+  "status": "completed",
+  "priority": "high",
+  "depends_on": ["TASK-027", "TASK-049"],
+  "description": "Enhanced PartnerAgentWorkflow with conversation history context. Both modes (HAS_PROPERTIES and HAS_BUYERS) now use generateResponseWithHistory() for multi-turn coherence. Partner agents can list properties or describe buyer needs with full conversation context preserved.",
+  "files_modified": [
+    "agents/backend/src/workflows/partner_agent.ts"
+  ],
+  "features": [
+    "All 4 partner agent stages now history-aware (ONBOARDING, HAS_PROPERTIES, HAS_BUYERS, GENERAL)",
+    "Conversation context allows natural multi-turn property listing",
+    "Buyer requirement collection benefits from history to avoid repeating questions"
+  ],
+  "completed_at": "2026-02-10"
+}

@@ -1,0 +1,41 @@
+{
+  "id": "TASK-122",
+  "title": "Call Processing Pipeline Integration",
+  "phase": 8,
+  "status": "completed",
+  "priority": "critical",
+  "depends_on": ["TASK-119", "TASK-120", "TASK-121"],
+  "description": "Background worker for automated call processing pipeline. Polls for uploaded calls, executes transcription → AI extraction sequence, updates status, and handles retries. Fully integrated with transcription and call extractor services.",
+  "files_created": [
+    "agents/backend/src/workers/call_processor.ts"
+  ],
+  "files_modified": [
+    "agents/backend/src/server.ts"
+  ],
+  "features": [
+    "Auto-start on server boot (integrated in server.ts)",
+    "Polls for PROCESSING status calls every 5 seconds",
+    "Sequential pipeline: PROCESSING → TRANSCRIBED → READY_FOR_REVIEW",
+    "Step 1: Transcription via transcriptionService.transcribeAudio()",
+    "Step 2: AI extraction via callExtractor.extractFromTranscript()",
+    "Concurrent job limit (max 2 simultaneous)",
+    "Retry logic with exponential backoff (max 3 attempts)",
+    "Timeout handling (5 minutes per call)",
+    "In-memory job queue (can upgrade to BullMQ/Redis)",
+    "Manual trigger API for retry operations",
+    "Worker status monitoring endpoint",
+    "Error handling with status updates",
+    "Winston logger integration"
+  ],
+  "acceptance_criteria": [
+    "Worker starts automatically on server boot",
+    "Calls transition: PROCESSING → TRANSCRIBED → READY_FOR_REVIEW",
+    "Transcription service integrated correctly",
+    "Call extractor service integrated correctly",
+    "Failed calls retry up to 3 times",
+    "Timeout prevents infinite processing",
+    "Zero TypeScript errors"
+  ],
+  "result_summary": "Complete background worker implementation with full pipeline integration. Auto-starts on server boot, processes calls asynchronously, handles retries and timeouts. Production-ready with proper error handling and logging. Android app backend fully functional end-to-end.",
+  "completed_at": "2026-02-13"
+}

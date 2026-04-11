@@ -1,0 +1,40 @@
+{
+  "id": "TASK-121",
+  "title": "Staff Call API Endpoints Integration",
+  "phase": 8,
+  "status": "completed",
+  "priority": "critical",
+  "depends_on": ["TASK-119", "TASK-120"],
+  "description": "Complete RESTful API for staff call intelligence workflow. Handles recording uploads, status polling, AI result review, SSOT submission, and call rejection. Fully integrated with transcription and audio storage services.",
+  "files_created": [
+    "agents/backend/src/routes/staff_calls.ts",
+    "agents/backend/src/validators/calls.validator.ts"
+  ],
+  "files_modified": [],
+  "features": [
+    "POST /api/calls/upload - Upload recording with multipart form-data",
+    "GET /api/calls/:id - Poll call status and get AI extraction results",
+    "POST /api/calls/:id/submit - Submit reviewed call to CRM (SSOT integration)",
+    "POST /api/calls/:id/reject - Discard call and delete recording",
+    "GET /api/calls - Call history with pagination and filters",
+    "GET /api/calls/stats/overview - Dashboard statistics",
+    "Agent JWT authentication on all endpoints",
+    "Ownership verification (agents can only access their own calls)",
+    "Signed URL generation for secure audio playback",
+    "Zod validation schemas for request data",
+    "Full SSOT integration: Contact, VoiceCall, Interaction, LeadScore",
+    "Transaction-based data consistency",
+    "Winston logger integration"
+  ],
+  "acceptance_criteria": [
+    "Android app can upload recording successfully",
+    "API returns processing status correctly",
+    "Signed URLs work for audio playback",
+    "SSOT integration creates all required records",
+    "Lead score updated on call submission",
+    "Rejected calls have recordings deleted",
+    "Zero TypeScript errors"
+  ],
+  "result_summary": "Complete API implementation with 6 endpoints covering full staff call workflow. Integrated with audio_storage.ts and transcription services. Full SSOT compliance with transactional updates. Production-ready with authentication, validation, and logging.",
+  "completed_at": "2026-02-13"
+}

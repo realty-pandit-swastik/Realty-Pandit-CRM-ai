@@ -1,0 +1,16 @@
+{
+  "task_id": "TASK-031",
+  "title": "Auth Database Schema",
+  "status": "completed",
+  "priority": "high",
+  "classification": "Feature",
+  "domain": ["Database", "Backend"],
+  "created_at": "2026-02-10T00:00:00+05:30",
+  "completed_at": "2026-02-10T00:00:00+05:30",
+  "goal": "Add authentication fields (password_hash, refresh_token, last_login_at) to Agent model in Prisma schema.",
+  "dependencies": ["TASK-024"],
+  "files_touched": [
+    "agents/backend/prisma/schema.prisma"
+  ],
+  "result_summary": "Added password_hash (String?), refresh_token (String?), last_login_at (DateTime?), created_at, updated_at to Agent model. These fields support JWT-based authentication with refresh token rotation."
+}

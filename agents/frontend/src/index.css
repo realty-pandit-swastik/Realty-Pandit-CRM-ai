@@ -1,0 +1,245 @@
+/* ========================================
+   Realty Pandit Admin — Theme System
+   CSS Custom Properties for Light/Dark mode
+   ======================================== */
+
+/* Light Theme (default) */
+:root {
+  --bg-primary: #ffffff;
+  --bg-secondary: #f8fafc;
+  --bg-tertiary: #f1f5f9;
+  --bg-sidebar: #f8fafc;
+  --bg-input: #f1f5f9;
+  --bg-hover: #e2e8f0;
+  --bg-active: #e2e8f0;
+
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --text-muted: #94a3b8;
+  --text-bright: #1e293b;
+  --text-link: #3b82f6;
+
+  --border-primary: #e2e8f0;
+  --border-secondary: #cbd5e1;
+
+  --error-bg: #fef2f2;
+  --error-text: #dc2626;
+  --success-bg: #f0fdf4;
+  --success-text: #16a34a;
+  --success-text-bright: #22c55e;
+  --warning-bg: #fffbeb;
+  --warning-border: #f59e0b;
+  --warning-text: #92400e;
+
+  --shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+
+  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Dark Theme */
+.dark {
+  --bg-primary: #0f172a;
+  --bg-secondary: #1e293b;
+  --bg-tertiary: #0a1628;
+  --bg-sidebar: #0f172a;
+  --bg-input: #0f172a;
+  --bg-hover: #334155;
+  --bg-active: #1e293b;
+
+  --text-primary: #f8fafc;
+  --text-secondary: #94a3b8;
+  --text-muted: #64748b;
+  --text-bright: #e2e8f0;
+  --text-link: #60a5fa;
+
+  --border-primary: #1e293b;
+  --border-secondary: #334155;
+
+  --error-bg: #7f1d1d;
+  --error-text: #fca5a5;
+  --success-bg: #14532d;
+  --success-text: #86efac;
+  --success-text-bright: #4ade80;
+  --warning-bg: #78350f;
+  --warning-border: #f59e0b;
+  --warning-text: #fde68a;
+
+  --shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+a {
+  color: var(--text-link);
+  text-decoration: none;
+}
+
+button {
+  font-family: inherit;
+}
+
+/* Scrollbar styling for dark mode */
+.dark ::-webkit-scrollbar {
+  width: 8px;
+}
+.dark ::-webkit-scrollbar-track {
+  background: #0f172a;
+}
+.dark ::-webkit-scrollbar-thumb {
+  background: #334155;
+  border-radius: 4px;
+}
+
+/* ========================================
+   Login Page Animations
+   ======================================== */
+
+@keyframes bounceIn {
+  0% { transform: scale(0.3) translateY(-60px); opacity: 0; }
+  50% { transform: scale(1.05) translateY(0); opacity: 1; }
+  70% { transform: scale(0.95); }
+  100% { transform: scale(1); }
+}
+
+@keyframes slideUp {
+  0% { transform: translateY(40px); opacity: 0; }
+  100% { transform: translateY(0); opacity: 1; }
+}
+
+@keyframes fadeIn {
+  0% { opacity: 0; }
+  100% { opacity: 1; }
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+@keyframes buildingRise {
+  0% { transform: scaleY(0); opacity: 0; }
+  60% { transform: scaleY(1.05); opacity: 1; }
+  100% { transform: scaleY(1); opacity: 1; }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+@keyframes slideInLeft {
+  0% { transform: translateX(-30px); opacity: 0; }
+  100% { transform: translateX(0); opacity: 1; }
+}
+
+@keyframes zoomFade {
+  0% { transform: scale(1); opacity: 1; }
+  100% { transform: scale(1.08); opacity: 0; }
+}
+
+@keyframes particleFloat {
+  0% { transform: translateY(0) rotate(0deg); opacity: 0.7; }
+  50% { opacity: 1; }
+  100% { transform: translateY(-100vh) rotate(360deg); opacity: 0; }
+}
+
+.login-logo { animation: bounceIn 0.8s cubic-bezier(0.34, 1.56, 0.64, 1) forwards; }
+.login-subtitle { animation: slideUp 0.6s ease-out 0.3s both; }
+.login-form-field-1 { animation: slideUp 0.5s ease-out 0.5s both; }
+.login-form-field-2 { animation: slideUp 0.5s ease-out 0.65s both; }
+.login-form-field-3 { animation: slideUp 0.5s ease-out 0.8s both; }
+.login-btn { animation: slideUp 0.5s ease-out 0.95s both; }
+.login-footer { animation: fadeIn 0.5s ease-out 1.1s both; }
+.login-error { animation: slideInLeft 0.3s ease-out both; }
+.login-logo-float { animation: float 3s ease-in-out infinite; }
+.login-transitioning { animation: zoomFade 0.6s ease-in forwards; }
+
+.login-btn-shimmer {
+  background: linear-gradient(90deg, #3b82f6 0%, #60a5fa 50%, #3b82f6 100%) !important;
+  background-size: 200% 100%;
+  animation: shimmer 2s linear infinite;
+}
+
+.building-bar {
+  transform-origin: bottom;
+  animation: buildingRise 0.6s ease-out forwards;
+}
+
+.login-particle {
+  position: absolute;
+  pointer-events: none;
+  animation: particleFloat linear forwards;
+}
+
+/* Focus glow for login inputs */
+.login-input:focus {
+  border-color: #3b82f6 !important;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+}
+.login-input {
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+/* ========================================
+   Mobile Utilities
+   ======================================== */
+
+/* Touch targets — min 44px for mobile */
+@media (max-width: 768px) {
+  button, select, input[type="text"], input[type="number"], input[type="password"], input[type="email"], textarea {
+    min-height: 44px;
+  }
+
+  /* Safe area insets for devices with notches */
+  body {
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-left: env(safe-area-inset-left, 0px);
+    padding-right: env(safe-area-inset-right, 0px);
+  }
+
+  /* Hide scrollbar on mobile for cleaner look */
+  ::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+  }
+
+  /* Prevent text selection on interactive elements */
+  button, [role="button"] {
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Disable pull-to-refresh in PWA mode */
+  html {
+    overscroll-behavior-y: contain;
+  }
+}
+
+/* Chat workflow animations */
+@keyframes typingBounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}

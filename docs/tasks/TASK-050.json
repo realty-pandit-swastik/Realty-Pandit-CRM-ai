@@ -1,0 +1,22 @@
+{
+  "id": "TASK-050",
+  "title": "Persistent Session Store",
+  "phase": 6,
+  "status": "completed",
+  "priority": "high",
+  "depends_on": [],
+  "description": "DB-backed session store replacing in-memory workflow state. New ConversationSession model tracks workflow name, state, and context per contact. SessionStore service provides getSession, setSession, updateState, endSession. Integrated into MessageRouter for automatic session lifecycle management.",
+  "files_created": [
+    "agents/backend/src/services/session_store.ts"
+  ],
+  "files_modified": [
+    "agents/backend/prisma/schema.prisma",
+    "agents/backend/src/services/message_router.ts"
+  ],
+  "schema_changes": [
+    "Added ConversationSession model (conversation_sessions table)",
+    "Fields: id, phone_number, workflow, state, context (JSON), active, timestamps",
+    "Index on (phone_number, active)"
+  ],
+  "completed_at": "2026-02-10"
+}

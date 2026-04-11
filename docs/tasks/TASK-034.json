@@ -1,0 +1,16 @@
+{
+  "task_id": "TASK-034",
+  "title": "RBAC Permission Matrix",
+  "status": "completed",
+  "priority": "high",
+  "classification": "Feature",
+  "domain": ["Backend"],
+  "created_at": "2026-02-10T00:00:00+05:30",
+  "completed_at": "2026-02-10T00:00:00+05:30",
+  "goal": "Define role-based access control permission matrix for super_boss, manager, and employee roles.",
+  "dependencies": ["TASK-033"],
+  "files_touched": [
+    "agents/backend/src/config/permissions.ts"
+  ],
+  "result_summary": "Created PERMISSIONS matrix: super_boss (10 perms: all access), manager (6 perms: view/assign leads, reports, manage agents, view/edit inventory), employee (3 perms: view assigned leads, update status, view inventory). Helper functions hasPermission() and getAllPermissions()."
+}

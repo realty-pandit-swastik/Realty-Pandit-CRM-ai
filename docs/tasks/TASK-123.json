@@ -1,0 +1,40 @@
+{
+  "id": "TASK-123",
+  "title": "External Onboarding Pages - /join Flow",
+  "phase": 13,
+  "status": "completed",
+  "priority": "high",
+  "depends_on": ["TASK-126", "TASK-127"],
+  "description": "Complete onboarding flow for external agents and builders to register via website. Includes landing page with user type selection and dedicated registration forms with plan selection and backend API integration.",
+  "files_created": [
+    "agents/website/src/app/join/page.tsx",
+    "agents/website/src/app/join/agent/page.tsx",
+    "agents/website/src/app/join/builder/page.tsx"
+  ],
+  "files_modified": [],
+  "features": [
+    "Landing page with 3 user type cards (Individual Agent, Property Agency, Real Estate Builder)",
+    "Animated cards with Framer Motion transitions",
+    "Feature comparison per user type (FREE, PRO, PREMIUM plans)",
+    "Agent registration form with plan selection (FREE/BASIC/PRO)",
+    "Agency vs Individual agent differentiation",
+    "Builder registration form with PREMIUM plan display",
+    "Form validation and error handling",
+    "Success states with redirect to dashboard",
+    "Integration with backend APIs (POST /agent/register, POST /builder/register)",
+    "Full dark mode support",
+    "Responsive mobile design",
+    "Benefits section explaining marketplace value"
+  ],
+  "acceptance_criteria": [
+    "Landing page displays 3 user type options with features",
+    "Agent form validates and submits to backend",
+    "Builder form validates and submits to backend",
+    "Plan selection works correctly",
+    "Success redirect to appropriate dashboard",
+    "Zero TypeScript errors on build",
+    "Full dark mode compatibility"
+  ],
+  "result_summary": "Complete /join onboarding flow implemented with landing page and dedicated registration forms for agents and builders. All forms integrate with existing backend APIs. Success states with dashboard redirects. Full dark mode and responsive design.",
+  "completed_at": "2026-02-14"
+}

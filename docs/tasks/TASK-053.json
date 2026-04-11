@@ -1,0 +1,26 @@
+{
+  "id": "TASK-053",
+  "title": "Language Detection & Preference",
+  "phase": 6,
+  "status": "completed",
+  "priority": "medium",
+  "depends_on": ["TASK-049"],
+  "description": "Added language detection (english/hindi/hinglish) via LLM. Stores preferred_language on Contact model. MessageRouter auto-detects language on first message. SystemPromptService generates language-specific instructions for each detected preference.",
+  "files_modified": [
+    "agents/backend/prisma/schema.prisma",
+    "agents/backend/src/services/llm.ts",
+    "agents/backend/src/services/message_router.ts",
+    "agents/backend/src/services/system_prompt.ts"
+  ],
+  "schema_changes": [
+    "Added preferred_language (String?) to Contact model"
+  ],
+  "features": [
+    "detectLanguage() in LLMService classifies: english, hindi, hinglish",
+    "Auto-detected on first message (non-blocking)",
+    "SystemPromptService.getCoreBehavior() accepts optional language parameter",
+    "Language-specific prompt instructions for each preference",
+    "Conversation continuity rules added to core behavior"
+  ],
+  "completed_at": "2026-02-10"
+}

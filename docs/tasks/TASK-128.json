@@ -1,0 +1,41 @@
+{
+  "id": "TASK-128",
+  "title": "Data Masking Middleware",
+  "phase": 13,
+  "status": "completed",
+  "priority": "high",
+  "depends_on": ["TASK-086"],
+  "description": "Data masking functions integrated into permission engine to protect buyer/tenant contact information for FREE package agents. Implements canSeeBuyerPhone permission and masking utilities for phone numbers and names based on agent subscription package.",
+  "files_created": [],
+  "files_modified": [
+    "agents/backend/src/services/permission_engine.ts"
+  ],
+  "features": [
+    "canSeeBuyerPhone permission check",
+    "FREE package: canSeeBuyerPhone = false",
+    "BASIC/PRO/ADVANCE_PRO packages: canSeeBuyerPhone = true",
+    "maskPhone() utility: Hides middle 6 digits (e.g., +91-XXXXX-XXX10)",
+    "maskName() utility: Hides middle characters (e.g., R****a S****a)",
+    "Applied to leads endpoint in agent routes",
+    "Applied to appointments endpoint in agent routes",
+    "Preserves first 2 and last 2 digits for phone verification",
+    "Preserves first and last characters for name recognition",
+    "Automatic masking based on agent package",
+    "No changes needed in controller logic",
+    "TypeScript types for masking functions"
+  ],
+  "acceptance_criteria": [
+    "canSeeBuyerPhone permission implemented",
+    "FREE agents cannot see full buyer phone",
+    "PRO+ agents can see full buyer phone",
+    "maskPhone hides middle 6 digits correctly",
+    "maskName hides middle characters correctly",
+    "Masking applied to leads API response",
+    "Masking applied to appointments API response",
+    "Permission engine validates package correctly",
+    "Zero TypeScript errors",
+    "Masking functions work with E.164 format"
+  ],
+  "result_summary": "Complete data masking implementation in permission engine. FREE agents see masked buyer phone (+91-XXXXX-XXX10) and names (R****a S****a) while PRO+ agents see full details. Automatic masking based on package subscription. Production-ready for marketplace privacy control.",
+  "completed_at": "2026-02-13"
+}

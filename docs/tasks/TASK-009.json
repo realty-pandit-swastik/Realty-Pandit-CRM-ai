@@ -1,0 +1,41 @@
+{
+    "task_id": "TASK-009",
+    "title": "Implement Voice Integration (Vapi)",
+    "status": "completed",
+    "result_summary": "Vapi Webhook implemented. Voice calls logged to SSOT (VoiceCall + Interaction tables). Contact updated correctly.",
+    "files_touched": [
+        "agents/backend/src/services/voice.ts",
+        "agents/backend/src/routes/webhooks.ts",
+        "agents/backend/src/scripts/simulate_voice_webhook.ts"
+    ],
+    "priority": "high",
+    "classification": "Implementation",
+    "domain": [
+        "Backend",
+        "Voice"
+    ],
+    "created_at": "2026-02-06T23:45:00+05:30",
+    "goal": "Integrate Vapi.ai for inbound/outbound voice calls and link to SSOT.",
+    "context": {
+        "requirement": "Chatgpt.txt Line 22: 'Talk on Voice calls', Line 104: 'Voice Automation Layer'",
+        "user_story": "As the system, I need to handle incoming calls and trigger outbound calls based on logic."
+    },
+    "dependencies": [
+        "TASK-004",
+        "TASK-006"
+    ],
+    "sub_tasks": [
+        {
+            "id": "TASK-009-A",
+            "output": "Configure Vapi Webhook in `server.ts`"
+        },
+        {
+            "id": "TASK-009-B",
+            "output": "Implement `VoiceService` to handle call events"
+        },
+        {
+            "id": "TASK-009-C",
+            "output": "Store call logs in `voice_calls` and `interactions` tables"
+        }
+    ]
+}

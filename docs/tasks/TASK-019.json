@@ -1,0 +1,50 @@
+{
+    "task_id": "TASK-019",
+    "title": "Implement Lead Scoring & No-Show Logic",
+    "status": "completed",
+    "priority": "high",
+    "classification": "Feature",
+    "domain": [
+        "Logic",
+        "Database",
+        "Automation"
+    ],
+    "created_at": "2026-02-07T11:25:00+05:30",
+    "goal": "Implement a 0-100 Lead Scoring model to classify leads (Hot/Warm/Cold) and automate No-Show recovery.",
+    "context": {
+        "source": "Chatgpt.txt (Lead Scoring Model)",
+        "requirement": "Calculate score based on Intent, Engagement, Reliability, Urgency. Handle No-Shows automatically."
+    },
+    "dependencies": [
+        "TASK-001",
+        "TASK-018"
+    ],
+    "sub_tasks": [
+        {
+            "id": "TASK-019-A",
+            "output": "Update `schema.prisma` with `LeadScore` model"
+        },
+        {
+            "id": "TASK-019-B",
+            "output": "Create `LeadScoreService` logic (Calculation & Updates)"
+        },
+        {
+            "id": "TASK-019-C",
+            "output": "Hook Scoring into Webhooks & Decision Engine"
+        },
+        {
+            "id": "TASK-019-D",
+            "output": "Implement No-Show Recovery Automation"
+        },
+        {
+            "id": "TASK-019-E",
+            "output": "Verify Scoring Updates with Test Script"
+        }
+    ],
+    "acceptance_criteria": [
+        "LeadScore table exists and links to Contact.",
+        "Score updates automatically on new messages (+Activity).",
+        "No-Show event reduces Reliability Score (-20).",
+        "High score leads are marked as 'HOT'."
+    ]
+}

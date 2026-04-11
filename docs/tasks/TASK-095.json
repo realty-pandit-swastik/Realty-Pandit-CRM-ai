@@ -1,0 +1,61 @@
+{
+  "task_id": "TASK-095",
+  "title": "Swagger API Documentation",
+  "status": "completed",
+  "priority": "medium",
+  "classification": "Documentation",
+  "domain": ["Backend", "API", "Documentation"],
+  "created_at": "2026-02-12T00:00:00+05:30",
+  "completed_at": "2026-02-12T00:00:00+05:30",
+  "goal": "Generate interactive OpenAPI 3.0 documentation using Swagger for all API endpoints to enable developer onboarding, testing, and API exploration.",
+  "dependencies": [],
+  "sub_tasks": [
+    {
+      "id": "TASK-095-1",
+      "title": "Configure swagger-jsdoc with OpenAPI 3.0",
+      "status": "completed",
+      "output": "Created swagger.ts with OpenAPI 3.0 spec configuration"
+    },
+    {
+      "id": "TASK-095-2",
+      "title": "Define Security Schemes",
+      "status": "completed",
+      "output": "Configured BearerAuth (staff JWT), AgentBearerAuth (partner agent JWT), and ApiKeyAuth (external integrations) security schemes"
+    },
+    {
+      "id": "TASK-095-3",
+      "title": "Document Common Schemas",
+      "status": "completed",
+      "output": "Created reusable schemas for Error, ValidationError, Property, Contact in components"
+    },
+    {
+      "id": "TASK-095-4",
+      "title": "Document API Tags and Paths",
+      "status": "completed",
+      "output": "Organized endpoints into tags: Auth, Public, Staff Calls, Agent Portal, External, Admin. Documented key paths for login, register, properties, contact, calls, etc."
+    },
+    {
+      "id": "TASK-095-5",
+      "title": "Mount Swagger UI at /api-docs",
+      "status": "completed",
+      "output": "Integrated swagger-ui-express middleware, API docs accessible at /api-docs endpoint"
+    }
+  ],
+  "files_touched": [
+    "agents/backend/src/swagger.ts",
+    "agents/backend/src/app.ts"
+  ],
+  "acceptance_criteria": [
+    "OpenAPI 3.0 specification generated",
+    "Swagger UI accessible at /api-docs route",
+    "All major endpoint categories documented (Auth, Public, Staff Calls, Agent Portal, External)",
+    "Security schemes defined for JWT and API Key authentication",
+    "Request/response schemas documented",
+    "Example payloads included",
+    "Interactive API testing enabled via Swagger UI",
+    "API version and contact information included",
+    "Server URLs configured for development"
+  ],
+  "result_summary": "Complete API documentation system using OpenAPI 3.0 and Swagger UI. All major endpoints documented with request/response schemas, authentication requirements, and validation rules. Interactive documentation at /api-docs enables developers to explore and test APIs directly in browser. Three security schemes support different authentication patterns. Organized by tags for easy navigation: Auth, Public, Staff Calls, Agent Portal, External, Admin.",
+  "next_recommended_tasks": []
+}

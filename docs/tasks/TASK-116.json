@@ -1,0 +1,33 @@
+{
+  "id": "TASK-116",
+  "title": "Property Listing Page - Resale vs Projects Tabs",
+  "phase": 15,
+  "status": "completed",
+  "priority": "high",
+  "depends_on": ["TASK-114", "TASK-115"],
+  "description": "Enhanced property listing page with tab-based navigation to separate resale properties from builder projects. Implements conditional filtering, separate API calls, and dedicated card layouts for each property type with smooth Framer Motion transitions.",
+  "files_created": [],
+  "files_modified": [
+    "agents/website/src/app/properties/page.tsx",
+    "agents/website/src/lib/api.ts"
+  ],
+  "features": [
+    "Tab switcher with URL state sync (resale vs projects)",
+    "Conditional API calls (getProperties vs getProjects)",
+    "Separate card components (PropertyCard vs ProjectListCard)",
+    "Conditional filter sidebar (BHK/furnishing only for resale)",
+    "Framer Motion tab animations and transitions",
+    "Search persistence across tab switches",
+    "Dark mode support for all new components"
+  ],
+  "acceptance_criteria": [
+    "Tab state persists in URL query params",
+    "Correct API called based on active tab",
+    "Filters adapt to property type (resale vs project)",
+    "Smooth animations between tab switches",
+    "Zero TypeScript errors on build",
+    "Full dark mode compatibility"
+  ],
+  "result_summary": "Property listing page successfully updated with tab-based navigation. Users can seamlessly switch between resale properties and builder projects with appropriate filters and card layouts for each type. All animations smooth, URL state synced, and builds with zero errors.",
+  "completed_at": "2026-02-14"
+}

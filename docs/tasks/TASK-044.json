@@ -1,0 +1,27 @@
+{
+  "id": "TASK-044",
+  "title": "99acres Integration",
+  "phase": 5,
+  "status": "completed",
+  "priority": "high",
+  "depends_on": ["TASK-043"],
+  "description": "Webhook adapter for 99acres leads. Maps 99acres-specific fields (name, mobile, project_name, city, budget, requirement_type) to SSOT Contact model.",
+  "files_created": [
+    "agents/backend/src/integrations/99acres.ts"
+  ],
+  "files_modified": [
+    "agents/backend/src/app.ts"
+  ],
+  "endpoints": [
+    "POST /external/99acres/webhook"
+  ],
+  "field_mapping": {
+    "mobile/phone": "phone_number",
+    "name": "name",
+    "email": "email",
+    "requirement_type": "intent (buy/rent/sell)",
+    "locality+city": "preferred_location",
+    "budget": "budget_max"
+  },
+  "completed_at": "2026-02-10"
+}

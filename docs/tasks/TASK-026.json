@@ -1,0 +1,67 @@
+{
+  "task_id": "TASK-026",
+  "title": "Phase 2: User Type System - Unknown Workflow, Partner Agent, Message Router, Frontend Types, Seller LLM",
+  "status": "completed",
+  "priority": "critical",
+  "classification": "Feature",
+  "domain": ["Backend", "Frontend", "Database", "AI"],
+  "created_at": "2026-02-10T00:00:00+05:30",
+  "completed_at": "2026-02-10T00:00:00+05:30",
+  "goal": "Implement the full 5-category contact classification system with AI-powered identification, partner agent handling, central message routing, and LLM-powered seller workflow.",
+  "dependencies": ["TASK-021", "TASK-022", "TASK-023"],
+  "sub_tasks": [
+    {
+      "id": "TASK-026",
+      "title": "Unknown Identification Workflow",
+      "status": "completed",
+      "output": "Created workflows/unknown.ts with AI-powered contact type classification. Added classifyContactType() to LLM service. Added getIdentificationPrompt() to SystemPromptService."
+    },
+    {
+      "id": "TASK-027",
+      "title": "Partner Agent System",
+      "status": "completed",
+      "output": "Created workflows/partner_agent.ts with dual-mode handling (HAS_PROPERTIES/HAS_BUYERS). Added getPartnerAgentPrompt() to SystemPromptService. PartnerAgent model already in schema from Phase 1."
+    },
+    {
+      "id": "TASK-028",
+      "title": "Central Message Router",
+      "status": "completed",
+      "output": "Created services/message_router.ts with route() method. Refactored webhooks.ts to use MessageRouter instead of inline routing logic. Removed primitive keyword matching."
+    },
+    {
+      "id": "TASK-029",
+      "title": "Contact Type in Frontend",
+      "status": "completed",
+      "output": "Added contact_type badges to ContactList.tsx (color-coded by type). Added dropdown selector in ChatView.tsx for manual classification. Added PATCH /api/contacts/:phone endpoint. Added updateContactType() to API client."
+    },
+    {
+      "id": "TASK-030",
+      "title": "Seller Workflow LLM Upgrade",
+      "status": "completed",
+      "output": "Refactored seller.ts from hardcoded questions to LLM-powered flow using SystemPromptService.getSellerPrompt(). Maintains keyword extraction for property type but generates AI responses."
+    }
+  ],
+  "files_touched": [
+    "agents/backend/src/workflows/unknown.ts",
+    "agents/backend/src/workflows/partner_agent.ts",
+    "agents/backend/src/workflows/seller.ts",
+    "agents/backend/src/services/message_router.ts",
+    "agents/backend/src/services/llm.ts",
+    "agents/backend/src/services/system_prompt.ts",
+    "agents/backend/src/routes/webhooks.ts",
+    "agents/backend/src/routes/api.ts",
+    "agents/frontend/src/App.tsx",
+    "agents/frontend/src/api/client.ts",
+    "agents/frontend/src/components/ContactList.tsx",
+    "agents/frontend/src/components/ChatView.tsx"
+  ],
+  "acceptance_criteria": [
+    "Unknown contacts get AI-powered identification via Panditji",
+    "Partner agents have dedicated workflow with dual-mode handling",
+    "Central MessageRouter replaces inline webhook routing",
+    "Frontend shows contact_type badges and allows manual override",
+    "Seller workflow uses Gemini AI for conversational responses"
+  ],
+  "result_summary": "Phase 2 complete. All 5 contact types are now classified, routed, and displayed. The system flow is: New message → SSOT lookup → MessageRouter.route(contact_type) → Correct workflow → AI response → WhatsApp reply.",
+  "next_recommended_tasks": ["TASK-031", "TASK-049", "TASK-050"]
+}

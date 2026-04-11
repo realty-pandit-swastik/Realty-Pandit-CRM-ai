@@ -1,0 +1,24 @@
+{
+  "id": "TASK-049",
+  "title": "Conversation History Context",
+  "phase": 6,
+  "status": "completed",
+  "priority": "critical",
+  "depends_on": ["TASK-022"],
+  "description": "Added generateResponseWithHistory() to LLMService that fetches last N interactions from DB and includes them as conversation context in the prompt. Updated all workflows (Buyer, Seller, Partner Agent, Management, Unknown) to use history-aware responses for multi-turn conversational coherence.",
+  "files_modified": [
+    "agents/backend/src/services/llm.ts",
+    "agents/backend/src/workflows/buyer.ts",
+    "agents/backend/src/workflows/seller.ts",
+    "agents/backend/src/workflows/partner_agent.ts",
+    "agents/backend/src/workflows/management.ts",
+    "agents/backend/src/workflows/unknown.ts"
+  ],
+  "features": [
+    "generateResponseWithHistory() fetches last 10 interactions by default",
+    "Interactions reversed to chronological order for context",
+    "Graceful fallback to non-history response on error",
+    "All 5 workflow types now history-aware"
+  ],
+  "completed_at": "2026-02-10"
+}

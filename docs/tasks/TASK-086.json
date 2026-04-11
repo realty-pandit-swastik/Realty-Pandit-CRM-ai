@@ -1,0 +1,63 @@
+{
+  "task_id": "TASK-086",
+  "title": "Rate Limiting Middleware",
+  "status": "completed",
+  "priority": "critical",
+  "classification": "Security",
+  "domain": ["Backend", "Security", "Performance"],
+  "created_at": "2026-02-12T00:00:00+05:30",
+  "completed_at": "2026-02-12T00:00:00+05:30",
+  "goal": "Implement granular rate limiting for different API endpoints to prevent abuse, brute-force attacks, and ensure fair resource usage.",
+  "dependencies": ["TASK-085"],
+  "sub_tasks": [
+    {
+      "id": "TASK-086-1",
+      "title": "Create authLimiter (5 requests/15min)",
+      "status": "completed",
+      "output": "Strict rate limiter for auth endpoints to prevent brute force login attempts"
+    },
+    {
+      "id": "TASK-086-2",
+      "title": "Create publicLimiter (50 requests/15min)",
+      "status": "completed",
+      "output": "Moderate rate limiter for public API endpoints"
+    },
+    {
+      "id": "TASK-086-3",
+      "title": "Create webhookLimiter (200 requests/15min)",
+      "status": "completed",
+      "output": "High-capacity rate limiter for WhatsApp webhook traffic"
+    },
+    {
+      "id": "TASK-086-4",
+      "title": "Create externalLimiter (100 requests/15min)",
+      "status": "completed",
+      "output": "Rate limiter for external integration endpoints (99acres, MagicBricks, Housing)"
+    },
+    {
+      "id": "TASK-086-5",
+      "title": "Create agentLimiter (30 requests/15min)",
+      "status": "completed",
+      "output": "Rate limiter for partner agent portal endpoints"
+    },
+    {
+      "id": "TASK-086-6",
+      "title": "Create apiLimiter (100 requests/15min)",
+      "status": "completed",
+      "output": "Rate limiter for internal authenticated staff API"
+    }
+  ],
+  "files_touched": [
+    "agents/backend/src/middleware/rate_limit.ts",
+    "agents/backend/src/app.ts"
+  ],
+  "acceptance_criteria": [
+    "Six different rate limiters created with appropriate limits",
+    "All limiters use 15-minute sliding window",
+    "Standard rate limit headers included (RateLimit-Limit, RateLimit-Remaining, etc.)",
+    "Meaningful error messages for rate limit violations",
+    "Legacy headers disabled for modern API design"
+  ],
+  "result_summary": "Comprehensive rate limiting system implemented with six specialized limiters. Each endpoint category has appropriate limits: auth (5/15min for brute-force protection), public (50/15min), webhooks (200/15min for high WhatsApp traffic), external integrations (100/15min), partner agents (30/15min), and internal API (100/15min). All use standard headers and return clear error messages.",
+  "next_recommended_tasks": ["TASK-087"]
+}

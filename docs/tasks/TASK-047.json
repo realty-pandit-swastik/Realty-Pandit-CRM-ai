@@ -1,0 +1,20 @@
+{
+  "id": "TASK-047",
+  "title": "Email-Based Lead Parser",
+  "phase": 5,
+  "status": "completed",
+  "priority": "medium",
+  "depends_on": ["TASK-043"],
+  "description": "Backup channel for lead capture. Parses portal notification emails to extract phone, name, email via regex. Detects source from email address/subject. Creates Contact + Interaction in SSOT.",
+  "files_created": [
+    "agents/backend/src/services/email_lead_parser.ts"
+  ],
+  "features": [
+    "Phone regex: Indian numbers (+91, 0-prefix, 10-digit starting 6-9)",
+    "Source detection from email from-address and subject line",
+    "Name extraction from 'Name: X' patterns",
+    "Email extraction via standard email regex",
+    "Falls back to generic 'email' source if portal not identified"
+  ],
+  "completed_at": "2026-02-10"
+}

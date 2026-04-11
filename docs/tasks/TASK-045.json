@@ -1,0 +1,27 @@
+{
+  "id": "TASK-045",
+  "title": "MagicBricks Integration",
+  "phase": 5,
+  "status": "completed",
+  "priority": "high",
+  "depends_on": ["TASK-043"],
+  "description": "Webhook adapter for MagicBricks leads. Maps MagicBricks-specific fields (buyer_name, buyer_phone, looking_for, budget_range) to SSOT Contact model.",
+  "files_created": [
+    "agents/backend/src/integrations/magicbricks.ts"
+  ],
+  "files_modified": [
+    "agents/backend/src/app.ts"
+  ],
+  "endpoints": [
+    "POST /external/magicbricks/webhook"
+  ],
+  "field_mapping": {
+    "buyer_phone/phone": "phone_number",
+    "buyer_name/name": "name",
+    "buyer_email/email": "email",
+    "looking_for": "intent (buy/rent)",
+    "locality+city": "preferred_location",
+    "budget_range/budget": "budget_max"
+  },
+  "completed_at": "2026-02-10"
+}

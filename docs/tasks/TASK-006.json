@@ -1,0 +1,51 @@
+{
+    "task_id": "TASK-006",
+    "title": "SSOT Validation & Migration",
+    "status": "in_progress",
+    "priority": "critical",
+    "classification": "Infrastructure",
+    "domain": [
+        "Backend",
+        "Deployment"
+    ],
+    "created_at": "2026-02-06T22:30:00+05:30",
+    "goal": "Spin up the local database infrastructure using Docker and apply the Prisma migrations to validate the SSOT schema.",
+    "context": {
+        "infra": "Docker Compose (Postgres 15 + Redis 7)",
+        "requirement": "Database must be accessible to the Backend API (TASK-004)."
+    },
+    "dependencies": [
+        "TASK-001",
+        "TASK-004"
+    ],
+    "sub_tasks": [
+        {
+            "id": "TASK-006-A",
+            "workflow": "Deployment",
+            "output": "docker-compose.yml file."
+        },
+        {
+            "id": "TASK-006-B",
+            "workflow": "Backend",
+            "output": "Applied DB Migrations (tables created)."
+        }
+    ],
+    "files_touched": [
+        "agents/deployment/docker-compose.yml",
+        "agents/backend/prisma/migrations",
+        "agents/backend/prisma/seed.ts"
+    ],
+    "decisions": [
+        "Use Docker Compose for local dev consistency.",
+        "Expose Postgres on default port 5432."
+    ],
+    "acceptance_criteria": [
+        "Docker containers are running (healthy).",
+        "Prisma migrate runs without errors.",
+        "Tables 'contacts' and 'interactions' exist in DB."
+    ],
+    "result_summary": "Docker infra up (PG+Redis). Migrations applied. Default Tenant seeded.",
+    "next_recommended_tasks": [
+        "TASK-007"
+    ]
+}
