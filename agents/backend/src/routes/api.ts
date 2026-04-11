@@ -5,36 +5,26 @@ import { authMiddleware, requireRole, checkPermission } from '../middleware/auth
 import { sendPartnerWelcomeWhatsApp, sendPartnerWelcomeEmail } from '../services/partner_notifications';
 import { normalizePhone, phoneVariants } from '../utils/phone';
 import { identifyContact } from '../services/contact_identifier';
+import { buildFullContactVisibilityFilter } from '../middleware/contact_visibility';
 
 const router = Router();
 
 // All API routes require authentication
 router.use(authMiddleware);
 
-// GET /contacts — Role-scoped: super_boss sees all, manager sees own + subordinates', employee sees own assigned only
+// GET /contacts — Role-scoped via created_by: super_boss sees all, manager sees own + subordinates', employee sees own only
 router.get('/contacts', async (req, res) => {
     try {
         const agentRole = req.agent!.role;
         const agentId = req.agent!.id;
 
-        let whereClause: any = {};
-
-        if (agentRole === 'employee') {
-            // Employee: only contacts assigned to them
-            whereClause = { assigned_agent_id: agentId };
-        } else if (agentRole === 'manager') {
-            // Manager: contacts assigned to them OR their subordinates
-            const subordinates = await prisma.agent.findMany({
-                where: { reports_to_id: agentId },
-                select: { id: true },
-            });
-            const allowedIds = [agentId, ...subordinates.map(s => s.id)];
-            whereClause = { assigned_agent_id: { in: allowedIds } };
-        }
-        // super_boss: no filter (sees all)
+        const visibilityFilter = await buildFullContactVisibilityFilter(agentId, agentRole);
 
         const contacts = await prisma.contact.findMany({
-            where: whereClause,
+            where: {
+                tenant_id: req.agent!.tenant_id,
+                ...visibilityFilter,
+            },
             orderBy: { updated_at: 'desc' },
             include: {
                 lead_score: true,
@@ -218,6 +208,7 @@ router.post('/contacts/ensure', async (req, res) => {
                 contact_type: reqContactType || 'UNKNOWN',
                 tenant_id,
                 last_interaction: new Date(),
+                created_by: req.agent?.id || null,
             }
         });
 
@@ -361,7 +352,8 @@ router.post('/partners', checkPermission('manage_agents'), async (req, res) => {
                 name,
                 email,
                 contact_type: 'PARTNER_AGENT',
-                source: 'admin_created'
+                source: 'admin_created',
+                created_by: req.agent?.id || null,
             },
             update: { contact_type: 'PARTNER_AGENT', name, email }
         });

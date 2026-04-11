@@ -105,6 +105,7 @@ router.post('/', authMiddleware, checkPermission('edit_inventory'), async (req, 
                 tenant_id: tenant.id,
                 last_channel: 'admin',
                 last_interaction: new Date(),
+                created_by: req.agent?.id || null,
             },
         });
 
@@ -627,7 +628,8 @@ router.post('/:id/share-to-client', authMiddleware, async (req, res) => {
                 contact_type: 'BUYER',
                 tenant_id: agent.tenant_id,
                 last_channel: 'whatsapp',
-                last_interaction: new Date()
+                last_interaction: new Date(),
+                created_by: req.agent?.id || null,
             }
         });
 
@@ -837,6 +839,7 @@ router.post('/:id/transfer-ownership', authMiddleware, checkPermission('manage_i
                 tenant_id: tenant.id,
                 last_channel: 'admin',
                 last_interaction: new Date(),
+                created_by: req.agent?.id || null,
             },
         });
 

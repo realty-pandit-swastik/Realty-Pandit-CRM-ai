@@ -154,7 +154,8 @@ router.post('/members', checkPermission('create_agents'), async (req, res) => {
                     name,
                     email,
                     contact_type: 'MANAGEMENT',
-                    source: 'admin_created'
+                    source: 'admin_created',
+                    created_by: req.agent?.id || null,
                 },
                 update: {
                     name,
@@ -264,6 +265,7 @@ router.patch('/members/:id', checkPermission('manage_team'), async (req, res) =>
                     email: agent.email,
                     contact_type: 'MANAGEMENT',
                     source: 'team_update',
+                    created_by: req.agent?.id || null,
                 },
                 update: {
                     contact_type: 'MANAGEMENT',
@@ -510,7 +512,8 @@ router.post('/inventory/bulk-upload', checkPermission('bulk_upload'), upload.sin
                         tenant_id: tenant.id,
                         name: row.owner_name || null,
                         contact_type: 'LANDLORD',
-                        source: 'bulk_upload'
+                        source: 'bulk_upload',
+                        created_by: req.agent?.id || null,
                     },
                     update: {
                         contact_type: 'LANDLORD'

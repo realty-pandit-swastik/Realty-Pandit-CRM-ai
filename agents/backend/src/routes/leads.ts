@@ -360,6 +360,7 @@ router.post('/', async (req: any, res) => {
                 budget_max: budget_max ? Number(budget_max) : null,
                 demand_bhk: demand_bhk ? Number(demand_bhk) : null,
                 timeline: timeline || null,
+                created_by: req.agent?.id || null,
             },
         });
 
