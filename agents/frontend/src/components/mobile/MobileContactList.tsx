@@ -9,16 +9,17 @@ interface MobileContactListProps {
 const CARD_RADIUS = '12px';
 
 const TYPE_ICON: Record<string, string> = {
-    BUYER_TENANT: '🏠', SELLER_LANDLORD: '🔑', PARTNER_AGENT: '🤝', MANAGEMENT: '👔', UNKNOWN: '👤',
+    BUYER: '🏠', TENANT: '🛋️', LANDLORD: '🔑', PARTNER_AGENT: '🤝', REAL_ESTATE_BUILDER: '🏗️', MANAGEMENT: '👔', UNKNOWN: '👤',
 };
 const TYPE_LABEL: Record<string, string> = {
-    BUYER_TENANT: 'Buyer', SELLER_LANDLORD: 'Seller', PARTNER_AGENT: 'Partner', MANAGEMENT: 'Mgmt', UNKNOWN: 'Unknown',
+    BUYER: 'Buyer', TENANT: 'Tenant', LANDLORD: 'Landlord', PARTNER_AGENT: 'Partner', REAL_ESTATE_BUILDER: 'Builder', MANAGEMENT: 'Team', UNKNOWN: 'Unknown',
 };
 
 const FILTER_CHIPS = [
     { key: '', label: 'All' },
-    { key: 'BUYER_TENANT', label: 'Buyers' },
-    { key: 'SELLER_LANDLORD', label: 'Sellers' },
+    { key: 'BUYER', label: 'Buyers' },
+    { key: 'TENANT', label: 'Tenants' },
+    { key: 'LANDLORD', label: 'Landlords' },
     { key: 'PARTNER_AGENT', label: 'Partners' },
     { key: 'hot', label: '🔥 Hot' },
 ];

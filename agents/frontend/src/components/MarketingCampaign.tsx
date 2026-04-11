@@ -576,8 +576,10 @@ export default function MarketingCampaign() {
                           className="w-full px-2 py-1 border rounded text-sm"
                         >
                           <option value="">All</option>
-                          <option value="BUYER_TENANT">Buyer/Tenant</option>
-                          <option value="SELLER_LANDLORD">Seller/Landlord</option>
+                          <option value="BUYER">Buyers</option>
+                          <option value="TENANT">Tenants</option>
+                          <option value="LANDLORD">Landlords</option>
+                          <option value="PARTNER_AGENT">Partner Agents</option>
                         </select>
                       </div>
                       <div>

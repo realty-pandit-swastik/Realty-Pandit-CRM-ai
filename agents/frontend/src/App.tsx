@@ -76,11 +76,22 @@ function WelcomePanel({ contacts, agentName, onSelect }: WelcomePanelProps) {
   ];
 
   const TYPE_LABEL: Record<string, string> = {
-    BUYER_TENANT: 'Buyer', SELLER_LANDLORD: 'Seller',
-    PARTNER_AGENT: 'Partner', MANAGEMENT: 'Mgmt', UNKNOWN: '?',
+    BUYER: 'Buyer',
+    TENANT: 'Tenant',
+    LANDLORD: 'Landlord',
+    PARTNER_AGENT: 'Partner',
+    REAL_ESTATE_BUILDER: 'Builder',
+    MANAGEMENT: 'Team',
+    UNKNOWN: 'Unknown',
   };
   const TYPE_ICON: Record<string, string> = {
-    BUYER_TENANT: '🏠', SELLER_LANDLORD: '🔑', PARTNER_AGENT: '🤝', MANAGEMENT: '👔', UNKNOWN: '👤',
+    BUYER: '🏠',
+    TENANT: '🛋️',
+    LANDLORD: '🔑',
+    PARTNER_AGENT: '🤝',
+    REAL_ESTATE_BUILDER: '🏗️',
+    MANAGEMENT: '👔',
+    UNKNOWN: '👤',
   };
 
   return (

@@ -80,10 +80,12 @@ export const ChatView: React.FC<Props> = ({ contact, interactions, onReportNoSho
                             }}
                         >
                             <option value="UNKNOWN">Unknown</option>
-                            <option value="BUYER_TENANT">Buyer/Tenant</option>
-                            <option value="SELLER_LANDLORD">Seller/Landlord</option>
+                            <option value="BUYER">Buyer (Purchasing)</option>
+                            <option value="TENANT">Tenant (Renting)</option>
+                            <option value="LANDLORD">Landlord (Property Owner)</option>
                             <option value="PARTNER_AGENT">Partner Agent</option>
-                            <option value="MANAGEMENT">Management</option>
+                            <option value="REAL_ESTATE_BUILDER">Builder</option>
+                            <option value="MANAGEMENT">Team Member</option>
                         </select>
                     </div>
                     {/* Phone (secondary) */}

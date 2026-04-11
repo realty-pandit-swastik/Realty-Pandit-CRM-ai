@@ -12,10 +12,10 @@ const PADDING = '16px';
 const GAP = '12px';
 
 const TYPE_ICON: Record<string, string> = {
-    BUYER_TENANT: '🏠', SELLER_LANDLORD: '🔑', PARTNER_AGENT: '🤝', MANAGEMENT: '👔', UNKNOWN: '👤',
+    BUYER: '🏠', TENANT: '🛋️', LANDLORD: '🔑', PARTNER_AGENT: '🤝', REAL_ESTATE_BUILDER: '🏗️', MANAGEMENT: '👔', UNKNOWN: '👤',
 };
 const TYPE_LABEL: Record<string, string> = {
-    BUYER_TENANT: 'Buyer', SELLER_LANDLORD: 'Seller', PARTNER_AGENT: 'Partner', MANAGEMENT: 'Mgmt', UNKNOWN: '?',
+    BUYER: 'Buyer', TENANT: 'Tenant', LANDLORD: 'Landlord', PARTNER_AGENT: 'Partner', REAL_ESTATE_BUILDER: 'Builder', MANAGEMENT: 'Team', UNKNOWN: '?',
 };
 
 export function MobileDashboard({ contacts, agentName, onSelectContact }: MobileDashboardProps) {

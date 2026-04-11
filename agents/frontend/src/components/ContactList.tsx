@@ -24,11 +24,13 @@ interface Props {
 }
 
 const TYPE_BADGE: Record<string, { label: string; color: string; bg: string }> = {
-    'BUYER_TENANT':    { label: 'Buyer',   color: '#93c5fd', bg: '#1e3a5f' },
-    'SELLER_LANDLORD': { label: 'Seller',  color: 'var(--success-text)', bg: 'var(--success-bg)' },
-    'PARTNER_AGENT':   { label: 'Partner', color: '#d8b4fe', bg: '#3b1f5e' },
-    'MANAGEMENT':      { label: 'Mgmt',    color: '#fdba74', bg: '#7c2d12' },
-    'UNKNOWN':         { label: '?',       color: 'var(--text-secondary)', bg: 'var(--bg-secondary)' },
+    'BUYER':               { label: 'Buyer',    color: '#1d4ed8', bg: '#dbeafe' },
+    'TENANT':              { label: 'Tenant',   color: '#6d28d9', bg: '#ede9fe' },
+    'LANDLORD':            { label: 'Landlord', color: '#15803d', bg: '#dcfce7' },
+    'PARTNER_AGENT':       { label: 'Partner',  color: '#a16207', bg: '#fef9c3' },
+    'REAL_ESTATE_BUILDER': { label: 'Builder',  color: '#b91c1c', bg: '#fee2e2' },
+    'MANAGEMENT':          { label: 'Team',     color: '#475569', bg: '#f1f5f9' },
+    'UNKNOWN':             { label: 'Unknown',  color: '#6b7280', bg: '#f3f4f6' },
 };
 
 const getScoreBadge = (score?: LeadScore) => {

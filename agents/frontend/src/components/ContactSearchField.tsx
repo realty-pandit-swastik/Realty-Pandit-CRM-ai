@@ -26,7 +26,7 @@ function mapToWorkflowRole(contactType: string, identifiedType?: string): string
         }
     }
     switch (contactType) {
-        case 'SELLER_LANDLORD': return 'PROPERTY_OWNER';
+        case 'LANDLORD': return 'PROPERTY_OWNER';
         case 'PARTNER_AGENT': return 'AGENT_DEALER';
         case 'REAL_ESTATE_BUILDER': return 'BUILDER';
         case 'MANAGEMENT': return 'AGENT_DEALER';
@@ -40,8 +40,9 @@ function getRoleBadge(contactType: string, identifiedType?: string): { label: st
         case 'MANAGEMENT': return { label: 'Team Member', color: '#60a5fa', bg: 'rgba(59,130,246,0.15)' };
         case 'PARTNER_AGENT': return { label: 'Agent / Dealer', color: '#f59e0b', bg: 'rgba(245,158,11,0.15)' };
         case 'REAL_ESTATE_BUILDER': return { label: 'Builder', color: '#a78bfa', bg: 'rgba(167,139,250,0.15)' };
-        case 'SELLER_LANDLORD': return { label: 'Owner', color: '#34d399', bg: 'rgba(52,211,153,0.15)' };
-        case 'BUYER_TENANT': return { label: 'Buyer / Tenant', color: '#fb923c', bg: 'rgba(251,146,60,0.15)' };
+        case 'LANDLORD': return { label: 'Owner', color: '#34d399', bg: 'rgba(52,211,153,0.15)' };
+        case 'BUYER': return { label: 'Buyer', color: '#fb923c', bg: 'rgba(251,146,60,0.15)' };
+        case 'TENANT': return { label: 'Tenant', color: '#c084fc', bg: 'rgba(192,132,252,0.15)' };
         default: return { label: 'Contact', color: 'var(--text-muted)', bg: 'var(--bg-secondary)' };
     }
 }
@@ -173,9 +174,9 @@ export const ContactSearchField: React.FC<ContactSearchFieldProps> = ({
 
         // Map role selection to contact_type for DB
         const contactTypeMap: Record<string, string> = {
-            'PROPERTY_OWNER': 'SELLER_LANDLORD',
+            'PROPERTY_OWNER': 'LANDLORD',
             'AGENT_DEALER': 'PARTNER_AGENT',
-            'FINANCER': 'SELLER_LANDLORD',
+            'FINANCER': 'LANDLORD',
         };
 
         try {
