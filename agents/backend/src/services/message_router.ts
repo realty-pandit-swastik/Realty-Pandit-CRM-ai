@@ -144,15 +144,15 @@ export class MessageRouter {
         }
 
         // Classify domain intent
-        // Skip LLM call for BUYER_TENANT (always PROPERTY) and SELLER_LANDLORD (always PROPERTY)
+        // Skip LLM call for BUYER/TENANT/LANDLORD (always PROPERTY)
         // For UNKNOWN: use pre-classification result (already done above in classifyFull)
         let domainIntent: DomainIntent = 'GENERAL';
         if (contactType === 'UNKNOWN' && preClassification) {
             // Use consolidated result — no extra LLM call
             domainIntent = preClassification.domainIntent as DomainIntent;
             logger.info(`[MasterOrchestrator] Domain intent (from classifyFull): ${domainIntent}`);
-        } else if (contactType === 'BUYER_TENANT' || contactType === 'SELLER_LANDLORD') {
-            // Default to PROPERTY for buyers/sellers — no LLM call needed
+        } else if (contactType === 'BUYER' || contactType === 'TENANT' || contactType === 'LANDLORD') {
+            // Default to PROPERTY for buyers/tenants/landlords — no LLM call needed
             domainIntent = 'PROPERTY';
             // Quick keyword check for appointment intent
             const appointmentKeywords = ['appointment', 'schedule', 'visit', 'meeting', 'book', 'reschedule', 'cancel visit'];
@@ -173,7 +173,7 @@ export class MessageRouter {
 
         // ─── Transaction-aware routing (Phase TX) ──────────────
         // Detect role context: DEMAND, SUPPLY, or INTERNAL
-        // Skip LLM for BUYER_TENANT and SELLER_LANDLORD — assign role directly
+        // Skip LLM for BUYER/TENANT/LANDLORD — assign role directly
         let roleContext: RoleContextResult | null = null;
         let activeTransactions: TransactionData[] = [];
         let currentTransaction: TransactionData | null = null;
@@ -181,10 +181,10 @@ export class MessageRouter {
         if (contactType !== 'UNKNOWN') {
             try {
                 // Direct assignment for known contact types (no LLM call)
-                if (contactType === 'BUYER_TENANT') {
-                    roleContext = { role: 'DEMAND', confidence: 1, reasoning: 'contact_type=BUYER_TENANT' };
-                } else if (contactType === 'SELLER_LANDLORD') {
-                    roleContext = { role: 'SUPPLY', confidence: 1, reasoning: 'contact_type=SELLER_LANDLORD' };
+                if (contactType === 'BUYER' || contactType === 'TENANT') {
+                    roleContext = { role: 'DEMAND', confidence: 1, reasoning: `contact_type=${contactType}` };
+                } else if (contactType === 'LANDLORD') {
+                    roleContext = { role: 'SUPPLY', confidence: 1, reasoning: 'contact_type=LANDLORD' };
                 } else {
                     roleContext = await detectRoleContext(phone, message, contactType);
                 }
@@ -385,9 +385,9 @@ export class MessageRouter {
                 if (domainIntent === 'APPOINTMENT' && currentTransaction) {
                     return this.coordinationAgent;
                 }
-                // Individual owners (SELLER_LANDLORD) go to SalesAgent — NOT PartnerAgent
+                // Individual owners (LANDLORD) go to SalesAgent — NOT PartnerAgent
                 // PartnerAgent is ONLY for external brokers/dealers (PARTNER_AGENT) and builders
-                if (rawContactType === 'SELLER_LANDLORD') {
+                if (rawContactType === 'LANDLORD') {
                     return this.salesAgent;
                 }
                 // Partner agents and builders use partner handler
@@ -404,8 +404,9 @@ export class MessageRouter {
     private getWorkflowName(contactType: string): string {
         const map: Record<string, string> = {
             'UNKNOWN': 'unknown',
-            'BUYER_TENANT': 'sales_buyer',
-            'SELLER_LANDLORD': 'sales_seller',
+            'BUYER': 'sales_buyer',
+            'TENANT': 'sales_tenant',
+            'LANDLORD': 'sales_seller',
             'PARTNER_AGENT': 'partner',
             'MANAGEMENT': 'admin',
             'REAL_ESTATE_BUILDER': 'partner',

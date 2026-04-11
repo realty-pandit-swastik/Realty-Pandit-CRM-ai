@@ -167,15 +167,17 @@ export class LLMService {
         You are a Contact Type Classifier for a Real Estate AI called Panditji.
         Based on the message, classify the person into one of these categories:
 
-        - BUYER_TENANT (wants to buy or rent a property for themselves)
-        - SELLER_LANDLORD (owns a property and wants to sell or rent it out)
+        - BUYER (wants to PURCHASE/BUY a property — words like "buy", "purchase", "kharidna")
+        - TENANT (wants to RENT a property — words like "rent", "kiraya", "on rent", "looking for flat to rent")
+        - LANDLORD (OWNS a property and wants to sell or rent it out — says "my property", "mera ghar", "sell karna hai", "rent pe dena hai")
         - PARTNER_AGENT (is a property dealer, broker, or agent from another agency)
         - MANAGEMENT (is an internal team member, boss, manager, or employee)
         - UNKNOWN (cannot determine from the message)
 
         Clues:
-        - If they mention "buy", "rent", "looking for", "need flat/house" -> BUYER_TENANT
-        - If they mention "sell", "rent out", "have property", "my flat/house" -> SELLER_LANDLORD
+        - If they want to PURCHASE: "buy", "kharidna", "purchase", "looking to buy" -> BUYER
+        - If they want to RENT for themselves: "rent", "kiraya", "on rent", "need flat on rent" -> TENANT
+        - If they OWN and want to sell/rent out: "sell", "rent out", "my property", "mera ghar dena hai" -> LANDLORD
         - If they mention "dealer", "agent", "broker", "my agency", "I have clients/buyers" -> PARTNER_AGENT
         - If they mention "report", "team", "dashboard", "assign", "employee" -> MANAGEMENT
         - If it's just a greeting like "hi", "hello" -> UNKNOWN
@@ -187,7 +189,7 @@ export class LLMService {
 
         const text = await this.callGemini(prompt, 'UNKNOWN');
         const result = text.toUpperCase().trim();
-        const valid = ['BUYER_TENANT', 'SELLER_LANDLORD', 'PARTNER_AGENT', 'MANAGEMENT', 'UNKNOWN'];
+        const valid = ['BUYER', 'TENANT', 'LANDLORD', 'PARTNER_AGENT', 'REAL_ESTATE_BUILDER', 'MANAGEMENT', 'UNKNOWN'];
         const classified = valid.includes(result) ? result : 'UNKNOWN';
 
         // Cache for 1 hour
@@ -215,13 +217,14 @@ export class LLMService {
         Based on the message, classify the person and provide a confidence score.
 
         Categories:
-        - BUYER_TENANT: Person looking to BUY or RENT a property for their OWN USE.
-        - SELLER_LANDLORD: INDIVIDUAL OWNER who wants to sell or rent out THEIR OWN property. They say "I am the owner", "my flat", "mera ghar", "apna property", "I own", "wish to sale", "want to sell".
+        - BUYER: Person looking to PURCHASE/BUY a property. Uses words like buy, purchase, kharidna.
+        - TENANT: Person looking to RENT a property. Uses words like rent, kiraya, on rent, need flat on rent.
+        - LANDLORD: Property OWNER wanting to sell or give on rent. Says "my property", "sell karna", "rent pe dena".
         - PARTNER_AGENT: Professional property DEALER, BROKER, or AGENT who deals in real estate as a business. They represent clients or have a firm/agency.
         - MANAGEMENT: Internal team member of Realty Pandit.
         - UNKNOWN: Cannot determine clearly.
 
-        KEY RULE: If someone says they want to sell/rent out a property — they are most likely an INDIVIDUAL OWNER (SELLER_LANDLORD), NOT a PARTNER_AGENT. Only classify as PARTNER_AGENT if they explicitly say "broker", "dealer", "agent", "agency", or similar business terms.
+        KEY RULE: If someone says they want to sell/rent out a property — they are most likely an INDIVIDUAL OWNER (LANDLORD), NOT a PARTNER_AGENT. Only classify as PARTNER_AGENT if they explicitly say "broker", "dealer", "agent", "agency", or similar business terms.
 
         Also detect intent if possible:
         - buy, rent, sell, rent_out, or null
@@ -239,7 +242,7 @@ export class LLMService {
             const jsonMatch = text.match(/\{[^}]+\}/);
             if (jsonMatch) {
                 const parsed = JSON.parse(jsonMatch[0]);
-                const validTypes = ['BUYER_TENANT', 'SELLER_LANDLORD', 'PARTNER_AGENT', 'MANAGEMENT', 'UNKNOWN'];
+                const validTypes = ['BUYER', 'TENANT', 'LANDLORD', 'PARTNER_AGENT', 'REAL_ESTATE_BUILDER', 'MANAGEMENT', 'UNKNOWN'];
                 if (validTypes.includes(parsed.type)) {
                     const result = {
                         type: parsed.type,
@@ -386,13 +389,14 @@ export class LLMService {
         Analyze the following message and provide ALL of these classifications in ONE response.
 
         1. CONTACT TYPE — Who is this person?
-        - BUYER_TENANT: Wants to buy or rent a property for their OWN use.
-        - SELLER_LANDLORD: INDIVIDUAL OWNER who wants to sell or rent out THEIR OWN property.
+        - BUYER: Wants to PURCHASE a property. Keywords: buy, purchase, kharidna.
+        - TENANT: Wants to RENT a property. Keywords: rent, kiraya, on rent, need flat on rent.
+        - LANDLORD: OWNS a property, wants to sell or rent it out. Keywords: my property, sell, rent out, dena hai.
         - PARTNER_AGENT: Professional property DEALER, BROKER, or AGENT with a business.
         - MANAGEMENT: Internal team member of Realty Pandit.
         - UNKNOWN: Cannot determine (greetings like "hi", "hello").
 
-        KEY RULE: If someone says they want to sell/rent out — they are SELLER_LANDLORD, NOT PARTNER_AGENT.
+        KEY RULE: If someone says they want to sell/rent out — they are LANDLORD, NOT PARTNER_AGENT.
         Only classify as PARTNER_AGENT if they explicitly mention "broker", "dealer", "agent", "agency".
 
         2. DOMAIN INTENT — What topic is this about?
@@ -421,7 +425,7 @@ export class LLMService {
             const jsonMatch = text.match(/\{[^}]+\}/);
             if (jsonMatch) {
                 const parsed = JSON.parse(jsonMatch[0]);
-                const validTypes = ['BUYER_TENANT', 'SELLER_LANDLORD', 'PARTNER_AGENT', 'MANAGEMENT', 'UNKNOWN'];
+                const validTypes = ['BUYER', 'TENANT', 'LANDLORD', 'PARTNER_AGENT', 'REAL_ESTATE_BUILDER', 'MANAGEMENT', 'UNKNOWN'];
                 const validDomains = ['PROPERTY', 'LEGAL', 'LOAN', 'SERVICE', 'APPOINTMENT', 'GENERAL'];
                 const validLangs = ['english', 'hindi', 'hinglish'];
 

@@ -86,7 +86,7 @@ export class ClassifierAgent implements BaseAgent {
         // When someone wants to sell/rent out a property, we MUST ask if they
         // are the owner or a broker. This prevents misrouting individual
         // owners to the Partner Agent flow.
-        const isSellIntent = classification.type === 'SELLER_LANDLORD' ||
+        const isSellIntent = classification.type === 'LANDLORD' ||
             classification.intent === 'sell' || classification.intent === 'rent_out';
 
         if (isSellIntent && !this.hasOwnerSignal(message) && !this.hasAgentSignal(message)) {
@@ -117,7 +117,7 @@ export class ClassifierAgent implements BaseAgent {
         let intent: string | undefined;
         if (classification.intent) {
             intent = classification.intent;
-        } else if (contactType === 'BUYER_TENANT' || contactType === 'SELLER_LANDLORD') {
+        } else if (contactType === 'BUYER' || contactType === 'TENANT' || contactType === 'LANDLORD') {
             const classifiedIntent = await this.llmService.classifyIntent(message);
             if (classifiedIntent === 'BUYER') intent = 'buy';
             else if (classifiedIntent === 'TENANT') intent = 'rent';
@@ -127,8 +127,9 @@ export class ClassifierAgent implements BaseAgent {
 
         // Return acknowledgment
         const acknowledgments: Record<string, string> = {
-            BUYER_TENANT: "Welcome! I understand you're looking for a property. Let me help you find the perfect one.",
-            SELLER_LANDLORD: "Welcome! I understand you're the owner and have a property to sell or rent out. Let me help you list it.",
+            BUYER: "Welcome! I understand you're looking to purchase a property. Let me help you find the perfect match.",
+            TENANT: "Welcome! I understand you're looking for a rental property. Let me help you find the right place.",
+            LANDLORD: "Welcome! I understand you have a property. Let me help you list it and find the right buyer or tenant.",
             PARTNER_AGENT: "Welcome, partner! I see you're a property dealer. Let me know if you have properties to list or buyers to match.",
             MANAGEMENT: "Welcome, boss! How can I assist you today?",
         };
