@@ -143,8 +143,8 @@ model Contact {
   saved_properties       SavedProperty[] // Properties saved/favorited by this contact
   shortlisted_properties LeadPropertyShortlist[] // Properties in lead's consideration journey
 
-  // Contact Attribution (who created this contact — determines visibility)
-  // null = auto-created by system (inbound WhatsApp/website/portal) → owned by super_boss
+  // Contact Attribution (who created this contact -- determines visibility)
+  // null = auto-created by system (inbound WhatsApp/website/portal) -> owned by super_boss
   created_by       String? // Agent.id who created this contact
   created_by_agent Agent?  @relation("ContactCreatedBy", fields: [created_by], references: [id])
 
@@ -163,9 +163,9 @@ model Contact {
 }
 
 enum ContactType {
-  BUYER // Was BUYER_TENANT — looking to purchase a property
-  TENANT // Was BUYER_TENANT — looking to rent a property
-  LANDLORD // Was SELLER_LANDLORD — property owner (can sell or rent)
+  BUYER // Was BUYER_TENANT - looking to purchase a property
+  TENANT // Was BUYER_TENANT - looking to rent a property
+  LANDLORD // Was SELLER_LANDLORD - property owner (can sell or rent)
   PARTNER_AGENT // External broker/dealer
   REAL_ESTATE_BUILDER // Builder with projects
   MANAGEMENT // Internal team member
@@ -855,7 +855,7 @@ model LeadScore {
 }
 
 // ---------------------------------------------------------
-// LEADS (Demand Requirements — Separated from Contact)
+// LEADS (Demand Requirements - Separated from Contact)
 // One Contact can have multiple Leads over time
 // ---------------------------------------------------------
 model Lead {
