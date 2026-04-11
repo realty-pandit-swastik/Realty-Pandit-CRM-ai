@@ -243,7 +243,7 @@ export const MainDashboard: React.FC = () => {
                     flexShrink: 0,
                   }}
                 >
-                  {{ BUYER: '🏠', TENANT: '🛋️', LANDLORD: '🔑', PARTNER_AGENT: '🤝', MANAGEMENT: '👔' }[c.contact_type] || '👤'}
+                  {({ BUYER: '🏠', TENANT: '🛋️', LANDLORD: '🔑', PARTNER_AGENT: '🤝', MANAGEMENT: '👔' } as Record<string, string>)[c.contact_type] || '👤'}
                 </div>
                 <div style={{ minWidth: 0, flex: 1 }}>
                   <div
