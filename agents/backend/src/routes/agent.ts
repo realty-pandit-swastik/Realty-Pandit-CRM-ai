@@ -196,7 +196,8 @@ router.post('/register', validate(agentRegisterSchema), async (req, res) => {
                     name: name,
                     email: email,
                     contact_type: 'PARTNER_AGENT',
-                    source: 'agent_registration'
+                    source: 'agent_registration',
+                    created_by: req.agent?.id || null,
                 }
             });
         } else {
@@ -1050,7 +1051,8 @@ router.post('/team', authenticateAgent, async (req: any, res) => {
                 name,
                 email: email || undefined,
                 contact_type: 'PARTNER_AGENT',
-                source: 'partner_team_created'
+                source: 'partner_team_created',
+                created_by: req.agent?.id || null,
             },
             update: { name, contact_type: 'PARTNER_AGENT' }
         });
@@ -1114,6 +1116,7 @@ router.post('/deals', authenticateAgent, validate(partnerCreateDealSchema), asyn
                     name: customer_name,
                     contact_type: type === 'RENT' ? 'TENANT' : 'BUYER',
                     source: 'partner_deal',
+                    created_by: req.agent?.id || null,
                 },
                 update: { name: customer_name },
             });
@@ -1127,6 +1130,7 @@ router.post('/deals', authenticateAgent, validate(partnerCreateDealSchema), asyn
                     name: customer_name,
                     contact_type: type === 'RENT' ? 'TENANT' : 'BUYER',
                     source: 'partner_deal',
+                    created_by: req.agent?.id || null,
                 },
             });
             contactId = contact.phone_number;
