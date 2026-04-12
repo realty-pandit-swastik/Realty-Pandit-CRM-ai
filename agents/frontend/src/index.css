@@ -33,6 +33,29 @@
 
   --shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 
+  /* ── Claymorphism ── */
+  --shadow-clay:       0 4px 24px rgba(0,0,0,0.08), inset 0 1px 0 rgba(255,255,255,0.85);
+  --shadow-clay-hover: 0 8px 32px rgba(0,0,0,0.13), inset 0 1px 0 rgba(255,255,255,0.95);
+  --radius-clay:       16px;
+  --radius-chip:       20px;
+
+  /* ── Skeleton shimmer ── */
+  --skeleton-base:  #e5e7eb;
+  --skeleton-shine: #f3f4f6;
+
+  /* ── Bottom sheet ── */
+  --sheet-backdrop: rgba(0, 0, 0, 0.35);
+
+  /* ── Toast ── */
+  --toast-bg:    #1e293b;
+  --toast-text:  #f8fafc;
+
+  /* ── Bento grid gap ── */
+  --bento-gap: 10px;
+
+  /* ── Theme transition ── */
+  --theme-transition: background-color 200ms ease, color 200ms ease, border-color 200ms ease, box-shadow 200ms ease;
+
   font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
   line-height: 1.5;
   font-weight: 400;
@@ -71,6 +94,17 @@
   --warning-text: #fde68a;
 
   --shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+
+  /* ── Claymorphism (dark) ── */
+  --shadow-clay:       0 8px 32px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.06);
+  --shadow-clay-hover: 0 12px 40px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.09);
+
+  /* ── Skeleton shimmer (dark) ── */
+  --skeleton-base:  #1e2d3d;
+  --skeleton-shine: #2a3f55;
+
+  /* ── Bottom sheet (dark) ── */
+  --sheet-backdrop: rgba(0, 0, 0, 0.6);
 }
 
 body {
@@ -242,4 +276,87 @@ button {
 
 @keyframes spin {
   to { transform: rotate(360deg); }
+}
+
+@keyframes skeleton-shimmer {
+  0%   { background-position: -400px 0; }
+  100% { background-position: 400px 0; }
+}
+
+@keyframes slide-up-in {
+  from { transform: translateY(100%); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
+}
+
+@keyframes slide-up-out {
+  from { transform: translateY(0);    opacity: 1; }
+  to   { transform: translateY(100%); opacity: 0; }
+}
+
+@keyframes fade-stagger {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes toast-in {
+  from { transform: translateY(80px); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
+}
+
+/* ── Skeleton pulse ── */
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--skeleton-base) 0%,
+    var(--skeleton-shine) 40%,
+    var(--skeleton-base) 80%
+  );
+  background-size: 800px 100%;
+  animation: skeleton-shimmer 1.4s ease-in-out infinite;
+  border-radius: 8px;
+}
+
+/* ── Clay card ── */
+.clay-card {
+  background-color: var(--bg-card, var(--bg-secondary));
+  box-shadow: var(--shadow-clay);
+  border-radius: var(--radius-clay);
+  transition: var(--theme-transition), box-shadow 150ms ease;
+}
+.clay-card:hover {
+  box-shadow: var(--shadow-clay-hover);
+}
+
+/* ── Chip ── */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 14px;
+  border-radius: var(--radius-chip);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1.5px solid transparent;
+  transition: background-color 120ms ease, color 120ms ease, border-color 120ms ease;
+  white-space: nowrap;
+}
+.chip-inactive {
+  background-color: var(--bg-secondary);
+  color: var(--text-secondary);
+  border-color: var(--border-primary);
+}
+.chip-active {
+  background-color: var(--text-link);
+  color: #fff;
+  border-color: var(--text-link);
+}
+
+/* ── Smooth theme transitions ── */
+*, *::before, *::after {
+  transition: background-color 200ms ease, color 200ms ease, border-color 200ms ease;
+}
+/* Disable transitions on skeleton elements to prevent shimmer jank */
+.skeleton, .skeleton * {
+  transition: none !important;
 }
