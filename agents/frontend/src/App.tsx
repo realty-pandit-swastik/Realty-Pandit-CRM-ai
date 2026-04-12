@@ -3,6 +3,8 @@ import { useEffect, useState, useCallback } from 'react';
 import { getContacts, getInteractions, updateContactType, reportNoShow } from './api/client';
 import { useAuth } from './contexts/AuthContext';
 import { useIsMobile } from './hooks/useIsMobile';
+import { ToastProvider } from './contexts/ToastContext';
+import { ToastContainer } from './components/ui/Toast';
 import { LoginPage } from './components/LoginPage';
 import { SetupPasswordPage } from './components/SetupPasswordPage';
 import { DashboardLayout } from './components/DashboardLayout';
@@ -433,11 +435,12 @@ function App() {
     };
 
     return (
-      <>
+      <ToastProvider>
         <MobileLayout activeView={view} onViewChange={handleMobileNav}>
           <ErrorBoundary>{renderMobileContent()}</ErrorBoundary>
         </MobileLayout>
-      </>
+        <ToastContainer />
+      </ToastProvider>
     );
   }
 
@@ -516,12 +519,13 @@ function App() {
   };
 
   return (
-    <>
+    <ToastProvider>
       <DashboardLayout activeView={view} onViewChange={setView}>
         <ErrorBoundary>{renderContent()}</ErrorBoundary>
       </DashboardLayout>
       <VoiceCommands onNavigate={setView} currentView={view} />
-    </>
+      <ToastContainer />
+    </ToastProvider>
   );
 }
 
