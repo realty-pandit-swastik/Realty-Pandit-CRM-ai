@@ -3,10 +3,9 @@ import { useState, useMemo } from 'react';
 
 interface MobileContactListProps {
     contacts: any[];
+    loading?: boolean;
     onSelect: (phone: string) => void;
 }
-
-const CARD_RADIUS = '12px';
 
 const TYPE_ICON: Record<string, string> = {
     BUYER: '🏠', TENANT: '🛋️', LANDLORD: '🔑', PARTNER_AGENT: '🤝', REAL_ESTATE_BUILDER: '🏗️', MANAGEMENT: '👔', UNKNOWN: '👤',
@@ -24,7 +23,7 @@ const FILTER_CHIPS = [
     { key: 'hot', label: '🔥 Hot' },
 ];
 
-export function MobileContactList({ contacts, onSelect }: MobileContactListProps) {
+export function MobileContactList({ contacts, loading = false, onSelect }: MobileContactListProps) {
     const [search, setSearch] = useState('');
     const [filter, setFilter] = useState('');
 
@@ -54,7 +53,7 @@ export function MobileContactList({ contacts, onSelect }: MobileContactListProps
                     onChange={e => setSearch(e.target.value)}
                     placeholder="Search contacts..."
                     style={{
-                        width: '100%', padding: '10px 14px', borderRadius: CARD_RADIUS,
+                        width: '100%', padding: '10px 14px', borderRadius: 'var(--radius-clay)',
                         border: '1px solid var(--border-secondary)', backgroundColor: 'var(--bg-secondary)',
                         color: 'var(--text-primary)', fontSize: '14px', boxSizing: 'border-box',
                     }}
@@ -65,15 +64,10 @@ export function MobileContactList({ contacts, onSelect }: MobileContactListProps
             <div style={{ padding: '0 16px 8px', display: 'flex', gap: '8px', overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
                 {FILTER_CHIPS.map(chip => (
                     <button
+                        type="button"
                         key={chip.key}
                         onClick={() => setFilter(chip.key)}
-                        style={{
-                            flexShrink: 0, padding: '6px 14px', borderRadius: '20px',
-                            border: filter === chip.key ? '1px solid #4F46E5' : '1px solid var(--border-secondary)',
-                            backgroundColor: filter === chip.key ? '#4F46E5' : 'var(--bg-secondary)',
-                            color: filter === chip.key ? '#fff' : 'var(--text-secondary)',
-                            fontSize: '13px', fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap',
-                        }}
+                        className={`chip ${filter === chip.key ? 'chip-active' : 'chip-inactive'}`}
                     >
                         {chip.label}
                     </button>
@@ -82,20 +76,28 @@ export function MobileContactList({ contacts, onSelect }: MobileContactListProps
 
             {/* Contact List */}
             <div style={{ flex: 1, overflow: 'auto', padding: '0 16px 16px' }}>
-                {filtered.length === 0 ? (
-                    <div style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '40px 0', fontSize: '14px' }}>
-                        No contacts found
+                {loading ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', paddingTop: '8px' }}>
+                        {Array.from({ length: 6 }).map((_, i) => (
+                            <div key={i} className="skeleton" style={{ height: '72px', borderRadius: 'var(--radius-clay)' }} />
+                        ))}
+                    </div>
+                ) : filtered.length === 0 ? (
+                    <div style={{ padding: '40px 20px', textAlign: 'center', color: 'var(--text-muted)' }}>
+                        <div style={{ fontSize: '36px', marginBottom: '12px' }}>💬</div>
+                        <div style={{ fontWeight: 600, fontSize: '15px' }}>No contacts found</div>
+                        <div style={{ fontSize: '13px', marginTop: '6px' }}>Try a different filter or search</div>
                     </div>
                 ) : (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                         {filtered.map(c => (
                             <div
                                 key={c.phone_number}
+                                className="clay-card"
                                 onClick={() => onSelect(c.phone_number)}
                                 style={{
-                                    backgroundColor: 'var(--bg-secondary)', borderRadius: CARD_RADIUS,
                                     padding: '12px 16px', display: 'flex', alignItems: 'center', gap: '12px',
-                                    border: '1px solid var(--border-secondary)', cursor: 'pointer',
+                                    cursor: 'pointer', marginBottom: '0',
                                 }}
                             >
                                 <div style={{

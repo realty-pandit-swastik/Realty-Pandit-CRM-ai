@@ -192,6 +192,7 @@ function App() {
   const isMobile = useIsMobile();
   const [view, setView] = useState('dashboard');
   const [contacts, setContacts] = useState<any[]>([]);
+  const [contactsLoading, setContactsLoading] = useState(true);
   const [selectedPhone, setSelectedPhone] = useState<string | null>(null);
   const [interactions, setInteractions] = useState<any[]>([]);
   // Mobile-specific state
@@ -208,10 +209,13 @@ function App() {
 
   const loadContacts = async () => {
     try {
+      setContactsLoading(true);
       const data = await getContacts();
       setContacts(data);
     } catch (err) {
       console.error('Failed to load contacts', err);
+    } finally {
+      setContactsLoading(false);
     }
   };
 
@@ -344,6 +348,7 @@ function App() {
           return (
             <MobileContactList
               contacts={contacts}
+              loading={contactsLoading}
               onSelect={handleMobileSelectContact}
             />
           );
