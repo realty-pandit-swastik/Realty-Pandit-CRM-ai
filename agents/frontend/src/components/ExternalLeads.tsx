@@ -145,6 +145,25 @@ function channelIcon(ch: string) {
     return ({ whatsapp: '💬', voice: '📞', email: '📧', website: '🌐' } as any)[ch] || '📌';
 }
 
+// ─── FilterSection accordion ──────────────────────────────────────────────────
+
+function FilterSection({ title, children }: { title: string; children: React.ReactNode }) {
+    const [open, setOpen] = useState(true);
+    return (
+        <div style={{ borderBottom: '1px solid var(--border-primary)', padding: '12px 20px' }}>
+            <button
+                type="button"
+                onClick={() => setOpen(o => !o)}
+                style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+            >
+                <span style={{ fontWeight: 600, fontSize: '14px', color: 'var(--text-primary)' }}>{title}</span>
+                <span style={{ color: 'var(--text-muted)', fontSize: '18px', transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 200ms ease' }}>⌄</span>
+            </button>
+            {open && <div style={{ marginTop: '12px' }}>{children}</div>}
+        </div>
+    );
+}
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export function ExternalLeads({ isMobile: isMobileProp }: { isMobile?: boolean } = {}) {
@@ -195,6 +214,7 @@ export function ExternalLeads({ isMobile: isMobileProp }: { isMobile?: boolean }
     const [bhkFilter, setBhkFilter] = useState<number[]>([]);
     const [categoryFilter, setCategoryFilter] = useState('');
     const [locationFilter, setLocationFilter] = useState('');
+    const [showFilterSheet, setShowFilterSheet] = useState(false);
 
     // ── Classification tree ──
     const [classificationTree, setClassificationTree] = useState<Category[]>([]);
@@ -828,6 +848,12 @@ export function ExternalLeads({ isMobile: isMobileProp }: { isMobile?: boolean }
 
     const totalAll = leadsBySource.reduce((sum, s) => sum + s._count, 0);
 
+    const activeFilterCount = [
+        statusFilter, sourceFilter, agentFilter, dateFrom, dateTo, locationFilter,
+        ...bhkFilter.map(String),
+        categoryFilter,
+    ].filter(Boolean).length;
+
     const filteredLeads = recentLeads.filter(lead => {
         if (searchQuery) {
             const q = searchQuery.toLowerCase();
@@ -927,56 +953,147 @@ export function ExternalLeads({ isMobile: isMobileProp }: { isMobile?: boolean }
                     ))}
                 </div>
 
-                {/* Filters Row */}
-                <div style={{ display: 'flex', gap: '6px', marginBottom: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
-                    <input type="text" placeholder="Search name, phone, email..." value={searchQuery}
-                        onChange={e => setSearchQuery(e.target.value)} style={{ flex: 1, minWidth: '160px', padding: '5px 10px', borderRadius: '6px', border: '1px solid var(--border-secondary)', backgroundColor: 'var(--bg-secondary)', color: 'var(--text-primary)', fontSize: '12px', boxSizing: 'border-box' }} />
-                    <select title="Filter by status" value={statusFilter} onChange={e => setStatusFilter(e.target.value)} style={filterSelectStyle}>
-                        <option value="">Status</option>
-                        {LEAD_STATUSES.map(s => <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
-                    </select>
-                    <select title="Filter by source" value={sourceFilter} onChange={e => setSourceFilter(e.target.value)} style={filterSelectStyle}>
-                        <option value="">Source</option>
-                        {SOURCES.map(s => <option key={s} value={s}>{sourceLabels[s] || s}</option>)}
-                    </select>
-                    {isPrivileged && (
-                        <select title="Filter by agent" value={agentFilter} onChange={e => setAgentFilter(e.target.value)} style={filterSelectStyle}>
-                            <option value="">Agent</option>
-                            {teamMembers.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-                        </select>
-                    )}
-                    <input type="date" title="From date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
-                        style={{ ...filterSelectStyle, width: '120px' }} />
-                    <input type="date" title="To date" value={dateTo} onChange={e => setDateTo(e.target.value)}
-                        style={{ ...filterSelectStyle, width: '120px' }} />
-                    {(searchQuery || statusFilter || sourceFilter || agentFilter || dateFrom || dateTo || bhkFilter.length > 0 || categoryFilter || locationFilter) && (
-                        <button type="button" onClick={() => { setSearchQuery(''); setStatusFilter(''); setSourceFilter(''); setAgentFilter(''); setDateFrom(''); setDateTo(''); setBhkFilter([]); setCategoryFilter(''); setLocationFilter(''); }}
-                            style={{ padding: '4px 10px', borderRadius: '6px', border: '1px solid var(--border-secondary)', backgroundColor: 'var(--bg-secondary)', color: '#ef4444', cursor: 'pointer', fontSize: '11px', fontWeight: 600 }}>
-                            Clear
-                        </button>
-                    )}
-                </div>
+                {/* ── Filters — mobile: minimalist bar; desktop: full rows ── */}
+                {isMobile ? (
+                    <div style={{ padding: '4px 0 0', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        {/* Row 1: Search + Filters button */}
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                            <input
+                                type="text"
+                                value={searchQuery}
+                                onChange={e => setSearchQuery(e.target.value)}
+                                placeholder="Search name, phone, email..."
+                                style={{
+                                    flex: 1, padding: '10px 14px', borderRadius: '12px',
+                                    border: '1px solid var(--border-secondary)',
+                                    backgroundColor: 'var(--bg-secondary)', color: 'var(--text-primary)',
+                                    fontSize: '14px', outline: 'none',
+                                }}
+                            />
+                            <button
+                                type="button"
+                                onClick={() => setShowFilterSheet(true)}
+                                style={{
+                                    padding: '10px 14px', borderRadius: '12px', cursor: 'pointer',
+                                    border: activeFilterCount > 0 ? '1.5px solid var(--text-link)' : '1px solid var(--border-secondary)',
+                                    backgroundColor: activeFilterCount > 0 ? 'var(--text-link)' : 'var(--bg-secondary)',
+                                    color: activeFilterCount > 0 ? '#fff' : 'var(--text-secondary)',
+                                    fontWeight: 600, fontSize: '13px', flexShrink: 0,
+                                    display: 'flex', alignItems: 'center', gap: '6px',
+                                }}
+                            >
+                                <span>⚙</span>
+                                <span>Filters{activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}</span>
+                            </button>
+                        </div>
 
-                {/* Advanced Filter Bar — BHK, Category, Location */}
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '8px', alignItems: 'center' }}>
-                    <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600, whiteSpace: 'nowrap' }}>BHK:</span>
-                    {[1, 2, 3, 4, 5].map(n => (
-                        <button key={n} type="button"
-                            onClick={() => setBhkFilter(prev => prev.includes(n) ? prev.filter(x => x !== n) : [...prev, n])}
-                            style={{ padding: '3px 8px', borderRadius: '6px', fontSize: '11px', fontWeight: 600, cursor: 'pointer', border: bhkFilter.includes(n) ? '1.5px solid #3b82f6' : '1px solid var(--border-secondary)', backgroundColor: bhkFilter.includes(n) ? 'rgba(59,130,246,0.12)' : 'var(--bg-secondary)', color: bhkFilter.includes(n) ? '#3b82f6' : 'var(--text-secondary)' }}>
-                            {n}{n === 5 ? '+' : ''}BHK
-                        </button>
-                    ))}
-                    <select value={categoryFilter} onChange={e => setCategoryFilter(e.target.value)} style={{ ...filterSelectStyle, color: categoryFilter ? '#3b82f6' : undefined }}>
-                        <option value="">All Types</option>
-                        <option value="residential">Residential</option>
-                        <option value="commercial">Commercial</option>
-                        <option value="agricultural">Agricultural</option>
-                    </select>
-                    <input type="text" placeholder="Location..." value={locationFilter}
-                        onChange={e => setLocationFilter(e.target.value)}
-                        style={{ padding: '4px 10px', borderRadius: '6px', fontSize: '12px', minWidth: '140px', border: locationFilter ? '1.5px solid #3b82f6' : '1px solid var(--border-secondary)', backgroundColor: 'var(--bg-secondary)', color: 'var(--text-primary)', outline: 'none' }} />
-                </div>
+                        {/* Row 2: Active filter chips (dismissible) */}
+                        {activeFilterCount > 0 && (
+                            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                                {statusFilter && (
+                                    <button type="button" onClick={() => setStatusFilter('')} className="chip chip-active" style={{ fontSize: '12px', padding: '4px 10px' }}>
+                                        {statusFilter} ×
+                                    </button>
+                                )}
+                                {sourceFilter && (
+                                    <button type="button" onClick={() => setSourceFilter('')} className="chip chip-active" style={{ fontSize: '12px', padding: '4px 10px' }}>
+                                        {sourceLabels[sourceFilter] || sourceFilter} ×
+                                    </button>
+                                )}
+                                {agentFilter && (
+                                    <button type="button" onClick={() => setAgentFilter('')} className="chip chip-active" style={{ fontSize: '12px', padding: '4px 10px' }}>
+                                        {teamMembers.find(m => m.id === agentFilter)?.name || 'Agent'} ×
+                                    </button>
+                                )}
+                                {dateFrom && (
+                                    <button type="button" onClick={() => setDateFrom('')} className="chip chip-active" style={{ fontSize: '12px', padding: '4px 10px' }}>
+                                        From {dateFrom} ×
+                                    </button>
+                                )}
+                                {dateTo && (
+                                    <button type="button" onClick={() => setDateTo('')} className="chip chip-active" style={{ fontSize: '12px', padding: '4px 10px' }}>
+                                        To {dateTo} ×
+                                    </button>
+                                )}
+                                {bhkFilter.length > 0 && (
+                                    <button type="button" onClick={() => setBhkFilter([])} className="chip chip-active" style={{ fontSize: '12px', padding: '4px 10px' }}>
+                                        {bhkFilter.length === 1 ? `${bhkFilter[0]} BHK` : `${bhkFilter.length} BHK types`} ×
+                                    </button>
+                                )}
+                                {categoryFilter && (
+                                    <button type="button" onClick={() => setCategoryFilter('')} className="chip chip-active" style={{ fontSize: '12px', padding: '4px 10px' }}>
+                                        {categoryFilter.charAt(0).toUpperCase() + categoryFilter.slice(1)} ×
+                                    </button>
+                                )}
+                                {locationFilter && (
+                                    <button type="button" onClick={() => setLocationFilter('')} className="chip chip-active" style={{ fontSize: '12px', padding: '4px 10px' }}>
+                                        {locationFilter} ×
+                                    </button>
+                                )}
+                                <button
+                                    type="button"
+                                    onClick={() => { setStatusFilter(''); setSourceFilter(''); setAgentFilter(''); setDateFrom(''); setDateTo(''); setBhkFilter([]); setCategoryFilter(''); setLocationFilter(''); }}
+                                    style={{ padding: '4px 10px', borderRadius: '20px', fontSize: '12px', fontWeight: 600, backgroundColor: 'transparent', border: '1px solid var(--border-secondary)', color: 'var(--text-muted)', cursor: 'pointer' }}
+                                >
+                                    Clear all
+                                </button>
+                            </div>
+                        )}
+                    </div>
+                ) : (
+                    <>
+                        {/* Desktop: Filters Row */}
+                        <div style={{ display: 'flex', gap: '6px', marginBottom: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+                            <input type="text" placeholder="Search name, phone, email..." value={searchQuery}
+                                onChange={e => setSearchQuery(e.target.value)} style={{ flex: 1, minWidth: '160px', padding: '5px 10px', borderRadius: '6px', border: '1px solid var(--border-secondary)', backgroundColor: 'var(--bg-secondary)', color: 'var(--text-primary)', fontSize: '12px', boxSizing: 'border-box' }} />
+                            <select title="Filter by status" value={statusFilter} onChange={e => setStatusFilter(e.target.value)} style={filterSelectStyle}>
+                                <option value="">Status</option>
+                                {LEAD_STATUSES.map(s => <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
+                            </select>
+                            <select title="Filter by source" value={sourceFilter} onChange={e => setSourceFilter(e.target.value)} style={filterSelectStyle}>
+                                <option value="">Source</option>
+                                {SOURCES.map(s => <option key={s} value={s}>{sourceLabels[s] || s}</option>)}
+                            </select>
+                            {isPrivileged && (
+                                <select title="Filter by agent" value={agentFilter} onChange={e => setAgentFilter(e.target.value)} style={filterSelectStyle}>
+                                    <option value="">Agent</option>
+                                    {teamMembers.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                                </select>
+                            )}
+                            <input type="date" title="From date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
+                                style={{ ...filterSelectStyle, width: '120px' }} />
+                            <input type="date" title="To date" value={dateTo} onChange={e => setDateTo(e.target.value)}
+                                style={{ ...filterSelectStyle, width: '120px' }} />
+                            {(searchQuery || statusFilter || sourceFilter || agentFilter || dateFrom || dateTo || bhkFilter.length > 0 || categoryFilter || locationFilter) && (
+                                <button type="button" onClick={() => { setSearchQuery(''); setStatusFilter(''); setSourceFilter(''); setAgentFilter(''); setDateFrom(''); setDateTo(''); setBhkFilter([]); setCategoryFilter(''); setLocationFilter(''); }}
+                                    style={{ padding: '4px 10px', borderRadius: '6px', border: '1px solid var(--border-secondary)', backgroundColor: 'var(--bg-secondary)', color: '#ef4444', cursor: 'pointer', fontSize: '11px', fontWeight: 600 }}>
+                                    Clear
+                                </button>
+                            )}
+                        </div>
+
+                        {/* Desktop: Advanced Filter Bar — BHK, Category, Location */}
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '8px', alignItems: 'center' }}>
+                            <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600, whiteSpace: 'nowrap' }}>BHK:</span>
+                            {[1, 2, 3, 4, 5].map(n => (
+                                <button key={n} type="button"
+                                    onClick={() => setBhkFilter(prev => prev.includes(n) ? prev.filter(x => x !== n) : [...prev, n])}
+                                    style={{ padding: '3px 8px', borderRadius: '6px', fontSize: '11px', fontWeight: 600, cursor: 'pointer', border: bhkFilter.includes(n) ? '1.5px solid #3b82f6' : '1px solid var(--border-secondary)', backgroundColor: bhkFilter.includes(n) ? 'rgba(59,130,246,0.12)' : 'var(--bg-secondary)', color: bhkFilter.includes(n) ? '#3b82f6' : 'var(--text-secondary)' }}>
+                                    {n}{n === 5 ? '+' : ''}BHK
+                                </button>
+                            ))}
+                            <select value={categoryFilter} onChange={e => setCategoryFilter(e.target.value)} style={{ ...filterSelectStyle, color: categoryFilter ? '#3b82f6' : undefined }}>
+                                <option value="">All Types</option>
+                                <option value="residential">Residential</option>
+                                <option value="commercial">Commercial</option>
+                                <option value="agricultural">Agricultural</option>
+                            </select>
+                            <input type="text" placeholder="Location..." value={locationFilter}
+                                onChange={e => setLocationFilter(e.target.value)}
+                                style={{ padding: '4px 10px', borderRadius: '6px', fontSize: '12px', minWidth: '140px', border: locationFilter ? '1.5px solid #3b82f6' : '1px solid var(--border-secondary)', backgroundColor: 'var(--bg-secondary)', color: 'var(--text-primary)', outline: 'none' }} />
+                        </div>
+                    </>
+                )}
 
                 {/* Table */}
                 <div style={{ backgroundColor: 'var(--bg-secondary)', borderRadius: '8px', overflow: 'hidden', border: '1px solid var(--border-secondary)' }}>
@@ -1820,6 +1937,119 @@ export function ExternalLeads({ isMobile: isMobileProp }: { isMobile?: boolean }
 
                     </div>
                 </>
+            )}
+
+            {/* ── Filter Bottom Sheet ── */}
+            {showFilterSheet && (
+                <div
+                    style={{ position: 'fixed', inset: 0, backgroundColor: 'var(--sheet-backdrop)', zIndex: 900 }}
+                    onClick={() => setShowFilterSheet(false)}
+                >
+                    <div
+                        style={{
+                            position: 'absolute', bottom: 0, left: 0, right: 0,
+                            backgroundColor: 'var(--bg-secondary)',
+                            borderRadius: '20px 20px 0 0',
+                            maxHeight: '80vh',
+                            overflowY: 'auto',
+                            WebkitOverflowScrolling: 'touch',
+                            padding: '0 0 32px',
+                            boxShadow: '0 -8px 40px rgba(0,0,0,0.25)',
+                            animation: 'slide-up-in 250ms cubic-bezier(0.34,1.2,0.64,1) forwards',
+                        }}
+                        onClick={e => e.stopPropagation()}
+                    >
+                        {/* Sheet handle */}
+                        <div style={{ display: 'flex', justifyContent: 'center', padding: '12px 0 8px' }}>
+                            <div style={{ width: '40px', height: '4px', borderRadius: '2px', backgroundColor: 'var(--border-secondary)' }} />
+                        </div>
+
+                        <div style={{ padding: '0 20px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span style={{ fontWeight: 700, fontSize: '16px', color: 'var(--text-primary)' }}>Filters</span>
+                            <button type="button" onClick={() => {
+                                setStatusFilter('');
+                                setSourceFilter('');
+                                setAgentFilter('');
+                                setDateFrom('');
+                                setDateTo('');
+                                setBhkFilter([]);
+                                setCategoryFilter('');
+                                setLocationFilter('');
+                            }} style={{ background: 'none', border: 'none', color: 'var(--text-link)', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}>
+                                Clear All
+                            </button>
+                        </div>
+
+                        {/* Status section */}
+                        <FilterSection title="Status">
+                            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                                {LEAD_STATUSES.map(s => (
+                                    <button type="button" key={s} onClick={() => setStatusFilter(statusFilter === s ? '' : s)}
+                                        className={`chip ${statusFilter === s ? 'chip-active' : 'chip-inactive'}`}>
+                                        {s.charAt(0).toUpperCase() + s.slice(1)}
+                                    </button>
+                                ))}
+                            </div>
+                        </FilterSection>
+
+                        {/* Source section */}
+                        <FilterSection title="Source">
+                            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                                {SOURCES.map(s => (
+                                    <button type="button" key={s} onClick={() => setSourceFilter(sourceFilter === s ? '' : s)}
+                                        className={`chip ${sourceFilter === s ? 'chip-active' : 'chip-inactive'}`}>
+                                        {sourceLabels[s] || s.charAt(0).toUpperCase() + s.slice(1)}
+                                    </button>
+                                ))}
+                            </div>
+                        </FilterSection>
+
+                        {/* BHK section */}
+                        <FilterSection title="Property Size">
+                            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                                {[1, 2, 3, 4, 5].map(n => (
+                                    <button type="button" key={n}
+                                        onClick={() => setBhkFilter(prev => prev.includes(n) ? prev.filter(x => x !== n) : [...prev, n])}
+                                        className={`chip ${bhkFilter.includes(n) ? 'chip-active' : 'chip-inactive'}`}>
+                                        {n === 5 ? '5+ BHK' : `${n} BHK`}
+                                    </button>
+                                ))}
+                            </div>
+                        </FilterSection>
+
+                        {/* Category section */}
+                        <FilterSection title="Category">
+                            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                                {['residential', 'commercial', 'agricultural'].map(c => (
+                                    <button type="button" key={c} onClick={() => setCategoryFilter(categoryFilter === c ? '' : c)}
+                                        className={`chip ${categoryFilter === c ? 'chip-active' : 'chip-inactive'}`}>
+                                        {c.charAt(0).toUpperCase() + c.slice(1)}
+                                    </button>
+                                ))}
+                            </div>
+                        </FilterSection>
+
+                        {/* Date Range */}
+                        <FilterSection title="Date Range">
+                            <div style={{ display: 'flex', gap: '10px' }}>
+                                <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
+                                    style={{ flex: 1, padding: '8px', borderRadius: '8px', border: '1px solid var(--border-secondary)', backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)', fontSize: '13px' }} />
+                                <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
+                                    style={{ flex: 1, padding: '8px', borderRadius: '8px', border: '1px solid var(--border-secondary)', backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)', fontSize: '13px' }} />
+                            </div>
+                        </FilterSection>
+
+                        {/* Apply button */}
+                        <div style={{ padding: '16px 20px 0' }}>
+                            <button type="button"
+                                onClick={() => setShowFilterSheet(false)}
+                                style={{ width: '100%', padding: '14px', borderRadius: '12px', border: 'none', backgroundColor: 'var(--text-link)', color: '#fff', fontWeight: 700, fontSize: '15px', cursor: 'pointer' }}
+                            >
+                                Apply Filters{activeFilterCount > 0 ? ` (${activeFilterCount} active)` : ''}
+                            </button>
+                        </div>
+                    </div>
+                </div>
             )}
         </div>
     );
