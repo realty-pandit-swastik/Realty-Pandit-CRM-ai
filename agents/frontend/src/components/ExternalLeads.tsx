@@ -618,13 +618,19 @@ export function ExternalLeads({ isMobile: isMobileProp }: { isMobile?: boolean }
     };
 
     const handleClientSearchChange = (val: string) => {
-        setClientSearchQuery(val);
+        // Strip all non-digits, cap at 10
+        const digitsOnly = val.replace(/\D/g, '').slice(0, 10);
+        setClientSearchQuery(digitsOnly);
         if (clientSearchTimer.current) clearTimeout(clientSearchTimer.current);
-        if (val.trim().length < 2) { setClientSearchResults([]); setClientSearching(false); return; }
+        if (digitsOnly.length < 10 || !/^[6-9]/.test(digitsOnly)) {
+            setClientSearchResults([]);
+            setClientSearching(false);
+            return;
+        }
         setClientSearching(true);
         clientSearchTimer.current = setTimeout(async () => {
             try {
-                const res = await client.get('/api/leads/search', { params: { q: val.trim() } });
+                const res = await client.get('/api/leads/search', { params: { q: digitsOnly } });
                 setClientSearchResults(res.data || []);
             } catch {
                 setClientSearchResults([]);
@@ -642,8 +648,8 @@ export function ExternalLeads({ isMobile: isMobileProp }: { isMobile?: boolean }
 
     const handleCreateNewClient = () => {
         const q = clientSearchQuery.trim();
-        const isPhone = /^\+?\d[\d\s\-]{7,}$/.test(q);
-        setCreateForm(p => ({ ...p, [isPhone ? 'phone' : 'name']: q }));
+        // clientSearchQuery is always digits-only, so always treat as phone
+        setCreateForm(p => ({ ...p, phone: q }));
         setPreselectedContact(null);
         setCreateStep(3);
     };
@@ -1525,18 +1531,36 @@ export function ExternalLeads({ isMobile: isMobileProp }: { isMobile?: boolean }
                         {createStep === 2 && createLeadType === 'DIRECT_OWNER' && (
                             <div>
                                 <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '12px' }}>Search if this client already exists</div>
-                                <input
-                                    type="text"
-                                    autoFocus
-                                    value={clientSearchQuery}
-                                    onChange={e => handleClientSearchChange(e.target.value)}
-                                    placeholder="Search by name or phone number..."
-                                    style={{ ...inputStyle, fontSize: '14px', padding: '10px 14px' }}
-                                />
+                                <div style={{ position: 'relative' }}>
+                                    <input
+                                        type="tel"
+                                        inputMode="numeric"
+                                        pattern="[0-9]*"
+                                        autoFocus
+                                        value={clientSearchQuery}
+                                        onChange={e => handleClientSearchChange(e.target.value)}
+                                        placeholder="Enter 10-digit phone number"
+                                        maxLength={10}
+                                        style={{ ...inputStyle, fontSize: '14px', padding: '10px 14px' }}
+                                    />
+                                    <span style={{
+                                        position: 'absolute', right: '14px', top: '50%', transform: 'translateY(-50%)',
+                                        fontSize: '12px', fontWeight: 600,
+                                        color: clientSearchQuery.length === 10 ? '#22c55e' : 'var(--text-muted)',
+                                        pointerEvents: 'none',
+                                    }}>
+                                        {clientSearchQuery.length}/10
+                                    </span>
+                                </div>
+                                {clientSearchQuery.length > 0 && clientSearchQuery.length < 10 && (
+                                    <p style={{ fontSize: '12px', color: 'var(--text-muted)', margin: '6px 0 0 4px' }}>
+                                        {10 - clientSearchQuery.length} more digits needed
+                                    </p>
+                                )}
                                 {clientSearching && <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '6px' }}>Searching...</div>}
 
                                 {/* Results */}
-                                {clientSearchQuery.trim().length >= 2 && !clientSearching && clientSearchResults.length > 0 && (
+                                {clientSearchQuery.trim().length === 10 && !clientSearching && clientSearchResults.length > 0 && (
                                     <div style={{ marginTop: '8px', border: '1px solid var(--border-secondary)', borderRadius: '8px', overflow: 'hidden' }}>
                                         {clientSearchResults.map(r => {
                                             const isTemp = r.phone_number.startsWith('TEMP_');
@@ -1564,7 +1588,7 @@ export function ExternalLeads({ isMobile: isMobileProp }: { isMobile?: boolean }
                                 )}
 
                                 {/* Not found — offer to create */}
-                                {clientSearchQuery.trim().length >= 2 && !clientSearching && clientSearchResults.length === 0 && (
+                                {clientSearchQuery.trim().length === 10 && !clientSearching && clientSearchResults.length === 0 && (
                                     <div style={{ marginTop: '10px', padding: '14px', backgroundColor: 'var(--bg-secondary)', borderRadius: '8px', border: '1px solid var(--border-secondary)', textAlign: 'center' }}>
                                         <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '10px' }}>No contact found for "{clientSearchQuery}"</div>
                                         <button type="button" onClick={handleCreateNewClient} style={{ ...primaryBtn, padding: '7px 18px', fontSize: '13px' }}>
@@ -1574,7 +1598,7 @@ export function ExternalLeads({ isMobile: isMobileProp }: { isMobile?: boolean }
                                 )}
 
                                 {/* Skip search — go straight to new client form */}
-                                {clientSearchQuery.trim().length < 2 && (
+                                {clientSearchQuery.trim().length < 10 && (
                                     <div style={{ marginTop: '10px', textAlign: 'center' }}>
                                         <button type="button" onClick={() => { setPreselectedContact(null); setCreateStep(3); }} style={{ fontSize: '12px', color: 'var(--text-muted)', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}>
                                             Skip — add new client directly

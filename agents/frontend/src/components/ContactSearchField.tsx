@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { identifyContactByPhone, getRecentContacts, ensureContact } from '../api/client';
+import React, { useState, useCallback, useRef } from 'react';
+import { identifyContactByPhone, ensureContact } from '../api/client';
 
 export interface SelectedContact {
     phone: string;
@@ -13,6 +13,7 @@ export interface SelectedContact {
 interface ContactSearchFieldProps {
     onContactSelected: (contact: SelectedContact) => void;
     label?: string;
+    /** @deprecated Phone-only mode; placeholder is fixed and this prop is ignored */
     placeholder?: string;
 }
 
@@ -49,16 +50,12 @@ function getRoleBadge(contactType: string, identifiedType?: string): { label: st
 
 export const ContactSearchField: React.FC<ContactSearchFieldProps> = ({
     onContactSelected,
-    label = 'Search contact by phone or name',
-    placeholder = 'Enter phone number or name',
+    label = 'Search contact by phone number',
 }) => {
     const [query, setQuery] = useState('');
     const [searching, setSearching] = useState(false);
     const [searchResult, setSearchResult] = useState<any>(null); // { contact, identified }
     const [notFound, setNotFound] = useState(false);
-    const [recentContacts, setRecentContacts] = useState<any[]>([]);
-    const [filteredContacts, setFilteredContacts] = useState<any[]>([]);
-    const [loadingRecent, setLoadingRecent] = useState(true);
 
     // New contact form (when not found)
     const [newName, setNewName] = useState('');
@@ -67,16 +64,6 @@ export const ContactSearchField: React.FC<ContactSearchFieldProps> = ({
     const [error, setError] = useState('');
 
     const searchTimeout = useRef<any>(null);
-
-    // Detect if input looks like a phone number
-    const isPhoneQuery = (val: string) => /^\d+$/.test(val.trim());
-
-    // Load recent contacts on mount
-    useEffect(() => {
-        getRecentContacts(30).then(data => {
-            setRecentContacts(Array.isArray(data) ? data : []);
-        }).catch(() => {}).finally(() => setLoadingRecent(false));
-    }, []);
 
     // Phone search
     const doPhoneSearch = useCallback(async (phoneVal: string) => {
@@ -87,7 +74,6 @@ export const ContactSearchField: React.FC<ContactSearchFieldProps> = ({
         setError('');
         setNotFound(false);
         setSearchResult(null);
-        setFilteredContacts([]);
 
         try {
             const result = await identifyContactByPhone(clean);
@@ -104,39 +90,20 @@ export const ContactSearchField: React.FC<ContactSearchFieldProps> = ({
         }
     }, []);
 
-    // Name search — filter recent contacts client-side
-    const doNameFilter = useCallback((nameVal: string) => {
-        const q = nameVal.toLowerCase().trim();
-        if (q.length < 2) {
-            setFilteredContacts([]);
-            return;
-        }
-        const matches = recentContacts.filter(c =>
-            c.name && c.name.toLowerCase().includes(q)
-        );
-        setFilteredContacts(matches);
-        setSearchResult(null);
-        setNotFound(false);
-    }, [recentContacts]);
-
     const handleInputChange = useCallback((val: string) => {
-        setQuery(val);
+        // Strip all non-digits, cap at 10
+        const digitsOnly = val.replace(/\D/g, '').slice(0, 10);
+        setQuery(digitsOnly);
         setSearchResult(null);
         setNotFound(false);
         setError('');
-        setFilteredContacts([]);
 
         if (searchTimeout.current) clearTimeout(searchTimeout.current);
 
-        if (isPhoneQuery(val)) {
-            const cleaned = val.replace(/\D/g, '').slice(0, 10);
-            if (cleaned.length === 10 && /^[6-9]/.test(cleaned)) {
-                searchTimeout.current = setTimeout(() => doPhoneSearch(cleaned), 300);
-            }
-        } else if (val.trim().length >= 2) {
-            searchTimeout.current = setTimeout(() => doNameFilter(val), 200);
+        if (digitsOnly.length === 10 && /^[6-9]/.test(digitsOnly)) {
+            searchTimeout.current = setTimeout(() => doPhoneSearch(digitsOnly), 300);
         }
-    }, [doPhoneSearch, doNameFilter]);
+    }, [doPhoneSearch]);
 
     // Select an existing contact (from phone search result)
     const handleSelectFound = useCallback(() => {
@@ -155,13 +122,6 @@ export const ContactSearchField: React.FC<ContactSearchFieldProps> = ({
             sourceId: identified?.source_id,
         });
     }, [searchResult, query, onContactSelected]);
-
-    // Select from recent/filtered contacts list — do full identify lookup
-    const handleSelectRecent = useCallback((recent: any) => {
-        const cleaned = recent.phone_number.replace(/^\+91/, '').replace(/^91/, '');
-        setQuery(cleaned);
-        doPhoneSearch(recent.phone_number);
-    }, [doPhoneSearch]);
 
     // Create new contact
     const handleCreateContact = useCallback(async () => {
@@ -201,23 +161,39 @@ export const ContactSearchField: React.FC<ContactSearchFieldProps> = ({
 
     return (
         <div>
-            {/* Search Input — accepts phone or name */}
+            {/* Search Input — accepts phone digits only */}
             <label style={styles.label}>{label}</label>
             <div style={{ position: 'relative' }}>
                 <input
-                    type="text"
+                    type="tel"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
                     value={query}
                     onChange={e => handleInputChange(e.target.value)}
-                    placeholder={placeholder}
+                    placeholder="Enter 10-digit phone number"
+                    maxLength={10}
                     style={styles.input}
                     autoFocus
                 />
-                {searching && (
+                {searching ? (
                     <span style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', fontSize: '13px' }}>
                         Searching...
                     </span>
+                ) : (
+                    <span style={{
+                        position: 'absolute', right: '14px', top: '50%', transform: 'translateY(-50%)',
+                        fontSize: '12px', color: query.length === 10 ? 'var(--success-text)' : 'var(--text-muted)',
+                        fontWeight: 600, pointerEvents: 'none',
+                    }}>
+                        {query.length}/10
+                    </span>
                 )}
             </div>
+            {query.length > 0 && query.length < 10 && (
+                <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '6px', paddingLeft: '4px' }}>
+                    {10 - query.length} more digits needed
+                </div>
+            )}
 
             {error && <div style={styles.error}>{error}</div>}
 
@@ -302,91 +278,6 @@ export const ContactSearchField: React.FC<ContactSearchFieldProps> = ({
                     <button style={styles.primaryBtn} onClick={handleCreateContact} disabled={creating || !newName.trim() || !newRole}>
                         {creating ? 'Creating...' : 'Create & Continue'} &rarr;
                     </button>
-                </div>
-            )}
-
-            {/* Name Search Results */}
-            {filteredContacts.length > 0 && !searchResult && (
-                <div style={{ marginTop: '16px' }}>
-                    <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                        Matching Contacts
-                    </div>
-                    <div style={{ maxHeight: '280px', overflowY: 'auto', borderRadius: '8px', border: '1px solid var(--border-secondary)' }}>
-                        {filteredContacts.map((c, i) => {
-                            const b = getRoleBadge(c.contact_type);
-                            return (
-                                <button
-                                    key={c.phone_number}
-                                    onClick={() => handleSelectRecent(c)}
-                                    style={{
-                                        display: 'flex', alignItems: 'center', gap: '10px', width: '100%',
-                                        padding: '10px 14px', border: 'none', cursor: 'pointer', textAlign: 'left' as const,
-                                        backgroundColor: i % 2 === 0 ? 'var(--bg-primary)' : 'var(--bg-secondary)',
-                                        borderBottom: '1px solid var(--border-secondary)',
-                                    }}
-                                >
-                                    <div style={{ ...styles.avatar, width: '32px', height: '32px', fontSize: '13px' }}>
-                                        {(c.name || '?')[0].toUpperCase()}
-                                    </div>
-                                    <div style={{ flex: 1 }}>
-                                        <div style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)' }}>{c.name || 'Unknown'}</div>
-                                        <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{c.phone_number}</div>
-                                    </div>
-                                    <span style={{ padding: '2px 8px', borderRadius: '12px', fontSize: '10px', fontWeight: 600, color: b.color, backgroundColor: b.bg }}>{b.label}</span>
-                                </button>
-                            );
-                        })}
-                    </div>
-                </div>
-            )}
-
-            {/* Recent Contacts */}
-            {!searchResult && !notFound && filteredContacts.length === 0 && (!isPhoneQuery(query) || query.length === 0) && (
-                <div style={{ marginTop: '16px' }}>
-                    <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                        Recent Contacts
-                    </div>
-                    {loadingRecent ? (
-                        <div style={{ color: 'var(--text-muted)', fontSize: '13px', padding: '12px' }}>Loading...</div>
-                    ) : recentContacts.length === 0 ? (
-                        <div style={{ color: 'var(--text-muted)', fontSize: '13px', padding: '12px' }}>No recent contacts</div>
-                    ) : (
-                        <div style={{ maxHeight: '280px', overflowY: 'auto', borderRadius: '8px', border: '1px solid var(--border-secondary)' }}>
-                            {recentContacts.map((c, i) => {
-                                const b = getRoleBadge(c.contact_type);
-                                return (
-                                    <button
-                                        key={c.phone_number}
-                                        onClick={() => handleSelectRecent(c)}
-                                        style={{
-                                            display: 'flex', alignItems: 'center', gap: '10px', width: '100%',
-                                            padding: '10px 14px', border: 'none', cursor: 'pointer', textAlign: 'left',
-                                            backgroundColor: i % 2 === 0 ? 'var(--bg-primary)' : 'var(--bg-secondary)',
-                                            borderBottom: '1px solid var(--border-secondary)',
-                                        }}
-                                    >
-                                        <div style={{ ...styles.avatar, width: '32px', height: '32px', fontSize: '13px' }}>
-                                            {(c.name || '?')[0].toUpperCase()}
-                                        </div>
-                                        <div style={{ flex: 1 }}>
-                                            <div style={{ fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)' }}>
-                                                {c.name || 'Unknown'}
-                                            </div>
-                                            <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                                                {c.phone_number}
-                                            </div>
-                                        </div>
-                                        <span style={{
-                                            padding: '2px 8px', borderRadius: '12px', fontSize: '10px', fontWeight: 600,
-                                            color: b.color, backgroundColor: b.bg,
-                                        }}>
-                                            {b.label}
-                                        </span>
-                                    </button>
-                                );
-                            })}
-                        </div>
-                    )}
                 </div>
             )}
         </div>
