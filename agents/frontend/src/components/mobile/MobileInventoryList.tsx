@@ -28,7 +28,7 @@ const INTENT_COLORS: Record<string, { bg: string; color: string }> = {
 };
 
 export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryListProps) {
-    const { hasPermission } = useAuth();
+    const { hasPermission, agent } = useAuth();
     const [items, setItems] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [page, setPage] = useState(1);
@@ -339,7 +339,7 @@ export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryLis
                                                 )}
                                             </div>
                                         )}
-                                        {hasPermission('edit_inventory') && (
+                                        {hasPermission('edit_inventory') && (item.uploaded_by_agent?.id === agent?.id || agent?.role === 'super_boss' || agent?.role === 'manager') && (
                                             <button
                                                 onClick={async (e) => {
                                                     e.stopPropagation();

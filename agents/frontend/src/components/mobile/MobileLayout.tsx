@@ -12,7 +12,7 @@ interface MobileLayoutProps {
 
 const PRIMARY = '#4F46E5';
 
-const NAV_SECTIONS = [
+const NAV_SECTIONS: { label: string; items: { id: string; label: string; icon: string; permission: string | null }[] }[] = [
     {
         label: "Today's Tasks",
         items: [
@@ -55,7 +55,7 @@ const NAV_SECTIONS = [
     {
         label: 'Admin',
         items: [
-            { id: 'dashboard', label: 'Dashboard', icon: '📊', permission: null },
+            { id: 'dashboard', label: 'Dashboard', icon: '📊', permission: 'view_reports' },
             { id: 'reports', label: 'Reports', icon: '📊', permission: 'view_reports' },
             { id: 'ai-dashboard', label: 'AI Agents', icon: '🤖', permission: 'view_reports' },
             { id: 'agent-logs', label: 'Agent Logs', icon: '📝', permission: 'view_reports' },
