@@ -239,12 +239,13 @@ export default function LeadWorkflowPage() {
     // ── Styles ──
     const cardStyle = (task: WorkflowTask): React.CSSProperties => ({
         backgroundColor: 'var(--bg-secondary)',
-        borderRadius: '10px',
-        padding: '16px',
-        marginBottom: '12px',
+        borderRadius: 'var(--radius-clay)',
+        padding: '14px 16px',
+        marginBottom: '10px',
         borderLeft: `4px solid ${STAGE_COLORS[task.task_type] || '#6b7280'}`,
         cursor: 'pointer',
-        transition: 'box-shadow 0.2s',
+        boxShadow: 'var(--shadow-clay)',
+        transition: 'box-shadow 150ms ease',
     });
 
     const badgeStyle = (color: string): React.CSSProperties => ({
@@ -284,33 +285,43 @@ export default function LeadWorkflowPage() {
     // ── Render: Stats Bar ──
     const renderStatsBar = () => {
         if (!stats) return null;
-        const stages = ['QUALIFY_LEAD', 'SHARE_PROPERTIES', 'SCHEDULE_VISIT', 'VISIT_FEEDBACK', 'NEGOTIATE_DEAL'];
+        const stages = [
+            { key: 'QUALIFY_LEAD',     icon: '📞', color: '#3b82f6' },
+            { key: 'SHARE_PROPERTIES', icon: '📤', color: '#8b5cf6' },
+            { key: 'SCHEDULE_VISIT',   icon: '📅', color: '#f59e0b' },
+            { key: 'VISIT_FEEDBACK',   icon: '✅', color: '#06b6d4' },
+            { key: 'NEGOTIATE_DEAL',   icon: '🤝', color: '#f97316' },
+        ];
         return (
-            <div style={{ display: 'flex', gap: '12px', marginBottom: '20px', flexWrap: 'wrap' }}>
-                {stages.map(s => (
-                    <div key={s} style={{
-                        flex: '1 1 140px',
-                        backgroundColor: STAGE_COLORS[s] + '15',
-                        borderRadius: '10px',
-                        padding: '12px 16px',
-                        textAlign: 'center',
-                        borderBottom: `3px solid ${STAGE_COLORS[s]}`,
-                    }}>
-                        <div style={{ fontSize: '20px' }}>{STAGE_ICONS[s]}</div>
-                        <div style={{ fontSize: '24px', fontWeight: 700, color: STAGE_COLORS[s] }}>
-                            {stats.by_stage?.[s] || 0}
+            <div style={{
+                display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '4px',
+                marginBottom: '20px', WebkitOverflowScrolling: 'touch', flexShrink: 0,
+            }}>
+                {stages.map(s => {
+                    const count = stats.by_stage?.[s.key] || 0;
+                    return (
+                        <div key={s.key} style={{
+                            display: 'flex', alignItems: 'center', gap: '5px',
+                            padding: '7px 14px', borderRadius: 'var(--radius-chip)', flexShrink: 0,
+                            backgroundColor: s.color + '18', border: `1.5px solid ${s.color}33`,
+                            fontSize: '13px',
+                        }}>
+                            <span>{s.icon}</span>
+                            <span style={{ fontWeight: 700, color: s.color }}>{count}</span>
+                            <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{STAGE_LABELS[s.key]}</span>
                         </div>
-                        <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{STAGE_LABELS[s]}</div>
-                    </div>
-                ))}
+                    );
+                })}
                 {stats.overdue > 0 && (
                     <div style={{
-                        flex: '1 1 140px', backgroundColor: '#ef444422', borderRadius: '10px',
-                        padding: '12px 16px', textAlign: 'center', borderBottom: '3px solid #ef4444',
+                        display: 'flex', alignItems: 'center', gap: '5px',
+                        padding: '7px 14px', borderRadius: 'var(--radius-chip)', flexShrink: 0,
+                        backgroundColor: '#ef444418', border: '1.5px solid #ef444433',
+                        fontSize: '13px',
                     }}>
-                        <div style={{ fontSize: '20px' }}>🔴</div>
-                        <div style={{ fontSize: '24px', fontWeight: 700, color: '#ef4444' }}>{stats.overdue}</div>
-                        <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Overdue</div>
+                        <span>🔴</span>
+                        <span style={{ fontWeight: 700, color: '#ef4444' }}>{stats.overdue}</span>
+                        <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Overdue</span>
                     </div>
                 )}
             </div>
