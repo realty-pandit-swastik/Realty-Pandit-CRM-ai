@@ -45,15 +45,7 @@ export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryLis
     const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
     const [shareItem, setShareItem] = useState<any>(null);
     const [bookVisitItem, setBookVisitItem] = useState<any>(null);
-    const [callDropdownId, setCallDropdownId] = useState<string | null>(null);
-
-    // Close call dropdown on outside tap
-    useEffect(() => {
-        if (!callDropdownId) return;
-        const handler = () => setCallDropdownId(null);
-        document.addEventListener('click', handler);
-        return () => document.removeEventListener('click', handler);
-    }, [callDropdownId]);
+    const [activeSheetItem, setActiveSheetItem] = useState<any>(null);
 
     useEffect(() => {
         getStates().then(d => {
@@ -194,13 +186,22 @@ export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryLis
                             const location = item.full_address || [item.locality, item.city || item.district, item.state].filter(Boolean).join(', ') || 'Location N/A';
                             const specs = item.specs || {};
                             return (
-                                <div key={item.id} onClick={() => onEditItem(item)}
+                                <div
+                                    key={item.id}
+                                    className="clay-card"
+                                    onClick={() => setActiveSheetItem(item)}
                                     style={{
-                                        backgroundColor: 'var(--bg-secondary)', borderRadius: CARD_RADIUS,
-                                        padding: '14px 16px', border: '1px solid var(--border-secondary)', cursor: 'pointer',
-                                    }}>
+                                        marginBottom: '10px',
+                                        padding: '14px 16px',
+                                        cursor: 'pointer',
+                                        display: 'flex',
+                                        flexDirection: 'column',
+                                        gap: '8px',
+                                        border: '1px solid var(--border-primary)',
+                                    }}
+                                >
                                     {/* Top row: thumbnail + info */}
-                                    <div style={{ display: 'flex', gap: '10px', marginBottom: '8px' }}>
+                                    <div style={{ display: 'flex', gap: '10px' }}>
                                         {/* Thumbnail */}
                                         <div style={{ width: '60px', height: '60px', borderRadius: '8px', overflow: 'hidden', flexShrink: 0, backgroundColor: 'var(--bg-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                                             {item.media_urls?.[0] ? (
@@ -240,7 +241,7 @@ export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryLis
                                     </div>
 
                                     {/* Dual Pricing */}
-                                    <div style={{ display: 'flex', gap: '8px', marginBottom: '6px', fontSize: '12px', flexWrap: 'wrap', alignItems: 'center' }}>
+                                    <div style={{ display: 'flex', gap: '8px', fontSize: '12px', flexWrap: 'wrap', alignItems: 'center' }}>
                                         <span style={{ color: 'var(--text-muted)' }}>
                                             Demand: <strong style={{ color: 'var(--text-secondary)' }}>{formatPrice(item.customer_price || item.price, item.intent)}</strong>
                                         </span>
@@ -270,7 +271,7 @@ export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryLis
 
                                     {/* Specs row */}
                                     {(specs.bedrooms || specs.area) && (
-                                        <div style={{ display: 'flex', gap: '10px', fontSize: '11px', color: 'var(--text-secondary)', marginBottom: '6px' }}>
+                                        <div style={{ display: 'flex', gap: '10px', fontSize: '11px', color: 'var(--text-secondary)' }}>
                                             {specs.bedrooms && <span>{specs.bedrooms} BHK</span>}
                                             {specs.bathrooms && <span>{specs.bathrooms} Bath</span>}
                                             {specs.area && <span>{specs.area} {specs.area_unit || 'sqft'}</span>}
@@ -278,7 +279,7 @@ export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryLis
                                     )}
 
                                     {/* Completion Bar */}
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                                         <div style={{ flex: 1, height: '4px', borderRadius: '2px', backgroundColor: 'var(--bg-primary)', maxWidth: '140px' }}>
                                             <div style={{
                                                 height: '100%', borderRadius: '2px',
@@ -298,75 +299,6 @@ export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryLis
                                             </span>
                                         )}
                                     </div>
-
-                                    {/* Action Buttons */}
-                                    <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
-                                        {/* Call Button */}
-                                        {(item.uploader_phone || item.owner_phone || item.key_holder_phone) && (
-                                            <div style={{ position: 'relative', display: 'inline-block' }}>
-                                                <button
-                                                    onClick={(e) => { e.stopPropagation(); setCallDropdownId(callDropdownId === item.id ? null : item.id); }}
-                                                    style={{ padding: '4px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: 600, border: 'none', cursor: 'pointer', backgroundColor: '#22d3ee22', color: '#22d3ee' }}
-                                                >&#9742; Call</button>
-                                                {callDropdownId === item.id && (
-                                                    <div onClick={e => e.stopPropagation()} style={{
-                                                        position: 'absolute', bottom: '100%', right: 0, marginBottom: '4px',
-                                                        backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-secondary)',
-                                                        borderRadius: '8px', padding: '4px', minWidth: '180px', zIndex: 100,
-                                                        boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
-                                                    }}>
-                                                        {item.uploader_phone && (
-                                                            <a href={`tel:${item.uploader_phone}`} style={{ display: 'flex', flexDirection: 'column', padding: '8px 12px', borderRadius: '6px', textDecoration: 'none', color: 'inherit' }}>
-                                                                <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>{item.ownership_type === 'OWNER' ? 'Owner' : 'Uploader'}</span>
-                                                                <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>{item.uploader_name || 'Unknown'}</span>
-                                                                <span style={{ fontSize: '12px', color: '#22d3ee' }}>{item.uploader_phone}</span>
-                                                            </a>
-                                                        )}
-                                                        {item.owner_phone && item.owner_phone !== item.uploader_phone && (
-                                                            <a href={`tel:${item.owner_phone}`} style={{ display: 'flex', flexDirection: 'column', padding: '8px 12px', borderRadius: '6px', textDecoration: 'none', color: 'inherit' }}>
-                                                                <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Owner</span>
-                                                                <span style={{ fontSize: '12px', color: '#22d3ee' }}>{item.owner_phone}</span>
-                                                            </a>
-                                                        )}
-                                                        {item.key_holder_type === 'EXTERNAL' && item.key_holder_phone && (
-                                                            <a href={`tel:${item.key_holder_phone}`} style={{ display: 'flex', flexDirection: 'column', padding: '8px 12px', borderRadius: '6px', textDecoration: 'none', color: 'inherit' }}>
-                                                                <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Key Holder</span>
-                                                                <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>{item.key_holder_name || 'Unknown'}</span>
-                                                                <span style={{ fontSize: '12px', color: '#22d3ee' }}>{item.key_holder_phone}</span>
-                                                            </a>
-                                                        )}
-                                                    </div>
-                                                )}
-                                            </div>
-                                        )}
-                                        {hasPermission('edit_inventory') && (item.uploaded_by_agent?.id === agent?.id || agent?.role === 'super_boss' || agent?.role === 'manager') && (
-                                            <button
-                                                onClick={async (e) => {
-                                                    e.stopPropagation();
-                                                    const newStatus = item.status === 'active' ? 'inactive' : 'active';
-                                                    if (!confirm(`${newStatus === 'inactive' ? 'Deactivate' : 'Activate'}?`)) return;
-                                                    try { await updateInventory(item.id, { status: newStatus }); loadData(); }
-                                                    catch (err: any) { alert(err.response?.data?.error || 'Failed'); }
-                                                }}
-                                                style={{
-                                                    padding: '4px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: 600,
-                                                    border: 'none', cursor: 'pointer',
-                                                    backgroundColor: item.status === 'active' ? '#F59E0B22' : '#10B98122',
-                                                    color: item.status === 'active' ? '#F59E0B' : '#10B981',
-                                                }}
-                                            >
-                                                {item.status === 'active' ? 'Deactivate' : 'Activate'}
-                                            </button>
-                                        )}
-                                        <button
-                                            onClick={(e) => { e.stopPropagation(); setShareItem(item); }}
-                                            style={{ padding: '4px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: 600, border: 'none', cursor: 'pointer', backgroundColor: '#22c55e22', color: '#22c55e' }}
-                                        >Share</button>
-                                        <button
-                                            onClick={(e) => { e.stopPropagation(); setBookVisitItem(item); }}
-                                            style={{ padding: '4px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: 600, border: 'none', cursor: 'pointer', backgroundColor: '#8b5cf622', color: '#8b5cf6' }}
-                                        >Visit</button>
-                                    </div>
                                 </div>
                             );
                         })}
@@ -376,12 +308,12 @@ export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryLis
                 {/* Pagination */}
                 {totalPages > 1 && (
                     <div style={{ display: 'flex', justifyContent: 'center', gap: '12px', padding: '16px 0', alignItems: 'center' }}>
-                        <button disabled={page <= 1} onClick={() => setPage(p => p - 1)}
+                        <button type="button" disabled={page <= 1} onClick={() => setPage(p => p - 1)}
                             style={{ padding: '8px 16px', borderRadius: '8px', border: '1px solid var(--border-secondary)', backgroundColor: 'var(--bg-secondary)', color: 'var(--text-secondary)', cursor: page <= 1 ? 'not-allowed' : 'pointer', opacity: page <= 1 ? 0.4 : 1 }}>
                             Prev
                         </button>
                         <span style={{ color: 'var(--text-muted)', fontSize: '13px' }}>{page}/{totalPages}</span>
-                        <button disabled={page >= totalPages} onClick={() => setPage(p => p + 1)}
+                        <button type="button" disabled={page >= totalPages} onClick={() => setPage(p => p + 1)}
                             style={{ padding: '8px 16px', borderRadius: '8px', border: '1px solid var(--border-secondary)', backgroundColor: 'var(--bg-secondary)', color: 'var(--text-secondary)', cursor: page >= totalPages ? 'not-allowed' : 'pointer', opacity: page >= totalPages ? 0.4 : 1 }}>
                             Next
                         </button>
@@ -391,7 +323,7 @@ export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryLis
 
             {/* FAB — Add Property */}
             {hasPermission('edit_inventory') && (
-                <button onClick={onAddNew}
+                <button type="button" onClick={onAddNew}
                     style={{
                         position: 'absolute', bottom: '16px', right: '16px',
                         width: '56px', height: '56px', borderRadius: '28px',
@@ -409,6 +341,122 @@ export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryLis
             )}
             {bookVisitItem && (
                 <BookVisitModal item={bookVisitItem} onClose={() => setBookVisitItem(null)} onBooked={() => setBookVisitItem(null)} />
+            )}
+
+            {/* Action Bottom Sheet */}
+            {activeSheetItem && (
+                <div
+                    style={{ position: 'fixed', inset: 0, backgroundColor: 'var(--sheet-backdrop)', zIndex: 900 }}
+                    onClick={() => setActiveSheetItem(null)}
+                >
+                    <div
+                        style={{
+                            position: 'absolute', bottom: 0, left: 0, right: 0,
+                            backgroundColor: 'var(--bg-secondary)',
+                            borderRadius: '20px 20px 0 0',
+                            padding: '12px 0 32px',
+                            boxShadow: '0 -8px 40px rgba(0,0,0,0.25)',
+                            animation: 'slide-up-in 250ms cubic-bezier(0.34,1.2,0.64,1) forwards',
+                        }}
+                        onClick={e => e.stopPropagation()}
+                    >
+                        {/* Sheet handle */}
+                        <div style={{ display: 'flex', justifyContent: 'center', padding: '0 0 12px' }}>
+                            <div style={{ width: '40px', height: '4px', borderRadius: '2px', backgroundColor: 'var(--border-secondary)' }} />
+                        </div>
+
+                        {/* Property title */}
+                        <div style={{ padding: '0 20px 16px' }}>
+                            <div style={{ fontWeight: 700, fontSize: '15px', color: 'var(--text-primary)' }}>
+                                {activeSheetItem.flat_property_type?.name || activeSheetItem.property_type_link?.name || activeSheetItem.type?.replace(/_/g, ' ') || 'Property'}
+                            </div>
+                            <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>
+                                {activeSheetItem.full_address || [activeSheetItem.locality, activeSheetItem.city || activeSheetItem.district, activeSheetItem.state].filter(Boolean).join(', ') || 'Location N/A'}
+                            </div>
+                        </div>
+
+                        {/* Call Owner — shown only if phone numbers exist */}
+                        {(activeSheetItem.uploader_phone || activeSheetItem.owner_phone || activeSheetItem.key_holder_phone) && (
+                            <>
+                                {activeSheetItem.uploader_phone && (
+                                    <a
+                                        href={`tel:${activeSheetItem.uploader_phone}`}
+                                        onClick={() => setActiveSheetItem(null)}
+                                        style={{ display: 'block', width: '100%', padding: '16px 24px', backgroundColor: 'transparent', borderBottom: '1px solid var(--border-primary)', color: 'var(--text-primary)', fontSize: '15px', textAlign: 'left', cursor: 'pointer', fontWeight: 500, textDecoration: 'none', boxSizing: 'border-box' }}
+                                    >
+                                        &#9742; Call {activeSheetItem.ownership_type === 'OWNER' ? 'Owner' : 'Uploader'} — {activeSheetItem.uploader_name || activeSheetItem.uploader_phone}
+                                    </a>
+                                )}
+                                {activeSheetItem.owner_phone && activeSheetItem.owner_phone !== activeSheetItem.uploader_phone && (
+                                    <a
+                                        href={`tel:${activeSheetItem.owner_phone}`}
+                                        onClick={() => setActiveSheetItem(null)}
+                                        style={{ display: 'block', width: '100%', padding: '16px 24px', backgroundColor: 'transparent', borderBottom: '1px solid var(--border-primary)', color: 'var(--text-primary)', fontSize: '15px', textAlign: 'left', cursor: 'pointer', fontWeight: 500, textDecoration: 'none', boxSizing: 'border-box' }}
+                                    >
+                                        &#9742; Call Owner — {activeSheetItem.owner_phone}
+                                    </a>
+                                )}
+                                {activeSheetItem.key_holder_type === 'EXTERNAL' && activeSheetItem.key_holder_phone && (
+                                    <a
+                                        href={`tel:${activeSheetItem.key_holder_phone}`}
+                                        onClick={() => setActiveSheetItem(null)}
+                                        style={{ display: 'block', width: '100%', padding: '16px 24px', backgroundColor: 'transparent', borderBottom: '1px solid var(--border-primary)', color: 'var(--text-primary)', fontSize: '15px', textAlign: 'left', cursor: 'pointer', fontWeight: 500, textDecoration: 'none', boxSizing: 'border-box' }}
+                                    >
+                                        &#9742; Call Key Holder — {activeSheetItem.key_holder_name || activeSheetItem.key_holder_phone}
+                                    </a>
+                                )}
+                            </>
+                        )}
+
+                        {/* Share Listing */}
+                        <button
+                            type="button"
+                            onClick={() => { setShareItem(activeSheetItem); setActiveSheetItem(null); }}
+                            style={{ display: 'block', width: '100%', padding: '16px 24px', backgroundColor: 'transparent', border: 'none', borderBottom: '1px solid var(--border-primary)', color: 'var(--text-primary)', fontSize: '15px', textAlign: 'left', cursor: 'pointer', fontWeight: 500 }}
+                        >
+                            📤 Share Listing
+                        </button>
+
+                        {/* Schedule Visit */}
+                        <button
+                            type="button"
+                            onClick={() => { setBookVisitItem(activeSheetItem); setActiveSheetItem(null); }}
+                            style={{ display: 'block', width: '100%', padding: '16px 24px', backgroundColor: 'transparent', border: 'none', borderBottom: '1px solid var(--border-primary)', color: 'var(--text-primary)', fontSize: '15px', textAlign: 'left', cursor: 'pointer', fontWeight: 500 }}
+                        >
+                            📍 Schedule Visit
+                        </button>
+
+                        {/* Edit */}
+                        <button
+                            type="button"
+                            onClick={() => { onEditItem(activeSheetItem); setActiveSheetItem(null); }}
+                            style={{ display: 'block', width: '100%', padding: '16px 24px', backgroundColor: 'transparent', border: 'none', borderBottom: '1px solid var(--border-primary)', color: 'var(--text-primary)', fontSize: '15px', textAlign: 'left', cursor: 'pointer', fontWeight: 500 }}
+                        >
+                            ✏️ Edit Property
+                        </button>
+
+                        {/* Deactivate — ownership guard from Task 4 */}
+                        {hasPermission('edit_inventory') && (activeSheetItem.uploaded_by_agent?.id === agent?.id || agent?.role === 'super_boss' || agent?.role === 'manager') && (
+                            <button
+                                type="button"
+                                onClick={async () => {
+                                    const newStatus = activeSheetItem.status === 'active' ? 'inactive' : 'active';
+                                    if (!confirm(`${newStatus === 'inactive' ? 'Deactivate' : 'Activate'}?`)) return;
+                                    try {
+                                        await updateInventory(activeSheetItem.id, { status: newStatus });
+                                        setActiveSheetItem(null);
+                                        loadData();
+                                    } catch (err: any) {
+                                        alert(err.response?.data?.error || 'Failed');
+                                    }
+                                }}
+                                style={{ display: 'block', width: '100%', padding: '16px 24px', backgroundColor: 'transparent', border: 'none', color: '#ef4444', fontSize: '15px', textAlign: 'left', cursor: 'pointer', fontWeight: 500 }}
+                            >
+                                🚫 {activeSheetItem.status === 'active' ? 'Deactivate' : 'Activate'}
+                            </button>
+                        )}
+                    </div>
+                </div>
             )}
         </div>
     );
