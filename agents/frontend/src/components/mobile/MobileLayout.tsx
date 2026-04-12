@@ -196,7 +196,7 @@ export function MobileLayout({ activeView, onViewChange, children }: MobileLayou
                         </div>
 
                         {/* Sectioned Navigation */}
-                        <nav style={{ flex: 1, padding: '8px 8px', overflowY: 'auto' }}>
+                        <nav style={{ flex: 1, padding: '8px 8px', overflowY: 'auto', minHeight: 0, WebkitOverflowScrolling: 'touch' }}>
                             {NAV_SECTIONS.map(section => {
                                 const sectionItems = section.items.filter(
                                     item => item.permission === null || hasPermission(item.permission)
@@ -233,54 +233,54 @@ export function MobileLayout({ activeView, onViewChange, children }: MobileLayou
                                     </div>
                                 );
                             })}
-                        </nav>
 
-                        {/* Profile + Logout */}
-                        <div style={{ padding: '16px', borderTop: '1px solid var(--border-primary)', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                                <div style={{
-                                    width: '40px', height: '40px', borderRadius: '50%',
-                                    backgroundColor: PRIMARY, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                    fontSize: '18px', color: '#fff', fontWeight: 700, flexShrink: 0,
-                                }}>
-                                    {agent?.name?.charAt(0)?.toUpperCase() || '?'}
-                                </div>
-                                <div style={{ flex: 1, minWidth: 0 }}>
-                                    <div style={{ color: 'var(--text-primary)', fontWeight: 600, fontSize: '14px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                        {agent?.name}
-                                    </div>
-                                    <span style={{
-                                        display: 'inline-block', marginTop: '2px',
-                                        backgroundColor: roleStyle.bg, color: roleStyle.color,
-                                        padding: '1px 8px', borderRadius: '8px', fontSize: '10px', fontWeight: 700, textTransform: 'uppercase',
+                            {/* Profile — bottom of scroll area */}
+                            <div style={{ marginTop: '16px', paddingTop: '16px', borderTop: '1px solid var(--border-primary)', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                    <div style={{
+                                        width: '40px', height: '40px', borderRadius: '50%',
+                                        backgroundColor: PRIMARY, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                        fontSize: '18px', color: '#fff', fontWeight: 700, flexShrink: 0,
                                     }}>
-                                        {agent?.role?.replace('_', ' ')}
-                                    </span>
+                                        {agent?.name?.charAt(0)?.toUpperCase() || '?'}
+                                    </div>
+                                    <div style={{ flex: 1, minWidth: 0 }}>
+                                        <div style={{ color: 'var(--text-primary)', fontWeight: 600, fontSize: '14px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                            {agent?.name}
+                                        </div>
+                                        <span style={{
+                                            display: 'inline-block', marginTop: '2px',
+                                            backgroundColor: roleStyle.bg, color: roleStyle.color,
+                                            padding: '1px 8px', borderRadius: '8px', fontSize: '10px', fontWeight: 700, textTransform: 'uppercase',
+                                        }}>
+                                            {agent?.role?.replace('_', ' ')}
+                                        </span>
+                                    </div>
                                 </div>
+                                <button
+                                    onClick={toggleTheme}
+                                    style={{
+                                        width: '100%', padding: '10px 14px', borderRadius: '10px',
+                                        border: '1px solid var(--border-secondary)', backgroundColor: 'var(--bg-primary)',
+                                        color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '13px',
+                                        display: 'flex', alignItems: 'center', gap: '8px',
+                                    }}
+                                >
+                                    {theme === 'dark' ? '☀️' : '🌙'}
+                                    {theme === 'dark' ? 'Light Mode' : 'Dark Mode'}
+                                </button>
+                                <button
+                                    onClick={logout}
+                                    style={{
+                                        width: '100%', padding: '10px 14px', borderRadius: '10px',
+                                        border: '1px solid #EF4444', backgroundColor: 'transparent',
+                                        color: '#EF4444', cursor: 'pointer', fontSize: '13px', fontWeight: 600,
+                                    }}
+                                >
+                                    Logout
+                                </button>
                             </div>
-                            <button
-                                onClick={toggleTheme}
-                                style={{
-                                    width: '100%', padding: '10px 14px', borderRadius: '10px',
-                                    border: '1px solid var(--border-secondary)', backgroundColor: 'var(--bg-primary)',
-                                    color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '13px',
-                                    display: 'flex', alignItems: 'center', gap: '8px',
-                                }}
-                            >
-                                {theme === 'dark' ? '☀️' : '🌙'}
-                                {theme === 'dark' ? 'Light Mode' : 'Dark Mode'}
-                            </button>
-                            <button
-                                onClick={logout}
-                                style={{
-                                    width: '100%', padding: '10px 14px', borderRadius: '10px',
-                                    border: '1px solid #EF4444', backgroundColor: 'transparent',
-                                    color: '#EF4444', cursor: 'pointer', fontSize: '13px', fontWeight: 600,
-                                }}
-                            >
-                                Logout
-                            </button>
-                        </div>
+                        </nav>
                     </div>
                 </div>
             )}
