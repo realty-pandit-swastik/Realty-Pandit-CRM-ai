@@ -71,6 +71,16 @@ router.get('/recent-external', async (req: any, res) => {
         const category = req.query.category as string | undefined;
         const location = req.query.location as string | undefined;
         const agentId = req.query.agent_id as string | undefined;
+        // New filter params (v2 filter redesign)
+        const intent = req.query.intent as string | undefined;           // BUYER | TENANT
+        const categoryId = req.query.category_id as string | undefined;
+        const subCategoryId = req.query.sub_category_id as string | undefined;
+        const typeId = req.query.type_id as string | undefined;
+        const lat = req.query.lat ? parseFloat(req.query.lat as string) : undefined;
+        const lng = req.query.lng ? parseFloat(req.query.lng as string) : undefined;
+        const radiusKm = req.query.radius_km ? parseFloat(req.query.radius_km as string) : 2;
+        const notContactedDays = req.query.not_contacted_days ? parseInt(req.query.not_contacted_days as string) : undefined;
+        const noShowcaseDays = req.query.no_showcase_days ? parseInt(req.query.no_showcase_days as string) : undefined;
 
         const isPrivileged = PRIVILEGED_ROLES.includes(req.agent.role);
 
@@ -103,6 +113,62 @@ router.get('/recent-external', async (req: any, res) => {
         }
         if (agentId) {
             where.assigned_agent_id = agentId;
+        }
+
+        // Intent filter (contact_type: BUYER or TENANT)
+        if (intent === 'BUYER' || intent === 'TENANT') {
+            where.contact_type = intent;
+        }
+
+        // Classification ID filters
+        if (categoryId) where.category_id = categoryId;
+        if (subCategoryId) where.sub_category_id = subCategoryId;
+        if (typeId) where.type_id = typeId;
+
+        // Proximity filter — Haversine on preferred_lat/preferred_lng
+        if (lat !== undefined && lng !== undefined) {
+            const radius = radiusKm > 0 ? radiusKm : 2;
+            const nearbyPhones = await prisma.$queryRaw<{ phone_number: string }[]>`
+                SELECT phone_number FROM contacts
+                WHERE preferred_lat IS NOT NULL AND preferred_lng IS NOT NULL
+                AND (6371 * acos(
+                    LEAST(1.0,
+                        cos(radians(${lat})) * cos(radians(preferred_lat::float))
+                        * cos(radians(preferred_lng::float) - radians(${lng}))
+                        + sin(radians(${lat})) * sin(radians(preferred_lat::float))
+                    )
+                )) <= ${radius}
+            `;
+            const nearbyPhoneList = nearbyPhones.map((r: { phone_number: string }) => r.phone_number);
+            if (where.AND) {
+                where.AND.push({ phone_number: { in: nearbyPhoneList } });
+            } else {
+                where.AND = [{ phone_number: { in: nearbyPhoneList } }];
+            }
+        }
+
+        // Staleness: not contacted in X days
+        if (notContactedDays && notContactedDays > 0) {
+            const cutoff = new Date(Date.now() - notContactedDays * 24 * 60 * 60 * 1000);
+            const cond = { OR: [{ last_interaction: null }, { last_interaction: { lt: cutoff } }] };
+            if (where.AND) where.AND.push(cond);
+            else where.AND = [cond];
+        }
+
+        // Staleness: no property showcased (PropertyShare) in X days
+        if (noShowcaseDays && noShowcaseDays > 0) {
+            const cutoff = new Date(Date.now() - noShowcaseDays * 24 * 60 * 60 * 1000);
+            const recentlyShowcased = await prisma.propertyShare.findMany({
+                where: { created_at: { gte: cutoff } },
+                select: { client_phone: true },
+                distinct: ['client_phone'],
+            });
+            const showcasedPhones = recentlyShowcased.map((s: { client_phone: string }) => s.client_phone);
+            if (showcasedPhones.length > 0) {
+                const cond = { phone_number: { notIn: showcasedPhones } };
+                if (where.AND) where.AND.push(cond);
+                else where.AND = [cond];
+            }
         }
 
         const [leads, total] = await Promise.all([
@@ -341,6 +407,7 @@ router.post('/', async (req: any, res) => {
                 email: email || null,
                 source: source || 'manual',
                 intent: intent || null,
+                contact_type: intent === 'buy' ? 'BUYER' : intent === 'rent' ? 'TENANT' : 'UNKNOWN',
                 property_type: property_type || null,
                 preferred_location: preferred_location || null,
                 preferred_lat: preferred_lat ? Number(preferred_lat) : null,
@@ -410,6 +477,16 @@ router.post('/', async (req: any, res) => {
                     timeline: timeline || null,
                 },
             });
+            // Wire lead_id into lead_scores so scoring is connected to this lead
+            try {
+                await prisma.$executeRaw`
+                    UPDATE lead_scores
+                    SET lead_id = (SELECT id FROM leads WHERE contact_phone = ${phoneNumber} AND tenant_id = ${tenant.id} ORDER BY created_at DESC LIMIT 1)
+                    WHERE phone_number = ${phoneNumber} AND lead_id IS NULL
+                `;
+            } catch (scoreErr) {
+                console.warn('[leads.ts] lead_scores lead_id link failed:', (scoreErr as Error).message);
+            }
         } catch (leadErr) {
             // Non-fatal: log but don't block the response
             console.error('[leads.ts] Failed to write Lead record:', leadErr);
@@ -532,7 +609,7 @@ router.post('/:phone/match', async (req, res) => {
             };
         }
 
-        const matches = await matchingEngine.findMatches(criteria, 5);
+        const matches = await matchingEngine.findMatches(criteria, 10);
 
         // Advance lifecycle to MATCHED if still in early stages
         if (['NEW', 'QUALIFIED'].includes(contact.lifecycle_stage || 'NEW')) {

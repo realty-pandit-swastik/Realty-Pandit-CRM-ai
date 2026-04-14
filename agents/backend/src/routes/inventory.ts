@@ -233,7 +233,19 @@ router.get('/', authMiddleware, async (req, res) => {
         }
 
         // Query filters
-        const { intent, state, type, category, agent_id, status, search, page, limit: limitParam, bhk, location } = req.query;
+        const {
+            intent, state, type, category, agent_id, status, search, page,
+            limit: limitParam, bhk, location,
+            // New filter params (v2 filter redesign)
+            category_id, sub_category_id,
+            listing_source, data_source,
+            lat: latParam, lng: lngParam, radius_km: radiusKmParam,
+            days_in_system, days_no_visit,
+        } = req.query;
+
+        const filterLat = latParam ? parseFloat(latParam as string) : undefined;
+        const filterLng = lngParam ? parseFloat(lngParam as string) : undefined;
+        const filterRadiusKm = radiusKmParam ? parseFloat(radiusKmParam as string) : 2;
 
         if (intent && typeof intent === 'string') where.intent = intent;
         if (status && typeof status === 'string') where.status = status;
@@ -292,6 +304,80 @@ router.get('/', authMiddleware, async (req, res) => {
                 where.AND = [{ OR: visibilityOR }, { OR: searchOR }];
             } else {
                 where.OR = searchOR;
+            }
+        }
+
+        // Classification ID filters (v2)
+        if (category_id && typeof category_id === 'string') {
+            where.category_id = category_id;
+        }
+        if (sub_category_id && typeof sub_category_id === 'string') {
+            where.sub_category_id = sub_category_id;
+        }
+
+        // Listing source type (ownership_type)
+        if (listing_source && typeof listing_source === 'string') {
+            const validSources = ['OWNER', 'EXTERNAL_AGENT', 'AGENT_OWNER'];
+            if (validSources.includes(listing_source)) {
+                where.ownership_type = listing_source;
+            }
+        }
+
+        // Data source (upload_source)
+        if (data_source && typeof data_source === 'string') {
+            where.upload_source = data_source;
+        }
+
+        // Proximity filter — Haversine on latitude/longitude
+        if (filterLat !== undefined && filterLng !== undefined) {
+            const radius = filterRadiusKm > 0 ? filterRadiusKm : 2;
+            const nearbyIds = await prisma.$queryRaw<{ id: string }[]>`
+                SELECT id FROM inventory
+                WHERE latitude IS NOT NULL AND longitude IS NOT NULL
+                AND (6371 * acos(
+                    LEAST(1.0,
+                        cos(radians(${filterLat})) * cos(radians(latitude::float))
+                        * cos(radians(longitude::float) - radians(${filterLng}))
+                        + sin(radians(${filterLat})) * sin(radians(latitude::float))
+                    )
+                )) <= ${radius}
+            `;
+            const ids = nearbyIds.map((r: { id: string }) => r.id);
+            const proxCond = { id: { in: ids } };
+            if (where.AND) where.AND.push(proxCond);
+            else where.AND = [...(where.AND || []), proxCond];
+        }
+
+        // Staleness: days in system (unsold/unrented, created X+ days ago)
+        if (days_in_system && typeof days_in_system === 'string') {
+            const days = parseInt(days_in_system);
+            if (!isNaN(days) && days > 0) {
+                const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+                where.created_at = { lt: cutoff };
+                if (!where.status) {
+                    where.status = { notIn: ['sold', 'rented'] };
+                }
+            }
+        }
+
+        // Staleness: days since last showcased/visited (no Appointment in X days)
+        if (days_no_visit && typeof days_no_visit === 'string') {
+            const days = parseInt(days_no_visit);
+            if (!isNaN(days) && days > 0) {
+                const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+                const recentlyVisited = await prisma.appointment.findMany({
+                    where: { property_id: { not: null }, scheduled_at: { gte: cutoff } },
+                    select: { property_id: true },
+                    distinct: ['property_id'],
+                });
+                const visitedIds = recentlyVisited
+                    .map((a: { property_id: string | null }) => a.property_id)
+                    .filter(Boolean) as string[];
+                if (visitedIds.length > 0) {
+                    const noVisitCond = { id: { notIn: visitedIds } };
+                    if (where.AND) where.AND.push(noVisitCond);
+                    else where.AND = [noVisitCond];
+                }
             }
         }
 
