@@ -5,6 +5,13 @@ import { useAuth } from '../contexts/AuthContext';
 import LeadCard from './leads/LeadCard';
 import MatchedPropertiesSection from './leads/MatchedPropertiesSection';
 import { loadGoogleMaps } from '../lib/loadGoogleMaps';
+import {
+    FilterSection,
+    FilterCategorySection,
+    FilterLocationSection,
+    StalenessSection,
+} from './filters/FilterSheetShared';
+import type { CategorySelection, LocationSelection } from './filters/FilterSheetShared';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -145,25 +152,6 @@ function channelIcon(ch: string) {
     return ({ whatsapp: '💬', voice: '📞', email: '📧', website: '🌐' } as any)[ch] || '📌';
 }
 
-// ─── FilterSection accordion ──────────────────────────────────────────────────
-
-function FilterSection({ title, children }: { title: string; children: React.ReactNode }) {
-    const [open, setOpen] = useState(true);
-    return (
-        <div style={{ borderBottom: '1px solid var(--border-primary)', padding: '12px 20px' }}>
-            <button
-                type="button"
-                onClick={() => setOpen(o => !o)}
-                style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
-            >
-                <span style={{ fontWeight: 600, fontSize: '14px', color: 'var(--text-primary)' }}>{title}</span>
-                <span style={{ color: 'var(--text-muted)', fontSize: '18px', transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 200ms ease' }}>⌄</span>
-            </button>
-            {open && <div style={{ marginTop: '12px' }}>{children}</div>}
-        </div>
-    );
-}
-
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export function ExternalLeads({ isMobile: isMobileProp }: { isMobile?: boolean } = {}) {
@@ -211,10 +199,17 @@ export function ExternalLeads({ isMobile: isMobileProp }: { isMobile?: boolean }
     const [agentFilter, setAgentFilter] = useState('');
     const [dateFrom, setDateFrom] = useState('');
     const [dateTo, setDateTo] = useState('');
-    const [bhkFilter, setBhkFilter] = useState<number[]>([]);
-    const [categoryFilter, setCategoryFilter] = useState('');
-    const [locationFilter, setLocationFilter] = useState('');
     const [showFilterSheet, setShowFilterSheet] = useState(false);
+    // v2 filter state
+    const [intentFilter, setIntentFilter] = useState<'BUYER' | 'TENANT' | ''>('');
+    const [categorySelection, setCategorySelection] = useState<CategorySelection>({
+        categoryId: '', subCategoryId: '', typeId: '', bhk: [],
+    });
+    const [locationSelection, setLocationSelection] = useState<LocationSelection>({
+        label: '', lat: null, lng: null, radiusKm: 2,
+    });
+    const [notContactedDays, setNotContactedDays] = useState(0);
+    const [noShowcaseDays, setNoShowcaseDays] = useState(0);
 
     // ── Classification tree ──
     const [classificationTree, setClassificationTree] = useState<Category[]>([]);
@@ -336,10 +331,17 @@ export function ExternalLeads({ isMobile: isMobileProp }: { isMobile?: boolean }
                     params: {
                         ...(sourceFilter ? { source: sourceFilter } : {}),
                         ...(statusFilter ? { status: statusFilter } : {}),
-                        ...(bhkFilter.length > 0 ? { bhk: bhkFilter.join(',') } : {}),
-                        ...(categoryFilter ? { category: categoryFilter } : {}),
-                        ...(locationFilter.trim() ? { location: locationFilter.trim() } : {}),
                         ...(agentFilter ? { agent_id: agentFilter } : {}),
+                        intent: intentFilter || undefined,
+                        category_id: categorySelection.categoryId || undefined,
+                        sub_category_id: categorySelection.subCategoryId || undefined,
+                        type_id: categorySelection.typeId || undefined,
+                        bhk: categorySelection.bhk.length > 0 ? categorySelection.bhk.join(',') : undefined,
+                        lat: locationSelection.lat !== null ? String(locationSelection.lat) : undefined,
+                        lng: locationSelection.lng !== null ? String(locationSelection.lng) : undefined,
+                        radius_km: (locationSelection.lat !== null && locationSelection.radiusKm > 0) ? String(locationSelection.radiusKm) : undefined,
+                        not_contacted_days: notContactedDays > 0 ? String(notContactedDays) : undefined,
+                        no_showcase_days: noShowcaseDays > 0 ? String(noShowcaseDays) : undefined,
                     },
                 }),
             ]);
@@ -352,7 +354,7 @@ export function ExternalLeads({ isMobile: isMobileProp }: { isMobile?: boolean }
         } finally {
             setLoading(false);
         }
-    }, [sourceFilter, statusFilter, bhkFilter, categoryFilter, locationFilter, agentFilter]);
+    }, [sourceFilter, statusFilter, agentFilter, intentFilter, categorySelection, locationSelection, notContactedDays, noShowcaseDays]);
 
     useEffect(() => { loadData(); }, [loadData]);
     useEffect(() => {
@@ -769,7 +771,7 @@ export function ExternalLeads({ isMobile: isMobileProp }: { isMobile?: boolean }
         setConvertingDeal(true);
         setDealError('');
         try {
-            const intentMap: Record<string, string> = { buy: 'BUY', rent: 'RENT' };
+            const intentMap: Record<string, string> = { buy: 'SALE', rent: 'RENT' };
             const dealType = intentMap[leadDetail.intent ?? ''];
             if (!dealType) { setDealError('Lead needs a valid intent (buy or rent) to convert.'); return; }
 
@@ -849,10 +851,18 @@ export function ExternalLeads({ isMobile: isMobileProp }: { isMobile?: boolean }
     const totalAll = leadsBySource.reduce((sum, s) => sum + s._count, 0);
 
     const activeFilterCount = [
-        statusFilter, sourceFilter, agentFilter, dateFrom, dateTo, locationFilter,
-        ...bhkFilter.map(String),
-        categoryFilter,
-    ].filter(Boolean).length;
+        statusFilter,
+        sourceFilter,
+        agentFilter,
+        dateFrom,
+        dateTo,
+        intentFilter,
+        categorySelection.categoryId,
+        categorySelection.subCategoryId,
+        locationSelection.lat !== null ? '1' : '',
+        notContactedDays > 0 ? '1' : '',
+        noShowcaseDays > 0 ? '1' : '',
+    ].filter(Boolean).length + (categorySelection.bhk.length > 0 ? 1 : 0);
 
     const filteredLeads = recentLeads.filter(lead => {
         if (searchQuery) {
@@ -1015,24 +1025,39 @@ export function ExternalLeads({ isMobile: isMobileProp }: { isMobile?: boolean }
                                         To {dateTo} ×
                                     </button>
                                 )}
-                                {bhkFilter.length > 0 && (
-                                    <button type="button" onClick={() => setBhkFilter([])} className="chip chip-active" style={{ fontSize: '12px', padding: '4px 10px' }}>
-                                        {bhkFilter.length === 1 ? `${bhkFilter[0]} BHK` : `${bhkFilter.length} BHK types`} ×
+                                {intentFilter && (
+                                    <button type="button" onClick={() => setIntentFilter('')} className="chip chip-active" style={{ fontSize: '12px', padding: '4px 10px' }}>
+                                        {intentFilter === 'BUYER' ? 'Buy' : 'Rent'} ×
                                     </button>
                                 )}
-                                {categoryFilter && (
-                                    <button type="button" onClick={() => setCategoryFilter('')} className="chip chip-active" style={{ fontSize: '12px', padding: '4px 10px' }}>
-                                        {categoryFilter.charAt(0).toUpperCase() + categoryFilter.slice(1)} ×
+                                {categorySelection.categoryId && (
+                                    <button type="button" onClick={() => setCategorySelection({ categoryId: '', subCategoryId: '', typeId: '', bhk: [] })} className="chip chip-active" style={{ fontSize: '12px', padding: '4px 10px' }}>
+                                        {classificationTree.find(c => c.id === categorySelection.categoryId)?.name || 'Category'} ×
                                     </button>
                                 )}
-                                {locationFilter && (
-                                    <button type="button" onClick={() => setLocationFilter('')} className="chip chip-active" style={{ fontSize: '12px', padding: '4px 10px' }}>
-                                        {locationFilter} ×
+                                {categorySelection.subCategoryId && (
+                                    <button type="button" onClick={() => setCategorySelection(prev => ({ ...prev, subCategoryId: '', typeId: '' }))} className="chip chip-active" style={{ fontSize: '12px', padding: '4px 10px' }}>
+                                        {classificationTree.flatMap(c => c.subcategories).find(s => s.id === categorySelection.subCategoryId)?.name || 'Sub-cat'} ×
+                                    </button>
+                                )}
+                                {locationSelection.lat !== null && (
+                                    <button type="button" onClick={() => setLocationSelection({ label: '', lat: null, lng: null, radiusKm: 2 })} className="chip chip-active" style={{ fontSize: '12px', padding: '4px 10px' }}>
+                                        📍 {locationSelection.label.substring(0, 20)}{locationSelection.label.length > 20 ? '…' : ''}{locationSelection.radiusKm > 0 ? ` (${locationSelection.radiusKm}km)` : ''} ×
+                                    </button>
+                                )}
+                                {notContactedDays > 0 && (
+                                    <button type="button" onClick={() => setNotContactedDays(0)} className="chip chip-active" style={{ fontSize: '12px', padding: '4px 10px' }}>
+                                        No contact {notContactedDays}d+ ×
+                                    </button>
+                                )}
+                                {noShowcaseDays > 0 && (
+                                    <button type="button" onClick={() => setNoShowcaseDays(0)} className="chip chip-active" style={{ fontSize: '12px', padding: '4px 10px' }}>
+                                        No showcase {noShowcaseDays}d+ ×
                                     </button>
                                 )}
                                 <button
                                     type="button"
-                                    onClick={() => { setStatusFilter(''); setSourceFilter(''); setAgentFilter(''); setDateFrom(''); setDateTo(''); setBhkFilter([]); setCategoryFilter(''); setLocationFilter(''); }}
+                                    onClick={() => { setStatusFilter(''); setSourceFilter(''); setAgentFilter(''); setDateFrom(''); setDateTo(''); setIntentFilter(''); setCategorySelection({ categoryId: '', subCategoryId: '', typeId: '', bhk: [] }); setLocationSelection({ label: '', lat: null, lng: null, radiusKm: 2 }); setNotContactedDays(0); setNoShowcaseDays(0); }}
                                     style={{ padding: '4px 10px', borderRadius: '20px', fontSize: '12px', fontWeight: 600, backgroundColor: 'transparent', border: '1px solid var(--border-secondary)', color: 'var(--text-muted)', cursor: 'pointer' }}
                                 >
                                     Clear all
@@ -1064,34 +1089,14 @@ export function ExternalLeads({ isMobile: isMobileProp }: { isMobile?: boolean }
                                 style={{ ...filterSelectStyle, width: '120px' }} />
                             <input type="date" title="To date" value={dateTo} onChange={e => setDateTo(e.target.value)}
                                 style={{ ...filterSelectStyle, width: '120px' }} />
-                            {(searchQuery || statusFilter || sourceFilter || agentFilter || dateFrom || dateTo || bhkFilter.length > 0 || categoryFilter || locationFilter) && (
-                                <button type="button" onClick={() => { setSearchQuery(''); setStatusFilter(''); setSourceFilter(''); setAgentFilter(''); setDateFrom(''); setDateTo(''); setBhkFilter([]); setCategoryFilter(''); setLocationFilter(''); }}
+                            {(searchQuery || statusFilter || sourceFilter || agentFilter || dateFrom || dateTo || intentFilter || categorySelection.categoryId || locationSelection.lat !== null || notContactedDays > 0 || noShowcaseDays > 0) && (
+                                <button type="button" onClick={() => { setSearchQuery(''); setStatusFilter(''); setSourceFilter(''); setAgentFilter(''); setDateFrom(''); setDateTo(''); setIntentFilter(''); setCategorySelection({ categoryId: '', subCategoryId: '', typeId: '', bhk: [] }); setLocationSelection({ label: '', lat: null, lng: null, radiusKm: 2 }); setNotContactedDays(0); setNoShowcaseDays(0); }}
                                     style={{ padding: '4px 10px', borderRadius: '6px', border: '1px solid var(--border-secondary)', backgroundColor: 'var(--bg-secondary)', color: '#ef4444', cursor: 'pointer', fontSize: '11px', fontWeight: 600 }}>
                                     Clear
                                 </button>
                             )}
                         </div>
 
-                        {/* Desktop: Advanced Filter Bar — BHK, Category, Location */}
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '8px', alignItems: 'center' }}>
-                            <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600, whiteSpace: 'nowrap' }}>BHK:</span>
-                            {[1, 2, 3, 4, 5].map(n => (
-                                <button key={n} type="button"
-                                    onClick={() => setBhkFilter(prev => prev.includes(n) ? prev.filter(x => x !== n) : [...prev, n])}
-                                    style={{ padding: '3px 8px', borderRadius: '6px', fontSize: '11px', fontWeight: 600, cursor: 'pointer', border: bhkFilter.includes(n) ? '1.5px solid #3b82f6' : '1px solid var(--border-secondary)', backgroundColor: bhkFilter.includes(n) ? 'rgba(59,130,246,0.12)' : 'var(--bg-secondary)', color: bhkFilter.includes(n) ? '#3b82f6' : 'var(--text-secondary)' }}>
-                                    {n}{n === 5 ? '+' : ''}BHK
-                                </button>
-                            ))}
-                            <select value={categoryFilter} onChange={e => setCategoryFilter(e.target.value)} style={{ ...filterSelectStyle, color: categoryFilter ? '#3b82f6' : undefined }}>
-                                <option value="">All Types</option>
-                                <option value="residential">Residential</option>
-                                <option value="commercial">Commercial</option>
-                                <option value="agricultural">Agricultural</option>
-                            </select>
-                            <input type="text" placeholder="Location..." value={locationFilter}
-                                onChange={e => setLocationFilter(e.target.value)}
-                                style={{ padding: '4px 10px', borderRadius: '6px', fontSize: '12px', minWidth: '140px', border: locationFilter ? '1.5px solid #3b82f6' : '1px solid var(--border-secondary)', backgroundColor: 'var(--bg-secondary)', color: 'var(--text-primary)', outline: 'none' }} />
-                        </div>
                     </>
                 )}
 
@@ -1488,8 +1493,31 @@ export function ExternalLeads({ isMobile: isMobileProp }: { isMobile?: boolean }
                                                     {priceFormatted && <div><div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '2px' }}>Listed Price</div><div style={{ fontSize: '13px', color: 'var(--text-primary)' }}>{priceFormatted}</div></div>}
                                                     {meta.res_com && <div><div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '2px' }}>Property Type</div><div style={{ fontSize: '13px', color: 'var(--text-primary)' }}>{resComLabel}</div></div>}
                                                     {meta.identity && <div><div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '2px' }}>Buyer Type</div><div style={{ fontSize: '12px', fontWeight: 600, padding: '2px 8px', borderRadius: '12px', display: 'inline-block', backgroundColor: meta.identity === 'Dealer' ? '#fef3c7' : '#dbeafe', color: meta.identity === 'Dealer' ? '#92400e' : '#1e40af' }}>{meta.identity}</div></div>}
-                                                    {meta.sub_user_name && <div><div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '2px' }}>Agent's Listing</div><div style={{ fontSize: '12px', color: 'var(--text-secondary)', wordBreak: 'break-all' }}>{meta.sub_user_name}</div></div>}
-                                                    {meta.property_code && <div><div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '2px' }}>Property Code</div><div style={{ fontSize: '12px', fontFamily: 'monospace', color: 'var(--text-primary)' }}>{meta.property_code}</div></div>}
+                                                    {meta.sub_user_name && <div><div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '2px' }}>Agent's 99acres Email</div><div style={{ fontSize: '12px', color: 'var(--text-secondary)', wordBreak: 'break-all' }}>{meta.sub_user_name}</div></div>}
+                                                    {meta.property_code && (
+                                                        <div style={{ gridColumn: '1 / -1' }}>
+                                                            <div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '4px' }}>99acres Listing</div>
+                                                            <a
+                                                                href={`https://www.99acres.com/search/property/buy/property-in-india?prop_id=${meta.property_code}`}
+                                                                target="_blank"
+                                                                rel="noopener noreferrer"
+                                                                style={{
+                                                                    display: 'inline-flex', alignItems: 'center', gap: '6px',
+                                                                    padding: '5px 12px', borderRadius: '8px',
+                                                                    backgroundColor: 'rgba(234,88,12,0.1)', color: '#ea580c',
+                                                                    border: '1px solid rgba(234,88,12,0.3)',
+                                                                    fontSize: '12px', fontWeight: 600, fontFamily: 'monospace',
+                                                                    textDecoration: 'none', transition: 'background 0.15s',
+                                                                }}
+                                                                onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'rgba(234,88,12,0.18)')}
+                                                                onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'rgba(234,88,12,0.1)')}
+                                                            >
+                                                                <span>🔗</span>
+                                                                <span>{meta.property_code}</span>
+                                                                <span style={{ fontSize: '10px', fontFamily: 'sans-serif', fontWeight: 400, opacity: 0.8 }}>View on 99acres ↗</span>
+                                                            </a>
+                                                        </div>
+                                                    )}
                                                     <div><div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '2px' }}>Phone Verified</div>{verifiedBadge(meta.phone_verification_status)}</div>
                                                     <div><div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '2px' }}>Email Verified</div>{verifiedBadge(meta.email_verification_status)}</div>
                                                 </div>
@@ -1972,19 +2000,67 @@ export function ExternalLeads({ isMobile: isMobileProp }: { isMobile?: boolean }
                                 setAgentFilter('');
                                 setDateFrom('');
                                 setDateTo('');
-                                setBhkFilter([]);
-                                setCategoryFilter('');
-                                setLocationFilter('');
+                                setIntentFilter('');
+                                setCategorySelection({ categoryId: '', subCategoryId: '', typeId: '', bhk: [] });
+                                setLocationSelection({ label: '', lat: null, lng: null, radiusKm: 2 });
+                                setNotContactedDays(0);
+                                setNoShowcaseDays(0);
                             }} style={{ background: 'none', border: 'none', color: 'var(--text-link)', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}>
                                 Clear All
                             </button>
                         </div>
 
-                        {/* Status section */}
-                        <FilterSection title="Status">
+                        {/* Intent */}
+                        <FilterSection title="Intent" defaultOpen badge={intentFilter ? 1 : 0}>
+                            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                                {[{ label: 'Buy', value: 'BUYER' }, { label: 'Rent', value: 'TENANT' }].map(opt => (
+                                    <button key={opt.value} type="button"
+                                        onClick={() => setIntentFilter(intentFilter === opt.value ? '' : opt.value as 'BUYER' | 'TENANT')}
+                                        className={`chip ${intentFilter === opt.value ? 'chip-active' : 'chip-inactive'}`}>
+                                        {opt.label}
+                                    </button>
+                                ))}
+                            </div>
+                        </FilterSection>
+
+                        <FilterLocationSection value={locationSelection} onChange={setLocationSelection} />
+
+                        <FilterCategorySection tree={classificationTree} value={categorySelection} onChange={setCategorySelection} />
+
+                        {/* Source */}
+                        <FilterSection title="Source" defaultOpen={false} badge={sourceFilter ? 1 : 0}>
+                            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                                {SOURCES.map(s => (
+                                    <button key={s} type="button"
+                                        onClick={() => setSourceFilter(sourceFilter === s ? '' : s)}
+                                        className={`chip ${sourceFilter === s ? 'chip-active' : 'chip-inactive'}`}>
+                                        {sourceLabels[s] || s}
+                                    </button>
+                                ))}
+                            </div>
+                        </FilterSection>
+
+                        {/* Agent (privileged only) */}
+                        {isPrivileged && (
+                            <FilterSection title="Agent" defaultOpen={false} badge={agentFilter ? 1 : 0}>
+                                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                                    {teamMembers.map(m => (
+                                        <button key={m.id} type="button"
+                                            onClick={() => setAgentFilter(agentFilter === m.id ? '' : m.id)}
+                                            className={`chip ${agentFilter === m.id ? 'chip-active' : 'chip-inactive'}`}>
+                                            {m.name}
+                                        </button>
+                                    ))}
+                                </div>
+                            </FilterSection>
+                        )}
+
+                        {/* Status */}
+                        <FilterSection title="Status" defaultOpen={false} badge={statusFilter ? 1 : 0}>
                             <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                                 {LEAD_STATUSES.map(s => (
-                                    <button type="button" key={s} onClick={() => setStatusFilter(statusFilter === s ? '' : s)}
+                                    <button key={s} type="button"
+                                        onClick={() => setStatusFilter(statusFilter === s ? '' : s)}
                                         className={`chip ${statusFilter === s ? 'chip-active' : 'chip-inactive'}`}>
                                         {s.charAt(0).toUpperCase() + s.slice(1)}
                                     </button>
@@ -1992,45 +2068,8 @@ export function ExternalLeads({ isMobile: isMobileProp }: { isMobile?: boolean }
                             </div>
                         </FilterSection>
 
-                        {/* Source section */}
-                        <FilterSection title="Source">
-                            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                                {SOURCES.map(s => (
-                                    <button type="button" key={s} onClick={() => setSourceFilter(sourceFilter === s ? '' : s)}
-                                        className={`chip ${sourceFilter === s ? 'chip-active' : 'chip-inactive'}`}>
-                                        {sourceLabels[s] || s.charAt(0).toUpperCase() + s.slice(1)}
-                                    </button>
-                                ))}
-                            </div>
-                        </FilterSection>
-
-                        {/* BHK section */}
-                        <FilterSection title="Property Size">
-                            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                                {[1, 2, 3, 4, 5].map(n => (
-                                    <button type="button" key={n}
-                                        onClick={() => setBhkFilter(prev => prev.includes(n) ? prev.filter(x => x !== n) : [...prev, n])}
-                                        className={`chip ${bhkFilter.includes(n) ? 'chip-active' : 'chip-inactive'}`}>
-                                        {n === 5 ? '5+ BHK' : `${n} BHK`}
-                                    </button>
-                                ))}
-                            </div>
-                        </FilterSection>
-
-                        {/* Category section */}
-                        <FilterSection title="Category">
-                            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                                {['residential', 'commercial', 'agricultural'].map(c => (
-                                    <button type="button" key={c} onClick={() => setCategoryFilter(categoryFilter === c ? '' : c)}
-                                        className={`chip ${categoryFilter === c ? 'chip-active' : 'chip-inactive'}`}>
-                                        {c.charAt(0).toUpperCase() + c.slice(1)}
-                                    </button>
-                                ))}
-                            </div>
-                        </FilterSection>
-
                         {/* Date Range */}
-                        <FilterSection title="Date Range">
+                        <FilterSection title="Date Range" defaultOpen={false} badge={(dateFrom || dateTo) ? 1 : 0}>
                             <div style={{ display: 'flex', gap: '10px' }}>
                                 <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
                                     style={{ flex: 1, padding: '8px', borderRadius: '8px', border: '1px solid var(--border-secondary)', backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)', fontSize: '13px' }} />
@@ -2038,6 +2077,17 @@ export function ExternalLeads({ isMobile: isMobileProp }: { isMobile?: boolean }
                                     style={{ flex: 1, padding: '8px', borderRadius: '8px', border: '1px solid var(--border-secondary)', backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)', fontSize: '13px' }} />
                             </div>
                         </FilterSection>
+
+                        <StalenessSection
+                            title="Lead Staleness"
+                            label1="Not contacted in"
+                            label2="No inventory showcased in"
+                            days1={notContactedDays}
+                            days2={noShowcaseDays}
+                            onDays1Change={setNotContactedDays}
+                            onDays2Change={setNoShowcaseDays}
+                            badge={(notContactedDays > 0 ? 1 : 0) + (noShowcaseDays > 0 ? 1 : 0)}
+                        />
 
                         {/* Apply button */}
                         <div style={{ padding: '16px 20px 0' }}>
