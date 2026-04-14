@@ -2,6 +2,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import axios from 'axios';
 import { getInventory, getInventoryItem, updateInventory, deleteInventory, approveInventory, rejectInventory, getCategoryTree, getStates, getTeamMembers, getTeamMembersList, uploadInventoryImages, deleteInventoryMedia, transferInventory, uploadInventoryDocument, deleteInventoryDocument } from '../api/client';
+import client from '../api/client';
 import { useAuth } from '../contexts/AuthContext';
 import { InventoryModal } from './InventoryModal';
 import { GooglePlacesInput } from './GooglePlacesInput';
@@ -9,6 +10,13 @@ import ShareToClientModal from './ShareToClientModal';
 import BookVisitModal from './BookVisitModal';
 import { ContactSearchField, type SelectedContact } from './ContactSearchField';
 import type { PlaceResult } from './GooglePlacesInput';
+import {
+    FilterSection,
+    FilterCategorySection,
+    FilterLocationSection,
+    StalenessSection,
+} from './filters/FilterSheetShared';
+import type { CategorySelection, LocationSelection } from './filters/FilterSheetShared';
 
 function formatPrice(price: number | null, intent: string): string {
     if (!price || price === 0) return 'Price on request';
@@ -115,6 +123,20 @@ export const InventoryList: React.FC = () => {
     const [filterLocation, setFilterLocation] = useState('');
     const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+    // ── Filter sheet state (v2 redesign) ──
+    const [showFilterSheet, setShowFilterSheet] = useState(false);
+    const [filterCategorySelection, setFilterCategorySelection] = useState<CategorySelection>({
+        categoryId: '', subCategoryId: '', typeId: '', bhk: [],
+    });
+    const [filterLocationSelection, setFilterLocationSelection] = useState<LocationSelection>({
+        label: '', lat: null, lng: null, radiusKm: 2,
+    });
+    const [filterListingSource, setFilterListingSource] = useState('');
+    const [filterDataSource, setFilterDataSource] = useState('');
+    const [filterDaysInSystem, setFilterDaysInSystem] = useState(0);
+    const [filterDaysNoVisit, setFilterDaysNoVisit] = useState(0);
+    const [filterClassificationTree, setFilterClassificationTree] = useState<any[]>([]);
+
     // Dropdown data for filters
     const [statesList, setStatesList] = useState<string[]>([]);
     const [agentsList, setAgentsList] = useState<{ id: string; name: string }[]>([]);
@@ -188,7 +210,7 @@ export const InventoryList: React.FC = () => {
 
     useEffect(() => {
         loadInventory();
-    }, [currentPage, filterIntent, filterState, filterType, filterStatus, filterAgent, filterBhk, filterLocation]);
+    }, [currentPage, filterIntent, filterState, filterType, filterStatus, filterAgent, filterBhk, filterLocation, filterCategorySelection, filterLocationSelection, filterListingSource, filterDataSource, filterDaysInSystem, filterDaysNoVisit]);
 
     // Close call dropdown on outside click
     useEffect(() => {
@@ -224,6 +246,12 @@ export const InventoryList: React.FC = () => {
         }).catch(() => {});
     }, []);
 
+    useEffect(() => {
+        client.get('/public/classification-tree')
+            .then((r: any) => setFilterClassificationTree(r.data.categories || []))
+            .catch(() => {});
+    }, []);
+
     // Debounced search
     useEffect(() => {
         if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
@@ -246,6 +274,15 @@ export const InventoryList: React.FC = () => {
             if (searchQuery.trim()) params.search = searchQuery.trim();
             if (filterBhk.length > 0) params.bhk = filterBhk.join(',');
             if (filterLocation.trim()) params.location = filterLocation.trim();
+            if (filterCategorySelection.categoryId) params.category_id = filterCategorySelection.categoryId;
+            if (filterCategorySelection.subCategoryId) params.sub_category_id = filterCategorySelection.subCategoryId;
+            if (filterListingSource) params.listing_source = filterListingSource;
+            if (filterDataSource) params.data_source = filterDataSource;
+            if (filterLocationSelection.lat !== null) params.lat = String(filterLocationSelection.lat);
+            if (filterLocationSelection.lng !== null) params.lng = String(filterLocationSelection.lng);
+            if (filterLocationSelection.lat !== null && filterLocationSelection.radiusKm > 0) params.radius_km = String(filterLocationSelection.radiusKm);
+            if (filterDaysInSystem > 0) params.days_in_system = String(filterDaysInSystem);
+            if (filterDaysNoVisit > 0) params.days_no_visit = String(filterDaysNoVisit);
 
             const res = await getInventory(params);
             // Support both paginated { data, total } and legacy array responses
@@ -322,6 +359,19 @@ export const InventoryList: React.FC = () => {
     };
 
     const hasActiveFilters = filterIntent || filterState || filterType || filterStatus || filterAgent || searchQuery.trim() || filterBhk.length > 0 || filterLocation.trim();
+
+    const activeInventoryFilterCount = [
+        filterIntent,
+        filterStatus,
+        filterAgent,
+        filterListingSource,
+        filterDataSource,
+        filterCategorySelection.categoryId,
+        filterCategorySelection.subCategoryId,
+        filterLocationSelection.lat !== null ? '1' : '',
+        filterDaysInSystem > 0 ? '1' : '',
+        filterDaysNoVisit > 0 ? '1' : '',
+    ].filter(Boolean).length + (filterCategorySelection.bhk.length > 0 ? 1 : 0);
 
     const AMENITIES_LIST = [
         { value: 'parking', label: 'Parking' }, { value: 'lift', label: 'Lift' },
@@ -820,6 +870,21 @@ export const InventoryList: React.FC = () => {
                         Clear
                     </button>
                 )}
+                <button
+                    type="button"
+                    onClick={() => setShowFilterSheet(true)}
+                    style={{
+                        padding: '10px 14px', borderRadius: '12px', cursor: 'pointer', flexShrink: 0,
+                        border: activeInventoryFilterCount > 0 ? '1.5px solid var(--text-link)' : '1px solid var(--border-secondary)',
+                        backgroundColor: activeInventoryFilterCount > 0 ? 'var(--text-link)' : 'var(--bg-secondary)',
+                        color: activeInventoryFilterCount > 0 ? '#fff' : 'var(--text-secondary)',
+                        fontWeight: 600, fontSize: '13px',
+                        display: 'flex', alignItems: 'center', gap: '6px',
+                    }}
+                >
+                    <span>⚙</span>
+                    <span>Filters{activeInventoryFilterCount > 0 ? ` (${activeInventoryFilterCount})` : ''}</span>
+                </button>
             </div>
 
             {inventory.length === 0 ? (
@@ -2504,6 +2569,133 @@ export const InventoryList: React.FC = () => {
                     } catch {}
                 }}
             />
+
+            {/* ── Inventory Filter Bottom Sheet ── */}
+            {showFilterSheet && (
+                <div
+                    style={{ position: 'fixed', inset: 0, backgroundColor: 'var(--sheet-backdrop)', zIndex: 900 }}
+                    onClick={() => setShowFilterSheet(false)}
+                >
+                    <div
+                        style={{
+                            position: 'absolute', bottom: 0, left: 0, right: 0,
+                            backgroundColor: 'var(--bg-secondary)',
+                            borderRadius: '20px 20px 0 0',
+                            maxHeight: '85vh', overflowY: 'auto',
+                            WebkitOverflowScrolling: 'touch',
+                            padding: '0 0 32px',
+                            boxShadow: '0 -8px 40px rgba(0,0,0,0.25)',
+                            animation: 'slide-up-in 250ms cubic-bezier(0.34,1.2,0.64,1) forwards',
+                        }}
+                        onClick={e => e.stopPropagation()}
+                    >
+                        {/* Drag handle */}
+                        <div style={{ display: 'flex', justifyContent: 'center', padding: '12px 0 8px' }}>
+                            <div style={{ width: '40px', height: '4px', borderRadius: '2px', backgroundColor: 'var(--border-secondary)' }} />
+                        </div>
+
+                        {/* Header */}
+                        <div style={{ padding: '0 20px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span style={{ fontWeight: 700, fontSize: '16px', color: 'var(--text-primary)' }}>Filters</span>
+                            <button type="button" onClick={() => {
+                                setFilterListingSource(''); setFilterDataSource('');
+                                setFilterCategorySelection({ categoryId: '', subCategoryId: '', typeId: '', bhk: [] });
+                                setFilterLocationSelection({ label: '', lat: null, lng: null, radiusKm: 2 });
+                                setFilterDaysInSystem(0); setFilterDaysNoVisit(0);
+                            }} style={{ background: 'none', border: 'none', color: 'var(--text-link)', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}>
+                                Clear All
+                            </button>
+                        </div>
+
+                        <FilterLocationSection value={filterLocationSelection} onChange={setFilterLocationSelection} />
+
+                        <FilterSection title="Listing Source" defaultOpen={false} badge={filterListingSource ? 1 : 0}>
+                            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                                {[
+                                    { label: 'Direct Owner', value: 'OWNER' },
+                                    { label: 'Partner Agent', value: 'EXTERNAL_AGENT' },
+                                    { label: 'Internal Agent', value: 'AGENT_OWNER' },
+                                ].map(opt => (
+                                    <button key={opt.value} type="button"
+                                        onClick={() => setFilterListingSource(filterListingSource === opt.value ? '' : opt.value)}
+                                        className={`chip ${filterListingSource === opt.value ? 'chip-active' : 'chip-inactive'}`}>
+                                        {opt.label}
+                                    </button>
+                                ))}
+                            </div>
+                        </FilterSection>
+
+                        <FilterSection title="Purpose" defaultOpen badge={filterIntent ? 1 : 0}>
+                            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                                {[{ label: 'Sale', value: 'sell' }, { label: 'Rent', value: 'rent' }].map(opt => (
+                                    <button key={opt.value} type="button"
+                                        onClick={() => setFilterIntent(filterIntent === opt.value ? '' : opt.value)}
+                                        className={`chip ${filterIntent === opt.value ? 'chip-active' : 'chip-inactive'}`}>
+                                        {opt.label}
+                                    </button>
+                                ))}
+                            </div>
+                        </FilterSection>
+
+                        <FilterCategorySection
+                            tree={filterClassificationTree}
+                            value={filterCategorySelection}
+                            onChange={setFilterCategorySelection}
+                        />
+
+                        <FilterSection title="Listing Status" defaultOpen={false} badge={filterStatus ? 1 : 0}>
+                            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                                {['active', 'sold', 'rented', 'withdrawn'].map(s => (
+                                    <button key={s} type="button"
+                                        onClick={() => setFilterStatus(filterStatus === s ? '' : s)}
+                                        className={`chip ${filterStatus === s ? 'chip-active' : 'chip-inactive'}`}>
+                                        {s.charAt(0).toUpperCase() + s.slice(1)}
+                                    </button>
+                                ))}
+                            </div>
+                        </FilterSection>
+
+                        <FilterSection title="Data Source" defaultOpen={false} badge={filterDataSource ? 1 : 0}>
+                            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                                {[
+                                    { label: 'WhatsApp', value: 'whatsapp' },
+                                    { label: 'Website', value: 'website' },
+                                    { label: 'Manual Entry', value: 'admin' },
+                                    { label: 'Mobile App', value: 'mobile_app' },
+                                    { label: 'Voice', value: 'voice' },
+                                ].map(opt => (
+                                    <button key={opt.value} type="button"
+                                        onClick={() => setFilterDataSource(filterDataSource === opt.value ? '' : opt.value)}
+                                        className={`chip ${filterDataSource === opt.value ? 'chip-active' : 'chip-inactive'}`}>
+                                        {opt.label}
+                                    </button>
+                                ))}
+                            </div>
+                        </FilterSection>
+
+                        <StalenessSection
+                            title="Inventory Staleness"
+                            label1="Days in system (unsold)"
+                            label2="Days since last visit"
+                            days1={filterDaysInSystem}
+                            days2={filterDaysNoVisit}
+                            onDays1Change={setFilterDaysInSystem}
+                            onDays2Change={setFilterDaysNoVisit}
+                            badge={(filterDaysInSystem > 0 ? 1 : 0) + (filterDaysNoVisit > 0 ? 1 : 0)}
+                        />
+
+                        {/* Apply button */}
+                        <div style={{ padding: '16px 20px 0' }}>
+                            <button type="button"
+                                onClick={() => setShowFilterSheet(false)}
+                                style={{ width: '100%', padding: '14px', borderRadius: '12px', border: 'none', backgroundColor: 'var(--text-link)', color: '#fff', fontWeight: 700, fontSize: '15px', cursor: 'pointer' }}
+                            >
+                                Apply Filters{activeInventoryFilterCount > 0 ? ` (${activeInventoryFilterCount} active)` : ''}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
