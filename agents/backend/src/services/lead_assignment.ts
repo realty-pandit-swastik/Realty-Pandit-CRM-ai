@@ -105,3 +105,42 @@ export async function assignViaPropertyUploader(propertyId: string): Promise<str
         return null;
     }
 }
+
+/**
+ * Round-robin assignment among managers (role IN 'manager' or 'super_boss').
+ * Picks the manager whose last_assigned_at is oldest (or null) and bumps it.
+ * Used as the fallback when portal-email matching can't resolve an agent for
+ * inbound external leads from website / WhatsApp / voice / unrecognised portal subusernames.
+ *
+ * Returns the agent id, or null when no active manager exists.
+ */
+export async function assignViaManagerRoundRobin(): Promise<string | null> {
+    try {
+        const next = await prisma.agent.findFirst({
+            where: {
+                role: { in: ['manager', 'super_boss'] },
+                status: 'active',
+            },
+            orderBy: [
+                { last_assigned_at: { sort: 'asc', nulls: 'first' } },
+                { created_at: 'asc' },
+            ],
+            select: { id: true, name: true },
+        });
+        if (!next) {
+            logger.warn('[LeadAssign] No active manager found for round-robin');
+            return null;
+        }
+
+        await prisma.agent.update({
+            where: { id: next.id },
+            data: { last_assigned_at: new Date() },
+        });
+
+        logger.info(`[LeadAssign] Manager round-robin → ${next.name} (${next.id})`);
+        return next.id;
+    } catch (err) {
+        logger.warn(`[LeadAssign] Manager round-robin error: ${(err as Error).message}`);
+        return null;
+    }
+}
