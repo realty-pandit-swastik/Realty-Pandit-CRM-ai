@@ -1,9 +1,3 @@
----
-name: Meta Product Catalog — Status & Architecture
-description: WhatsApp catalog ID, sync mechanism, bugs fixed, verification commands, review status monitoring
-type: project
----
-
 ## Catalog Identity
 
 - **Catalog ID**: `1669209180880841`

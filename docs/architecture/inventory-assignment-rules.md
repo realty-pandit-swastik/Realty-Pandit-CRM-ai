@@ -1,9 +1,3 @@
----
-name: Inventory assignment business rules
-description: Auto-assign rules for inventory and leads — uploader default + deactivation cascade to Sunny Sharma
-type: project
----
-
 Two business rules implemented 2026-04-21:
 
 ## Rule 1 — New inventory auto-assigns to uploader

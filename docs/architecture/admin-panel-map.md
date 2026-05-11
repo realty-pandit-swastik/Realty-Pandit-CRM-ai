@@ -1,9 +1,3 @@
----
-name: Admin Panel Full Map
-description: All 21 views, 55 components, API surface, auth flow, mobile support — verified from server 2026-04-06, PWA redesigned 2026-04-12
-type: project
----
-
 # Realty Pandit Admin Panel — Full Map (Verified 2026-04-06)
 
 ## Stack

@@ -1,9 +1,3 @@
----
-name: WhatsApp Token History — Breaks & Fixes
-description: History of WHATSAPP_TOKEN outages, root causes, and how to regenerate
-type: project
----
-
 ## Token Location
 `/var/www/realty-pandit/backend/.env` → `WHATSAPP_TOKEN=...`
 WABA ID: `2124684824933246` | Phone ID: `1021151161081768`

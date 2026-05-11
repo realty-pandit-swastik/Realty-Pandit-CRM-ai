@@ -1,9 +1,3 @@
----
-name: CSRF Cookie Cross-Subdomain Fix (2026-04-17)
-description: Critical fix — cookies were scoped to api.realtypandit.in, invisible to admin.realtypandit.in, breaking all POST/PUT/DELETE
-type: project
----
-
 The admin CRM was completely broken for every state-mutating action. User reported: can't save lead, can't match properties, Google Maps search "not working."
 
 **Root cause:** CSRF cookie was set without a `domain` attribute. Browser scoped it to `api.realtypandit.in` only. JS on `admin.realtypandit.in` could not read it, so X-CSRF-Token header was always empty. Every POST returned 403 "CSRF validation failed."

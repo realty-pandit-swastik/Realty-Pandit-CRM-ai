@@ -1,9 +1,3 @@
----
-name: Realty Pandit Full Architecture
-description: Complete technical architecture — all routes, models, services, agents, integrations, verified from live server 2026-04-06
-type: project
----
-
 # Realty Pandit — Full Architecture Map (Verified 2026-04-06)
 
 ## Tech Stack

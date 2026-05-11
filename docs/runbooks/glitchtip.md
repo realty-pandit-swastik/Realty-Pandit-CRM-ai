@@ -1,9 +1,3 @@
----
-name: GlitchTip Error Intelligence System
-description: Self-hosted GlitchTip + automated nightly digest → Claude memory. Completed 2026-04-15.
-type: project
----
-
 GlitchTip is self-hosted on the Realty Pandit server. A nightly script fetches all unresolved errors, maps them to source files, reads code context, generates fix hints, and writes to Claude memory. At every session start, errors are already loaded — no investigation needed.
 
 **Why:** Zero-cost Sentry alternative. Errors surfaced automatically so Claude can fix without re-investigating.

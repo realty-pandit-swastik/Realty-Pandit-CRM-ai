@@ -1,9 +1,3 @@
----
-name: Realty Pandit Design System & UI Guidelines
-description: Design language, component patterns, and UI rules for website, admin panel, and PWA — applies to ALL platforms simultaneously
-type: project
----
-
 # Realty Pandit — Design System (Locked 2026-04-10)
 
 ## Core Principle

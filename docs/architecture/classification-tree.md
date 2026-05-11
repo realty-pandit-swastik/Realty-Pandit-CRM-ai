@@ -1,9 +1,3 @@
----
-name: Classification Tree Final Structure
-description: The permanent property classification tree - all inventory, leads, and matching MUST use this exact structure. Locked as of 2026-03-29.
-type: project
----
-
 This tree is FINAL and PERMANENT. Do NOT add, remove, or modify categories/sub-categories/property types without explicit client approval.
 
 ## Residential

@@ -1,9 +1,3 @@
----
-name: Website Pages and Components Map
-description: All website pages, 78 components, API surface, state management, auth flow — verified from server 2026-04-06
-type: project
----
-
 # Realty Pandit Website — Full Map (Verified 2026-04-06)
 
 ## Stack

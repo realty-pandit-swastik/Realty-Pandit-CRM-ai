@@ -1,9 +1,3 @@
----
-name: 99acres Pull API Integration
-description: 99acres lead polling — operational. Re-confirmed working 2026-04-29 by Puneet (after a brief earlier-month outage was resolved).
-type: project
----
-
 99acres Pull API integration is fully built, deployed, and **currently WORKING** (re-confirmed by Puneet on 2026-04-29).
 
 **Credentials (configured in /var/www/realty-pandit/backend/.env):**

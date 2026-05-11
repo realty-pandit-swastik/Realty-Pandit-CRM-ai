@@ -1,9 +1,3 @@
----
-name: Master Agent Workflow System
-description: Complete agent roster, roles, inter-agent communication, self-healing deploy loop, and task routing rules for Realty Pandit
-type: project
----
-
 # Realty Pandit — Master Agent Workflow System
 
 ## Self-Healing Deploy → QA → Fix Loop (MANDATORY)

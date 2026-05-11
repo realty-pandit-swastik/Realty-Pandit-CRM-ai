@@ -1,9 +1,3 @@
----
-name: Installed Skills — Master Routing Guide
-description: All 31 installed Claude skills with exact use-case triggers, location, and how they map to Realty Pandit tasks. ALWAYS consult this before any task.
-type: reference
----
-
 # Installed Skills — Master Routing Guide
 
 **Location:** `~/.claude/skills/` (48 skills installed)

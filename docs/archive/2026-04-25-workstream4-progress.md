@@ -1,9 +1,3 @@
----
-name: Realty Pandit — Workstream 4 (AI Automation Wiring) Final State
-description: All 6 pipeline stage KRAs deployed. Property card templates split into sale/rent v2. Phase 9 inventory broadcast unblocked and wired. 19 grammar fixes pending re-submission to Meta.
-type: project
-originSessionId: cb437252-d20d-492e-a4a7-43f3282920fa
----
 **Decision:** Full pipeline automation deployed to production 2026-04-25. All 6 stage KRAs wired.
 
 **Why:** KRA specs (Stages 1–6) require per-stage AI messages, escalations, reminders, and cron-based automation.

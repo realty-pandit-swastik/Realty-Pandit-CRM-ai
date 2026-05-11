@@ -1,9 +1,3 @@
----
-name: Leads System Complete Map
-description: Full lead lifecycle, scoring algorithm, matching engine, admin panel gaps, and upgrade plan
-type: project
----
-
 # Realty Pandit — Leads System Complete Map
 
 ## Lead Sources (8 channels)

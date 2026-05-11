@@ -1,9 +1,3 @@
----
-name: Complete Project Reference — URLs, APIs, Credentials, Contacts
-description: Every URL, API endpoint, credential location, service, contact, and external integration for Realty Pandit — verified from server 2026-04-06
-type: reference
----
-
 # Realty Pandit — Complete Reference (Verified 2026-04-06)
 
 ## Client & Project
