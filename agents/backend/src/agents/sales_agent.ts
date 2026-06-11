@@ -17,6 +17,7 @@ import { transitionTransaction } from '../services/transaction_state_machine';
 import { TransactionStatus, TransactionType } from '@prisma/client';
 import prisma from '../db';
 import logger from '../utils/logger';
+import { extractReqSlots } from '../utils/requirement_slots';
 
 const STATES = {
     INTAKE: 'INTAKE',
@@ -424,6 +425,14 @@ export class SalesAgent implements BaseAgent {
             if (!contact.property_type && !data.property_type) {
                 data.property_type = 'flat'; // BHK implies flat
             }
+        }
+
+        // Intent (rent vs buy) — previously never captured by extractBuyerData,
+        // so standalone "rent"/"buy" answers were silently dropped. Feeds
+        // matching via contact.intent. (P1, 2026-06-11)
+        if (!contact.intent) {
+            const _slots = extractReqSlots(rawMessage);
+            if (_slots.intent) data.intent = _slots.intent;
         }
 
         return data;
