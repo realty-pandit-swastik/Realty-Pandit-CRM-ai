@@ -668,8 +668,11 @@ How can I help you find your perfect property today? 🏡`;
                 content: result.reply_script
             }
         });
-    } else {
-        // Fallback: workflow returned no reply
+    } else if (!result.metadata?.card_sent) {
+        // Fallback: workflow returned no reply.
+        // card_sent (2026-06-11): a v5 property card was already sent directly by the agent
+        // (matching_agent → shareNextProperty). Skip both the text send and this greeting fallback
+        // so the customer gets only the card — not a stray "how can I help?".
         const fallback = "Namaste! I'm Panditji, your property assistant. How can I help you today?";
         await whatsappService.sendText(from, fallback);
         await prisma.interaction.create({

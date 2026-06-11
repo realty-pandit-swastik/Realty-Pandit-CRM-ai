@@ -21,22 +21,40 @@ import { createLeadActionTask } from './workflow_task_service';
 
 const whatsapp = new WhatsAppService();
 
+// Button-tap titles — the customer tapped a quick-reply, so the title is the exact button
+// label; loose substring matching is safe here.
 const BUTTON_TITLES = {
     SCHEDULE: ['schedule visit', 'visit', 'schedule'],
     CALLBACK: ['call back', 'callback'],
     NEXT: ['next option', 'next', 'next property', 'aage'],
 };
 
+// Typed equivalents (2026-06-11): a customer who TYPES a button word should be routed the same
+// as a tap. Matched by EXACT trimmed equality (NOT substring) so ordinary chat like "next week",
+// "I visited yesterday", or "call you tomorrow?" never mis-fires the card actions.
+const TYPED_EQUIV = {
+    SCHEDULE: ['schedule visit', 'book visit', 'schedule a visit', 'site visit', 'visit'],
+    CALLBACK: ['call back', 'callback', 'call me', 'call me back'],
+    NEXT: ['next option', 'next property', 'show next', 'next', 'more', 'aage'],
+};
+
 /**
- * Returns true if the message was a property-card button reply that we routed.
+ * Returns true if the message was a property-card button reply (tap OR typed equivalent) we routed.
  */
 export async function handlePropertyCardReply(msg: any, from: string): Promise<boolean> {
-    const buttonTitle = (msg?.interactive?.button_reply?.title || msg?.button?.text || '').toLowerCase().trim();
-    if (!buttonTitle) return false;
+    const tapTitle = (msg?.interactive?.button_reply?.title || msg?.button?.text || '').toLowerCase().trim();
+    const typed = (msg?.text?.body || '').toLowerCase().trim();
 
-    const isSchedule = BUTTON_TITLES.SCHEDULE.some(t => buttonTitle.includes(t));
-    const isCallback = BUTTON_TITLES.CALLBACK.some(t => buttonTitle.includes(t));
-    const isNext = BUTTON_TITLES.NEXT.some(t => buttonTitle.includes(t));
+    let isSchedule = false, isCallback = false, isNext = false;
+    if (tapTitle) {
+        isSchedule = BUTTON_TITLES.SCHEDULE.some(t => tapTitle.includes(t));
+        isCallback = BUTTON_TITLES.CALLBACK.some(t => tapTitle.includes(t));
+        isNext = BUTTON_TITLES.NEXT.some(t => tapTitle.includes(t));
+    } else if (typed) {
+        isSchedule = TYPED_EQUIV.SCHEDULE.includes(typed);
+        isCallback = TYPED_EQUIV.CALLBACK.includes(typed);
+        isNext = TYPED_EQUIV.NEXT.includes(typed);
+    }
     if (!isSchedule && !isCallback && !isNext) return false;
 
     // Find the most recently shared property to this phone.
