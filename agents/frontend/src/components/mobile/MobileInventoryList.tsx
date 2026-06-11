@@ -8,6 +8,7 @@ import { useConfirm } from '../../contexts/ConfirmContext';
 import ShareToClientModal from '../ShareToClientModal';
 import BookVisitModal from '../BookVisitModal';
 import { toDialablePhone } from '../../lib/phone';
+import { pickSpecChips } from '../../lib/specChips';
 import {
     FilterSection,
     FilterTaxonomySection,
@@ -267,7 +268,6 @@ export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryLis
                         {items.map(item => {
                             const intentStyle = INTENT_COLORS[item.intent] || { bg: 'var(--bg-primary)', color: 'var(--text-muted)' };
                             const location = item.full_address || [item.locality, item.city || item.district, item.state].filter(Boolean).join(', ') || 'Location N/A';
-                            const specs = item.specs || {};
                             return (
                                 <div
                                     key={item.id}
@@ -365,14 +365,21 @@ export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryLis
                                         })()}
                                     </div>
 
-                                    {/* Specs row */}
-                                    {(specs.bedrooms || specs.area) && (
-                                        <div style={{ display: 'flex', gap: '10px', fontSize: '11px', color: 'var(--text-secondary)' }}>
-                                            {specs.bedrooms && <span>{specs.bedrooms} BHK</span>}
-                                            {specs.bathrooms && <span>{specs.bathrooms} Bath</span>}
-                                            {specs.area && <span>{specs.area} {specs.area_unit || 'sqft'}</span>}
-                                        </div>
-                                    )}
+                                    {/* Specs row — type-aware chips (residential→BHK/Bath/Area, hospitality→Rooms/Area,
+                                        commercial/land→Area; ⚠ on implausibly small area). See lib/specChips. */}
+                                    {(() => {
+                                        const chips = pickSpecChips(item);
+                                        if (chips.length === 0) return null;
+                                        return (
+                                            <div style={{ display: 'flex', gap: '10px', fontSize: '11px', color: 'var(--text-secondary)', flexWrap: 'wrap' }}>
+                                                {chips.map((c, i) => (
+                                                    <span key={i} style={c.warn ? { color: '#f59e0b', fontWeight: 600 } : undefined}>
+                                                        {c.warn ? '⚠ ' : ''}{c.value}
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        );
+                                    })()}
 
                                     {/* Completion Bar */}
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>

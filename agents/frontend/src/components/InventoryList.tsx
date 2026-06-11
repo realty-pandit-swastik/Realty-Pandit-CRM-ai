@@ -14,6 +14,7 @@ import { toDialablePhone } from '../lib/phone';
 import { GooglePlacesInput } from './GooglePlacesInput';
 import ShareToClientModal from './ShareToClientModal';
 import SharePropertyOptions from './SharePropertyOptions';
+import { pickSpecChips } from '../lib/specChips';
 import BookVisitModal from './BookVisitModal';
 import { ContactSearchField, type SelectedContact } from './ContactSearchField';
 import type { PlaceResult } from './GooglePlacesInput';
@@ -1429,9 +1430,9 @@ export const InventoryList: React.FC = () => {
                                                     Only fall back to structured parts when full_address is empty. Avoids the
                                                     "apartment_name + full_address" double-print that was jumbling cards. */}
                                                 {item.full_address || [item.apartment_name, item.sub_locality, item.locality, item.district || item.city, item.state, item.pincode].filter(Boolean).join(', ') || 'Location N/A'}
-                                                {/* Room count: canonical taxonomy keys (bhk for residential, rooms for commercial) → legacy fallbacks */}
-                                                {(item.specs?.bhk ?? item.specs?.rooms ?? item.specs?.bedrooms ?? item.specs?.bhk_count) && ` | ${item.specs.bhk ?? item.specs.rooms ?? item.specs.bedrooms ?? item.specs.bhk_count}BHK`}
-                                                {item.specs?.area && ` | ${item.specs.area} ${item.specs.area_unit || 'sqft'}`}
+                                                {/* Type-aware specs (residential→BHK/Bath/Area, hospitality→Rooms/Area,
+                                                    commercial/land→Area; ⚠ on implausible area). See lib/specChips. */}
+                                                {pickSpecChips(item).map(c => ` | ${c.warn ? '⚠ ' : ''}${c.value}`).join('')}
                                             </div>
 
                                             {/* Row 3: Dual Pricing */}
