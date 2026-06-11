@@ -46,18 +46,25 @@ export async function expandTaxonomyNodeIds(selectedIds: string[]): Promise<stri
 }
 
 /**
- * BHK filter over the canonical specs chain (bhk → rooms → bedrooms), matching number OR string
- * storage. Returns a Prisma `{ OR: [...] }` group, or null when nothing is selected. Fixes the old
- * filter that only checked `specs.bedrooms` and missed `specs.bhk` listings.
+ * BHK filter over the canonical specs chain, matching number OR string storage. Returns a Prisma
+ * `{ OR: [...] }` group, or null when nothing is selected.
+ *
+ * 2026-06-11 hardening: include `bhk_count` (the canonical read-chain used by extractBhkInt /
+ * shareNextProperty also reads it) and match common string-storage variants ("2", "2 BHK",
+ * "2bhk", "2 bhk") so a non-numeric listing isn't silently dropped. Existing clean numeric/`"N"`
+ * data is unaffected — this is pure OR-widening. (Slug-backfilled rows store a clean number, so
+ * this is belt-and-suspenders for legacy/future messy entries.)
  */
 export function bhkSpecsFilter(bhkValues: number[]): { OR: any[] } | null {
     if (!bhkValues || !bhkValues.length) return null;
-    const keys = ['bhk', 'rooms', 'bedrooms'];
+    const keys = ['bhk', 'rooms', 'bedrooms', 'bhk_count'];
     const or: any[] = [];
     for (const v of bhkValues) {
+        const variants: Array<number | string> = [v, String(v), `${v} BHK`, `${v}BHK`, `${v} bhk`, `${v}bhk`];
         for (const k of keys) {
-            or.push({ specs: { path: [k], equals: v } });
-            or.push({ specs: { path: [k], equals: String(v) } });
+            for (const val of variants) {
+                or.push({ specs: { path: [k], equals: val } });
+            }
         }
     }
     return { OR: or };
