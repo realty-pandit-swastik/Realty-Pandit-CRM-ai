@@ -633,6 +633,27 @@ How can I help you find your perfect property today? 🏡`;
 
     logger.info(`[Router] Result:`, result);
 
+    // ─── 6b. P0 reliability (2026-06-11): never send the raw LLM-failure string; never go silent ──
+    // After retries, a failed model call surfaces as the "high traffic" sentinel in reply_script.
+    // Replace it with a graceful holding line AND escalate to the assigned agent (createLeadActionTask)
+    // so a human follows up — the customer's message is never answered with an error or dropped.
+    if (result.reply_script && /experiencing high traffic|encountered a brief issue/i.test(result.reply_script)) {
+        const holding = 'Ek minute 🙏 — main aapki request check kar raha hoon. Hamari team aapse abhi connect karegi.';
+        await whatsappService.sendText(from, holding).catch(() => null);
+        try {
+            const { createLeadActionTask } = await import('./workflow_task_service');
+            await createLeadActionTask({
+                phone: from, action: 'CALLBACK_REQUEST', tenantId: contact.tenant_id,
+                sourceChannel: 'whatsapp-text',
+                rawNote: `AI could not respond (LLM failure). Customer's last message: "${(text || '[media]').slice(0, 200)}". Please follow up.`,
+            });
+        } catch (e) { logger.warn('[WebhookProcessor] safety-net task failed:', (e as Error).message); }
+        await prisma.interaction.create({
+            data: { tenant_id: contact.tenant_id, phone_number: from, channel: 'whatsapp', direction: 'outbound', event_type: 'message', content: holding },
+        }).catch(() => {});
+        return;
+    }
+
     // ─── 7. SEND RESPONSE ────────────────────────────────────────────────────
     if (result.reply_script) {
         await whatsappService.sendText(from, result.reply_script);
