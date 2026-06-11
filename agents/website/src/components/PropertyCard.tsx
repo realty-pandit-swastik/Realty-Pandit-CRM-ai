@@ -2,16 +2,15 @@
 
 import { motion } from 'framer-motion';
 import Link from 'next/link';
-import { MapPin, BedDouble, Bath, Maximize, ArrowRight, Home } from 'lucide-react';
+import { MapPin, BedDouble, Bath, Maximize, Building2, ArrowRight, Home } from 'lucide-react';
 import { formatPrice, getMediaUrl, getImageUrls, type Property } from '@/lib/api';
-import { formatPropertyTitle, formatAddress, getRoomCount, getRoomLabel } from '@/lib/propertyUtils';
+import { formatPropertyTitle, formatAddress } from '@/lib/propertyUtils';
+import { pickSpecChips } from '@/lib/specChips';
 import CompareButton from '@/components/property-detail/CompareButton';
 
 export default function PropertyCard({ property, index = 0 }: { property: Property; index?: number }) {
-    const specs = property.specs || {};
     const imageUrls = getImageUrls(property.media_urls);
-    const roomCount = getRoomCount(property);
-    const roomLabel = getRoomLabel(property);
+    const specChips = pickSpecChips(property);
 
     return (
         <motion.div
@@ -84,15 +83,14 @@ export default function PropertyCard({ property, index = 0 }: { property: Proper
                             </div>
                         )}
                         <div className="flex items-center gap-4 text-slate-500 dark:text-slate-400 text-sm border-t border-slate-100 dark:border-slate-800 pt-4">
-                            {roomCount != null && roomCount > 0 && (
-                                <span className="flex items-center gap-1"><BedDouble className="w-4 h-4" /> {roomCount} {roomLabel}</span>
-                            )}
-                            {specs.bathrooms && (
-                                <span className="flex items-center gap-1"><Bath className="w-4 h-4" /> {specs.bathrooms} Bath</span>
-                            )}
-                            {specs.area && (
-                                <span className="flex items-center gap-1"><Maximize className="w-4 h-4" /> {specs.area} {specs.unit || 'sqft'}</span>
-                            )}
+                            {specChips.map((c, i) => {
+                                const Icon = c.kind === 'area' ? Maximize
+                                    : (c.kind === 'bath' || c.kind === 'washroom') ? Bath
+                                    : c.kind === 'floors' ? Building2 : BedDouble;
+                                return (
+                                    <span key={i} className={`flex items-center gap-1 ${c.warn ? 'text-amber-500' : ''}`}><Icon className="w-4 h-4" /> {c.warn ? '⚠ ' : ''}{c.value}</span>
+                                );
+                            })}
                             <span className="ml-auto text-blue-500 group-hover:translate-x-1 transition-transform">
                                 <ArrowRight className="w-4 h-4" />
                             </span>

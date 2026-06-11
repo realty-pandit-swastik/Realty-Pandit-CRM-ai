@@ -4,7 +4,8 @@ import { motion } from 'framer-motion';
 import Link from 'next/link';
 import { MapPin, BedDouble, Bath, Maximize, Building2, Camera, CalendarPlus, MessageCircle, CheckCircle, Car, ArrowUpDown, Trees, Waves, Dumbbell, Shield, Zap, Droplets, Flame, Home } from 'lucide-react';
 import { formatPrice, getMediaUrl, getImageUrls, timeAgo, type Property } from '@/lib/api';
-import { formatPropertyTitle, formatAddress, getAmenities, getRoomCount, getRoomLabel, getFurnishing, getTotalFloors, amenitySlug } from '@/lib/propertyUtils';
+import { formatPropertyTitle, formatAddress, getAmenities, getFurnishing, getTotalFloors, amenitySlug } from '@/lib/propertyUtils';
+import { pickSpecChips, canShowPricePerArea } from '@/lib/specChips';
 
 const AMENITY_MAP: Record<string, { icon: typeof Car; label: string }> = {
     parking: { icon: Car, label: 'Parking' },
@@ -35,7 +36,9 @@ function formatFurnishing(f: string | null | undefined): string {
 export default function PropertyListCard({ property, index = 0, onScheduleVisit, onShareWhatsApp }: PropertyListCardProps) {
     const specs = property.specs || {};
     const imageUrls = getImageUrls(property.media_urls);
-    const pricePerSqft = property.price && specs.area
+    const specChips = pickSpecChips(property);
+    // Only show ₹/sqft when area is present AND plausible — a 4.5 sqm listing would otherwise print an absurd rate.
+    const pricePerSqft = property.price && canShowPricePerArea(property)
         ? Math.round(Number(property.price) / Number(specs.area))
         : null;
 
@@ -44,8 +47,6 @@ export default function PropertyListCard({ property, index = 0, onScheduleVisit,
     const locationText = formatAddress(property) || property.location || '';
 
     // Taxonomy-aware specs (inventory.specs is the SoT; furnishing/floors/features cols dropped).
-    const roomCount = getRoomCount(property);
-    const roomLabel = getRoomLabel(property);
     const totalFloors = getTotalFloors(property);
     const furnishing = getFurnishing(property);
 
@@ -135,21 +136,16 @@ export default function PropertyListCard({ property, index = 0, onScheduleVisit,
 
                     {/* Specs row */}
                     <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-slate-600 dark:text-slate-400 mb-3">
-                        {roomCount != null && roomCount > 0 && (
-                            <span className="flex items-center gap-1">
-                                <BedDouble className="w-3.5 h-3.5" /> {roomCount} {roomLabel}
-                            </span>
-                        )}
-                        {specs.bathrooms && (
-                            <span className="flex items-center gap-1">
-                                <Bath className="w-3.5 h-3.5" /> {specs.bathrooms} Bath
-                            </span>
-                        )}
-                        {specs.area && (
-                            <span className="flex items-center gap-1">
-                                <Maximize className="w-3.5 h-3.5" /> {specs.area} {specs.unit || 'sqft'}
-                            </span>
-                        )}
+                        {specChips.map((c, i) => {
+                            const Icon = c.kind === 'area' ? Maximize
+                                : (c.kind === 'bath' || c.kind === 'washroom') ? Bath
+                                : c.kind === 'floors' ? Building2 : BedDouble;
+                            return (
+                                <span key={i} className={`flex items-center gap-1 ${c.warn ? 'text-amber-500' : ''}`}>
+                                    <Icon className="w-3.5 h-3.5" /> {c.warn ? '⚠ ' : ''}{c.value}
+                                </span>
+                            );
+                        })}
                         {property.floor_number != null && (
                             <span className="flex items-center gap-1">
                                 <Building2 className="w-3.5 h-3.5" /> Floor {property.floor_number}{totalFloors != null ? `/${totalFloors}` : ''}
