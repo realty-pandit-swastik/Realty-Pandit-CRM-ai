@@ -28,6 +28,31 @@ export class MatchingAgent implements BaseAgent {
 
         logger.info(`[MatchingAgent] Matching request from ${contact.phone_number}`);
 
+        // 2026-06-11: Deal context → send ONE category-correct v5 property CARD (with Call Back /
+        // Schedule Visit / Next Option buttons), built from the deal's richer criteria, instead of
+        // the legacy free-form "Properties Found" text list. Reuses the Stage-2 card system
+        // (shareNextProperty) and mirrors the GENERIC-message path in webhook_processor (3b.3).
+        // The card body is self-sufficient, so we return NO reply_script and flag
+        // metadata.card_sent — webhook_processor then skips BOTH the text send (line 637) and the
+        // "Namaste, how can I help?" empty-reply fallback (line 671). Tapping/typing Next Option
+        // re-enters this path → next card. Any send error falls through to the legacy text below.
+        const dealId = context.currentTransaction?.id;
+        if (dealId) {
+            try {
+                const { shareNextProperty } = await import('../services/property_sharing');
+                await shareNextProperty(dealId);
+                logger.info(`[MatchingAgent] Sent v5 property card for deal ${dealId} (card path)`);
+                return {
+                    action: 'reply',
+                    quality_hint: 'confident',
+                    metadata: { card_sent: true, deal_id: dealId, matching_mode: 'v5_card' },
+                };
+            } catch (err) {
+                logger.error(`[MatchingAgent] v5 card send failed for deal ${dealId}; falling back to text list:`, err);
+                // fall through to the legacy text path below
+            }
+        }
+
         // Build match criteria from contact profile + current message
         const criteria = this.buildCriteria(context);
 
