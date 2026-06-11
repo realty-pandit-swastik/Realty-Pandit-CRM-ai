@@ -67,6 +67,18 @@ export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryLis
     const [bookVisitItem, setBookVisitItem] = useState<any>(null);
     const [activeSheetItem, setActiveSheetItem] = useState<any>(null);
 
+    // Multi-select / batch-share state (ported from desktop InventoryList)
+    const [selectionMode, setSelectionMode] = useState(false);
+    const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+    const [showBatchShareModal, setShowBatchShareModal] = useState(false);
+    const [batchShareContact, setBatchShareContact] = useState<{ phone_number: string; name: string | null } | null>(null);
+    const [batchShareLoading, setBatchShareLoading] = useState(false);
+    const [batchShareResults, setBatchShareResults] = useState<{ id: string; title: string; status: 'sent' | 'already_shared' | 'error'; message: string }[]>([]);
+    const [batchContactSearch, setBatchContactSearch] = useState('');
+    const [batchContactResults, setBatchContactResults] = useState<{ phone_number: string; name: string | null }[]>([]);
+    const [batchContactSearching, setBatchContactSearching] = useState(false);
+    const batchSearchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
     useEffect(() => {
         client.get('/public/taxonomy/tree')
             .then((r: any) => setTaxonomyTree(r.data.tree || []))
@@ -84,6 +96,24 @@ export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryLis
         searchTimer.current = setTimeout(() => { setPage(1); loadData(); }, 300);
         return () => { if (searchTimer.current) clearTimeout(searchTimer.current); };
     }, [search]);
+
+    const toggleSelect = (id: string) => {
+        setSelectedIds(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s; });
+    };
+
+    // Contact search for batch share (ported from InventoryList.tsx:350-364)
+    useEffect(() => {
+        if (batchContactSearch.trim().length < 2) { setBatchContactResults([]); return; }
+        if (batchSearchTimer.current) clearTimeout(batchSearchTimer.current);
+        batchSearchTimer.current = setTimeout(async () => {
+            setBatchContactSearching(true);
+            try {
+                const res = await client.get('/api/leads/search', { params: { q: batchContactSearch.trim() } });
+                setBatchContactResults(res.data || []);
+            } catch { setBatchContactResults([]); }
+            finally { setBatchContactSearching(false); }
+        }, 400);
+    }, [batchContactSearch]);
 
     const loadData = async () => {
         try {
@@ -115,6 +145,35 @@ export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryLis
             }
         } catch (e) { console.error(e); }
         finally { setLoading(false); }
+    };
+
+    const handleBatchShare = async () => {
+        if (!batchShareContact || selectedIds.size === 0) return;
+        setBatchShareLoading(true);
+        setBatchShareResults([]);
+        const results: { id: string; title: string; status: 'sent' | 'already_shared' | 'error'; message: string }[] = [];
+        for (const invId of Array.from(selectedIds)) {
+            const inv = items.find(i => i.id === invId);
+            const title = [inv?.apartment_name, inv?.locality || inv?.full_address].filter(Boolean).join(', ') || invId;
+            try {
+                const res = await client.post(
+                    `/api/inventory/${invId}/share-to-client`,
+                    { client_phone: batchShareContact.phone_number }
+                );
+                if (res.data.whatsapp_sent === false) {
+                    results.push({ id: invId, title, status: 'error', message: 'Not delivered — WhatsApp send failed (try again)' });
+                } else {
+                    const note = res.data.already_shared && res.data.previously_shared_at
+                        ? ` (previously shared on ${new Date(res.data.previously_shared_at).toLocaleDateString('en-IN')} — re-sent)`
+                        : '';
+                    results.push({ id: invId, title, status: 'sent', message: `Sent via WhatsApp${note}` });
+                }
+            } catch (err: any) {
+                results.push({ id: invId, title, status: 'error', message: err?.response?.data?.error || 'Failed to share' });
+            }
+        }
+        setBatchShareResults(results);
+        setBatchShareLoading(false);
     };
 
     const activeSheetFilterCount = (
@@ -184,6 +243,16 @@ export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryLis
                         </span>
                     )}
                 </button>
+                <button onClick={() => { setSelectionMode(p => !p); setSelectedIds(new Set()); }}
+                    style={{
+                        flexShrink: 0, padding: '6px 14px', borderRadius: '20px',
+                        border: selectionMode ? '1px solid #3b82f6' : '1px solid var(--border-secondary)',
+                        backgroundColor: selectionMode ? 'rgba(59,130,246,0.12)' : 'var(--bg-secondary)',
+                        color: selectionMode ? '#3b82f6' : 'var(--text-secondary)',
+                        fontSize: '13px', fontWeight: 600, cursor: 'pointer',
+                    }}>
+                    {selectionMode ? `✓ ${selectedIds.size} Selected` : '☐ Select'}
+                </button>
             </div>
 
 
@@ -203,7 +272,7 @@ export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryLis
                                 <div
                                     key={item.id}
                                     className="clay-card"
-                                    onClick={() => setActiveSheetItem(item)}
+                                    onClick={() => selectionMode ? toggleSelect(item.id) : setActiveSheetItem(item)}
                                     style={{
                                         marginBottom: '10px',
                                         padding: '14px 16px',
@@ -216,6 +285,19 @@ export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryLis
                                 >
                                     {/* Top row: thumbnail + info */}
                                     <div style={{ display: 'flex', gap: '10px' }}>
+                                        {/* Selection checkbox (visual — card onClick handles the toggle) */}
+                                        {selectionMode && (
+                                            <div
+                                                style={{
+                                                    width: '22px', height: '22px', borderRadius: '6px', flexShrink: 0, alignSelf: 'center',
+                                                    border: selectedIds.has(item.id) ? '2px solid #3b82f6' : '2px solid var(--border-secondary)',
+                                                    backgroundColor: selectedIds.has(item.id) ? '#3b82f6' : 'transparent',
+                                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                }}
+                                            >
+                                                {selectedIds.has(item.id) && <span style={{ color: '#fff', fontSize: '14px', lineHeight: 1 }}>✓</span>}
+                                            </div>
+                                        )}
                                         {/* Thumbnail */}
                                         <div style={{ width: '60px', height: '60px', borderRadius: '8px', overflow: 'hidden', flexShrink: 0, backgroundColor: 'var(--bg-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                                             {item.media_urls?.[0] ? (
@@ -335,8 +417,8 @@ export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryLis
                 )}
             </div>
 
-            {/* FAB — Add Property */}
-            {hasPermission('edit_inventory') && (
+            {/* FAB — Add Property (hidden in selection mode to avoid overlapping the action bar) */}
+            {!selectionMode && hasPermission('edit_inventory') && (
                 <button type="button" onClick={onAddNew}
                     style={{
                         position: 'absolute', bottom: '16px', right: '16px',
@@ -355,6 +437,124 @@ export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryLis
             )}
             {bookVisitItem && (
                 <BookVisitModal item={bookVisitItem} onClose={() => setBookVisitItem(null)} onBooked={() => setBookVisitItem(null)} />
+            )}
+
+            {/* Floating action bar — appears when items are selected */}
+            {selectionMode && selectedIds.size > 0 && (
+                <div style={{
+                    position: 'fixed', bottom: 0, left: 0, right: 0,
+                    backgroundColor: 'var(--bg-primary)', borderTop: '1px solid var(--border-secondary)',
+                    padding: '12px 16px', display: 'flex', alignItems: 'center', gap: '10px',
+                    boxShadow: '0 -4px 24px rgba(0,0,0,0.2)', zIndex: 1000,
+                }}>
+                    <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)', flex: 1 }}>
+                        {selectedIds.size} propert{selectedIds.size === 1 ? 'y' : 'ies'} selected
+                    </span>
+                    <button
+                        type="button"
+                        onClick={() => { setShowBatchShareModal(true); setBatchShareResults([]); setBatchShareContact(null); setBatchContactSearch(''); }}
+                        style={{ padding: '10px 18px', borderRadius: '8px', fontSize: '14px', fontWeight: 700, cursor: 'pointer', backgroundColor: '#25d366', border: 'none', color: '#fff' }}
+                    >📲 Share</button>
+                    <button
+                        type="button"
+                        onClick={() => { setSelectedIds(new Set()); setSelectionMode(false); }}
+                        style={{ padding: '10px 14px', borderRadius: '8px', fontSize: '13px', cursor: 'pointer', border: '1px solid var(--border-secondary)', backgroundColor: 'transparent', color: 'var(--text-muted)' }}
+                    >Cancel</button>
+                </div>
+            )}
+
+            {/* Batch Share Bottom Sheet */}
+            {showBatchShareModal && (
+                <div
+                    style={{ position: 'fixed', inset: 0, backgroundColor: 'var(--sheet-backdrop)', zIndex: 2000 }}
+                    onClick={() => { if (!batchShareLoading) setShowBatchShareModal(false); }}
+                >
+                    <div
+                        style={{
+                            position: 'absolute', bottom: 0, left: 0, right: 0,
+                            backgroundColor: 'var(--bg-secondary)', borderRadius: '20px 20px 0 0',
+                            maxHeight: '85vh', overflowY: 'auto', padding: '0 0 32px',
+                            boxShadow: '0 -8px 40px rgba(0,0,0,0.25)',
+                            animation: 'slide-up-in 250ms cubic-bezier(0.34,1.2,0.64,1) forwards',
+                        }}
+                        onClick={e => e.stopPropagation()}
+                    >
+                        <div style={{ display: 'flex', justifyContent: 'center', padding: '12px 0 8px' }}>
+                            <div style={{ width: '40px', height: '4px', borderRadius: '2px', backgroundColor: 'var(--border-secondary)' }} />
+                        </div>
+                        <div style={{ padding: '0 20px 16px', fontSize: '16px', fontWeight: 700, color: 'var(--text-primary)' }}>
+                            📲 Share {selectedIds.size} Propert{selectedIds.size === 1 ? 'y' : 'ies'} via WhatsApp
+                        </div>
+                        <div style={{ padding: '0 20px' }}>
+                            {batchShareResults.length > 0 ? (
+                                <div>
+                                    {batchShareResults.map(r => (
+                                        <div key={r.id} style={{ display: 'flex', gap: '10px', padding: '8px 0', borderBottom: '1px solid var(--border-secondary)', alignItems: 'flex-start' }}>
+                                            <span style={{ fontSize: '16px' }}>
+                                                {r.status === 'sent' ? '✅' : r.status === 'already_shared' ? '⚠️' : '❌'}
+                                            </span>
+                                            <div>
+                                                <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>{r.title}</div>
+                                                <div style={{ fontSize: '11px', color: r.status === 'already_shared' ? '#f59e0b' : r.status === 'error' ? '#ef4444' : '#22c55e' }}>{r.message}</div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                    <button
+                                        type="button"
+                                        onClick={() => { setShowBatchShareModal(false); setSelectionMode(false); setSelectedIds(new Set()); setBatchShareResults([]); }}
+                                        style={{ marginTop: '16px', width: '100%', padding: '12px', borderRadius: '10px', fontWeight: 700, backgroundColor: '#3b82f6', color: '#fff', border: 'none', cursor: 'pointer' }}
+                                    >Done</button>
+                                </div>
+                            ) : !batchShareContact ? (
+                                <div>
+                                    <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '8px' }}>Search contact to share with:</div>
+                                    <input
+                                        type="text"
+                                        placeholder="Name or phone number..."
+                                        value={batchContactSearch}
+                                        onChange={e => setBatchContactSearch(e.target.value)}
+                                        autoFocus
+                                        style={{ width: '100%', padding: '12px', borderRadius: '8px', fontSize: '14px', border: '1px solid var(--border-secondary)', backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)', outline: 'none', boxSizing: 'border-box' }}
+                                    />
+                                    {batchContactSearching && <div style={{ fontSize: '12px', color: 'var(--text-muted)', padding: '8px 0' }}>Searching...</div>}
+                                    {batchContactResults.map(c => (
+                                        <div
+                                            key={c.phone_number}
+                                            onClick={() => { setBatchShareContact(c); setBatchContactSearch(''); setBatchContactResults([]); }}
+                                            style={{ padding: '12px', borderRadius: '8px', cursor: 'pointer', margin: '6px 0', backgroundColor: 'var(--bg-primary)', display: 'flex', gap: '10px', alignItems: 'center' }}
+                                        >
+                                            <div style={{ width: '36px', height: '36px', borderRadius: '50%', backgroundColor: 'rgba(59,130,246,0.12)', color: '#3b82f6', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '14px', flexShrink: 0 }}>
+                                                {(c.name || c.phone_number)[0].toUpperCase()}
+                                            </div>
+                                            <div>
+                                                <div style={{ fontSize: '14px', fontWeight: 600 }}>{c.name || 'Unknown'}</div>
+                                                <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{c.phone_number}</div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            ) : (
+                                <div>
+                                    <div style={{ padding: '12px', borderRadius: '10px', backgroundColor: 'rgba(37,211,102,0.08)', border: '1px solid rgba(37,211,102,0.3)', marginBottom: '16px' }}>
+                                        <div style={{ fontSize: '12px', color: '#25d366', fontWeight: 600, marginBottom: '4px' }}>Sending to:</div>
+                                        <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-primary)' }}>{batchShareContact.name || batchShareContact.phone_number}</div>
+                                        <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{batchShareContact.phone_number}</div>
+                                        <button type="button" onClick={() => setBatchShareContact(null)} style={{ marginTop: '8px', fontSize: '11px', color: 'var(--text-muted)', background: 'none', border: 'none', cursor: 'pointer' }}>Change contact</button>
+                                    </div>
+                                    <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '12px' }}>
+                                        {selectedIds.size} propert{selectedIds.size === 1 ? 'y' : 'ies'} will be sent. Already-shared properties will be flagged, not re-sent.
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={handleBatchShare}
+                                        disabled={batchShareLoading}
+                                        style={{ width: '100%', padding: '14px', borderRadius: '10px', fontWeight: 700, fontSize: '15px', backgroundColor: '#25d366', color: '#fff', border: 'none', cursor: batchShareLoading ? 'not-allowed' : 'pointer', opacity: batchShareLoading ? 0.7 : 1 }}
+                                    >{batchShareLoading ? 'Sending...' : '📲 Send via WhatsApp'}</button>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
             )}
 
             {/* Action Bottom Sheet */}
