@@ -170,6 +170,23 @@ router.post('/', authMiddleware, checkPermission('edit_inventory'), async (req, 
             if (labels.length) mergedSpecs.amenities = labels;
         }
 
+        // Area sanity (2026-06-11): drop non-positive area; flag implausibly-small values (likely a
+        // unit mix-up, e.g. "4.5 sqm") — stored but logged, never silently rejected (owner may
+        // override). This single write point covers ALL capture paths (admin add, website
+        // post-property, WhatsApp workflow). Surfaced to owners via the ⚠ on cards + the report script.
+        if (mergedSpecs.area != null && mergedSpecs.area !== '') {
+            const areaNum = Number(mergedSpecs.area);
+            if (!Number.isFinite(areaNum) || areaNum <= 0) {
+                delete mergedSpecs.area;
+            } else {
+                const AREA_SQFT: Record<string, number> = { sqft: 1, sqm: 10.7639, sqyd: 9, acre: 43560, bigha: 27000, marla: 272.25, gaj: 9, katha: 720 };
+                const sqftNorm = areaNum * (AREA_SQFT[String(mergedSpecs.area_unit || 'sqft').toLowerCase()] ?? 1);
+                if (sqftNorm < 100) {
+                    logger.warn(`[inventory.create] implausibly small area ${mergedSpecs.area} ${mergedSpecs.area_unit || 'sqft'} (~${Math.round(sqftNorm)} sqft) for ${legacyType || 'property'} by ${phone} — stored but flagged for review`);
+                }
+            }
+        }
+
         // Create inventory
         const inventory = await prisma.inventory.create({
             data: {
