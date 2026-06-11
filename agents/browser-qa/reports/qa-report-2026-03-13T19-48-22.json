@@ -1,0 +1,894 @@
+{
+  "timestamp": "2026-03-13T19:48:22.280Z",
+  "duration": "53.4s",
+  "summary": {
+    "totalIssues": 27,
+    "critical": 0,
+    "warnings": 1,
+    "info": 26,
+    "pagesChecked": 14,
+    "screenshotsTaken": 14
+  },
+  "issues": [
+    {
+      "page": "Homepage",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "desktop"
+      },
+      "timestamp": "2026-03-13T19:47:36.727Z"
+    },
+    {
+      "page": "Homepage",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "desktop"
+      },
+      "timestamp": "2026-03-13T19:47:36.728Z"
+    },
+    {
+      "page": "Homepage",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "desktop"
+      },
+      "timestamp": "2026-03-13T19:47:36.729Z"
+    },
+    {
+      "page": "Homepage",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "desktop"
+      },
+      "timestamp": "2026-03-13T19:47:36.729Z"
+    },
+    {
+      "page": "Homepage",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "desktop"
+      },
+      "timestamp": "2026-03-13T19:47:36.729Z"
+    },
+    {
+      "page": "Homepage",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "desktop"
+      },
+      "timestamp": "2026-03-13T19:47:36.729Z"
+    },
+    {
+      "page": "Homepage",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "desktop"
+      },
+      "timestamp": "2026-03-13T19:47:36.729Z"
+    },
+    {
+      "page": "Homepage",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "desktop"
+      },
+      "timestamp": "2026-03-13T19:47:36.729Z"
+    },
+    {
+      "page": "Properties",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "desktop"
+      },
+      "timestamp": "2026-03-13T19:47:41.425Z"
+    },
+    {
+      "page": "Properties",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "desktop"
+      },
+      "timestamp": "2026-03-13T19:47:41.425Z"
+    },
+    {
+      "page": "Properties",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Form input without label: search",
+      "details": {
+        "viewport": "desktop"
+      },
+      "timestamp": "2026-03-13T19:47:41.425Z"
+    },
+    {
+      "page": "Properties",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Form input without label: select-one",
+      "details": {
+        "viewport": "desktop"
+      },
+      "timestamp": "2026-03-13T19:47:41.425Z"
+    },
+    {
+      "page": "About",
+      "type": "seo",
+      "severity": "info",
+      "message": "Title too long (69 chars)",
+      "details": {},
+      "timestamp": "2026-03-13T19:47:44.423Z"
+    },
+    {
+      "page": "Services",
+      "type": "seo",
+      "severity": "info",
+      "message": "Title too long (74 chars)",
+      "details": {},
+      "timestamp": "2026-03-13T19:47:53.760Z"
+    },
+    {
+      "page": "Discovered: /post-property",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Form input without label: textarea",
+      "details": {
+        "viewport": "desktop"
+      },
+      "timestamp": "2026-03-13T19:47:59.869Z"
+    },
+    {
+      "page": "Discovered: /login",
+      "type": "layout",
+      "severity": "warning",
+      "message": "1 elements overflow viewport",
+      "details": {
+        "type": "element-overflow",
+        "message": "1 elements overflow viewport",
+        "elements": [
+          "div.absolute"
+        ],
+        "viewport": "desktop"
+      },
+      "timestamp": "2026-03-13T19:48:03.348Z"
+    },
+    {
+      "page": "Discovered: /faq",
+      "type": "seo",
+      "severity": "info",
+      "message": "Title too long (62 chars)",
+      "details": {},
+      "timestamp": "2026-03-13T19:48:07.243Z"
+    },
+    {
+      "page": "Discovered: /faq",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Form input without label: text",
+      "details": {
+        "viewport": "desktop"
+      },
+      "timestamp": "2026-03-13T19:48:07.248Z"
+    },
+    {
+      "page": "Discovered: /tools/emi-calculator",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Form input without label: range",
+      "details": {
+        "viewport": "desktop"
+      },
+      "timestamp": "2026-03-13T19:48:10.028Z"
+    },
+    {
+      "page": "Discovered: /tools/emi-calculator",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Form input without label: range",
+      "details": {
+        "viewport": "desktop"
+      },
+      "timestamp": "2026-03-13T19:48:10.028Z"
+    },
+    {
+      "page": "Discovered: /tools/emi-calculator",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Form input without label: range",
+      "details": {
+        "viewport": "desktop"
+      },
+      "timestamp": "2026-03-13T19:48:10.028Z"
+    },
+    {
+      "page": "Discovered: /tools/area-converter",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "desktop"
+      },
+      "timestamp": "2026-03-13T19:48:12.569Z"
+    },
+    {
+      "page": "Discovered: /tools/area-converter",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Form input without label: select-one",
+      "details": {
+        "viewport": "desktop"
+      },
+      "timestamp": "2026-03-13T19:48:12.569Z"
+    },
+    {
+      "page": "Discovered: /tools/area-converter",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Form input without label: number",
+      "details": {
+        "viewport": "desktop"
+      },
+      "timestamp": "2026-03-13T19:48:12.569Z"
+    },
+    {
+      "page": "Discovered: /tools/area-converter",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Form input without label: select-one",
+      "details": {
+        "viewport": "desktop"
+      },
+      "timestamp": "2026-03-13T19:48:12.569Z"
+    },
+    {
+      "page": "Discovered: /compare",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "desktop"
+      },
+      "timestamp": "2026-03-13T19:48:21.189Z"
+    },
+    {
+      "page": "Discovered: /compare",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "desktop"
+      },
+      "timestamp": "2026-03-13T19:48:21.189Z"
+    }
+  ],
+  "consoleErrors": [],
+  "networkErrors": [
+    {
+      "url": "https://www.realtypandit.in/_next/static/chunks/1fe9c5ec4e7ffe7d.js",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "script",
+      "pageUrl": "https://www.realtypandit.in/",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.realtypandit.in/_next/static/chunks/1f9d1fc6d48c2539.js",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "script",
+      "pageUrl": "https://www.realtypandit.in/",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.realtypandit.in/_next/static/chunks/f4115144c402d830.js",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "script",
+      "pageUrl": "https://www.realtypandit.in/",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.realtypandit.in/_next/static/chunks/aee6c7720838f8a2.js",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "script",
+      "pageUrl": "https://www.realtypandit.in/",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.googletagmanager.com/gtag/js?id=G-WJF3Y3SXM3",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "script",
+      "pageUrl": "https://www.realtypandit.in/",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.googletagmanager.com/gtm.js?id=GTM-TBFWLRD7",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "script",
+      "pageUrl": "https://www.realtypandit.in/",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.realtypandit.in/_next/static/chunks/d2be314c3ece3fbe.js",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "script",
+      "pageUrl": "https://www.realtypandit.in/",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.realtypandit.in/_next/static/chunks/ff1a16fafef87110.js",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "script",
+      "pageUrl": "https://www.realtypandit.in/",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.realtypandit.in/_next/static/chunks/bb77ffd8a83f1c5e.js",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "script",
+      "pageUrl": "https://www.realtypandit.in/",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.realtypandit.in/_next/static/chunks/a0e13f09e8783e80.js",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "script",
+      "pageUrl": "https://www.realtypandit.in/",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.realtypandit.in/_next/static/chunks/6531dc0975e5b470.js",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "script",
+      "pageUrl": "https://www.realtypandit.in/",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.google-analytics.com/g/collect?v=2&tid=G-WJF3Y3SXM3&gtm=45je63b1v9243687425za200zb9243676380zd9243676380&_p=1773431252157&gcd=13l3l3l3l1l1&npa=0&dma=0&cid=1898456963.1773431253&ul=en-us&sr=1920x1080&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uamb=0&uam=&uap=Windows&uapv=10.0.0&uaw=0&are=1&frm=0&pscdl=noapi&_s=1&tag_exp=103116026~103200004~115616985~115938466~115938468~116024733~117484252&sid=1773431253&sct=1&seg=0&dl=https%3A%2F%2Fwww.realtypandit.in%2F&dt=Realty%20Pandit%20-%20Find%20Your%20Dream%20Property&en=page_view&_fv=1&_nsi=1&_ss=1&_ee=1&tfd=1018",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "fetch",
+      "pageUrl": "https://www.realtypandit.in/",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.google-analytics.com/g/collect?v=2&tid=G-WJF3Y3SXM3&gtm=45je63b1v9243687425za200zb9243676380zd9243676380&_p=1773431252157&gcd=13l3l3l3l1l1&npa=0&dma=0&cid=1898456963.1773431253&ul=en-us&sr=1920x1080&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uamb=0&uam=&uap=Windows&uapv=10.0.0&uaw=0&are=1&frm=0&pscdl=noapi&_eu=AAAAAAQ&_s=2&tag_exp=103116026~103200004~115616985~115938466~115938468~116024733~117484252&sid=1773431253&sct=1&seg=0&dl=https%3A%2F%2Fwww.realtypandit.in%2F&dt=Realty%20Pandit%20-%20Find%20Your%20Dream%20Property&en=user_engagement&_et=5399&tfd=6421",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "fetch",
+      "pageUrl": "https://www.realtypandit.in/",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.realtypandit.in/properties/bafd7775-12c2-4039-b0ff-cb55b19d950e?_rsc=yimjc",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "fetch",
+      "pageUrl": "https://www.realtypandit.in/properties",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.realtypandit.in/properties/45c2c98f-8656-4fe9-9740-091cf9ddf671?_rsc=k355n",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "fetch",
+      "pageUrl": "https://www.realtypandit.in/properties",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.realtypandit.in/properties/ea8d1537-dd97-43f3-9f77-5411c799c343?_rsc=k355n",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "fetch",
+      "pageUrl": "https://www.realtypandit.in/properties",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.realtypandit.in/properties/a111e575-7d3c-49b3-97df-29dd47325c94?_rsc=k355n",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "fetch",
+      "pageUrl": "https://www.realtypandit.in/properties",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.realtypandit.in/properties/d17e20da-5fe0-4ce7-b69e-88d2f7f0b30d?_rsc=k355n",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "fetch",
+      "pageUrl": "https://www.realtypandit.in/properties",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.googletagmanager.com/gtm.js?id=GTM-TBFWLRD7&is_td=1&v=3&t=t&pid=1017403535&gtm=45He63b1v9243676380za200zd9243676380&seq=2&exp=102015666~103116026~103200004~115938465~115938469~116024733~117484252&dl=www.realtypandit.in%2Fproperties&tdp=GTM-TBFWLRD7;243676380;0;0;0&mde=G-WJF3Y3SXM3;0_1~GTM-TBFWLRD7;61_1&fin=1&z=0",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "script",
+      "pageUrl": "https://www.realtypandit.in/properties",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.googletagmanager.com/td?id=GTM-TBFWLRD7&v=3&t=t&pid=1017403535&gtm=45He63b1v9243676380za200zd9243676380&seq=2&exp=102015666~103116026~103200004~115938465~115938469~116024733~117484252&dl=www.realtypandit.in%2Fproperties&tdp=GTM-TBFWLRD7;243676380;0;0;0&mde=G-WJF3Y3SXM3;0_1~GTM-TBFWLRD7;61_1&fin=1&z=0",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "fetch",
+      "pageUrl": "https://www.realtypandit.in/properties",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.google-analytics.com/g/collect?v=2&tid=G-WJF3Y3SXM3&gtm=45je63b1v9243687425za200zb9243676380zd9243676380&_p=1773431258472&gcd=13l3l3l3l1l1&npa=0&dma=0&cid=1898456963.1773431253&ul=en-us&sr=1920x1080&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uamb=0&uam=&uap=Windows&uapv=10.0.0&uaw=0&are=1&frm=0&pscdl=noapi&_eu=AAAAAAQ&tag_exp=103116026~103200004~115938465~115938469~116024733~117484252&sid=1773431253&sct=1&seg=1&dl=https%3A%2F%2Fwww.realtypandit.in%2Fproperties&dt=Properties%20for%20Sale%20%26%20Rent%20in%20India%20%7C%20Realty%20Pandit&_s=1&tfd=3704",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "fetch",
+      "pageUrl": "https://www.realtypandit.in/properties",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.google-analytics.com/g/collect?v=2&tid=G-WJF3Y3SXM3&gtm=45je63b1v9243687425za200zd9243687425&_p=1773431262099&gcd=13l3l3l3l1l1&npa=0&dma=0&cid=1898456963.1773431253&ul=en-us&sr=1920x1080&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uamb=0&uam=&uap=Windows&uapv=10.0.0&uaw=0&are=1&frm=0&pscdl=noapi&_eu=AAAAAAQ&tag_exp=103116026~103200004~115616985~115938465~115938468~116024733~117484252&sid=1773431253&sct=1&seg=1&dl=https%3A%2F%2Fwww.realtypandit.in%2Fabout&dt=About%20Realty%20Pandit%20-%20AI-Powered%20Real%20Estate%20Platform%20%7C%20Realty%20Pandit&_s=1&tfd=3564",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "fetch",
+      "pageUrl": "https://www.realtypandit.in/about",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.google-analytics.com/g/collect?v=2&tid=G-WJF3Y3SXM3&gtm=45je63b1v9243687425za200zd9243687425&_p=1773431265553&gcd=13l3l3l3l1l1&npa=0&dma=0&cid=1898456963.1773431253&ul=en-us&sr=1920x1080&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uamb=0&uam=&uap=Windows&uapv=10.0.0&uaw=0&are=1&frm=0&pscdl=noapi&_eu=AAAAAAQ&_s=1&tag_exp=103116026~103200004~115616985~115938466~115938468~116024733~117484252&sid=1773431253&sct=1&seg=1&dl=https%3A%2F%2Fwww.realtypandit.in%2Fcontact&dt=Contact%20Realty%20Pandit%20-%20Get%20in%20Touch%20%7C%20Realty%20Pandit&en=page_view&_ee=1&tfd=5247",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "fetch",
+      "pageUrl": "https://www.realtypandit.in/contact",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.google-analytics.com/g/collect?v=2&tid=G-WJF3Y3SXM3&gtm=45je63b1v9243687425za200zd9243687425&_p=1773431265553&gcd=13l3l3l3l1l1&npa=0&dma=0&cid=1898456963.1773431253&ul=en-us&sr=1920x1080&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uamb=0&uam=&uap=Windows&uapv=10.0.0&uaw=0&are=1&frm=0&pscdl=noapi&_eu=AAAAAAQ&_s=2&tag_exp=103116026~103200004~115616985~115938466~115938468~116024733~117484252&sid=1773431253&sct=1&seg=1&dl=https%3A%2F%2Fwww.realtypandit.in%2Fcontact&dt=Contact%20Realty%20Pandit%20-%20Get%20in%20Touch%20%7C%20Realty%20Pandit&en=user_engagement&_et=5878&tfd=6119",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "fetch",
+      "pageUrl": "https://www.realtypandit.in/contact",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.google-analytics.com/g/collect?v=2&tid=G-WJF3Y3SXM3&gtm=45je63b1v9243687425za200zd9243687425&_p=1773431271579&gcd=13l3l3l3l1l1&npa=0&dma=0&cid=1898456963.1773431253&ul=en-us&sr=1920x1080&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uamb=0&uam=&uap=Windows&uapv=10.0.0&uaw=0&are=1&frm=0&pscdl=noapi&_eu=AAAAAAQ&tag_exp=103116026~103200004~115616986~115938466~115938468~116024733~117484252&sid=1773431253&sct=1&seg=1&dl=https%3A%2F%2Fwww.realtypandit.in%2Fservices&dt=Real%20Estate%20Services%20-%20Buy%2C%20Sell%2C%20Rent%2C%20Legal%20%26%20Home%20Loans%20%7C%20Realty%20Pandit&_s=1&tfd=3046",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "fetch",
+      "pageUrl": "https://www.realtypandit.in/services",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.realtypandit.in/blog/ai-transforming-real-estate-2025?_rsc=3h8go",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "fetch",
+      "pageUrl": "https://www.realtypandit.in/blog",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.realtypandit.in/blog/10-tips-first-time-home-buyers-india?_rsc=3h8go",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "fetch",
+      "pageUrl": "https://www.realtypandit.in/blog",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.realtypandit.in/blog/top-5-mistakes-sellers-avoid?_rsc=dt32r",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "fetch",
+      "pageUrl": "https://www.realtypandit.in/blog",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.realtypandit.in/blog/noida-vs-gurgaon-investment-2025?_rsc=dt32r",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "fetch",
+      "pageUrl": "https://www.realtypandit.in/blog",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.realtypandit.in/blog/understanding-rera-complete-guide?_rsc=dt32r",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "fetch",
+      "pageUrl": "https://www.realtypandit.in/blog",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.realtypandit.in/blog/10-tips-first-time-home-buyers-india?_rsc=dt32r",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "fetch",
+      "pageUrl": "https://www.realtypandit.in/blog",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.realtypandit.in/blog/ai-transforming-real-estate-2025?_rsc=dt32r",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "fetch",
+      "pageUrl": "https://www.realtypandit.in/blog",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.google-analytics.com/g/collect?v=2&tid=G-WJF3Y3SXM3&gtm=45je63b1v9243687425za200zd9243687425&_p=1773431274562&gcd=13l3l3l3l1l1&npa=0&dma=0&cid=1898456963.1773431253&ul=en-us&sr=1920x1080&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uamb=0&uam=&uap=Windows&uapv=10.0.0&uaw=0&are=1&frm=0&pscdl=noapi&_eu=AAAAAAQ&tag_exp=103116026~103200004~115616985~115938466~115938469~116024733~117484252&sid=1773431253&sct=1&seg=1&dl=https%3A%2F%2Fwww.realtypandit.in%2Fblog&dt=Realty%20Pandit%20-%20Find%20Your%20Dream%20Property&_s=1&tfd=3240",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "fetch",
+      "pageUrl": "https://www.realtypandit.in/blog",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.google-analytics.com/g/collect?v=2&tid=G-WJF3Y3SXM3&gtm=45je63b1v9243687425za200zd9243687425&_p=1773431277713&gcd=13l3l3l3l1l1&npa=0&dma=0&cid=1898456963.1773431253&ul=en-us&sr=1920x1080&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uamb=0&uam=&uap=Windows&uapv=10.0.0&uaw=0&are=1&frm=0&pscdl=noapi&_eu=AAAAAAQ&tag_exp=103116026~103200004~115938465~115938469~116024733~117484252&sid=1773431253&sct=1&seg=1&dl=https%3A%2F%2Fwww.realtypandit.in%2Fpost-property&dt=Realty%20Pandit%20-%20Find%20Your%20Dream%20Property&_s=1&tfd=2691",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "fetch",
+      "pageUrl": "https://www.realtypandit.in/post-property",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.google-analytics.com/g/collect?v=2&tid=G-WJF3Y3SXM3&gtm=45je63b1v9243687425za200zd9243687425&_p=1773431280347&gcd=13l3l3l3l1l1&npa=0&dma=0&cid=1898456963.1773431253&ul=en-us&sr=1920x1080&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uamb=0&uam=&uap=Windows&uapv=10.0.0&uaw=0&are=1&frm=0&pscdl=noapi&_eu=AAAAAAQ&tag_exp=103116026~103200004~115616985~115938466~115938468~116024733~117484252&sid=1773431253&sct=1&seg=1&dl=https%3A%2F%2Fwww.realtypandit.in%2Flogin&dt=Realty%20Pandit%20-%20Find%20Your%20Dream%20Property&_s=1&tfd=4789",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "fetch",
+      "pageUrl": "https://www.realtypandit.in/login",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.google-analytics.com/g/collect?v=2&tid=G-WJF3Y3SXM3&gtm=45je63b1v9243687425za200zd9243687425&_p=1773431285093&gcd=13l3l3l3l1l1&npa=0&dma=0&cid=1898456963.1773431253&ul=en-us&sr=1920x1080&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uamb=0&uam=&uap=Windows&uapv=10.0.0&uaw=0&are=1&frm=0&pscdl=noapi&_eu=AAAAAAQ&tag_exp=103116026~103200004~115938466~115938468~116024733~117484252&sid=1773431253&sct=1&seg=1&dl=https%3A%2F%2Fwww.realtypandit.in%2Ffaq&dt=FAQ%20-%20Property%20Buying%2C%20Selling%20%26%20Renting%20Guide%20%7C%20Realty%20Pandit&_s=1&tfd=3039",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "fetch",
+      "pageUrl": "https://www.realtypandit.in/faq",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.google-analytics.com/g/collect?v=2&tid=G-WJF3Y3SXM3&gtm=45je63b1v9243687425za200zd9243687425&_p=1773431287932&gcd=13l3l3l3l1l1&npa=0&dma=0&cid=1898456963.1773431253&ul=en-us&sr=1920x1080&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uamb=0&uam=&uap=Windows&uapv=10.0.0&uaw=0&are=1&frm=0&pscdl=noapi&_eu=AAAAAAQ&tag_exp=103116026~103200004~115938465~115938469~116024733~117484252&sid=1773431253&sct=1&seg=1&dl=https%3A%2F%2Fwww.realtypandit.in%2Ftools%2Femi-calculator&dt=Realty%20Pandit%20-%20Find%20Your%20Dream%20Property&_s=1&tfd=2584",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "fetch",
+      "pageUrl": "https://www.realtypandit.in/tools/emi-calculator",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.google-analytics.com/g/collect?v=2&tid=G-WJF3Y3SXM3&gtm=45je63b1v9243687425za200zd9243687425&_p=1773431290451&gcd=13l3l3l3l1l1&npa=0&dma=0&cid=1898456963.1773431253&ul=en-us&sr=1920x1080&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uamb=0&uam=&uap=Windows&uapv=10.0.0&uaw=0&are=1&frm=0&pscdl=noapi&_eu=AAAAAAQ&tag_exp=103116026~103200004~115938465~115938469~116024733~117484252&sid=1773431253&sct=1&seg=1&dl=https%3A%2F%2Fwww.realtypandit.in%2Ftools%2Farea-converter&dt=Realty%20Pandit%20-%20Find%20Your%20Dream%20Property&_s=1&tfd=2614",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "fetch",
+      "pageUrl": "https://www.realtypandit.in/tools/area-converter",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.google-analytics.com/g/collect?v=2&tid=G-WJF3Y3SXM3&gtm=45je63b1v9243687425za200zd9243687425&_p=1773431293006&gcd=13l3l3l3l1l1&npa=0&dma=0&cid=1898456963.1773431253&ul=en-us&sr=1920x1080&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uamb=0&uam=&uap=Windows&uapv=10.0.0&uaw=0&are=1&frm=0&pscdl=noapi&_eu=AAAAAAQ&tag_exp=103116026~103200004~115938465~115938469~116024733~117384406~117484252&sid=1773431253&sct=1&seg=1&dl=https%3A%2F%2Fwww.realtypandit.in%2Fprivacy&dt=Realty%20Pandit%20-%20Find%20Your%20Dream%20Property&_s=1&tfd=3030",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "fetch",
+      "pageUrl": "https://www.realtypandit.in/privacy",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.google-analytics.com/g/collect?v=2&tid=G-WJF3Y3SXM3&gtm=45je63b1v9243687425za200zd9243687425&_p=1773431295976&gcd=13l3l3l3l1l1&npa=0&dma=0&cid=1898456963.1773431253&ul=en-us&sr=1920x1080&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uamb=0&uam=&uap=Windows&uapv=10.0.0&uaw=0&are=1&frm=0&pscdl=noapi&_eu=AAAAAAQ&tag_exp=103116026~103200004~115938466~115938469~116024733~117484252&sid=1773431253&sct=1&seg=1&dl=https%3A%2F%2Fwww.realtypandit.in%2Fterms&dt=Realty%20Pandit%20-%20Find%20Your%20Dream%20Property&_s=1&tfd=3113",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "fetch",
+      "pageUrl": "https://www.realtypandit.in/terms",
+      "viewport": "desktop"
+    }
+  ],
+  "performance": [
+    {
+      "page": "Homepage",
+      "viewport": "desktop",
+      "domContentLoaded": 149,
+      "fullLoad": 3165,
+      "firstByte": 118,
+      "domInteractive": 149
+    },
+    {
+      "page": "Properties",
+      "viewport": "desktop",
+      "domContentLoaded": 106,
+      "fullLoad": 1066,
+      "firstByte": 54,
+      "domInteractive": 106
+    },
+    {
+      "page": "About",
+      "viewport": "desktop",
+      "domContentLoaded": 141,
+      "fullLoad": 360,
+      "firstByte": 93,
+      "domInteractive": 141
+    },
+    {
+      "page": "Contact",
+      "viewport": "desktop",
+      "domContentLoaded": 119,
+      "fullLoad": 1227,
+      "firstByte": 73,
+      "domInteractive": 119
+    },
+    {
+      "page": "Services",
+      "viewport": "desktop",
+      "domContentLoaded": 101,
+      "fullLoad": 225,
+      "firstByte": 69,
+      "domInteractive": 101
+    },
+    {
+      "page": "Blog",
+      "viewport": "desktop",
+      "domContentLoaded": 119,
+      "fullLoad": 321,
+      "firstByte": 63,
+      "domInteractive": 119
+    },
+    {
+      "page": "Discovered: /post-property",
+      "viewport": "desktop",
+      "domContentLoaded": 81,
+      "fullLoad": 188,
+      "firstByte": 52,
+      "domInteractive": 81
+    },
+    {
+      "page": "Discovered: /login",
+      "viewport": "desktop",
+      "domContentLoaded": 111,
+      "fullLoad": 423,
+      "firstByte": 81,
+      "domInteractive": 111
+    },
+    {
+      "page": "Discovered: /faq",
+      "viewport": "desktop",
+      "domContentLoaded": 265,
+      "fullLoad": 367,
+      "firstByte": 142,
+      "domInteractive": 265
+    },
+    {
+      "page": "Discovered: /tools/emi-calculator",
+      "viewport": "desktop",
+      "domContentLoaded": 83,
+      "fullLoad": 177,
+      "firstByte": 56,
+      "domInteractive": 83
+    },
+    {
+      "page": "Discovered: /tools/area-converter",
+      "viewport": "desktop",
+      "domContentLoaded": 79,
+      "fullLoad": 182,
+      "firstByte": 54,
+      "domInteractive": 79
+    },
+    {
+      "page": "Discovered: /privacy",
+      "viewport": "desktop",
+      "domContentLoaded": 77,
+      "fullLoad": 197,
+      "firstByte": 51,
+      "domInteractive": 77
+    },
+    {
+      "page": "Discovered: /terms",
+      "viewport": "desktop",
+      "domContentLoaded": 120,
+      "fullLoad": 288,
+      "firstByte": 96,
+      "domInteractive": 120
+    },
+    {
+      "page": "Discovered: /compare",
+      "viewport": "desktop",
+      "domContentLoaded": 83,
+      "fullLoad": 211,
+      "firstByte": 56,
+      "domInteractive": 83
+    }
+  ],
+  "pages": [
+    {
+      "name": "Homepage",
+      "url": "https://www.realtypandit.in/",
+      "viewport": "desktop",
+      "status": "ok",
+      "loadTime": 3671,
+      "checks": {
+        "consoleErrors": 0
+      }
+    },
+    {
+      "name": "Properties",
+      "url": "https://www.realtypandit.in/properties",
+      "viewport": "desktop",
+      "status": "ok",
+      "loadTime": 2034,
+      "checks": {
+        "consoleErrors": 0
+      }
+    },
+    {
+      "name": "About",
+      "url": "https://www.realtypandit.in/about",
+      "viewport": "desktop",
+      "status": "ok",
+      "loadTime": 1441,
+      "checks": {
+        "consoleErrors": 0
+      }
+    },
+    {
+      "name": "Contact",
+      "url": "https://www.realtypandit.in/contact",
+      "viewport": "desktop",
+      "status": "ok",
+      "loadTime": 4428,
+      "checks": {
+        "consoleErrors": 0
+      }
+    },
+    {
+      "name": "Services",
+      "url": "https://www.realtypandit.in/services",
+      "viewport": "desktop",
+      "status": "ok",
+      "loadTime": 1264,
+      "checks": {
+        "consoleErrors": 0
+      }
+    },
+    {
+      "name": "Blog",
+      "url": "https://www.realtypandit.in/blog",
+      "viewport": "desktop",
+      "status": "ok",
+      "loadTime": 1544,
+      "checks": {
+        "consoleErrors": 0
+      }
+    },
+    {
+      "name": "Discovered: /post-property",
+      "url": "https://www.realtypandit.in/post-property",
+      "viewport": "desktop",
+      "status": "ok",
+      "loadTime": 1207,
+      "checks": {
+        "consoleErrors": 0
+      }
+    },
+    {
+      "name": "Discovered: /login",
+      "url": "https://www.realtypandit.in/login",
+      "viewport": "desktop",
+      "status": "ok",
+      "loadTime": 2095,
+      "checks": {
+        "consoleErrors": 0
+      }
+    },
+    {
+      "name": "Discovered: /faq",
+      "url": "https://www.realtypandit.in/faq",
+      "viewport": "desktop",
+      "status": "ok",
+      "loadTime": 1357,
+      "checks": {
+        "consoleErrors": 0
+      }
+    },
+    {
+      "name": "Discovered: /tools/emi-calculator",
+      "url": "https://www.realtypandit.in/tools/emi-calculator",
+      "viewport": "desktop",
+      "status": "ok",
+      "loadTime": 1165,
+      "checks": {
+        "consoleErrors": 0
+      }
+    },
+    {
+      "name": "Discovered: /tools/area-converter",
+      "url": "https://www.realtypandit.in/tools/area-converter",
+      "viewport": "desktop",
+      "status": "ok",
+      "loadTime": 1158,
+      "checks": {
+        "consoleErrors": 0
+      }
+    },
+    {
+      "name": "Discovered: /privacy",
+      "url": "https://www.realtypandit.in/privacy",
+      "viewport": "desktop",
+      "status": "ok",
+      "loadTime": 1146,
+      "checks": {
+        "consoleErrors": 0
+      }
+    },
+    {
+      "name": "Discovered: /terms",
+      "url": "https://www.realtypandit.in/terms",
+      "viewport": "desktop",
+      "status": "ok",
+      "loadTime": 1233,
+      "checks": {
+        "consoleErrors": 0
+      }
+    },
+    {
+      "name": "Discovered: /compare",
+      "url": "https://www.realtypandit.in/compare",
+      "viewport": "desktop",
+      "status": "ok",
+      "loadTime": 1245,
+      "checks": {
+        "consoleErrors": 0
+      }
+    }
+  ],
+  "screenshots": [
+    {
+      "page": "Homepage",
+      "viewport": "desktop",
+      "path": "screenshots\\homepage-desktop.png"
+    },
+    {
+      "page": "Properties",
+      "viewport": "desktop",
+      "path": "screenshots\\properties-desktop.png"
+    },
+    {
+      "page": "About",
+      "viewport": "desktop",
+      "path": "screenshots\\about-desktop.png"
+    },
+    {
+      "page": "Contact",
+      "viewport": "desktop",
+      "path": "screenshots\\contact-desktop.png"
+    },
+    {
+      "page": "Services",
+      "viewport": "desktop",
+      "path": "screenshots\\services-desktop.png"
+    },
+    {
+      "page": "Blog",
+      "viewport": "desktop",
+      "path": "screenshots\\blog-desktop.png"
+    },
+    {
+      "page": "Discovered: /post-property",
+      "viewport": "desktop",
+      "path": "screenshots\\discovered---post-property-desktop.png"
+    },
+    {
+      "page": "Discovered: /login",
+      "viewport": "desktop",
+      "path": "screenshots\\discovered---login-desktop.png"
+    },
+    {
+      "page": "Discovered: /faq",
+      "viewport": "desktop",
+      "path": "screenshots\\discovered---faq-desktop.png"
+    },
+    {
+      "page": "Discovered: /tools/emi-calculator",
+      "viewport": "desktop",
+      "path": "screenshots\\discovered---tools-emi-calculator-desktop.png"
+    },
+    {
+      "page": "Discovered: /tools/area-converter",
+      "viewport": "desktop",
+      "path": "screenshots\\discovered---tools-area-converter-desktop.png"
+    },
+    {
+      "page": "Discovered: /privacy",
+      "viewport": "desktop",
+      "path": "screenshots\\discovered---privacy-desktop.png"
+    },
+    {
+      "page": "Discovered: /terms",
+      "viewport": "desktop",
+      "path": "screenshots\\discovered---terms-desktop.png"
+    },
+    {
+      "page": "Discovered: /compare",
+      "viewport": "desktop",
+      "path": "screenshots\\discovered---compare-desktop.png"
+    }
+  ]
+}

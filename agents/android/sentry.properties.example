@@ -1,0 +1,20 @@
+# GlitchTip mapping-file upload credentials.
+# Copy to sentry.properties (gitignored) and fill in real values.
+# Required only for RELEASE builds (so R8/ProGuard-minified stack traces are readable).
+# Without this, release crashes still report — but stack traces are obfuscated.
+
+# GlitchTip server (NOT sentry.io)
+defaults.url=https://errors.realtypandit.in/
+
+# Your GlitchTip org slug
+defaults.org=realty-pandit
+
+# Reuses the existing backend GlitchTip project (events are filtered by the
+# `service:android` tag in StaffApp.kt). Set this to the SAME project slug
+# used by the backend in GlitchTip — typically `realty-backend`.
+defaults.project=realty-backend
+
+# Auth token with `project:write` scope.
+# Generate at: errors.realtypandit.in → Settings → Auth Tokens.
+# DO NOT commit this file — it's gitignored.
+auth.token=glpat_REPLACE_ME

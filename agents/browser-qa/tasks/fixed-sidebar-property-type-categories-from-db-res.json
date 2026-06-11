@@ -1,0 +1,50 @@
+{
+  "description": "Fixed sidebar: Property Type categories from DB (Residential/Commercial/Institutional/Mixed Use), Location with Google Places, Budget slider with number inputs (tab-aware: rent=₹5K-₹2L, sale=₹10L-₹5Cr), removed Posted By filter",
+  "checks": [
+    {
+      "type": "no_console_errors",
+      "page": "/properties",
+      "description": "No JS errors on /properties"
+    },
+    {
+      "type": "no_console_errors",
+      "page": "/properties?tab=rent",
+      "description": "No JS errors on /properties?tab=rent"
+    },
+    {
+      "type": "text_visible",
+      "page": "/properties",
+      "text": "Property Type",
+      "description": "Text \"Property Type\" visible on /properties"
+    },
+    {
+      "type": "text_visible",
+      "page": "/properties",
+      "text": "Location",
+      "description": "Text \"Location\" visible on /properties"
+    },
+    {
+      "type": "text_visible",
+      "page": "/properties",
+      "text": "Monthly Rent",
+      "description": "Text \"Monthly Rent\" visible on /properties"
+    },
+    {
+      "type": "text_visible",
+      "page": "/properties?tab=resale",
+      "text": "Budget",
+      "description": "Text \"Budget\" visible on /properties?tab=resale"
+    },
+    {
+      "type": "responsive",
+      "page": "/properties",
+      "description": "/properties is responsive on mobile"
+    },
+    {
+      "type": "page_loads",
+      "page": "/properties",
+      "max_time": 5000,
+      "description": "/properties loads under 5000ms"
+    }
+  ]
+}

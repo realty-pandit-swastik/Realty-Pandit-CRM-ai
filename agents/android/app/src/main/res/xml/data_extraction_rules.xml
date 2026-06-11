@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="sharedpref" path="staff_auth_prefs.xml"/>
+        <exclude domain="file" path="call_recordings/"/>
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="sharedpref" path="staff_auth_prefs.xml"/>
+        <exclude domain="file" path="call_recordings/"/>
+    </device-transfer>
+</data-extraction-rules>

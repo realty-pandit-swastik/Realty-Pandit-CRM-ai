@@ -1,0 +1,28 @@
+{
+  "description": "Website, admin, and API all healthy after Plan A+B+C deploy",
+  "checks": [
+    {
+      "type": "api_returns",
+      "url": "/",
+      "status": 200,
+      "description": "API / returns 200"
+    },
+    {
+      "type": "no_console_errors",
+      "page": "/",
+      "description": "No JS errors on /"
+    },
+    {
+      "type": "api_returns",
+      "url": "/public/properties?limit=1",
+      "status": 200,
+      "description": "API /public/properties?limit=1 returns 200"
+    },
+    {
+      "type": "page_loads",
+      "page": "/properties",
+      "max_time": 4000,
+      "description": "/properties loads under 4000ms"
+    }
+  ]
+}

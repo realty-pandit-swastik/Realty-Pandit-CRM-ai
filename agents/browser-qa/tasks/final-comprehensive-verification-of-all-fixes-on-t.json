@@ -1,0 +1,82 @@
+{
+  "description": "Final comprehensive verification of all fixes on the properties page",
+  "checks": [
+    {
+      "type": "no_console_errors",
+      "page": "/properties",
+      "description": "No JS errors on /properties"
+    },
+    {
+      "type": "page_loads",
+      "page": "/properties",
+      "max_time": 5000,
+      "description": "/properties loads under 5000ms"
+    },
+    {
+      "type": "text_visible",
+      "page": "/properties",
+      "text": "Residential",
+      "description": "Text \"Residential\" visible on /properties"
+    },
+    {
+      "type": "text_visible",
+      "page": "/properties",
+      "text": "Commercial",
+      "description": "Text \"Commercial\" visible on /properties"
+    },
+    {
+      "type": "text_visible",
+      "page": "/properties",
+      "text": "Agricultural Land",
+      "description": "Text \"Agricultural Land\" visible on /properties"
+    },
+    {
+      "type": "text_visible",
+      "page": "/properties",
+      "text": "Studio",
+      "description": "Text \"Studio\" visible on /properties"
+    },
+    {
+      "type": "text_visible",
+      "page": "/properties",
+      "text": "1 BHK",
+      "description": "Text \"1 BHK\" visible on /properties"
+    },
+    {
+      "type": "text_visible",
+      "page": "/properties",
+      "text": "5+ BHK",
+      "description": "Text \"5+ BHK\" visible on /properties"
+    },
+    {
+      "type": "element_exists",
+      "page": "/properties",
+      "selector": ".pac-container",
+      "description": "Element \".pac-container\" exists on /properties"
+    },
+    {
+      "type": "element_count",
+      "page": "/properties",
+      "selector": ".bg-white.rounded-2xl",
+      "min": 1,
+      "description": "1+ \".bg-white.rounded-2xl\" on /properties"
+    },
+    {
+      "type": "api_returns",
+      "url": "/public/properties?intent=sell",
+      "status": 200,
+      "description": "API /public/properties?intent=sell returns 200"
+    },
+    {
+      "type": "api_returns",
+      "url": "/public/master/tree",
+      "status": 200,
+      "description": "API /public/master/tree returns 200"
+    },
+    {
+      "type": "responsive",
+      "page": "/properties",
+      "description": "/properties is responsive on mobile"
+    }
+  ]
+}

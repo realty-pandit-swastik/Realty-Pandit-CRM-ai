@@ -1,0 +1,22 @@
+{
+  "description": "Verify Google Places search and nearby landmarks endpoint",
+  "checks": [
+    {
+      "type": "no_console_errors",
+      "page": "/properties",
+      "description": "No JS errors on /properties"
+    },
+    {
+      "type": "api_returns",
+      "url": "/public/nearby-landmarks/cm9fxj3ai0003uyt4ht9grm5p",
+      "status": 200,
+      "description": "API /public/nearby-landmarks/cm9fxj3ai0003uyt4ht9grm5p returns 200"
+    },
+    {
+      "type": "element_exists",
+      "page": "/properties input[type='text']",
+      "selector": "",
+      "description": "Element \"\" exists on /properties input[type='text']"
+    }
+  ]
+}

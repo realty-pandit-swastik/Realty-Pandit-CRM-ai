@@ -1,0 +1,3907 @@
+{
+  "timestamp": "2026-03-12T06:48:04.541Z",
+  "duration": "147.9s",
+  "summary": {
+    "totalIssues": 243,
+    "critical": 0,
+    "warnings": 6,
+    "info": 237,
+    "pagesChecked": 42,
+    "screenshotsTaken": 42
+  },
+  "issues": [
+    {
+      "page": "Homepage",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "desktop"
+      },
+      "timestamp": "2026-03-12T06:45:43.290Z"
+    },
+    {
+      "page": "Homepage",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "desktop"
+      },
+      "timestamp": "2026-03-12T06:45:43.291Z"
+    },
+    {
+      "page": "Homepage",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "desktop"
+      },
+      "timestamp": "2026-03-12T06:45:43.291Z"
+    },
+    {
+      "page": "Homepage",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "desktop"
+      },
+      "timestamp": "2026-03-12T06:45:43.291Z"
+    },
+    {
+      "page": "Homepage",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "desktop"
+      },
+      "timestamp": "2026-03-12T06:45:43.291Z"
+    },
+    {
+      "page": "Homepage",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "desktop"
+      },
+      "timestamp": "2026-03-12T06:45:43.291Z"
+    },
+    {
+      "page": "Homepage",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "desktop"
+      },
+      "timestamp": "2026-03-12T06:45:43.291Z"
+    },
+    {
+      "page": "Homepage",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "desktop"
+      },
+      "timestamp": "2026-03-12T06:45:43.291Z"
+    },
+    {
+      "page": "Homepage",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "desktop"
+      },
+      "timestamp": "2026-03-12T06:45:43.291Z"
+    },
+    {
+      "page": "Homepage",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "desktop"
+      },
+      "timestamp": "2026-03-12T06:45:43.291Z"
+    },
+    {
+      "page": "Homepage",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "desktop"
+      },
+      "timestamp": "2026-03-12T06:45:43.291Z"
+    },
+    {
+      "page": "Homepage",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Form input without label: email",
+      "details": {
+        "viewport": "desktop"
+      },
+      "timestamp": "2026-03-12T06:45:43.291Z"
+    },
+    {
+      "page": "Properties",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "desktop"
+      },
+      "timestamp": "2026-03-12T06:45:53.747Z"
+    },
+    {
+      "page": "Properties",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "desktop"
+      },
+      "timestamp": "2026-03-12T06:45:53.747Z"
+    },
+    {
+      "page": "Properties",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "desktop"
+      },
+      "timestamp": "2026-03-12T06:45:53.747Z"
+    },
+    {
+      "page": "Properties",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "desktop"
+      },
+      "timestamp": "2026-03-12T06:45:53.747Z"
+    },
+    {
+      "page": "Properties",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "desktop"
+      },
+      "timestamp": "2026-03-12T06:45:53.747Z"
+    },
+    {
+      "page": "Properties",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Form input without label: text",
+      "details": {
+        "viewport": "desktop"
+      },
+      "timestamp": "2026-03-12T06:45:53.747Z"
+    },
+    {
+      "page": "Properties",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Form input without label: select-one",
+      "details": {
+        "viewport": "desktop"
+      },
+      "timestamp": "2026-03-12T06:45:53.747Z"
+    },
+    {
+      "page": "Properties",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Form input without label: email",
+      "details": {
+        "viewport": "desktop"
+      },
+      "timestamp": "2026-03-12T06:45:53.747Z"
+    },
+    {
+      "page": "About",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "desktop"
+      },
+      "timestamp": "2026-03-12T06:45:56.732Z"
+    },
+    {
+      "page": "About",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "desktop"
+      },
+      "timestamp": "2026-03-12T06:45:56.732Z"
+    },
+    {
+      "page": "About",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "desktop"
+      },
+      "timestamp": "2026-03-12T06:45:56.732Z"
+    },
+    {
+      "page": "About",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Form input without label: email",
+      "details": {
+        "viewport": "desktop"
+      },
+      "timestamp": "2026-03-12T06:45:56.732Z"
+    },
+    {
+      "page": "Contact",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "desktop"
+      },
+      "timestamp": "2026-03-12T06:46:02.324Z"
+    },
+    {
+      "page": "Contact",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "desktop"
+      },
+      "timestamp": "2026-03-12T06:46:02.324Z"
+    },
+    {
+      "page": "Contact",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "desktop"
+      },
+      "timestamp": "2026-03-12T06:46:02.324Z"
+    },
+    {
+      "page": "Contact",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Form input without label: email",
+      "details": {
+        "viewport": "desktop"
+      },
+      "timestamp": "2026-03-12T06:46:02.324Z"
+    },
+    {
+      "page": "Services",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "desktop"
+      },
+      "timestamp": "2026-03-12T06:46:05.129Z"
+    },
+    {
+      "page": "Services",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "desktop"
+      },
+      "timestamp": "2026-03-12T06:46:05.129Z"
+    },
+    {
+      "page": "Services",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "desktop"
+      },
+      "timestamp": "2026-03-12T06:46:05.129Z"
+    },
+    {
+      "page": "Services",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Form input without label: email",
+      "details": {
+        "viewport": "desktop"
+      },
+      "timestamp": "2026-03-12T06:46:05.129Z"
+    },
+    {
+      "page": "Blog",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "desktop"
+      },
+      "timestamp": "2026-03-12T06:46:08.232Z"
+    },
+    {
+      "page": "Blog",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "desktop"
+      },
+      "timestamp": "2026-03-12T06:46:08.232Z"
+    },
+    {
+      "page": "Blog",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "desktop"
+      },
+      "timestamp": "2026-03-12T06:46:08.232Z"
+    },
+    {
+      "page": "Blog",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Form input without label: email",
+      "details": {
+        "viewport": "desktop"
+      },
+      "timestamp": "2026-03-12T06:46:08.232Z"
+    },
+    {
+      "page": "Discovered: /post-property",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "desktop"
+      },
+      "timestamp": "2026-03-12T06:46:11.144Z"
+    },
+    {
+      "page": "Discovered: /post-property",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "desktop"
+      },
+      "timestamp": "2026-03-12T06:46:11.144Z"
+    },
+    {
+      "page": "Discovered: /post-property",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "desktop"
+      },
+      "timestamp": "2026-03-12T06:46:11.144Z"
+    },
+    {
+      "page": "Discovered: /post-property",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Form input without label: textarea",
+      "details": {
+        "viewport": "desktop"
+      },
+      "timestamp": "2026-03-12T06:46:11.144Z"
+    },
+    {
+      "page": "Discovered: /post-property",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Form input without label: email",
+      "details": {
+        "viewport": "desktop"
+      },
+      "timestamp": "2026-03-12T06:46:11.144Z"
+    },
+    {
+      "page": "Discovered: /login",
+      "type": "layout",
+      "severity": "warning",
+      "message": "1 elements overflow viewport",
+      "details": {
+        "type": "element-overflow",
+        "message": "1 elements overflow viewport",
+        "elements": [
+          "div.absolute"
+        ],
+        "viewport": "desktop"
+      },
+      "timestamp": "2026-03-12T06:46:14.977Z"
+    },
+    {
+      "page": "Discovered: /login",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "desktop"
+      },
+      "timestamp": "2026-03-12T06:46:15.008Z"
+    },
+    {
+      "page": "Discovered: /login",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "desktop"
+      },
+      "timestamp": "2026-03-12T06:46:15.008Z"
+    },
+    {
+      "page": "Discovered: /login",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "desktop"
+      },
+      "timestamp": "2026-03-12T06:46:15.008Z"
+    },
+    {
+      "page": "Discovered: /login",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Form input without label: email",
+      "details": {
+        "viewport": "desktop"
+      },
+      "timestamp": "2026-03-12T06:46:15.008Z"
+    },
+    {
+      "page": "Discovered: /tools/emi-calculator",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "desktop"
+      },
+      "timestamp": "2026-03-12T06:46:18.985Z"
+    },
+    {
+      "page": "Discovered: /tools/emi-calculator",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "desktop"
+      },
+      "timestamp": "2026-03-12T06:46:18.985Z"
+    },
+    {
+      "page": "Discovered: /tools/emi-calculator",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "desktop"
+      },
+      "timestamp": "2026-03-12T06:46:18.985Z"
+    },
+    {
+      "page": "Discovered: /tools/emi-calculator",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Form input without label: range",
+      "details": {
+        "viewport": "desktop"
+      },
+      "timestamp": "2026-03-12T06:46:18.985Z"
+    },
+    {
+      "page": "Discovered: /tools/emi-calculator",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Form input without label: range",
+      "details": {
+        "viewport": "desktop"
+      },
+      "timestamp": "2026-03-12T06:46:18.985Z"
+    },
+    {
+      "page": "Discovered: /tools/emi-calculator",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Form input without label: range",
+      "details": {
+        "viewport": "desktop"
+      },
+      "timestamp": "2026-03-12T06:46:18.985Z"
+    },
+    {
+      "page": "Discovered: /tools/emi-calculator",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Form input without label: email",
+      "details": {
+        "viewport": "desktop"
+      },
+      "timestamp": "2026-03-12T06:46:18.985Z"
+    },
+    {
+      "page": "Discovered: /tools/area-converter",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "desktop"
+      },
+      "timestamp": "2026-03-12T06:46:21.697Z"
+    },
+    {
+      "page": "Discovered: /tools/area-converter",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "desktop"
+      },
+      "timestamp": "2026-03-12T06:46:21.697Z"
+    },
+    {
+      "page": "Discovered: /tools/area-converter",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "desktop"
+      },
+      "timestamp": "2026-03-12T06:46:21.697Z"
+    },
+    {
+      "page": "Discovered: /tools/area-converter",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "desktop"
+      },
+      "timestamp": "2026-03-12T06:46:21.697Z"
+    },
+    {
+      "page": "Discovered: /tools/area-converter",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Form input without label: select-one",
+      "details": {
+        "viewport": "desktop"
+      },
+      "timestamp": "2026-03-12T06:46:21.697Z"
+    },
+    {
+      "page": "Discovered: /tools/area-converter",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Form input without label: number",
+      "details": {
+        "viewport": "desktop"
+      },
+      "timestamp": "2026-03-12T06:46:21.697Z"
+    },
+    {
+      "page": "Discovered: /tools/area-converter",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Form input without label: select-one",
+      "details": {
+        "viewport": "desktop"
+      },
+      "timestamp": "2026-03-12T06:46:21.697Z"
+    },
+    {
+      "page": "Discovered: /tools/area-converter",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Form input without label: email",
+      "details": {
+        "viewport": "desktop"
+      },
+      "timestamp": "2026-03-12T06:46:21.697Z"
+    },
+    {
+      "page": "Discovered: /compare",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "desktop"
+      },
+      "timestamp": "2026-03-12T06:46:24.566Z"
+    },
+    {
+      "page": "Discovered: /compare",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "desktop"
+      },
+      "timestamp": "2026-03-12T06:46:24.566Z"
+    },
+    {
+      "page": "Discovered: /compare",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "desktop"
+      },
+      "timestamp": "2026-03-12T06:46:24.566Z"
+    },
+    {
+      "page": "Discovered: /compare",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "desktop"
+      },
+      "timestamp": "2026-03-12T06:46:24.566Z"
+    },
+    {
+      "page": "Discovered: /compare",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "desktop"
+      },
+      "timestamp": "2026-03-12T06:46:24.566Z"
+    },
+    {
+      "page": "Discovered: /compare",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Form input without label: email",
+      "details": {
+        "viewport": "desktop"
+      },
+      "timestamp": "2026-03-12T06:46:24.566Z"
+    },
+    {
+      "page": "Discovered: /faq",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "desktop"
+      },
+      "timestamp": "2026-03-12T06:46:27.295Z"
+    },
+    {
+      "page": "Discovered: /faq",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "desktop"
+      },
+      "timestamp": "2026-03-12T06:46:27.295Z"
+    },
+    {
+      "page": "Discovered: /faq",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "desktop"
+      },
+      "timestamp": "2026-03-12T06:46:27.295Z"
+    },
+    {
+      "page": "Discovered: /faq",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Form input without label: text",
+      "details": {
+        "viewport": "desktop"
+      },
+      "timestamp": "2026-03-12T06:46:27.295Z"
+    },
+    {
+      "page": "Discovered: /faq",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Form input without label: email",
+      "details": {
+        "viewport": "desktop"
+      },
+      "timestamp": "2026-03-12T06:46:27.295Z"
+    },
+    {
+      "page": "Discovered: /privacy",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "desktop"
+      },
+      "timestamp": "2026-03-12T06:46:30.470Z"
+    },
+    {
+      "page": "Discovered: /privacy",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "desktop"
+      },
+      "timestamp": "2026-03-12T06:46:30.470Z"
+    },
+    {
+      "page": "Discovered: /privacy",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "desktop"
+      },
+      "timestamp": "2026-03-12T06:46:30.470Z"
+    },
+    {
+      "page": "Discovered: /privacy",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Form input without label: email",
+      "details": {
+        "viewport": "desktop"
+      },
+      "timestamp": "2026-03-12T06:46:30.470Z"
+    },
+    {
+      "page": "Discovered: /terms",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "desktop"
+      },
+      "timestamp": "2026-03-12T06:46:33.372Z"
+    },
+    {
+      "page": "Discovered: /terms",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "desktop"
+      },
+      "timestamp": "2026-03-12T06:46:33.372Z"
+    },
+    {
+      "page": "Discovered: /terms",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "desktop"
+      },
+      "timestamp": "2026-03-12T06:46:33.372Z"
+    },
+    {
+      "page": "Discovered: /terms",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Form input without label: email",
+      "details": {
+        "viewport": "desktop"
+      },
+      "timestamp": "2026-03-12T06:46:33.372Z"
+    },
+    {
+      "page": "Homepage",
+      "type": "layout",
+      "severity": "warning",
+      "message": "8 elements overflow viewport",
+      "details": {
+        "type": "element-overflow",
+        "message": "8 elements overflow viewport",
+        "elements": [
+          "button.absolute",
+          "svg.[object",
+          "path.[object",
+          "div.shrink-0",
+          "div.shrink-0",
+          "div.shrink-0",
+          "div.shrink-0",
+          "div.shrink-0"
+        ],
+        "viewport": "tablet"
+      },
+      "timestamp": "2026-03-12T06:46:38.569Z"
+    },
+    {
+      "page": "Homepage",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "tablet"
+      },
+      "timestamp": "2026-03-12T06:46:38.587Z"
+    },
+    {
+      "page": "Homepage",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "tablet"
+      },
+      "timestamp": "2026-03-12T06:46:38.587Z"
+    },
+    {
+      "page": "Homepage",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "tablet"
+      },
+      "timestamp": "2026-03-12T06:46:38.587Z"
+    },
+    {
+      "page": "Homepage",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "tablet"
+      },
+      "timestamp": "2026-03-12T06:46:38.587Z"
+    },
+    {
+      "page": "Homepage",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "tablet"
+      },
+      "timestamp": "2026-03-12T06:46:38.587Z"
+    },
+    {
+      "page": "Homepage",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "tablet"
+      },
+      "timestamp": "2026-03-12T06:46:38.587Z"
+    },
+    {
+      "page": "Homepage",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "tablet"
+      },
+      "timestamp": "2026-03-12T06:46:38.587Z"
+    },
+    {
+      "page": "Homepage",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "tablet"
+      },
+      "timestamp": "2026-03-12T06:46:38.587Z"
+    },
+    {
+      "page": "Homepage",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "tablet"
+      },
+      "timestamp": "2026-03-12T06:46:38.587Z"
+    },
+    {
+      "page": "Homepage",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "tablet"
+      },
+      "timestamp": "2026-03-12T06:46:38.587Z"
+    },
+    {
+      "page": "Homepage",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "tablet"
+      },
+      "timestamp": "2026-03-12T06:46:38.587Z"
+    },
+    {
+      "page": "Homepage",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Form input without label: email",
+      "details": {
+        "viewport": "tablet"
+      },
+      "timestamp": "2026-03-12T06:46:38.587Z"
+    },
+    {
+      "page": "Properties",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "tablet"
+      },
+      "timestamp": "2026-03-12T06:46:46.627Z"
+    },
+    {
+      "page": "Properties",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "tablet"
+      },
+      "timestamp": "2026-03-12T06:46:46.627Z"
+    },
+    {
+      "page": "Properties",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "tablet"
+      },
+      "timestamp": "2026-03-12T06:46:46.627Z"
+    },
+    {
+      "page": "Properties",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "tablet"
+      },
+      "timestamp": "2026-03-12T06:46:46.627Z"
+    },
+    {
+      "page": "Properties",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "tablet"
+      },
+      "timestamp": "2026-03-12T06:46:46.627Z"
+    },
+    {
+      "page": "Properties",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Form input without label: text",
+      "details": {
+        "viewport": "tablet"
+      },
+      "timestamp": "2026-03-12T06:46:46.627Z"
+    },
+    {
+      "page": "Properties",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Form input without label: select-one",
+      "details": {
+        "viewport": "tablet"
+      },
+      "timestamp": "2026-03-12T06:46:46.627Z"
+    },
+    {
+      "page": "Properties",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Form input without label: email",
+      "details": {
+        "viewport": "tablet"
+      },
+      "timestamp": "2026-03-12T06:46:46.627Z"
+    },
+    {
+      "page": "About",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "tablet"
+      },
+      "timestamp": "2026-03-12T06:46:49.101Z"
+    },
+    {
+      "page": "About",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "tablet"
+      },
+      "timestamp": "2026-03-12T06:46:49.101Z"
+    },
+    {
+      "page": "About",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "tablet"
+      },
+      "timestamp": "2026-03-12T06:46:49.101Z"
+    },
+    {
+      "page": "About",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Form input without label: email",
+      "details": {
+        "viewport": "tablet"
+      },
+      "timestamp": "2026-03-12T06:46:49.101Z"
+    },
+    {
+      "page": "Contact",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "tablet"
+      },
+      "timestamp": "2026-03-12T06:46:52.232Z"
+    },
+    {
+      "page": "Contact",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "tablet"
+      },
+      "timestamp": "2026-03-12T06:46:52.232Z"
+    },
+    {
+      "page": "Contact",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "tablet"
+      },
+      "timestamp": "2026-03-12T06:46:52.232Z"
+    },
+    {
+      "page": "Contact",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Form input without label: email",
+      "details": {
+        "viewport": "tablet"
+      },
+      "timestamp": "2026-03-12T06:46:52.232Z"
+    },
+    {
+      "page": "Services",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "tablet"
+      },
+      "timestamp": "2026-03-12T06:46:54.504Z"
+    },
+    {
+      "page": "Services",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "tablet"
+      },
+      "timestamp": "2026-03-12T06:46:54.504Z"
+    },
+    {
+      "page": "Services",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "tablet"
+      },
+      "timestamp": "2026-03-12T06:46:54.504Z"
+    },
+    {
+      "page": "Services",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Form input without label: email",
+      "details": {
+        "viewport": "tablet"
+      },
+      "timestamp": "2026-03-12T06:46:54.504Z"
+    },
+    {
+      "page": "Blog",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "tablet"
+      },
+      "timestamp": "2026-03-12T06:46:56.961Z"
+    },
+    {
+      "page": "Blog",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "tablet"
+      },
+      "timestamp": "2026-03-12T06:46:56.961Z"
+    },
+    {
+      "page": "Blog",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "tablet"
+      },
+      "timestamp": "2026-03-12T06:46:56.961Z"
+    },
+    {
+      "page": "Blog",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Form input without label: email",
+      "details": {
+        "viewport": "tablet"
+      },
+      "timestamp": "2026-03-12T06:46:56.961Z"
+    },
+    {
+      "page": "Discovered: /post-property",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "tablet"
+      },
+      "timestamp": "2026-03-12T06:46:59.446Z"
+    },
+    {
+      "page": "Discovered: /post-property",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "tablet"
+      },
+      "timestamp": "2026-03-12T06:46:59.446Z"
+    },
+    {
+      "page": "Discovered: /post-property",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "tablet"
+      },
+      "timestamp": "2026-03-12T06:46:59.446Z"
+    },
+    {
+      "page": "Discovered: /post-property",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Form input without label: textarea",
+      "details": {
+        "viewport": "tablet"
+      },
+      "timestamp": "2026-03-12T06:46:59.446Z"
+    },
+    {
+      "page": "Discovered: /post-property",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Form input without label: email",
+      "details": {
+        "viewport": "tablet"
+      },
+      "timestamp": "2026-03-12T06:46:59.446Z"
+    },
+    {
+      "page": "Discovered: /login",
+      "type": "layout",
+      "severity": "warning",
+      "message": "1 elements overflow viewport",
+      "details": {
+        "type": "element-overflow",
+        "message": "1 elements overflow viewport",
+        "elements": [
+          "div.absolute"
+        ],
+        "viewport": "tablet"
+      },
+      "timestamp": "2026-03-12T06:47:02.162Z"
+    },
+    {
+      "page": "Discovered: /login",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "tablet"
+      },
+      "timestamp": "2026-03-12T06:47:02.169Z"
+    },
+    {
+      "page": "Discovered: /login",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "tablet"
+      },
+      "timestamp": "2026-03-12T06:47:02.169Z"
+    },
+    {
+      "page": "Discovered: /login",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "tablet"
+      },
+      "timestamp": "2026-03-12T06:47:02.169Z"
+    },
+    {
+      "page": "Discovered: /login",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Form input without label: email",
+      "details": {
+        "viewport": "tablet"
+      },
+      "timestamp": "2026-03-12T06:47:02.169Z"
+    },
+    {
+      "page": "Discovered: /tools/emi-calculator",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "tablet"
+      },
+      "timestamp": "2026-03-12T06:47:05.328Z"
+    },
+    {
+      "page": "Discovered: /tools/emi-calculator",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "tablet"
+      },
+      "timestamp": "2026-03-12T06:47:05.328Z"
+    },
+    {
+      "page": "Discovered: /tools/emi-calculator",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "tablet"
+      },
+      "timestamp": "2026-03-12T06:47:05.328Z"
+    },
+    {
+      "page": "Discovered: /tools/emi-calculator",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Form input without label: range",
+      "details": {
+        "viewport": "tablet"
+      },
+      "timestamp": "2026-03-12T06:47:05.328Z"
+    },
+    {
+      "page": "Discovered: /tools/emi-calculator",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Form input without label: range",
+      "details": {
+        "viewport": "tablet"
+      },
+      "timestamp": "2026-03-12T06:47:05.328Z"
+    },
+    {
+      "page": "Discovered: /tools/emi-calculator",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Form input without label: range",
+      "details": {
+        "viewport": "tablet"
+      },
+      "timestamp": "2026-03-12T06:47:05.328Z"
+    },
+    {
+      "page": "Discovered: /tools/emi-calculator",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Form input without label: email",
+      "details": {
+        "viewport": "tablet"
+      },
+      "timestamp": "2026-03-12T06:47:05.328Z"
+    },
+    {
+      "page": "Discovered: /tools/area-converter",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "tablet"
+      },
+      "timestamp": "2026-03-12T06:47:07.472Z"
+    },
+    {
+      "page": "Discovered: /tools/area-converter",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "tablet"
+      },
+      "timestamp": "2026-03-12T06:47:07.472Z"
+    },
+    {
+      "page": "Discovered: /tools/area-converter",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "tablet"
+      },
+      "timestamp": "2026-03-12T06:47:07.472Z"
+    },
+    {
+      "page": "Discovered: /tools/area-converter",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "tablet"
+      },
+      "timestamp": "2026-03-12T06:47:07.472Z"
+    },
+    {
+      "page": "Discovered: /tools/area-converter",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Form input without label: select-one",
+      "details": {
+        "viewport": "tablet"
+      },
+      "timestamp": "2026-03-12T06:47:07.472Z"
+    },
+    {
+      "page": "Discovered: /tools/area-converter",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Form input without label: number",
+      "details": {
+        "viewport": "tablet"
+      },
+      "timestamp": "2026-03-12T06:47:07.472Z"
+    },
+    {
+      "page": "Discovered: /tools/area-converter",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Form input without label: select-one",
+      "details": {
+        "viewport": "tablet"
+      },
+      "timestamp": "2026-03-12T06:47:07.472Z"
+    },
+    {
+      "page": "Discovered: /tools/area-converter",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Form input without label: email",
+      "details": {
+        "viewport": "tablet"
+      },
+      "timestamp": "2026-03-12T06:47:07.472Z"
+    },
+    {
+      "page": "Discovered: /compare",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "tablet"
+      },
+      "timestamp": "2026-03-12T06:47:09.789Z"
+    },
+    {
+      "page": "Discovered: /compare",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "tablet"
+      },
+      "timestamp": "2026-03-12T06:47:09.789Z"
+    },
+    {
+      "page": "Discovered: /compare",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "tablet"
+      },
+      "timestamp": "2026-03-12T06:47:09.789Z"
+    },
+    {
+      "page": "Discovered: /compare",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "tablet"
+      },
+      "timestamp": "2026-03-12T06:47:09.789Z"
+    },
+    {
+      "page": "Discovered: /compare",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "tablet"
+      },
+      "timestamp": "2026-03-12T06:47:09.789Z"
+    },
+    {
+      "page": "Discovered: /compare",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Form input without label: email",
+      "details": {
+        "viewport": "tablet"
+      },
+      "timestamp": "2026-03-12T06:47:09.789Z"
+    },
+    {
+      "page": "Discovered: /faq",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "tablet"
+      },
+      "timestamp": "2026-03-12T06:47:12.038Z"
+    },
+    {
+      "page": "Discovered: /faq",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "tablet"
+      },
+      "timestamp": "2026-03-12T06:47:12.038Z"
+    },
+    {
+      "page": "Discovered: /faq",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "tablet"
+      },
+      "timestamp": "2026-03-12T06:47:12.038Z"
+    },
+    {
+      "page": "Discovered: /faq",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Form input without label: text",
+      "details": {
+        "viewport": "tablet"
+      },
+      "timestamp": "2026-03-12T06:47:12.038Z"
+    },
+    {
+      "page": "Discovered: /faq",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Form input without label: email",
+      "details": {
+        "viewport": "tablet"
+      },
+      "timestamp": "2026-03-12T06:47:12.038Z"
+    },
+    {
+      "page": "Discovered: /privacy",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "tablet"
+      },
+      "timestamp": "2026-03-12T06:47:14.407Z"
+    },
+    {
+      "page": "Discovered: /privacy",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "tablet"
+      },
+      "timestamp": "2026-03-12T06:47:14.407Z"
+    },
+    {
+      "page": "Discovered: /privacy",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "tablet"
+      },
+      "timestamp": "2026-03-12T06:47:14.407Z"
+    },
+    {
+      "page": "Discovered: /privacy",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Form input without label: email",
+      "details": {
+        "viewport": "tablet"
+      },
+      "timestamp": "2026-03-12T06:47:14.407Z"
+    },
+    {
+      "page": "Discovered: /terms",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "tablet"
+      },
+      "timestamp": "2026-03-12T06:47:16.736Z"
+    },
+    {
+      "page": "Discovered: /terms",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "tablet"
+      },
+      "timestamp": "2026-03-12T06:47:16.736Z"
+    },
+    {
+      "page": "Discovered: /terms",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "tablet"
+      },
+      "timestamp": "2026-03-12T06:47:16.736Z"
+    },
+    {
+      "page": "Discovered: /terms",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Form input without label: email",
+      "details": {
+        "viewport": "tablet"
+      },
+      "timestamp": "2026-03-12T06:47:16.736Z"
+    },
+    {
+      "page": "Homepage",
+      "type": "layout",
+      "severity": "warning",
+      "message": "10 elements overflow viewport",
+      "details": {
+        "type": "element-overflow",
+        "message": "10 elements overflow viewport",
+        "elements": [
+          "div.absolute",
+          "div.absolute",
+          "div.shrink-0",
+          "div.shrink-0",
+          "div.shrink-0",
+          "div.shrink-0",
+          "div.shrink-0",
+          "div.shrink-0",
+          "div.shrink-0",
+          "div.shrink-0"
+        ],
+        "viewport": "mobile"
+      },
+      "timestamp": "2026-03-12T06:47:21.074Z"
+    },
+    {
+      "page": "Homepage",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "mobile"
+      },
+      "timestamp": "2026-03-12T06:47:21.082Z"
+    },
+    {
+      "page": "Homepage",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "mobile"
+      },
+      "timestamp": "2026-03-12T06:47:21.082Z"
+    },
+    {
+      "page": "Homepage",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "mobile"
+      },
+      "timestamp": "2026-03-12T06:47:21.082Z"
+    },
+    {
+      "page": "Homepage",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "mobile"
+      },
+      "timestamp": "2026-03-12T06:47:21.082Z"
+    },
+    {
+      "page": "Homepage",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "mobile"
+      },
+      "timestamp": "2026-03-12T06:47:21.082Z"
+    },
+    {
+      "page": "Homepage",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "mobile"
+      },
+      "timestamp": "2026-03-12T06:47:21.082Z"
+    },
+    {
+      "page": "Homepage",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "mobile"
+      },
+      "timestamp": "2026-03-12T06:47:21.082Z"
+    },
+    {
+      "page": "Homepage",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "mobile"
+      },
+      "timestamp": "2026-03-12T06:47:21.082Z"
+    },
+    {
+      "page": "Homepage",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "mobile"
+      },
+      "timestamp": "2026-03-12T06:47:21.082Z"
+    },
+    {
+      "page": "Homepage",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "mobile"
+      },
+      "timestamp": "2026-03-12T06:47:21.082Z"
+    },
+    {
+      "page": "Homepage",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "mobile"
+      },
+      "timestamp": "2026-03-12T06:47:21.082Z"
+    },
+    {
+      "page": "Homepage",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Form input without label: email",
+      "details": {
+        "viewport": "mobile"
+      },
+      "timestamp": "2026-03-12T06:47:21.082Z"
+    },
+    {
+      "page": "Properties",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "mobile"
+      },
+      "timestamp": "2026-03-12T06:47:34.348Z"
+    },
+    {
+      "page": "Properties",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "mobile"
+      },
+      "timestamp": "2026-03-12T06:47:34.348Z"
+    },
+    {
+      "page": "Properties",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "mobile"
+      },
+      "timestamp": "2026-03-12T06:47:34.348Z"
+    },
+    {
+      "page": "Properties",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "mobile"
+      },
+      "timestamp": "2026-03-12T06:47:34.348Z"
+    },
+    {
+      "page": "Properties",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "mobile"
+      },
+      "timestamp": "2026-03-12T06:47:34.348Z"
+    },
+    {
+      "page": "Properties",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Form input without label: text",
+      "details": {
+        "viewport": "mobile"
+      },
+      "timestamp": "2026-03-12T06:47:34.348Z"
+    },
+    {
+      "page": "Properties",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Form input without label: select-one",
+      "details": {
+        "viewport": "mobile"
+      },
+      "timestamp": "2026-03-12T06:47:34.348Z"
+    },
+    {
+      "page": "Properties",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Form input without label: email",
+      "details": {
+        "viewport": "mobile"
+      },
+      "timestamp": "2026-03-12T06:47:34.348Z"
+    },
+    {
+      "page": "About",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "mobile"
+      },
+      "timestamp": "2026-03-12T06:47:36.874Z"
+    },
+    {
+      "page": "About",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "mobile"
+      },
+      "timestamp": "2026-03-12T06:47:36.874Z"
+    },
+    {
+      "page": "About",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "mobile"
+      },
+      "timestamp": "2026-03-12T06:47:36.874Z"
+    },
+    {
+      "page": "About",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Form input without label: email",
+      "details": {
+        "viewport": "mobile"
+      },
+      "timestamp": "2026-03-12T06:47:36.874Z"
+    },
+    {
+      "page": "Contact",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "mobile"
+      },
+      "timestamp": "2026-03-12T06:47:40.529Z"
+    },
+    {
+      "page": "Contact",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "mobile"
+      },
+      "timestamp": "2026-03-12T06:47:40.529Z"
+    },
+    {
+      "page": "Contact",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "mobile"
+      },
+      "timestamp": "2026-03-12T06:47:40.529Z"
+    },
+    {
+      "page": "Contact",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Form input without label: email",
+      "details": {
+        "viewport": "mobile"
+      },
+      "timestamp": "2026-03-12T06:47:40.529Z"
+    },
+    {
+      "page": "Services",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "mobile"
+      },
+      "timestamp": "2026-03-12T06:47:42.655Z"
+    },
+    {
+      "page": "Services",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "mobile"
+      },
+      "timestamp": "2026-03-12T06:47:42.655Z"
+    },
+    {
+      "page": "Services",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "mobile"
+      },
+      "timestamp": "2026-03-12T06:47:42.655Z"
+    },
+    {
+      "page": "Services",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Form input without label: email",
+      "details": {
+        "viewport": "mobile"
+      },
+      "timestamp": "2026-03-12T06:47:42.655Z"
+    },
+    {
+      "page": "Blog",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "mobile"
+      },
+      "timestamp": "2026-03-12T06:47:44.940Z"
+    },
+    {
+      "page": "Blog",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "mobile"
+      },
+      "timestamp": "2026-03-12T06:47:44.940Z"
+    },
+    {
+      "page": "Blog",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "mobile"
+      },
+      "timestamp": "2026-03-12T06:47:44.940Z"
+    },
+    {
+      "page": "Blog",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Form input without label: email",
+      "details": {
+        "viewport": "mobile"
+      },
+      "timestamp": "2026-03-12T06:47:44.940Z"
+    },
+    {
+      "page": "Discovered: /post-property",
+      "type": "layout",
+      "severity": "warning",
+      "message": "1 elements overflow viewport",
+      "details": {
+        "type": "element-overflow",
+        "message": "1 elements overflow viewport",
+        "elements": [
+          "div.absolute"
+        ],
+        "viewport": "mobile"
+      },
+      "timestamp": "2026-03-12T06:47:47.246Z"
+    },
+    {
+      "page": "Discovered: /post-property",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "mobile"
+      },
+      "timestamp": "2026-03-12T06:47:47.251Z"
+    },
+    {
+      "page": "Discovered: /post-property",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "mobile"
+      },
+      "timestamp": "2026-03-12T06:47:47.251Z"
+    },
+    {
+      "page": "Discovered: /post-property",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "mobile"
+      },
+      "timestamp": "2026-03-12T06:47:47.251Z"
+    },
+    {
+      "page": "Discovered: /post-property",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Form input without label: textarea",
+      "details": {
+        "viewport": "mobile"
+      },
+      "timestamp": "2026-03-12T06:47:47.251Z"
+    },
+    {
+      "page": "Discovered: /post-property",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Form input without label: email",
+      "details": {
+        "viewport": "mobile"
+      },
+      "timestamp": "2026-03-12T06:47:47.251Z"
+    },
+    {
+      "page": "Discovered: /login",
+      "type": "layout",
+      "severity": "warning",
+      "message": "2 elements overflow viewport",
+      "details": {
+        "type": "element-overflow",
+        "message": "2 elements overflow viewport",
+        "elements": [
+          "div.absolute",
+          "div.absolute"
+        ],
+        "viewport": "mobile"
+      },
+      "timestamp": "2026-03-12T06:47:49.963Z"
+    },
+    {
+      "page": "Discovered: /login",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "mobile"
+      },
+      "timestamp": "2026-03-12T06:47:49.970Z"
+    },
+    {
+      "page": "Discovered: /login",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "mobile"
+      },
+      "timestamp": "2026-03-12T06:47:49.970Z"
+    },
+    {
+      "page": "Discovered: /login",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "mobile"
+      },
+      "timestamp": "2026-03-12T06:47:49.970Z"
+    },
+    {
+      "page": "Discovered: /login",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Form input without label: email",
+      "details": {
+        "viewport": "mobile"
+      },
+      "timestamp": "2026-03-12T06:47:49.970Z"
+    },
+    {
+      "page": "Discovered: /faq",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "mobile"
+      },
+      "timestamp": "2026-03-12T06:47:52.781Z"
+    },
+    {
+      "page": "Discovered: /faq",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "mobile"
+      },
+      "timestamp": "2026-03-12T06:47:52.781Z"
+    },
+    {
+      "page": "Discovered: /faq",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "mobile"
+      },
+      "timestamp": "2026-03-12T06:47:52.781Z"
+    },
+    {
+      "page": "Discovered: /faq",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Form input without label: text",
+      "details": {
+        "viewport": "mobile"
+      },
+      "timestamp": "2026-03-12T06:47:52.781Z"
+    },
+    {
+      "page": "Discovered: /faq",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Form input without label: email",
+      "details": {
+        "viewport": "mobile"
+      },
+      "timestamp": "2026-03-12T06:47:52.781Z"
+    },
+    {
+      "page": "Discovered: /tools/emi-calculator",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "mobile"
+      },
+      "timestamp": "2026-03-12T06:47:54.984Z"
+    },
+    {
+      "page": "Discovered: /tools/emi-calculator",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "mobile"
+      },
+      "timestamp": "2026-03-12T06:47:54.984Z"
+    },
+    {
+      "page": "Discovered: /tools/emi-calculator",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "mobile"
+      },
+      "timestamp": "2026-03-12T06:47:54.984Z"
+    },
+    {
+      "page": "Discovered: /tools/emi-calculator",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Form input without label: range",
+      "details": {
+        "viewport": "mobile"
+      },
+      "timestamp": "2026-03-12T06:47:54.984Z"
+    },
+    {
+      "page": "Discovered: /tools/emi-calculator",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Form input without label: range",
+      "details": {
+        "viewport": "mobile"
+      },
+      "timestamp": "2026-03-12T06:47:54.984Z"
+    },
+    {
+      "page": "Discovered: /tools/emi-calculator",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Form input without label: range",
+      "details": {
+        "viewport": "mobile"
+      },
+      "timestamp": "2026-03-12T06:47:54.984Z"
+    },
+    {
+      "page": "Discovered: /tools/emi-calculator",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Form input without label: email",
+      "details": {
+        "viewport": "mobile"
+      },
+      "timestamp": "2026-03-12T06:47:54.984Z"
+    },
+    {
+      "page": "Discovered: /tools/area-converter",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "mobile"
+      },
+      "timestamp": "2026-03-12T06:47:57.119Z"
+    },
+    {
+      "page": "Discovered: /tools/area-converter",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "mobile"
+      },
+      "timestamp": "2026-03-12T06:47:57.119Z"
+    },
+    {
+      "page": "Discovered: /tools/area-converter",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "mobile"
+      },
+      "timestamp": "2026-03-12T06:47:57.119Z"
+    },
+    {
+      "page": "Discovered: /tools/area-converter",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "mobile"
+      },
+      "timestamp": "2026-03-12T06:47:57.119Z"
+    },
+    {
+      "page": "Discovered: /tools/area-converter",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Form input without label: select-one",
+      "details": {
+        "viewport": "mobile"
+      },
+      "timestamp": "2026-03-12T06:47:57.119Z"
+    },
+    {
+      "page": "Discovered: /tools/area-converter",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Form input without label: number",
+      "details": {
+        "viewport": "mobile"
+      },
+      "timestamp": "2026-03-12T06:47:57.119Z"
+    },
+    {
+      "page": "Discovered: /tools/area-converter",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Form input without label: select-one",
+      "details": {
+        "viewport": "mobile"
+      },
+      "timestamp": "2026-03-12T06:47:57.119Z"
+    },
+    {
+      "page": "Discovered: /tools/area-converter",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Form input without label: email",
+      "details": {
+        "viewport": "mobile"
+      },
+      "timestamp": "2026-03-12T06:47:57.119Z"
+    },
+    {
+      "page": "Discovered: /privacy",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "mobile"
+      },
+      "timestamp": "2026-03-12T06:47:59.330Z"
+    },
+    {
+      "page": "Discovered: /privacy",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "mobile"
+      },
+      "timestamp": "2026-03-12T06:47:59.330Z"
+    },
+    {
+      "page": "Discovered: /privacy",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "mobile"
+      },
+      "timestamp": "2026-03-12T06:47:59.330Z"
+    },
+    {
+      "page": "Discovered: /privacy",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Form input without label: email",
+      "details": {
+        "viewport": "mobile"
+      },
+      "timestamp": "2026-03-12T06:47:59.330Z"
+    },
+    {
+      "page": "Discovered: /terms",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "mobile"
+      },
+      "timestamp": "2026-03-12T06:48:01.636Z"
+    },
+    {
+      "page": "Discovered: /terms",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "mobile"
+      },
+      "timestamp": "2026-03-12T06:48:01.636Z"
+    },
+    {
+      "page": "Discovered: /terms",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "mobile"
+      },
+      "timestamp": "2026-03-12T06:48:01.636Z"
+    },
+    {
+      "page": "Discovered: /terms",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Form input without label: email",
+      "details": {
+        "viewport": "mobile"
+      },
+      "timestamp": "2026-03-12T06:48:01.636Z"
+    },
+    {
+      "page": "Discovered: /compare",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "mobile"
+      },
+      "timestamp": "2026-03-12T06:48:04.180Z"
+    },
+    {
+      "page": "Discovered: /compare",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "mobile"
+      },
+      "timestamp": "2026-03-12T06:48:04.180Z"
+    },
+    {
+      "page": "Discovered: /compare",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "mobile"
+      },
+      "timestamp": "2026-03-12T06:48:04.180Z"
+    },
+    {
+      "page": "Discovered: /compare",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "mobile"
+      },
+      "timestamp": "2026-03-12T06:48:04.180Z"
+    },
+    {
+      "page": "Discovered: /compare",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "mobile"
+      },
+      "timestamp": "2026-03-12T06:48:04.180Z"
+    },
+    {
+      "page": "Discovered: /compare",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Form input without label: email",
+      "details": {
+        "viewport": "mobile"
+      },
+      "timestamp": "2026-03-12T06:48:04.180Z"
+    }
+  ],
+  "consoleErrors": [],
+  "networkErrors": [
+    {
+      "url": "https://www.google-analytics.com/g/collect?v=2&tid=G-WJF3Y3SXM3&gtm=45je63a1v9243687425za200zd9243687425&_p=1773297940326&gcd=13l3l3l3l1l1&npa=0&dma=0&cid=720645983.1773297941&ul=en-us&sr=1920x1080&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uamb=0&uam=&uap=Windows&uapv=10.0.0&uaw=0&are=1&frm=0&pscdl=noapi&_s=1&tag_exp=103116026~103200004~115616985~115938466~115938468~116024733~117484252&sid=1773297940&sct=1&seg=0&dl=https%3A%2F%2Fwww.realtypandit.in%2F&dt=Realty%20Pandit%20-%20Find%20Your%20Dream%20Property&en=page_view&_fv=1&_nsi=1&_ss=1&_ee=1&tfd=600",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "fetch",
+      "pageUrl": "https://www.realtypandit.in/",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.google-analytics.com/g/collect?v=2&tid=G-WJF3Y3SXM3&gtm=45je63a1v9243687425za200zd9243687425&_p=1773297940326&gcd=13l3l3l3l1l1&npa=0&dma=0&cid=720645983.1773297941&ul=en-us&sr=1920x1080&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uamb=0&uam=&uap=Windows&uapv=10.0.0&uaw=0&are=1&frm=0&pscdl=noapi&_eu=AAAAAAQ&_s=2&tag_exp=103116026~103200004~115616985~115938466~115938468~116024733~117484252&sid=1773297940&sct=1&seg=0&dl=https%3A%2F%2Fwww.realtypandit.in%2F&dt=Realty%20Pandit%20-%20Find%20Your%20Dream%20Property&en=user_engagement&_et=4164&tfd=4770",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "fetch",
+      "pageUrl": "https://www.realtypandit.in/",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.realtypandit.in/properties/05783827-b667-4e9e-83e4-99e2b4d076e0?_rsc=k355n",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "fetch",
+      "pageUrl": "https://www.realtypandit.in/properties",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.google-analytics.com/g/collect?v=2&tid=G-WJF3Y3SXM3&gtm=45je63a1v9243687425za200zd9243687425&_p=1773297945015&gcd=13l3l3l3l1l1&npa=0&dma=0&cid=720645983.1773297941&ul=en-us&sr=1920x1080&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uamb=0&uam=&uap=Windows&uapv=10.0.0&uaw=0&are=1&frm=0&pscdl=noapi&_eu=AAAAAAQ&_s=1&tag_exp=103116026~103200004~115938465~115938468~116024733~117484252&sid=1773297940&sct=1&seg=1&dl=https%3A%2F%2Fwww.realtypandit.in%2Fproperties&dt=Realty%20Pandit%20-%20Find%20Your%20Dream%20Property&en=page_view&_ee=1&tfd=5300",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "fetch",
+      "pageUrl": "https://www.realtypandit.in/properties",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.google-analytics.com/g/collect?v=2&tid=G-WJF3Y3SXM3&gtm=45je63a1v9243687425za200zd9243687425&_p=1773297945015&gcd=13l3l3l3l1l1&npa=0&dma=0&cid=720645983.1773297941&ul=en-us&sr=1920x1080&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uamb=0&uam=&uap=Windows&uapv=10.0.0&uaw=0&are=1&frm=0&pscdl=noapi&_eu=AAAAAAQ&_s=2&tag_exp=103116026~103200004~115938465~115938468~116024733~117484252&sid=1773297940&sct=1&seg=1&dl=https%3A%2F%2Fwww.realtypandit.in%2Fproperties&dt=Realty%20Pandit%20-%20Find%20Your%20Dream%20Property&en=user_engagement&_et=9258&tfd=9561",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "fetch",
+      "pageUrl": "https://www.realtypandit.in/properties",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.google-analytics.com/g/collect?v=2&tid=G-WJF3Y3SXM3&gtm=45je63a1v9243687425za200zd9243687425&_p=1773297954477&gcd=13l3l3l3l1l1&npa=0&dma=0&cid=720645983.1773297941&ul=en-us&sr=1920x1080&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uamb=0&uam=&uap=Windows&uapv=10.0.0&uaw=0&are=1&frm=0&pscdl=noapi&_eu=AAAAAAQ&tag_exp=103116026~103200004~115938465~115938469~116024733~117484252~117625641&sid=1773297940&sct=1&seg=1&dl=https%3A%2F%2Fwww.realtypandit.in%2Fabout&dt=Realty%20Pandit%20-%20Find%20Your%20Dream%20Property&_s=1&tfd=3943",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "fetch",
+      "pageUrl": "https://www.realtypandit.in/about",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.google-analytics.com/g/collect?v=2&tid=G-WJF3Y3SXM3&gtm=45je63a1v9243687425za200zd9243687425&_p=1773297958263&gcd=13l3l3l3l1l1&npa=0&dma=0&cid=720645983.1773297941&ul=en-us&sr=1920x1080&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uamb=0&uam=&uap=Windows&uapv=10.0.0&uaw=0&are=1&frm=0&pscdl=noapi&_eu=AAAAAAQ&tag_exp=103116026~103200004~115938465~115938468~116024733~117484252~117625642&sid=1773297940&sct=1&seg=1&dl=https%3A%2F%2Fwww.realtypandit.in%2Fcontact&dt=Realty%20Pandit%20-%20Find%20Your%20Dream%20Property&_s=1&tfd=5076",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "fetch",
+      "pageUrl": "https://www.realtypandit.in/contact",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.google-analytics.com/g/collect?v=2&tid=G-WJF3Y3SXM3&gtm=45je63a1v9243687425za200zd9243687425&_p=1773297962978&gcd=13l3l3l3l1l1&npa=0&dma=0&cid=720645983.1773297941&ul=en-us&sr=1920x1080&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uamb=0&uam=&uap=Windows&uapv=10.0.0&uaw=0&are=1&frm=0&pscdl=noapi&_eu=AAAAAAQ&tag_exp=103116026~103200004~115938465~115938469~116024733~117484252&sid=1773297940&sct=1&seg=1&dl=https%3A%2F%2Fwww.realtypandit.in%2Fservices&dt=Realty%20Pandit%20-%20Find%20Your%20Dream%20Property&_s=1&tfd=2876",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "fetch",
+      "pageUrl": "https://www.realtypandit.in/services",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.google-analytics.com/g/collect?v=2&tid=G-WJF3Y3SXM3&gtm=45je63a1v9243687425za200zd9243687425&_p=1773297965778&gcd=13l3l3l3l1l1&npa=0&dma=0&cid=720645983.1773297941&ul=en-us&sr=1920x1080&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uamb=0&uam=&uap=Windows&uapv=10.0.0&uaw=0&are=1&frm=0&pscdl=noapi&_eu=AAAAAAQ&tag_exp=103116026~103200004~115938466~115938468~116024733~117484252~117625641&sid=1773297940&sct=1&seg=1&dl=https%3A%2F%2Fwww.realtypandit.in%2Fblog&dt=Realty%20Pandit%20-%20Find%20Your%20Dream%20Property&_s=1&tfd=3296",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "fetch",
+      "pageUrl": "https://www.realtypandit.in/blog",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.google-analytics.com/g/collect?v=2&tid=G-WJF3Y3SXM3&gtm=45je63a1v9243687425za200zd9243687425&_p=1773297969000&gcd=13l3l3l3l1l1&npa=0&dma=0&cid=720645983.1773297941&ul=en-us&sr=1920x1080&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uamb=0&uam=&uap=Windows&uapv=10.0.0&uaw=0&are=1&frm=0&pscdl=noapi&_eu=AAAAAAQ&tag_exp=103116026~103200004~115938465~115938469~116024733~117484252&sid=1773297940&sct=1&seg=1&dl=https%3A%2F%2Fwww.realtypandit.in%2Fpost-property&dt=Realty%20Pandit%20-%20Find%20Your%20Dream%20Property&_s=1&tfd=2715",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "fetch",
+      "pageUrl": "https://www.realtypandit.in/post-property",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.google-analytics.com/g/collect?v=2&tid=G-WJF3Y3SXM3&gtm=45je63a1v9243687425za200zd9243687425&_p=1773297971643&gcd=13l3l3l3l1l1&npa=0&dma=0&cid=720645983.1773297941&ul=en-us&sr=1920x1080&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uamb=0&uam=&uap=Windows&uapv=10.0.0&uaw=0&are=1&frm=0&pscdl=noapi&_eu=AAAAAAQ&tag_exp=103116026~103200004~115938465~115938469~116024733~117484252&sid=1773297940&sct=1&seg=1&dl=https%3A%2F%2Fwww.realtypandit.in%2Flogin&dt=Realty%20Pandit%20-%20Find%20Your%20Dream%20Property&_s=1&tfd=5166",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "fetch",
+      "pageUrl": "https://www.realtypandit.in/login",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.google-analytics.com/g/collect?v=2&tid=G-WJF3Y3SXM3&gtm=45je63a1v9243687425za200zd9243687425&_p=1773297976784&gcd=13l3l3l3l1l1&npa=0&dma=0&cid=720645983.1773297941&ul=en-us&sr=1920x1080&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uamb=0&uam=&uap=Windows&uapv=10.0.0&uaw=0&are=1&frm=0&pscdl=noapi&_eu=AAAAAAQ&tag_exp=103116026~103200004~115616986~115938465~115938468~116024733~117484252~117851835&sid=1773297940&sct=1&seg=1&dl=https%3A%2F%2Fwww.realtypandit.in%2Ftools%2Femi-calculator&dt=Realty%20Pandit%20-%20Find%20Your%20Dream%20Property&_s=1&tfd=2958",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "fetch",
+      "pageUrl": "https://www.realtypandit.in/tools/emi-calculator",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.google-analytics.com/g/collect?v=2&tid=G-WJF3Y3SXM3&gtm=45je63a1v9243687425za200zd9243687425&_p=1773297979491&gcd=13l3l3l3l1l1&npa=0&dma=0&cid=720645983.1773297941&ul=en-us&sr=1920x1080&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uamb=0&uam=&uap=Windows&uapv=10.0.0&uaw=0&are=1&frm=0&pscdl=noapi&_eu=AAAAAAQ&tag_exp=103116026~103200004~115938465~115938468~116024733~117484252~117625638~117625639&sid=1773297940&sct=1&seg=1&dl=https%3A%2F%2Fwww.realtypandit.in%2Ftools%2Farea-converter&dt=Realty%20Pandit%20-%20Find%20Your%20Dream%20Property&_s=1&tfd=2752",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "fetch",
+      "pageUrl": "https://www.realtypandit.in/tools/area-converter",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.google-analytics.com/g/collect?v=2&tid=G-WJF3Y3SXM3&gtm=45je63a1v9243687425za200zd9243687425&_p=1773297982157&gcd=13l3l3l3l1l1&npa=0&dma=0&cid=720645983.1773297941&ul=en-us&sr=1920x1080&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uamb=0&uam=&uap=Windows&uapv=10.0.0&uaw=0&are=1&frm=0&pscdl=noapi&_eu=AAAAAAQ&tag_exp=103116026~103200004~115938465~115938468~116024733~117484252&sid=1773297940&sct=1&seg=1&dl=https%3A%2F%2Fwww.realtypandit.in%2Fcompare&dt=Realty%20Pandit%20-%20Find%20Your%20Dream%20Property&_s=1&tfd=3068",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "fetch",
+      "pageUrl": "https://www.realtypandit.in/compare",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.google-analytics.com/g/collect?v=2&tid=G-WJF3Y3SXM3&gtm=45je63a1v9243687425za200zd9243687425&_p=1773297985167&gcd=13l3l3l3l1l1&npa=0&dma=0&cid=720645983.1773297941&ul=en-us&sr=1920x1080&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uamb=0&uam=&uap=Windows&uapv=10.0.0&uaw=0&are=1&frm=0&pscdl=noapi&_eu=AAAAAAQ&tag_exp=103116026~103200004~115938465~115938469~116024733~117484252&sid=1773297940&sct=1&seg=1&dl=https%3A%2F%2Fwww.realtypandit.in%2Ffaq&dt=Realty%20Pandit%20-%20Find%20Your%20Dream%20Property&_s=1&tfd=3048",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "fetch",
+      "pageUrl": "https://www.realtypandit.in/faq",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.google-analytics.com/g/collect?v=2&tid=G-WJF3Y3SXM3&gtm=45je63a1v9243687425za200zd9243687425&_p=1773297988113&gcd=13l3l3l3l1l1&npa=0&dma=0&cid=720645983.1773297941&ul=en-us&sr=1920x1080&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uamb=0&uam=&uap=Windows&uapv=10.0.0&uaw=0&are=1&frm=0&pscdl=noapi&_eu=AAAAAAQ&tag_exp=103116026~103200004~115616986~115938465~115938468~116024733~117484252~117625640&sid=1773297940&sct=1&seg=1&dl=https%3A%2F%2Fwww.realtypandit.in%2Fprivacy&dt=Realty%20Pandit%20-%20Find%20Your%20Dream%20Property&_s=1&tfd=3227",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "fetch",
+      "pageUrl": "https://www.realtypandit.in/privacy",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.google-analytics.com/g/collect?v=2&tid=G-WJF3Y3SXM3&gtm=45je63a1v9243687425za200zd9243687425&_p=1773297995946&gcd=13l3l3l3l1l1&npa=0&dma=0&cid=951800948.1773297996&ul=en-us&sr=768x1024&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uamb=0&uam=&uap=Windows&uapv=10.0.0&uaw=0&are=1&frm=0&pscdl=noapi&_s=1&tag_exp=103116026~103200004~104573694~115938465~115938468~116024733~117484252~117625640&sid=1773297996&sct=1&seg=0&dl=https%3A%2F%2Fwww.realtypandit.in%2F&dt=Realty%20Pandit%20-%20Find%20Your%20Dream%20Property&en=page_view&_fv=1&_nsi=1&_ss=1&_ee=1&tfd=530",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "fetch",
+      "pageUrl": "https://www.realtypandit.in/",
+      "viewport": "tablet"
+    },
+    {
+      "url": "https://www.google-analytics.com/g/collect?v=2&tid=G-WJF3Y3SXM3&gtm=45je63a1v9243687425za200zd9243687425&_p=1773297995946&gcd=13l3l3l3l1l1&npa=0&dma=0&cid=951800948.1773297996&ul=en-us&sr=768x1024&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uamb=0&uam=&uap=Windows&uapv=10.0.0&uaw=0&are=1&frm=0&pscdl=noapi&_eu=AAAAAAQ&_s=2&tag_exp=103116026~103200004~104573694~115938465~115938468~116024733~117484252~117625640&sid=1773297996&sct=1&seg=0&dl=https%3A%2F%2Fwww.realtypandit.in%2F&dt=Realty%20Pandit%20-%20Find%20Your%20Dream%20Property&en=user_engagement&_et=3403&tfd=3939",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "fetch",
+      "pageUrl": "https://www.realtypandit.in/",
+      "viewport": "tablet"
+    },
+    {
+      "url": "https://www.google-analytics.com/g/collect?v=2&tid=G-WJF3Y3SXM3&gtm=45je63a1v9243687425za200zd9243687425&_p=1773297999820&gcd=13l3l3l3l1l1&npa=0&dma=0&cid=951800948.1773297996&ul=en-us&sr=768x1024&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uamb=0&uam=&uap=Windows&uapv=10.0.0&uaw=0&are=1&frm=0&pscdl=noapi&_eu=AAAAAAQ&_s=1&tag_exp=103116026~103200004~104573694~115616986~115938466~115938468~116024733~117484252~117625638~117625639&sid=1773297996&sct=1&seg=1&dl=https%3A%2F%2Fwww.realtypandit.in%2Fproperties&dt=Realty%20Pandit%20-%20Find%20Your%20Dream%20Property&en=page_view&_ee=1&tfd=5312",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "fetch",
+      "pageUrl": "https://www.realtypandit.in/properties",
+      "viewport": "tablet"
+    },
+    {
+      "url": "https://www.google-analytics.com/g/collect?v=2&tid=G-WJF3Y3SXM3&gtm=45je63a1v9243687425za200zd9243687425&_p=1773297999820&gcd=13l3l3l3l1l1&npa=0&dma=0&cid=951800948.1773297996&ul=en-us&sr=768x1024&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uamb=0&uam=&uap=Windows&uapv=10.0.0&uaw=0&are=1&frm=0&pscdl=noapi&_eu=AAAAAAQ&_s=2&tag_exp=103116026~103200004~104573694~115616986~115938466~115938468~116024733~117484252~117625638~117625639&sid=1773297996&sct=1&seg=1&dl=https%3A%2F%2Fwww.realtypandit.in%2Fproperties&dt=Realty%20Pandit%20-%20Find%20Your%20Dream%20Property&en=user_engagement&_et=7168&tfd=7481",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "fetch",
+      "pageUrl": "https://www.realtypandit.in/properties",
+      "viewport": "tablet"
+    },
+    {
+      "url": "https://www.google-analytics.com/g/collect?v=2&tid=G-WJF3Y3SXM3&gtm=45je63a1v9243687425za200zd9243687425&_p=1773298007189&gcd=13l3l3l3l1l1&npa=0&dma=0&cid=951800948.1773297996&ul=en-us&sr=768x1024&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uamb=0&uam=&uap=Windows&uapv=10.0.0&uaw=0&are=1&frm=0&pscdl=noapi&_eu=AAAAAAQ&tag_exp=103116026~103200004~104573694~115938465~115938468~116024733~117484252&sid=1773297996&sct=1&seg=1&dl=https%3A%2F%2Fwww.realtypandit.in%2Fabout&dt=Realty%20Pandit%20-%20Find%20Your%20Dream%20Property&_s=1&tfd=2702",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "fetch",
+      "pageUrl": "https://www.realtypandit.in/about",
+      "viewport": "tablet"
+    },
+    {
+      "url": "https://www.google-analytics.com/g/collect?v=2&tid=G-WJF3Y3SXM3&gtm=45je63a1v9243687425za200zd9243687425&_p=1773298009756&gcd=13l3l3l3l1l1&npa=0&dma=0&cid=951800948.1773297996&ul=en-us&sr=768x1024&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uamb=0&uam=&uap=Windows&uapv=10.0.0&uaw=0&are=1&frm=0&pscdl=noapi&_eu=AAAAAAQ&tag_exp=103116026~103200004~104573694~115938465~115938468~116024733~117484252~117625637&sid=1773297996&sct=1&seg=1&dl=https%3A%2F%2Fwww.realtypandit.in%2Fcontact&dt=Realty%20Pandit%20-%20Find%20Your%20Dream%20Property&_s=1&tfd=3049",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "fetch",
+      "pageUrl": "https://www.realtypandit.in/contact",
+      "viewport": "tablet"
+    },
+    {
+      "url": "https://www.google-analytics.com/g/collect?v=2&tid=G-WJF3Y3SXM3&gtm=45je63a1v9243687425za200zd9243687425&_p=1773298012715&gcd=13l3l3l3l1l1&npa=0&dma=0&cid=951800948.1773297996&ul=en-us&sr=768x1024&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uamb=0&uam=&uap=Windows&uapv=10.0.0&uaw=0&are=1&frm=0&pscdl=noapi&_eu=AAAAAAQ&tag_exp=103116026~103200004~104573694~115616986~115938465~115938469~116024733~117484252~117625638~117625641&sid=1773297996&sct=1&seg=1&dl=https%3A%2F%2Fwww.realtypandit.in%2Fservices&dt=Realty%20Pandit%20-%20Find%20Your%20Dream%20Property&_s=1&tfd=2380",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "fetch",
+      "pageUrl": "https://www.realtypandit.in/services",
+      "viewport": "tablet"
+    },
+    {
+      "url": "https://www.google-analytics.com/g/collect?v=2&tid=G-WJF3Y3SXM3&gtm=45je63a1v9243687425za200zd9243687425&_p=1773298015008&gcd=13l3l3l3l1l1&npa=0&dma=0&cid=951800948.1773297996&ul=en-us&sr=768x1024&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uamb=0&uam=&uap=Windows&uapv=10.0.0&uaw=0&are=1&frm=0&pscdl=noapi&_eu=AAAAAAQ&tag_exp=103116026~103200004~104573694~115938465~115938469~116024733~117484252~117625641&sid=1773297996&sct=1&seg=1&dl=https%3A%2F%2Fwww.realtypandit.in%2Fblog&dt=Realty%20Pandit%20-%20Find%20Your%20Dream%20Property&_s=1&tfd=2646",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "fetch",
+      "pageUrl": "https://www.realtypandit.in/blog",
+      "viewport": "tablet"
+    },
+    {
+      "url": "https://www.google-analytics.com/g/collect?v=2&tid=G-WJF3Y3SXM3&gtm=45je63a1v9243687425za200zd9243687425&_p=1773298017565&gcd=13l3l3l3l1l1&npa=0&dma=0&cid=951800948.1773297996&ul=en-us&sr=768x1024&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uamb=0&uam=&uap=Windows&uapv=10.0.0&uaw=0&are=1&frm=0&pscdl=noapi&_eu=AAAAAAQ&tag_exp=103116026~103200004~104573694~115616985~115938466~115938469~116024733~117484252~117625637&sid=1773297996&sct=1&seg=1&dl=https%3A%2F%2Fwww.realtypandit.in%2Fpost-property&dt=Realty%20Pandit%20-%20Find%20Your%20Dream%20Property&_s=1&tfd=2404",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "fetch",
+      "pageUrl": "https://www.realtypandit.in/post-property",
+      "viewport": "tablet"
+    },
+    {
+      "url": "https://www.google-analytics.com/g/collect?v=2&tid=G-WJF3Y3SXM3&gtm=45je63a1v9243687425za200zd9243687425&_p=1773298019884&gcd=13l3l3l3l1l1&npa=0&dma=0&cid=951800948.1773297996&ul=en-us&sr=768x1024&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uamb=0&uam=&uap=Windows&uapv=10.0.0&uaw=0&are=1&frm=0&pscdl=noapi&_eu=AAAAAAQ&tag_exp=103116026~103200004~104573694~115616985~115938465~115938468~116024733~117484252&sid=1773297996&sct=1&seg=1&dl=https%3A%2F%2Fwww.realtypandit.in%2Flogin&dt=Realty%20Pandit%20-%20Find%20Your%20Dream%20Property&_s=1&tfd=3478",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "fetch",
+      "pageUrl": "https://www.realtypandit.in/login",
+      "viewport": "tablet"
+    },
+    {
+      "url": "https://www.google-analytics.com/g/collect?v=2&tid=G-WJF3Y3SXM3&gtm=45je63a1v9243687425za200zd9243687425&_p=1773298023310&gcd=13l3l3l3l1l1&npa=0&dma=0&cid=951800948.1773297996&ul=en-us&sr=768x1024&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uamb=0&uam=&uap=Windows&uapv=10.0.0&uaw=0&are=1&frm=0&pscdl=noapi&_eu=AAAAAAQ&tag_exp=103116026~103200004~104573694~115938466~115938469~116024733~117484252~117625642&sid=1773297996&sct=1&seg=1&dl=https%3A%2F%2Fwww.realtypandit.in%2Ftools%2Femi-calculator&dt=Realty%20Pandit%20-%20Find%20Your%20Dream%20Property&_s=1&tfd=2623",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "fetch",
+      "pageUrl": "https://www.realtypandit.in/tools/emi-calculator",
+      "viewport": "tablet"
+    },
+    {
+      "url": "https://www.google-analytics.com/g/collect?v=2&tid=G-WJF3Y3SXM3&gtm=45je63a1v9243687425za200zd9243687425&_p=1773298025730&gcd=13l3l3l3l1l1&npa=0&dma=0&cid=951800948.1773297996&ul=en-us&sr=768x1024&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uamb=0&uam=&uap=Windows&uapv=10.0.0&uaw=0&are=1&frm=0&pscdl=noapi&_eu=AAAAAAQ&tag_exp=103116026~103200004~104573694~115938466~115938469~116024733~117484252&sid=1773297996&sct=1&seg=1&dl=https%3A%2F%2Fwww.realtypandit.in%2Ftools%2Farea-converter&dt=Realty%20Pandit%20-%20Find%20Your%20Dream%20Property&_s=1&tfd=2185",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "fetch",
+      "pageUrl": "https://www.realtypandit.in/tools/area-converter",
+      "viewport": "tablet"
+    },
+    {
+      "url": "https://www.google-analytics.com/g/collect?v=2&tid=G-WJF3Y3SXM3&gtm=45je63a1v9243687425za200zd9243687425&_p=1773298027821&gcd=13l3l3l3l1l1&npa=0&dma=0&cid=951800948.1773297996&ul=en-us&sr=768x1024&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uamb=0&uam=&uap=Windows&uapv=10.0.0&uaw=0&are=1&frm=0&pscdl=noapi&_eu=AAAAAAQ&tag_exp=103116026~103200004~104573694~115616985~115938465~115938469~116024733~117484252&sid=1773297996&sct=1&seg=1&dl=https%3A%2F%2Fwww.realtypandit.in%2Fcompare&dt=Realty%20Pandit%20-%20Find%20Your%20Dream%20Property&_s=1&tfd=2490",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "fetch",
+      "pageUrl": "https://www.realtypandit.in/compare",
+      "viewport": "tablet"
+    },
+    {
+      "url": "https://www.google-analytics.com/g/collect?v=2&tid=G-WJF3Y3SXM3&gtm=45je63a1v9243687425za200zd9243687425&_p=1773298030231&gcd=13l3l3l3l1l1&npa=0&dma=0&cid=951800948.1773297996&ul=en-us&sr=768x1024&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uamb=0&uam=&uap=Windows&uapv=10.0.0&uaw=0&are=1&frm=0&pscdl=noapi&_eu=AAAAAAQ&tag_exp=103116026~103200004~104573694~115938466~115938468~116024733~117484252~117625640&sid=1773297996&sct=1&seg=1&dl=https%3A%2F%2Fwww.realtypandit.in%2Ffaq&dt=Realty%20Pandit%20-%20Find%20Your%20Dream%20Property&_s=1&tfd=2509",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "fetch",
+      "pageUrl": "https://www.realtypandit.in/faq",
+      "viewport": "tablet"
+    },
+    {
+      "url": "https://www.google-analytics.com/g/collect?v=2&tid=G-WJF3Y3SXM3&gtm=45je63a1v9243687425za200zd9243687425&_p=1773298032586&gcd=13l3l3l3l1l1&npa=0&dma=0&cid=951800948.1773297996&ul=en-us&sr=768x1024&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uamb=0&uam=&uap=Windows&uapv=10.0.0&uaw=0&are=1&frm=0&pscdl=noapi&_eu=AAAAAAQ&tag_exp=103116026~103200004~104573694~115938466~115938468~116024733~117484252~117625639~117625642&sid=1773297996&sct=1&seg=1&dl=https%3A%2F%2Fwww.realtypandit.in%2Fprivacy&dt=Realty%20Pandit%20-%20Find%20Your%20Dream%20Property&_s=1&tfd=2481",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "fetch",
+      "pageUrl": "https://www.realtypandit.in/privacy",
+      "viewport": "tablet"
+    },
+    {
+      "url": "https://www.realtypandit.in/_next/static/chunks/0eab39baa21b4460.js",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "script",
+      "pageUrl": "https://www.realtypandit.in/",
+      "viewport": "mobile"
+    },
+    {
+      "url": "https://www.realtypandit.in/_next/static/chunks/turbopack-0130ea960bd25352.js",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "script",
+      "pageUrl": "https://www.realtypandit.in/",
+      "viewport": "mobile"
+    },
+    {
+      "url": "https://www.realtypandit.in/_next/static/chunks/96b037afceab1cea.js",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "script",
+      "pageUrl": "https://www.realtypandit.in/",
+      "viewport": "mobile"
+    },
+    {
+      "url": "https://www.realtypandit.in/_next/static/chunks/f4115144c402d830.js",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "script",
+      "pageUrl": "https://www.realtypandit.in/",
+      "viewport": "mobile"
+    },
+    {
+      "url": "https://www.realtypandit.in/_next/static/chunks/aee6c7720838f8a2.js",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "script",
+      "pageUrl": "https://www.realtypandit.in/",
+      "viewport": "mobile"
+    },
+    {
+      "url": "https://www.googletagmanager.com/gtag/js?id=G-WJF3Y3SXM3",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "script",
+      "pageUrl": "https://www.realtypandit.in/",
+      "viewport": "mobile"
+    },
+    {
+      "url": "https://www.googletagmanager.com/gtm.js?id=GTM-TBFWLRD7",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "script",
+      "pageUrl": "https://www.realtypandit.in/",
+      "viewport": "mobile"
+    },
+    {
+      "url": "https://www.realtypandit.in/_next/static/chunks/293a285bbeee97e6.js",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "script",
+      "pageUrl": "https://www.realtypandit.in/",
+      "viewport": "mobile"
+    },
+    {
+      "url": "https://www.realtypandit.in/_next/static/chunks/10cbf02e6fc36465.js",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "script",
+      "pageUrl": "https://www.realtypandit.in/",
+      "viewport": "mobile"
+    },
+    {
+      "url": "https://www.realtypandit.in/_next/static/chunks/d2be314c3ece3fbe.js",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "script",
+      "pageUrl": "https://www.realtypandit.in/",
+      "viewport": "mobile"
+    },
+    {
+      "url": "https://www.realtypandit.in/_next/static/chunks/ff1a16fafef87110.js",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "script",
+      "pageUrl": "https://www.realtypandit.in/",
+      "viewport": "mobile"
+    },
+    {
+      "url": "https://www.realtypandit.in/_next/static/chunks/82abf2d65f5428ae.js",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "script",
+      "pageUrl": "https://www.realtypandit.in/",
+      "viewport": "mobile"
+    },
+    {
+      "url": "https://www.realtypandit.in/_next/static/chunks/bb77ffd8a83f1c5e.js",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "script",
+      "pageUrl": "https://www.realtypandit.in/",
+      "viewport": "mobile"
+    },
+    {
+      "url": "https://www.realtypandit.in/_next/static/chunks/9022b411cc00422e.js",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "script",
+      "pageUrl": "https://www.realtypandit.in/",
+      "viewport": "mobile"
+    },
+    {
+      "url": "https://www.realtypandit.in/_next/static/chunks/a0e13f09e8783e80.js",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "script",
+      "pageUrl": "https://www.realtypandit.in/",
+      "viewport": "mobile"
+    },
+    {
+      "url": "https://www.realtypandit.in/_next/static/chunks/3c9697643abcbf15.js",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "script",
+      "pageUrl": "https://www.realtypandit.in/",
+      "viewport": "mobile"
+    },
+    {
+      "url": "https://www.google-analytics.com/g/collect?v=2&tid=G-WJF3Y3SXM3&gtm=45je63a1v9243687425za200zb9243676380zd9243676380&_p=1773298038244&gcd=13l3l3l3l1l1&npa=0&dma=0&cid=2035242954.1773298039&ul=en-us&sr=375x812&uaa=arm&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uamb=0&uam=&uap=iOS&uapv=16_0&uaw=0&are=1&frm=0&pscdl=noapi&_s=1&tag_exp=103116026~103200004~115616985~115938465~115938468~116024733~117484252~117625637~117625639&sid=1773298038&sct=1&seg=0&dl=https%3A%2F%2Fwww.realtypandit.in%2F&dt=Realty%20Pandit%20-%20Find%20Your%20Dream%20Property&en=page_view&_fv=1&_nsi=1&_ss=1&_ee=1&tfd=864",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "fetch",
+      "pageUrl": "https://www.realtypandit.in/",
+      "viewport": "mobile"
+    },
+    {
+      "url": "https://www.google-analytics.com/g/collect?v=2&tid=G-WJF3Y3SXM3&gtm=45je63a1v9243687425za200zb9243676380zd9243676380&_p=1773298038244&gcd=13l3l3l3l1l1&npa=0&dma=0&cid=2035242954.1773298039&ul=en-us&sr=375x812&uaa=arm&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uamb=0&uam=&uap=iOS&uapv=16_0&uaw=0&are=1&frm=0&pscdl=noapi&_eu=AAAAAAQ&_s=2&tag_exp=103116026~103200004~115616985~115938465~115938468~116024733~117484252~117625637~117625639&sid=1773298038&sct=1&seg=0&dl=https%3A%2F%2Fwww.realtypandit.in%2F&dt=Realty%20Pandit%20-%20Find%20Your%20Dream%20Property&en=user_engagement&_et=2881&tfd=3748",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "fetch",
+      "pageUrl": "https://www.realtypandit.in/",
+      "viewport": "mobile"
+    },
+    {
+      "url": "https://www.google-analytics.com/g/collect?v=2&tid=G-WJF3Y3SXM3&gtm=45je63a1v9243687425za200zd9243687425&_p=1773298041811&gcd=13l3l3l3l1l1&npa=0&dma=0&cid=2035242954.1773298039&ul=en-us&sr=375x812&uaa=arm&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uamb=0&uam=&uap=iOS&uapv=16_0&uaw=0&are=1&frm=0&pscdl=noapi&_eu=AAAAAAQ&_s=1&tag_exp=103116026~103200004~115616985~115938466~115938469~116024733~117484252&sid=1773298038&sct=1&seg=1&dl=https%3A%2F%2Fwww.realtypandit.in%2Fproperties&dt=Realty%20Pandit%20-%20Find%20Your%20Dream%20Property&en=page_view&_ee=1&tfd=5218",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "fetch",
+      "pageUrl": "https://www.realtypandit.in/properties",
+      "viewport": "mobile"
+    },
+    {
+      "url": "https://www.google-analytics.com/g/collect?v=2&tid=G-WJF3Y3SXM3&gtm=45je63a1v9243687425za200zd9243687425&_p=1773298041811&gcd=13l3l3l3l1l1&npa=0&dma=0&cid=2035242954.1773298039&ul=en-us&sr=375x812&uaa=arm&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uamb=0&uam=&uap=iOS&uapv=16_0&uaw=0&are=1&frm=0&pscdl=noapi&_eu=AAAAAAQ&_s=2&tag_exp=103116026~103200004~115616985~115938466~115938469~116024733~117484252&sid=1773298038&sct=1&seg=1&dl=https%3A%2F%2Fwww.realtypandit.in%2Fproperties&dt=Realty%20Pandit%20-%20Find%20Your%20Dream%20Property&en=user_engagement&_et=13041&tfd=13258",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "fetch",
+      "pageUrl": "https://www.realtypandit.in/properties",
+      "viewport": "mobile"
+    },
+    {
+      "url": "https://www.google-analytics.com/g/collect?v=2&tid=G-WJF3Y3SXM3&gtm=45je63a1v9243687425za200zd9243687425&_p=1773298054980&gcd=13l3l3l3l1l1&npa=0&dma=0&cid=2035242954.1773298039&ul=en-us&sr=375x812&uaa=arm&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uamb=0&uam=&uap=iOS&uapv=16_0&uaw=0&are=1&frm=0&pscdl=noapi&_eu=AAAAAAQ&tag_exp=103116026~103200004~115616986~115938466~115938468~116024733~117384405~117484252~117625638~117625642&sid=1773298038&sct=1&seg=1&dl=https%3A%2F%2Fwww.realtypandit.in%2Fabout&dt=Realty%20Pandit%20-%20Find%20Your%20Dream%20Property&_s=1&tfd=2679",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "fetch",
+      "pageUrl": "https://www.realtypandit.in/about",
+      "viewport": "mobile"
+    },
+    {
+      "url": "https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d1040.966878514319!2d77.3377957070108!3d28.648300623190828!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x390cfacf67fed425%3A0x2c49982c0a3889b4!2sRealty%20Pandit!5e0!3m2!1sen!2sin!4v1771135636157!5m2!1sen!2sin",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "document",
+      "pageUrl": "https://www.realtypandit.in/contact",
+      "viewport": "mobile"
+    },
+    {
+      "url": "https://www.google-analytics.com/g/collect?v=2&tid=G-WJF3Y3SXM3&gtm=45je63a1v9243687425za200zd9243687425&_p=1773298057478&gcd=13l3l3l3l1l1&npa=0&dma=0&cid=2035242954.1773298039&ul=en-us&sr=375x812&uaa=arm&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uamb=0&uam=&uap=iOS&uapv=16_0&uaw=0&are=1&frm=0&pscdl=noapi&_eu=AAAAAAQ&tag_exp=103116026~103200004~115938466~115938469~116024733~117484252~117625639&sid=1773298038&sct=1&seg=1&dl=https%3A%2F%2Fwww.realtypandit.in%2Fcontact&dt=Realty%20Pandit%20-%20Find%20Your%20Dream%20Property&_s=1&tfd=3528",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "fetch",
+      "pageUrl": "https://www.realtypandit.in/contact",
+      "viewport": "mobile"
+    },
+    {
+      "url": "https://www.google-analytics.com/g/collect?v=2&tid=G-WJF3Y3SXM3&gtm=45je63a1v9243687425za200zd9243687425&_p=1773298060908&gcd=13l3l3l3l1l1&npa=0&dma=0&cid=2035242954.1773298039&ul=en-us&sr=375x812&uaa=arm&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uamb=0&uam=&uap=iOS&uapv=16_0&uaw=0&are=1&frm=0&pscdl=noapi&_eu=AAAAAAQ&tag_exp=103116026~103200004~115938466~115938469~116024733~117484252~117625641&sid=1773298038&sct=1&seg=1&dl=https%3A%2F%2Fwww.realtypandit.in%2Fservices&dt=Realty%20Pandit%20-%20Find%20Your%20Dream%20Property&_s=1&tfd=2289",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "fetch",
+      "pageUrl": "https://www.realtypandit.in/services",
+      "viewport": "mobile"
+    },
+    {
+      "url": "https://www.google-analytics.com/g/collect?v=2&tid=G-WJF3Y3SXM3&gtm=45je63a1v9243687425za200zd9243687425&_p=1773298063046&gcd=13l3l3l3l1l1&npa=0&dma=0&cid=2035242954.1773298039&ul=en-us&sr=375x812&uaa=arm&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uamb=0&uam=&uap=iOS&uapv=16_0&uaw=0&are=1&frm=0&pscdl=noapi&_eu=AAAAAAQ&tag_exp=103116026~103200004~115616986~115938466~115938468~116024733~117484252&sid=1773298038&sct=1&seg=1&dl=https%3A%2F%2Fwww.realtypandit.in%2Fblog&dt=Realty%20Pandit%20-%20Find%20Your%20Dream%20Property&_s=1&tfd=2428",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "fetch",
+      "pageUrl": "https://www.realtypandit.in/blog",
+      "viewport": "mobile"
+    },
+    {
+      "url": "https://www.google-analytics.com/g/collect?v=2&tid=G-WJF3Y3SXM3&gtm=45je63a1v9243687425za200zd9243687425&_p=1773298065377&gcd=13l3l3l3l1l1&npa=0&dma=0&cid=2035242954.1773298039&ul=en-us&sr=375x812&uaa=arm&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uamb=0&uam=&uap=iOS&uapv=16_0&uaw=0&are=1&frm=0&pscdl=noapi&_eu=AAAAAAQ&tag_exp=103116026~103200004~115938465~115938469~116024733~117484252~117625637~117625640&sid=1773298038&sct=1&seg=1&dl=https%3A%2F%2Fwww.realtypandit.in%2Fpost-property&dt=Realty%20Pandit%20-%20Find%20Your%20Dream%20Property&_s=1&tfd=2392",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "fetch",
+      "pageUrl": "https://www.realtypandit.in/post-property",
+      "viewport": "mobile"
+    },
+    {
+      "url": "https://www.google-analytics.com/g/collect?v=2&tid=G-WJF3Y3SXM3&gtm=45je63a1v9243687425za200zd9243687425&_p=1773298067679&gcd=13l3l3l3l1l1&npa=0&dma=0&cid=2035242954.1773298039&ul=en-us&sr=375x812&uaa=arm&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uamb=0&uam=&uap=iOS&uapv=16_0&uaw=0&are=1&frm=0&pscdl=noapi&_eu=AAAAAAQ&tag_exp=103116026~103200004~115938466~115938469~116024733~117384406~117484252~117625639~117625641&sid=1773298038&sct=1&seg=1&dl=https%3A%2F%2Fwww.realtypandit.in%2Flogin&dt=Realty%20Pandit%20-%20Find%20Your%20Dream%20Property&_s=1&tfd=3393",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "fetch",
+      "pageUrl": "https://www.realtypandit.in/login",
+      "viewport": "mobile"
+    },
+    {
+      "url": "https://www.google-analytics.com/g/collect?v=2&tid=G-WJF3Y3SXM3&gtm=45je63a1v9243687425za200zd9243687425&_p=1773298070989&gcd=13l3l3l3l1l1&npa=0&dma=0&cid=2035242954.1773298039&ul=en-us&sr=375x812&uaa=arm&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uamb=0&uam=&uap=iOS&uapv=16_0&uaw=0&are=1&frm=0&pscdl=noapi&_eu=AAAAAAQ&tag_exp=103116026~103200004~115616986~115938465~115938468~116024733~117484252~117625642&sid=1773298038&sct=1&seg=1&dl=https%3A%2F%2Fwww.realtypandit.in%2Ffaq&dt=Realty%20Pandit%20-%20Find%20Your%20Dream%20Property&_s=1&tfd=2469",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "fetch",
+      "pageUrl": "https://www.realtypandit.in/faq",
+      "viewport": "mobile"
+    },
+    {
+      "url": "https://www.google-analytics.com/g/collect?v=2&tid=G-WJF3Y3SXM3&gtm=45je63a1v9243687425za200zd9243687425&_p=1773298073205&gcd=13l3l3l3l1l1&npa=0&dma=0&cid=2035242954.1773298039&ul=en-us&sr=375x812&uaa=arm&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uamb=0&uam=&uap=iOS&uapv=16_0&uaw=0&are=1&frm=0&pscdl=noapi&_eu=AAAAAAQ&tag_exp=103116026~103200004~115938466~115938468~116024733~117484252~117625639&sid=1773298038&sct=1&seg=1&dl=https%3A%2F%2Fwww.realtypandit.in%2Ftools%2Femi-calculator&dt=Realty%20Pandit%20-%20Find%20Your%20Dream%20Property&_s=1&tfd=2236",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "fetch",
+      "pageUrl": "https://www.realtypandit.in/tools/emi-calculator",
+      "viewport": "mobile"
+    },
+    {
+      "url": "https://www.google-analytics.com/g/collect?v=2&tid=G-WJF3Y3SXM3&gtm=45je63a1v9243687425za200zd9243687425&_p=1773298075348&gcd=13l3l3l3l1l1&npa=0&dma=0&cid=2035242954.1773298039&ul=en-us&sr=375x812&uaa=arm&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uamb=0&uam=&uap=iOS&uapv=16_0&uaw=0&are=1&frm=0&pscdl=noapi&_eu=AAAAAAQ&tag_exp=103116026~103200004~115938466~115938468~116024733~117484252&sid=1773298038&sct=1&seg=1&dl=https%3A%2F%2Fwww.realtypandit.in%2Ftools%2Farea-converter&dt=Realty%20Pandit%20-%20Find%20Your%20Dream%20Property&_s=1&tfd=2269",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "fetch",
+      "pageUrl": "https://www.realtypandit.in/tools/area-converter",
+      "viewport": "mobile"
+    },
+    {
+      "url": "https://www.google-analytics.com/g/collect?v=2&tid=G-WJF3Y3SXM3&gtm=45je63a1v9243687425za200zd9243687425&_p=1773298077518&gcd=13l3l3l3l1l1&npa=0&dma=0&cid=2035242954.1773298039&ul=en-us&sr=375x812&uaa=arm&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uamb=0&uam=&uap=iOS&uapv=16_0&uaw=0&are=1&frm=0&pscdl=noapi&_eu=AAAAAAQ&tag_exp=103116026~103200004~115616986~115938466~115938469~116024733~117384406~117484252~117625638&sid=1773298038&sct=1&seg=1&dl=https%3A%2F%2Fwww.realtypandit.in%2Fprivacy&dt=Realty%20Pandit%20-%20Find%20Your%20Dream%20Property&_s=1&tfd=2423",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "fetch",
+      "pageUrl": "https://www.realtypandit.in/privacy",
+      "viewport": "mobile"
+    },
+    {
+      "url": "https://www.google-analytics.com/g/collect?v=2&tid=G-WJF3Y3SXM3&gtm=45je63a1v9243687425za200zd9243687425&_p=1773298079834&gcd=13l3l3l3l1l1&npa=0&dma=0&cid=2035242954.1773298039&ul=en-us&sr=375x812&uaa=arm&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uamb=0&uam=&uap=iOS&uapv=16_0&uaw=0&are=1&frm=0&pscdl=noapi&_eu=AAAAAAQ&tag_exp=103116026~103200004~115616985~115938465~115938468~116024733~117484252~117625638&sid=1773298038&sct=1&seg=1&dl=https%3A%2F%2Fwww.realtypandit.in%2Fterms&dt=Realty%20Pandit%20-%20Find%20Your%20Dream%20Property&_s=1&tfd=2456",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "fetch",
+      "pageUrl": "https://www.realtypandit.in/terms",
+      "viewport": "mobile"
+    }
+  ],
+  "performance": [
+    {
+      "page": "Homepage",
+      "viewport": "desktop",
+      "domContentLoaded": 112,
+      "fullLoad": 665,
+      "firstByte": 71,
+      "domInteractive": 111
+    },
+    {
+      "page": "Properties",
+      "viewport": "desktop",
+      "domContentLoaded": 139,
+      "fullLoad": 327,
+      "firstByte": 86,
+      "domInteractive": 139
+    },
+    {
+      "page": "About",
+      "viewport": "desktop",
+      "domContentLoaded": 193,
+      "fullLoad": 363,
+      "firstByte": 139,
+      "domInteractive": 193
+    },
+    {
+      "page": "Contact",
+      "viewport": "desktop",
+      "domContentLoaded": 406,
+      "fullLoad": 1046,
+      "firstByte": 354,
+      "domInteractive": 406
+    },
+    {
+      "page": "Services",
+      "viewport": "desktop",
+      "domContentLoaded": 107,
+      "fullLoad": 235,
+      "firstByte": 58,
+      "domInteractive": 107
+    },
+    {
+      "page": "Blog",
+      "viewport": "desktop",
+      "domContentLoaded": 103,
+      "fullLoad": 393,
+      "firstByte": 65,
+      "domInteractive": 102
+    },
+    {
+      "page": "Discovered: /post-property",
+      "viewport": "desktop",
+      "domContentLoaded": 101,
+      "fullLoad": 191,
+      "firstByte": 67,
+      "domInteractive": 101
+    },
+    {
+      "page": "Discovered: /login",
+      "viewport": "desktop",
+      "domContentLoaded": 121,
+      "fullLoad": 466,
+      "firstByte": 77,
+      "domInteractive": 121
+    },
+    {
+      "page": "Discovered: /tools/emi-calculator",
+      "viewport": "desktop",
+      "domContentLoaded": 287,
+      "fullLoad": 478,
+      "firstByte": 181,
+      "domInteractive": 287
+    },
+    {
+      "page": "Discovered: /tools/area-converter",
+      "viewport": "desktop",
+      "domContentLoaded": 121,
+      "fullLoad": 266,
+      "firstByte": 74,
+      "domInteractive": 121
+    },
+    {
+      "page": "Discovered: /compare",
+      "viewport": "desktop",
+      "domContentLoaded": 85,
+      "fullLoad": 232,
+      "firstByte": 52,
+      "domInteractive": 84
+    },
+    {
+      "page": "Discovered: /faq",
+      "viewport": "desktop",
+      "domContentLoaded": 153,
+      "fullLoad": 308,
+      "firstByte": 118,
+      "domInteractive": 153
+    },
+    {
+      "page": "Discovered: /privacy",
+      "viewport": "desktop",
+      "domContentLoaded": 149,
+      "fullLoad": 373,
+      "firstByte": 74,
+      "domInteractive": 148
+    },
+    {
+      "page": "Discovered: /terms",
+      "viewport": "desktop",
+      "domContentLoaded": 114,
+      "fullLoad": 261,
+      "firstByte": 65,
+      "domInteractive": 113
+    },
+    {
+      "page": "Homepage",
+      "viewport": "tablet",
+      "domContentLoaded": 95,
+      "fullLoad": 613,
+      "firstByte": 52,
+      "domInteractive": 95
+    },
+    {
+      "page": "Properties",
+      "viewport": "tablet",
+      "domContentLoaded": 149,
+      "fullLoad": 394,
+      "firstByte": 93,
+      "domInteractive": 149
+    },
+    {
+      "page": "About",
+      "viewport": "tablet",
+      "domContentLoaded": 168,
+      "fullLoad": 433,
+      "firstByte": 124,
+      "domInteractive": 168
+    },
+    {
+      "page": "Contact",
+      "viewport": "tablet",
+      "domContentLoaded": 129,
+      "fullLoad": 793,
+      "firstByte": 80,
+      "domInteractive": 129
+    },
+    {
+      "page": "Services",
+      "viewport": "tablet",
+      "domContentLoaded": 117,
+      "fullLoad": 271,
+      "firstByte": 76,
+      "domInteractive": 117
+    },
+    {
+      "page": "Blog",
+      "viewport": "tablet",
+      "domContentLoaded": 121,
+      "fullLoad": 228,
+      "firstByte": 81,
+      "domInteractive": 121
+    },
+    {
+      "page": "Discovered: /post-property",
+      "viewport": "tablet",
+      "domContentLoaded": 117,
+      "fullLoad": 204,
+      "firstByte": 82,
+      "domInteractive": 117
+    },
+    {
+      "page": "Discovered: /login",
+      "viewport": "tablet",
+      "domContentLoaded": 139,
+      "fullLoad": 394,
+      "firstByte": 97,
+      "domInteractive": 139
+    },
+    {
+      "page": "Discovered: /tools/emi-calculator",
+      "viewport": "tablet",
+      "domContentLoaded": 234,
+      "fullLoad": 379,
+      "firstByte": 107,
+      "domInteractive": 234
+    },
+    {
+      "page": "Discovered: /tools/area-converter",
+      "viewport": "tablet",
+      "domContentLoaded": 121,
+      "fullLoad": 204,
+      "firstByte": 90,
+      "domInteractive": 121
+    },
+    {
+      "page": "Discovered: /compare",
+      "viewport": "tablet",
+      "domContentLoaded": 116,
+      "fullLoad": 220,
+      "firstByte": 78,
+      "domInteractive": 116
+    },
+    {
+      "page": "Discovered: /faq",
+      "viewport": "tablet",
+      "domContentLoaded": 189,
+      "fullLoad": 333,
+      "firstByte": 129,
+      "domInteractive": 188
+    },
+    {
+      "page": "Discovered: /privacy",
+      "viewport": "tablet",
+      "domContentLoaded": 114,
+      "fullLoad": 274,
+      "firstByte": 66,
+      "domInteractive": 114
+    },
+    {
+      "page": "Discovered: /terms",
+      "viewport": "tablet",
+      "domContentLoaded": 113,
+      "fullLoad": 221,
+      "firstByte": 84,
+      "domInteractive": 113
+    },
+    {
+      "page": "Homepage",
+      "viewport": "mobile",
+      "domContentLoaded": 208,
+      "fullLoad": 1511,
+      "firstByte": 71,
+      "domInteractive": 207
+    },
+    {
+      "page": "Properties",
+      "viewport": "mobile",
+      "domContentLoaded": 127,
+      "fullLoad": 228,
+      "firstByte": 75,
+      "domInteractive": 127
+    },
+    {
+      "page": "About",
+      "viewport": "mobile",
+      "domContentLoaded": 215,
+      "fullLoad": 344,
+      "firstByte": 183,
+      "domInteractive": 215
+    },
+    {
+      "page": "Contact",
+      "viewport": "mobile",
+      "domContentLoaded": 146,
+      "fullLoad": 1475,
+      "firstByte": 93,
+      "domInteractive": 146
+    },
+    {
+      "page": "Services",
+      "viewport": "mobile",
+      "domContentLoaded": 177,
+      "fullLoad": 276,
+      "firstByte": 112,
+      "domInteractive": 177
+    },
+    {
+      "page": "Blog",
+      "viewport": "mobile",
+      "domContentLoaded": 126,
+      "fullLoad": 234,
+      "firstByte": 89,
+      "domInteractive": 126
+    },
+    {
+      "page": "Discovered: /post-property",
+      "viewport": "mobile",
+      "domContentLoaded": 115,
+      "fullLoad": 202,
+      "firstByte": 82,
+      "domInteractive": 115
+    },
+    {
+      "page": "Discovered: /login",
+      "viewport": "mobile",
+      "domContentLoaded": 145,
+      "fullLoad": 354,
+      "firstByte": 102,
+      "domInteractive": 145
+    },
+    {
+      "page": "Discovered: /faq",
+      "viewport": "mobile",
+      "domContentLoaded": 284,
+      "fullLoad": 444,
+      "firstByte": 205,
+      "domInteractive": 284
+    },
+    {
+      "page": "Discovered: /tools/emi-calculator",
+      "viewport": "mobile",
+      "domContentLoaded": 126,
+      "fullLoad": 242,
+      "firstByte": 85,
+      "domInteractive": 126
+    },
+    {
+      "page": "Discovered: /tools/area-converter",
+      "viewport": "mobile",
+      "domContentLoaded": 127,
+      "fullLoad": 236,
+      "firstByte": 89,
+      "domInteractive": 127
+    },
+    {
+      "page": "Discovered: /privacy",
+      "viewport": "mobile",
+      "domContentLoaded": 141,
+      "fullLoad": 234,
+      "firstByte": 94,
+      "domInteractive": 141
+    },
+    {
+      "page": "Discovered: /terms",
+      "viewport": "mobile",
+      "domContentLoaded": 139,
+      "fullLoad": 229,
+      "firstByte": 105,
+      "domInteractive": 139
+    },
+    {
+      "page": "Discovered: /compare",
+      "viewport": "mobile",
+      "domContentLoaded": 154,
+      "fullLoad": 268,
+      "firstByte": 101,
+      "domInteractive": 154
+    }
+  ],
+  "pages": [
+    {
+      "name": "Homepage",
+      "url": "https://www.realtypandit.in/",
+      "viewport": "desktop",
+      "status": "ok",
+      "loadTime": 2037,
+      "checks": {
+        "consoleErrors": 0
+      }
+    },
+    {
+      "name": "Properties",
+      "url": "https://www.realtypandit.in/properties",
+      "viewport": "desktop",
+      "status": "ok",
+      "loadTime": 7815,
+      "checks": {
+        "consoleErrors": 0
+      }
+    },
+    {
+      "name": "About",
+      "url": "https://www.realtypandit.in/about",
+      "viewport": "desktop",
+      "status": "ok",
+      "loadTime": 1394,
+      "checks": {
+        "consoleErrors": 0
+      }
+    },
+    {
+      "name": "Contact",
+      "url": "https://www.realtypandit.in/contact",
+      "viewport": "desktop",
+      "status": "ok",
+      "loadTime": 3417,
+      "checks": {
+        "consoleErrors": 0
+      }
+    },
+    {
+      "name": "Services",
+      "url": "https://www.realtypandit.in/services",
+      "viewport": "desktop",
+      "status": "ok",
+      "loadTime": 1211,
+      "checks": {
+        "consoleErrors": 0
+      }
+    },
+    {
+      "name": "Blog",
+      "url": "https://www.realtypandit.in/blog",
+      "viewport": "desktop",
+      "status": "ok",
+      "loadTime": 1515,
+      "checks": {
+        "consoleErrors": 0
+      }
+    },
+    {
+      "name": "Discovered: /post-property",
+      "url": "https://www.realtypandit.in/post-property",
+      "viewport": "desktop",
+      "status": "ok",
+      "loadTime": 1216,
+      "checks": {
+        "consoleErrors": 0
+      }
+    },
+    {
+      "name": "Discovered: /login",
+      "url": "https://www.realtypandit.in/login",
+      "viewport": "desktop",
+      "status": "ok",
+      "loadTime": 2419,
+      "checks": {
+        "consoleErrors": 0
+      }
+    },
+    {
+      "name": "Discovered: /tools/emi-calculator",
+      "url": "https://www.realtypandit.in/tools/emi-calculator",
+      "viewport": "desktop",
+      "status": "ok",
+      "loadTime": 1460,
+      "checks": {
+        "consoleErrors": 0
+      }
+    },
+    {
+      "name": "Discovered: /tools/area-converter",
+      "url": "https://www.realtypandit.in/tools/area-converter",
+      "viewport": "desktop",
+      "status": "ok",
+      "loadTime": 1294,
+      "checks": {
+        "consoleErrors": 0
+      }
+    },
+    {
+      "name": "Discovered: /compare",
+      "url": "https://www.realtypandit.in/compare",
+      "viewport": "desktop",
+      "status": "ok",
+      "loadTime": 1470,
+      "checks": {
+        "consoleErrors": 0
+      }
+    },
+    {
+      "name": "Discovered: /faq",
+      "url": "https://www.realtypandit.in/faq",
+      "viewport": "desktop",
+      "status": "ok",
+      "loadTime": 1236,
+      "checks": {
+        "consoleErrors": 0
+      }
+    },
+    {
+      "name": "Discovered: /privacy",
+      "url": "https://www.realtypandit.in/privacy",
+      "viewport": "desktop",
+      "status": "ok",
+      "loadTime": 1447,
+      "checks": {
+        "consoleErrors": 0
+      }
+    },
+    {
+      "name": "Discovered: /terms",
+      "url": "https://www.realtypandit.in/terms",
+      "viewport": "desktop",
+      "status": "ok",
+      "loadTime": 1210,
+      "checks": {
+        "consoleErrors": 0
+      }
+    },
+    {
+      "name": "Homepage",
+      "url": "https://www.realtypandit.in/",
+      "viewport": "tablet",
+      "status": "ok",
+      "loadTime": 1690,
+      "checks": {
+        "consoleErrors": 0
+      }
+    },
+    {
+      "name": "Properties",
+      "url": "https://www.realtypandit.in/properties",
+      "viewport": "tablet",
+      "status": "ok",
+      "loadTime": 5907,
+      "checks": {
+        "consoleErrors": 0
+      }
+    },
+    {
+      "name": "About",
+      "url": "https://www.realtypandit.in/about",
+      "viewport": "tablet",
+      "status": "ok",
+      "loadTime": 1050,
+      "checks": {
+        "consoleErrors": 0
+      }
+    },
+    {
+      "name": "Contact",
+      "url": "https://www.realtypandit.in/contact",
+      "viewport": "tablet",
+      "status": "ok",
+      "loadTime": 1545,
+      "checks": {
+        "consoleErrors": 0
+      }
+    },
+    {
+      "name": "Services",
+      "url": "https://www.realtypandit.in/services",
+      "viewport": "tablet",
+      "status": "ok",
+      "loadTime": 861,
+      "checks": {
+        "consoleErrors": 0
+      }
+    },
+    {
+      "name": "Blog",
+      "url": "https://www.realtypandit.in/blog",
+      "viewport": "tablet",
+      "status": "ok",
+      "loadTime": 1023,
+      "checks": {
+        "consoleErrors": 0
+      }
+    },
+    {
+      "name": "Discovered: /post-property",
+      "url": "https://www.realtypandit.in/post-property",
+      "viewport": "tablet",
+      "status": "ok",
+      "loadTime": 964,
+      "checks": {
+        "consoleErrors": 0
+      }
+    },
+    {
+      "name": "Discovered: /login",
+      "url": "https://www.realtypandit.in/login",
+      "viewport": "tablet",
+      "status": "ok",
+      "loadTime": 1388,
+      "checks": {
+        "consoleErrors": 0
+      }
+    },
+    {
+      "name": "Discovered: /tools/emi-calculator",
+      "url": "https://www.realtypandit.in/tools/emi-calculator",
+      "viewport": "tablet",
+      "status": "ok",
+      "loadTime": 1191,
+      "checks": {
+        "consoleErrors": 0
+      }
+    },
+    {
+      "name": "Discovered: /tools/area-converter",
+      "url": "https://www.realtypandit.in/tools/area-converter",
+      "viewport": "tablet",
+      "status": "ok",
+      "loadTime": 841,
+      "checks": {
+        "consoleErrors": 0
+      }
+    },
+    {
+      "name": "Discovered: /compare",
+      "url": "https://www.realtypandit.in/compare",
+      "viewport": "tablet",
+      "status": "ok",
+      "loadTime": 1032,
+      "checks": {
+        "consoleErrors": 0
+      }
+    },
+    {
+      "name": "Discovered: /faq",
+      "url": "https://www.realtypandit.in/faq",
+      "viewport": "tablet",
+      "status": "ok",
+      "loadTime": 954,
+      "checks": {
+        "consoleErrors": 0
+      }
+    },
+    {
+      "name": "Discovered: /privacy",
+      "url": "https://www.realtypandit.in/privacy",
+      "viewport": "tablet",
+      "status": "ok",
+      "loadTime": 896,
+      "checks": {
+        "consoleErrors": 0
+      }
+    },
+    {
+      "name": "Discovered: /terms",
+      "url": "https://www.realtypandit.in/terms",
+      "viewport": "tablet",
+      "status": "ok",
+      "loadTime": 815,
+      "checks": {
+        "consoleErrors": 0
+      }
+    },
+    {
+      "name": "Homepage",
+      "url": "https://www.realtypandit.in/",
+      "viewport": "mobile",
+      "status": "ok",
+      "loadTime": 2019,
+      "checks": {
+        "consoleErrors": 0
+      }
+    },
+    {
+      "name": "Properties",
+      "url": "https://www.realtypandit.in/properties",
+      "viewport": "mobile",
+      "status": "ok",
+      "loadTime": 11607,
+      "checks": {
+        "consoleErrors": 0
+      }
+    },
+    {
+      "name": "About",
+      "url": "https://www.realtypandit.in/about",
+      "viewport": "mobile",
+      "status": "ok",
+      "loadTime": 981,
+      "checks": {
+        "consoleErrors": 0
+      }
+    },
+    {
+      "name": "Contact",
+      "url": "https://www.realtypandit.in/contact",
+      "viewport": "mobile",
+      "status": "ok",
+      "loadTime": 2153,
+      "checks": {
+        "consoleErrors": 0
+      }
+    },
+    {
+      "name": "Services",
+      "url": "https://www.realtypandit.in/services",
+      "viewport": "mobile",
+      "status": "ok",
+      "loadTime": 899,
+      "checks": {
+        "consoleErrors": 0
+      }
+    },
+    {
+      "name": "Blog",
+      "url": "https://www.realtypandit.in/blog",
+      "viewport": "mobile",
+      "status": "ok",
+      "loadTime": 983,
+      "checks": {
+        "consoleErrors": 0
+      }
+    },
+    {
+      "name": "Discovered: /post-property",
+      "url": "https://www.realtypandit.in/post-property",
+      "viewport": "mobile",
+      "status": "ok",
+      "loadTime": 962,
+      "checks": {
+        "consoleErrors": 0
+      }
+    },
+    {
+      "name": "Discovered: /login",
+      "url": "https://www.realtypandit.in/login",
+      "viewport": "mobile",
+      "status": "ok",
+      "loadTime": 1372,
+      "checks": {
+        "consoleErrors": 0
+      }
+    },
+    {
+      "name": "Discovered: /faq",
+      "url": "https://www.realtypandit.in/faq",
+      "viewport": "mobile",
+      "status": "ok",
+      "loadTime": 1036,
+      "checks": {
+        "consoleErrors": 0
+      }
+    },
+    {
+      "name": "Discovered: /tools/emi-calculator",
+      "url": "https://www.realtypandit.in/tools/emi-calculator",
+      "viewport": "mobile",
+      "status": "ok",
+      "loadTime": 867,
+      "checks": {
+        "consoleErrors": 0
+      }
+    },
+    {
+      "name": "Discovered: /tools/area-converter",
+      "url": "https://www.realtypandit.in/tools/area-converter",
+      "viewport": "mobile",
+      "status": "ok",
+      "loadTime": 864,
+      "checks": {
+        "consoleErrors": 0
+      }
+    },
+    {
+      "name": "Discovered: /privacy",
+      "url": "https://www.realtypandit.in/privacy",
+      "viewport": "mobile",
+      "status": "ok",
+      "loadTime": 915,
+      "checks": {
+        "consoleErrors": 0
+      }
+    },
+    {
+      "name": "Discovered: /terms",
+      "url": "https://www.realtypandit.in/terms",
+      "viewport": "mobile",
+      "status": "ok",
+      "loadTime": 890,
+      "checks": {
+        "consoleErrors": 0
+      }
+    },
+    {
+      "name": "Discovered: /compare",
+      "url": "https://www.realtypandit.in/compare",
+      "viewport": "mobile",
+      "status": "ok",
+      "loadTime": 1109,
+      "checks": {
+        "consoleErrors": 0
+      }
+    }
+  ],
+  "screenshots": [
+    {
+      "page": "Homepage",
+      "viewport": "desktop",
+      "path": "screenshots\\homepage-desktop.png"
+    },
+    {
+      "page": "Properties",
+      "viewport": "desktop",
+      "path": "screenshots\\properties-desktop.png"
+    },
+    {
+      "page": "About",
+      "viewport": "desktop",
+      "path": "screenshots\\about-desktop.png"
+    },
+    {
+      "page": "Contact",
+      "viewport": "desktop",
+      "path": "screenshots\\contact-desktop.png"
+    },
+    {
+      "page": "Services",
+      "viewport": "desktop",
+      "path": "screenshots\\services-desktop.png"
+    },
+    {
+      "page": "Blog",
+      "viewport": "desktop",
+      "path": "screenshots\\blog-desktop.png"
+    },
+    {
+      "page": "Discovered: /post-property",
+      "viewport": "desktop",
+      "path": "screenshots\\discovered---post-property-desktop.png"
+    },
+    {
+      "page": "Discovered: /login",
+      "viewport": "desktop",
+      "path": "screenshots\\discovered---login-desktop.png"
+    },
+    {
+      "page": "Discovered: /tools/emi-calculator",
+      "viewport": "desktop",
+      "path": "screenshots\\discovered---tools-emi-calculator-desktop.png"
+    },
+    {
+      "page": "Discovered: /tools/area-converter",
+      "viewport": "desktop",
+      "path": "screenshots\\discovered---tools-area-converter-desktop.png"
+    },
+    {
+      "page": "Discovered: /compare",
+      "viewport": "desktop",
+      "path": "screenshots\\discovered---compare-desktop.png"
+    },
+    {
+      "page": "Discovered: /faq",
+      "viewport": "desktop",
+      "path": "screenshots\\discovered---faq-desktop.png"
+    },
+    {
+      "page": "Discovered: /privacy",
+      "viewport": "desktop",
+      "path": "screenshots\\discovered---privacy-desktop.png"
+    },
+    {
+      "page": "Discovered: /terms",
+      "viewport": "desktop",
+      "path": "screenshots\\discovered---terms-desktop.png"
+    },
+    {
+      "page": "Homepage",
+      "viewport": "tablet",
+      "path": "screenshots\\homepage-tablet.png"
+    },
+    {
+      "page": "Properties",
+      "viewport": "tablet",
+      "path": "screenshots\\properties-tablet.png"
+    },
+    {
+      "page": "About",
+      "viewport": "tablet",
+      "path": "screenshots\\about-tablet.png"
+    },
+    {
+      "page": "Contact",
+      "viewport": "tablet",
+      "path": "screenshots\\contact-tablet.png"
+    },
+    {
+      "page": "Services",
+      "viewport": "tablet",
+      "path": "screenshots\\services-tablet.png"
+    },
+    {
+      "page": "Blog",
+      "viewport": "tablet",
+      "path": "screenshots\\blog-tablet.png"
+    },
+    {
+      "page": "Discovered: /post-property",
+      "viewport": "tablet",
+      "path": "screenshots\\discovered---post-property-tablet.png"
+    },
+    {
+      "page": "Discovered: /login",
+      "viewport": "tablet",
+      "path": "screenshots\\discovered---login-tablet.png"
+    },
+    {
+      "page": "Discovered: /tools/emi-calculator",
+      "viewport": "tablet",
+      "path": "screenshots\\discovered---tools-emi-calculator-tablet.png"
+    },
+    {
+      "page": "Discovered: /tools/area-converter",
+      "viewport": "tablet",
+      "path": "screenshots\\discovered---tools-area-converter-tablet.png"
+    },
+    {
+      "page": "Discovered: /compare",
+      "viewport": "tablet",
+      "path": "screenshots\\discovered---compare-tablet.png"
+    },
+    {
+      "page": "Discovered: /faq",
+      "viewport": "tablet",
+      "path": "screenshots\\discovered---faq-tablet.png"
+    },
+    {
+      "page": "Discovered: /privacy",
+      "viewport": "tablet",
+      "path": "screenshots\\discovered---privacy-tablet.png"
+    },
+    {
+      "page": "Discovered: /terms",
+      "viewport": "tablet",
+      "path": "screenshots\\discovered---terms-tablet.png"
+    },
+    {
+      "page": "Homepage",
+      "viewport": "mobile",
+      "path": "screenshots\\homepage-mobile.png"
+    },
+    {
+      "page": "Properties",
+      "viewport": "mobile",
+      "path": "screenshots\\properties-mobile.png"
+    },
+    {
+      "page": "About",
+      "viewport": "mobile",
+      "path": "screenshots\\about-mobile.png"
+    },
+    {
+      "page": "Contact",
+      "viewport": "mobile",
+      "path": "screenshots\\contact-mobile.png"
+    },
+    {
+      "page": "Services",
+      "viewport": "mobile",
+      "path": "screenshots\\services-mobile.png"
+    },
+    {
+      "page": "Blog",
+      "viewport": "mobile",
+      "path": "screenshots\\blog-mobile.png"
+    },
+    {
+      "page": "Discovered: /post-property",
+      "viewport": "mobile",
+      "path": "screenshots\\discovered---post-property-mobile.png"
+    },
+    {
+      "page": "Discovered: /login",
+      "viewport": "mobile",
+      "path": "screenshots\\discovered---login-mobile.png"
+    },
+    {
+      "page": "Discovered: /faq",
+      "viewport": "mobile",
+      "path": "screenshots\\discovered---faq-mobile.png"
+    },
+    {
+      "page": "Discovered: /tools/emi-calculator",
+      "viewport": "mobile",
+      "path": "screenshots\\discovered---tools-emi-calculator-mobile.png"
+    },
+    {
+      "page": "Discovered: /tools/area-converter",
+      "viewport": "mobile",
+      "path": "screenshots\\discovered---tools-area-converter-mobile.png"
+    },
+    {
+      "page": "Discovered: /privacy",
+      "viewport": "mobile",
+      "path": "screenshots\\discovered---privacy-mobile.png"
+    },
+    {
+      "page": "Discovered: /terms",
+      "viewport": "mobile",
+      "path": "screenshots\\discovered---terms-mobile.png"
+    },
+    {
+      "page": "Discovered: /compare",
+      "viewport": "mobile",
+      "path": "screenshots\\discovered---compare-mobile.png"
+    }
+  ]
+}

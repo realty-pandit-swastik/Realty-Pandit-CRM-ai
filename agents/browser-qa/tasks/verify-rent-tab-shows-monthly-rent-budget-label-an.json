@@ -1,0 +1,22 @@
+{
+  "description": "Verify rent tab shows Monthly Rent budget label and no Posted By filter",
+  "checks": [
+    {
+      "type": "no_console_errors",
+      "page": "/properties?tab=rent",
+      "description": "No JS errors on /properties?tab=rent"
+    },
+    {
+      "type": "text_visible",
+      "page": "/properties?tab=rent",
+      "text": "Monthly Rent",
+      "description": "Text \"Monthly Rent\" visible on /properties?tab=rent"
+    },
+    {
+      "type": "text_visible",
+      "page": "/properties?tab=rent",
+      "text": "Location",
+      "description": "Text \"Location\" visible on /properties?tab=rent"
+    }
+  ]
+}

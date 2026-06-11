@@ -1,0 +1,28 @@
+{
+  "description": "Fixed WhatsApp lead data gap: buyer_workflow_engine now saves category_id, sub_category_id, type_id, geocoords, demand_budget_type. Added /session endpoint. Fixed ExternalLeads admin form with intent dropdown, type_id dropdown, conversation answers display.",
+  "checks": [
+    {
+      "type": "api_returns",
+      "url": "/health",
+      "status": 200,
+      "description": "API /health returns 200"
+    },
+    {
+      "type": "api_returns",
+      "url": "/api/leads",
+      "status": 200,
+      "description": "API /api/leads returns 200"
+    },
+    {
+      "type": "no_console_errors",
+      "page": "/",
+      "description": "No JS errors on /"
+    },
+    {
+      "type": "page_loads",
+      "page": "/",
+      "max_time": 3000,
+      "description": "/ loads under 3000ms"
+    }
+  ]
+}

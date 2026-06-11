@@ -1,0 +1,57 @@
+{
+  "description": "Phase C: Filter upgrades — 3 tabs (Rent a Property, Property on Resale, New Launch Projects), multi-select filters, filter chips, amenities filter section",
+  "checks": [
+    {
+      "type": "no_console_errors",
+      "page": "/properties",
+      "description": "No JS errors on /properties"
+    },
+    {
+      "type": "text_visible",
+      "page": "/properties",
+      "text": "Rent a Property",
+      "description": "Text \"Rent a Property\" visible on /properties"
+    },
+    {
+      "type": "text_visible",
+      "page": "/properties",
+      "text": "Property on Resale",
+      "description": "Text \"Property on Resale\" visible on /properties"
+    },
+    {
+      "type": "text_visible",
+      "page": "/properties",
+      "text": "New Launch Projects",
+      "description": "Text \"New Launch Projects\" visible on /properties"
+    },
+    {
+      "type": "text_visible",
+      "page": "/properties",
+      "text": "Amenities",
+      "description": "Text \"Amenities\" visible on /properties"
+    },
+    {
+      "type": "text_visible",
+      "page": "/properties",
+      "text": "Furnishing",
+      "description": "Text \"Furnishing\" visible on /properties"
+    },
+    {
+      "type": "text_visible",
+      "page": "/properties",
+      "text": "Posted By",
+      "description": "Text \"Posted By\" visible on /properties"
+    },
+    {
+      "type": "responsive",
+      "page": "/properties",
+      "description": "/properties is responsive on mobile"
+    },
+    {
+      "type": "page_loads",
+      "page": "/properties",
+      "max_time": 5000,
+      "description": "/properties loads under 5000ms"
+    }
+  ]
+}

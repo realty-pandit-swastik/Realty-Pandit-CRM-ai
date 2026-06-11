@@ -1,0 +1,48 @@
+{
+  "timestamp": "2026-06-08T18:29:20.803Z",
+  "duration": "9.2s",
+  "task": "Phase A bot fixes deployed: A1 stop free-form to never-replied leads, A2 dedup property_share_exhausted, A3 closing-signal + conversational routing on QUALIFIED deals",
+  "summary": {
+    "total": 4,
+    "passed": 3,
+    "failed": 1
+  },
+  "allPassed": false,
+  "results": [
+    {
+      "type": "api_returns",
+      "url": "/health",
+      "status": 200,
+      "description": "API /health returns 200",
+      "passed": true,
+      "message": "API /health: HTTP 200 (expected 200)"
+    },
+    {
+      "type": "api_returns",
+      "url": "/public/properties",
+      "status": 200,
+      "description": "API /public/properties returns 200",
+      "passed": true,
+      "message": "API /public/properties: HTTP 200 (expected 200)"
+    },
+    {
+      "type": "no_console_errors",
+      "page": "/",
+      "description": "No JS errors on /",
+      "passed": false,
+      "message": "1 console errors: Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+      "errors": [
+        "Failed to load resource: the server responded with a status of 401 (Unauthorized)"
+      ]
+    },
+    {
+      "type": "page_loads",
+      "page": "/properties",
+      "max_time": 5000,
+      "description": "/properties loads under 5000ms",
+      "passed": true,
+      "message": "/properties loaded in 2674ms (max: 5000ms)",
+      "loadTime": 2674
+    }
+  ]
+}

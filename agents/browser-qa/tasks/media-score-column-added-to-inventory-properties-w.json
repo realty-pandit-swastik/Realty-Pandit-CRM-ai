@@ -1,0 +1,27 @@
+{
+  "description": "media_score column added to inventory — properties with images/videos now appear first on homepage and listing page",
+  "checks": [
+    {
+      "type": "no_console_errors",
+      "page": "/",
+      "description": "No JS errors on /"
+    },
+    {
+      "type": "api_returns",
+      "url": "/public/featured-properties",
+      "status": 200,
+      "description": "API /public/featured-properties returns 200"
+    },
+    {
+      "type": "no_console_errors",
+      "page": "/properties",
+      "description": "No JS errors on /properties"
+    },
+    {
+      "type": "api_returns",
+      "url": "/public/properties",
+      "status": 200,
+      "description": "API /public/properties returns 200"
+    }
+  ]
+}

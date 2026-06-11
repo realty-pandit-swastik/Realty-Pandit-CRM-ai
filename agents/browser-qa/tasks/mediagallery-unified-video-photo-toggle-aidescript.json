@@ -1,0 +1,28 @@
+{
+  "description": "MediaGallery (unified video+photo toggle), AIDescription fallback, image rendering fix on property detail page",
+  "checks": [
+    {
+      "type": "element_exists",
+      "page": "/properties/f8f2db7a-927e-4f7f-a7b3-f84fc5978bf4",
+      "selector": "ai-description",
+      "description": "Element \"ai-description\" exists on /properties/f8f2db7a-927e-4f7f-a7b3-f84fc5978bf4"
+    },
+    {
+      "type": "text_visible",
+      "page": "/properties/f8f2db7a-927e-4f7f-a7b3-f84fc5978bf4",
+      "text": "About This Property",
+      "description": "Text \"About This Property\" visible on /properties/f8f2db7a-927e-4f7f-a7b3-f84fc5978bf4"
+    },
+    {
+      "type": "no_console_errors",
+      "page": "/properties/f8f2db7a-927e-4f7f-a7b3-f84fc5978bf4",
+      "description": "No JS errors on /properties/f8f2db7a-927e-4f7f-a7b3-f84fc5978bf4"
+    },
+    {
+      "type": "image_loads",
+      "page": "/properties/f8f2db7a-927e-4f7f-a7b3-f84fc5978bf4",
+      "selector": "ai-description",
+      "description": "Image \"ai-description\" loads on /properties/f8f2db7a-927e-4f7f-a7b3-f84fc5978bf4"
+    }
+  ]
+}

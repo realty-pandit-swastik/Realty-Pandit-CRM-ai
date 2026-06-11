@@ -1,0 +1,299 @@
+{
+  "timestamp": "2026-03-13T05:30:18.750Z",
+  "viewport": {
+    "width": 375,
+    "height": 812
+  },
+  "results": [
+    {
+      "section": "home",
+      "url": "https://admin.realtypandit.in/login",
+      "headings": [
+        "Good morning, Hardiq 👋"
+      ],
+      "buttonsCount": 12,
+      "buttonsSample": [
+        "☰",
+        "🌙",
+        "📊Main Dashboard",
+        "📈Market Trends",
+        "👥User Performance",
+        "🎯Lead Sources",
+        "🏠Property Analytics",
+        "🏡Home",
+        "💬Chats",
+        "🏠Inventory",
+        "👥Team",
+        "☰Menu"
+      ],
+      "hasCanvas": 0,
+      "hasSvgChart": 0,
+      "hasTable": 0,
+      "cardCount": 0,
+      "overflows": [],
+      "textSample": "☰\nDashboard\n🌙\n📊\nMain Dashboard\n📈\nMarket Trends\n👥\nUser Performance\n🎯\nLead Sources\n🏠\nProperty Analytics\nGood morning, Hardiq 👋\n\nFriday, 13 March 2026\n\nQUICK OVERVIEW\n\n👥\n0\nTotal Contacts\n🔥\n0\nHOT Leads\n🟢\n0\nWARM Leads\n❄️\n0\nCOLD Leads\n📅\n0\nToday's Appointments\n🏠\n0\nActive Properties\n💡\nExplore different tabs above to view detailed analytics, market trends, and team performance metrics.\n🏡\nHome\n💬\nChats\n🏠\nInventory\n👥\nTeam\n☰\nMenu"
+    },
+    {
+      "section": "chats",
+      "url": "https://admin.realtypandit.in/login",
+      "headings": [],
+      "buttonsCount": 12,
+      "buttonsSample": [
+        "☰",
+        "🌙",
+        "All",
+        "Buyers",
+        "Sellers",
+        "Partners",
+        "🔥 Hot",
+        "🏡Home",
+        "💬Chats",
+        "🏠Inventory",
+        "👥Team",
+        "☰Menu"
+      ],
+      "hasCanvas": 0,
+      "hasSvgChart": 0,
+      "hasTable": 0,
+      "cardCount": 0,
+      "overflows": [],
+      "textSample": "☰\nChats\n🌙\nAll\nBuyers\nSellers\nPartners\n🔥 Hot\nNo contacts found\n🏡\nHome\n💬\nChats\n🏠\nInventory\n👥\nTeam\n☰\nMenu"
+    },
+    {
+      "section": "inventory",
+      "url": "https://admin.realtypandit.in/login",
+      "headings": [],
+      "buttonsCount": 13,
+      "buttonsSample": [
+        "☰",
+        "🌙",
+        "All",
+        "Sale",
+        "Rent",
+        "Lease",
+        "Filters",
+        "+",
+        "🏡Home",
+        "💬Chats",
+        "🏠Inventory",
+        "👥Team",
+        "☰Menu"
+      ],
+      "hasCanvas": 0,
+      "hasSvgChart": 0,
+      "hasTable": 0,
+      "cardCount": 0,
+      "overflows": [],
+      "textSample": "☰\nInventory\n🌙\nAll\nSale\nRent\nLease\nFilters\nNo properties found\n+\n🏡\nHome\n💬\nChats\n🏠\nInventory\n👥\nTeam\n☰\nMenu"
+    },
+    {
+      "section": "team",
+      "url": "https://admin.realtypandit.in/login",
+      "headings": [],
+      "buttonsCount": 7,
+      "buttonsSample": [
+        "☰",
+        "🌙",
+        "🏡Home",
+        "💬Chats",
+        "🏠Inventory",
+        "👥Team",
+        "☰Menu"
+      ],
+      "hasCanvas": 0,
+      "hasSvgChart": 0,
+      "hasTable": 0,
+      "cardCount": 0,
+      "overflows": [],
+      "textSample": "☰\nTeam\n🌙\nTEAM MEMBERS (0)\n🏡\nHome\n💬\nChats\n🏠\nInventory\n👥\nTeam\n☰\nMenu"
+    },
+    {
+      "section": "drawer-calendar",
+      "url": "https://admin.realtypandit.in/login",
+      "headings": [],
+      "buttonsCount": 11,
+      "buttonsSample": [
+        "☰",
+        "🌙",
+        "All",
+        "Upcoming",
+        "Confirmed",
+        "Done",
+        "🏡Home",
+        "💬Chats",
+        "🏠Inventory",
+        "👥Team",
+        "☰Menu"
+      ],
+      "hasCanvas": 0,
+      "hasSvgChart": 0,
+      "hasTable": 0,
+      "cardCount": 0,
+      "overflows": [],
+      "textSample": "☰\nCalendar\n🌙\nAll\nUpcoming\nConfirmed\nDone\nNo appointments\n🏡\nHome\n💬\nChats\n🏠\nInventory\n👥\nTeam\n☰\nMenu"
+    },
+    {
+      "section": "drawer-emails",
+      "url": "https://admin.realtypandit.in/login",
+      "headings": [
+        "📧 Email Management"
+      ],
+      "buttonsCount": 16,
+      "buttonsSample": [
+        "☰",
+        "🌙",
+        "All",
+        "Inbox",
+        "Sent",
+        "✉️ Compose Email",
+        "📨 Bulk Send",
+        "🔍 Search",
+        "Clear",
+        "← Previous",
+        "Next →",
+        "🏡Home",
+        "💬Chats",
+        "🏠Inventory",
+        "👥Team"
+      ],
+      "hasCanvas": 0,
+      "hasSvgChart": 0,
+      "hasTable": 0,
+      "cardCount": 0,
+      "overflows": [],
+      "textSample": "☰\nEmails\n🌙\n📧 Email Management\n\nPowered by Panditji AI • Total: 0 emails\n\nAll\nInbox\nSent\n✉️ Compose Email\n📨 Bulk Send\n🔍 Search\nClear\nNo emails found\n← Previous\nPage 1 of 0\nNext →\n🏡\nHome\n💬\nChats\n🏠\nInventory\n👥\nTeam\n☰\nMenu"
+    },
+    {
+      "section": "drawer-call-log",
+      "url": "https://admin.realtypandit.in/login",
+      "headings": [
+        "📞 Call Log",
+        "Filters",
+        "Call History (0)"
+      ],
+      "buttonsCount": 7,
+      "buttonsSample": [
+        "☰",
+        "🌙",
+        "🏡Home",
+        "💬Chats",
+        "🏠Inventory",
+        "👥Team",
+        "☰Menu"
+      ],
+      "hasCanvas": 0,
+      "hasSvgChart": 0,
+      "hasTable": 0,
+      "cardCount": 0,
+      "overflows": [],
+      "textSample": "☰\nCall Log\n🌙\n📞 Call Log\n\nView call history with audio playback and AI summaries\n\nYou do not have permission to view call logs\n0\nTotal Calls\n0\nAnswered\n0\nMissed\n0\nIncoming\n0\nOutgoing\n0:00\nTotal Duration\nFilters\nSearch\nStatus\nAll Calls\nAnswered\nMissed\nFailed\nDirection\nAll Directions\nIncoming\nOutgoing\nFrom Date\nTo Date\nCall History (0)\n\nNo calls found\n\nTry adjusting your filters\n\n🏡\nHome\n💬\nChats\n🏠\nInventory\n👥\nTeam\n☰\nMenu"
+    },
+    {
+      "section": "drawer-partner-agents",
+      "url": "https://admin.realtypandit.in/login",
+      "headings": [
+        "Partner Agents"
+      ],
+      "buttonsCount": 9,
+      "buttonsSample": [
+        "☰",
+        "🌙",
+        "+ Register Partner",
+        "Suspend",
+        "🏡Home",
+        "💬Chats",
+        "🏠Inventory",
+        "👥Team",
+        "☰Menu"
+      ],
+      "hasCanvas": 0,
+      "hasSvgChart": 0,
+      "hasTable": 1,
+      "cardCount": 0,
+      "overflows": [
+        "TABLE(756px) overflow 406px"
+      ],
+      "textSample": "☰\nPartner Agents\n🌙\nPartner Agents\n\n1 of 1 partner\n\n+ Register Partner\nAll Plans\nFree\nPro\nAdvance Pro\nAll Status\nActive\nSuspended\nExpired\nPending Payment\nNAME / BUSINESS\tPHONE\tCATEGORY\tPLAN\tMANAGER\tSTATUS\tACTIONS\n\nMeenakshi Sharma\nMenu Property\n\t+919958804559\tINDIVIDUAL\t\nFree\nFree\nPro\nAdvance Pro\n\tHardiq\tACTIVE\t\nSuspend\n🏡\nHome\n💬\nChats\n🏠\nInventory\n👥\nTeam\n☰\nMenu"
+    },
+    {
+      "section": "drawer-tasks",
+      "url": "https://admin.realtypandit.in/login",
+      "headings": [
+        "📋 Task Management",
+        "To Do(0)",
+        "In Progress(0)",
+        "Done(0)",
+        "Blocked(0)"
+      ],
+      "buttonsCount": 12,
+      "buttonsSample": [
+        "☰",
+        "🌙",
+        "Kanban",
+        "List",
+        "Calendar",
+        "New Project",
+        "New Task",
+        "🏡Home",
+        "💬Chats",
+        "🏠Inventory",
+        "👥Team",
+        "☰Menu"
+      ],
+      "hasCanvas": 0,
+      "hasSvgChart": 0,
+      "hasTable": 0,
+      "cardCount": 0,
+      "overflows": [],
+      "textSample": "☰\nTasks\n🌙\n📋 Task Management\n\nOrganize and track all tasks with AI-powered automation\n\n0\nTotal Tasks\n0\nIn Progress\n0\nCompleted\n0\nOverdue\n0\nHigh Priority\nKanbanListCalendar\nAll Projects\nNew ProjectNew Task\nTo Do(0)\nNo tasks\nIn Progress(0)\nNo tasks\nDone(0)\nNo tasks\nBlocked(0)\nNo tasks\n🏡\nHome\n💬\nChats\n🏠\nInventory\n👥\nTeam\n☰\nMenu"
+    },
+    {
+      "section": "FeatureCheck-Dashboard",
+      "leadPipeline": {
+        "hasPipelineWord": false,
+        "hasKanban": false,
+        "hasStageNew": false,
+        "hasStageContacted": false,
+        "hasStageQualified": false,
+        "hasStageNegotiation": false,
+        "hasStageClosedWon": false
+      },
+      "statsCards": {
+        "hasTotalContacts": true,
+        "hasHotLeads": true,
+        "hasWarmLeads": true,
+        "hasColdLeads": true,
+        "hasQuickOverview": true
+      },
+      "analytics": {
+        "hasCanvas": 0,
+        "hasChartSvg": 0,
+        "hasAnalyticsWord": true
+      },
+      "transactions": {
+        "hasTransactionWord": false,
+        "hasDealWord": false,
+        "hasRevenueWord": false
+      },
+      "other": {
+        "hasRecentActivity": false,
+        "hasMarketTrends": true,
+        "hasUserPerformance": true
+      }
+    }
+  ],
+  "consoleErrors": [
+    {
+      "url": "https://admin.realtypandit.in/login",
+      "text": "Failed to load resource: the server responded with a status of 403 (Forbidden)"
+    },
+    {
+      "url": "https://admin.realtypandit.in/login",
+      "text": "Failed to load resource: the server responded with a status of 403 (Forbidden)"
+    },
+    {
+      "url": "https://admin.realtypandit.in/login",
+      "text": "AxiosError: Request failed with status code 403\n    at HR (https://admin.realtypandit.in/assets/index-97i4iQ3-.js:11:1091)\n    at XMLHttpRequest._ (https://admin.realtypandit.in/assets/index-97i4iQ3-.js:11:5850)\n    at Zf.request (https://admin.realtypandit.in/assets/index-97i4iQ3-.js:13:2094)\n    a"
+    }
+  ]
+}

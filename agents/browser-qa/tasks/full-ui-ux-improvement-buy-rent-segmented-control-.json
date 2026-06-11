@@ -1,0 +1,50 @@
+{
+  "description": "Full UI/UX improvement — Buy/Rent segmented control, property titles, schedule visit form, phone reveal, bento grid",
+  "checks": [
+    {
+      "type": "no_console_errors",
+      "page": "/",
+      "description": "No JS errors on /"
+    },
+    {
+      "type": "no_console_errors",
+      "page": "/properties",
+      "description": "No JS errors on /properties"
+    },
+    {
+      "type": "page_loads",
+      "page": "/properties",
+      "max_time": 5000,
+      "description": "/properties loads under 5000ms"
+    },
+    {
+      "type": "element_exists",
+      "page": "/properties",
+      "selector": "schedule-visit-form",
+      "description": "Element \"schedule-visit-form\" exists on /properties"
+    },
+    {
+      "type": "no_console_errors",
+      "page": "/properties/f8f2db7a-927e-4f7f-a7b3-f84fc5978bf4",
+      "description": "No JS errors on /properties/f8f2db7a-927e-4f7f-a7b3-f84fc5978bf4"
+    },
+    {
+      "type": "page_loads",
+      "page": "/properties/f8f2db7a-927e-4f7f-a7b3-f84fc5978bf4",
+      "max_time": 6000,
+      "description": "/properties/f8f2db7a-927e-4f7f-a7b3-f84fc5978bf4 loads under 6000ms"
+    },
+    {
+      "type": "api_returns",
+      "url": "/public/properties?limit=1",
+      "status": 200,
+      "description": "API /public/properties?limit=1 returns 200"
+    },
+    {
+      "type": "api_returns",
+      "url": "/health",
+      "status": 200,
+      "description": "API /health returns 200"
+    }
+  ]
+}

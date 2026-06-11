@@ -1,0 +1,44 @@
+{
+  "description": "Phase A+B fixes: PM2 ecosystem config, SSR timeout guards, AIChatModal memory leak fix, PropertyDetailClient aria-labels + EMI form labels, WorkflowChatInput accessible label",
+  "checks": [
+    {
+      "type": "no_console_errors",
+      "page": "/",
+      "description": "No JS errors on /"
+    },
+    {
+      "type": "page_loads",
+      "page": "/",
+      "max_time": 3000,
+      "description": "/ loads under 3000ms"
+    },
+    {
+      "type": "no_console_errors",
+      "page": "/properties",
+      "description": "No JS errors on /properties"
+    },
+    {
+      "type": "page_loads",
+      "page": "/properties",
+      "max_time": 4000,
+      "description": "/properties loads under 4000ms"
+    },
+    {
+      "type": "responsive",
+      "page": "/",
+      "description": "/ is responsive on mobile"
+    },
+    {
+      "type": "api_returns",
+      "url": "/health",
+      "status": 200,
+      "description": "API /health returns 200"
+    },
+    {
+      "type": "api_returns",
+      "url": "/public/properties",
+      "status": 200,
+      "description": "API /public/properties returns 200"
+    }
+  ]
+}

@@ -1,0 +1,72 @@
+{
+  "description": "Verify commercial configs removed from bedroom filter + Google Places + filter functionality",
+  "checks": [
+    {
+      "type": "text_visible",
+      "page": "/properties",
+      "text": "3 BHK",
+      "description": "Text \"3 BHK\" visible on /properties"
+    },
+    {
+      "type": "text_visible",
+      "page": "/properties",
+      "text": "4 BHK",
+      "description": "Text \"4 BHK\" visible on /properties"
+    },
+    {
+      "type": "text_visible",
+      "page": "/properties",
+      "text": "5+ BHK",
+      "description": "Text \"5+ BHK\" visible on /properties"
+    },
+    {
+      "type": "text_visible",
+      "page": "/properties",
+      "text": "Furnished Office",
+      "description": "Text \"Furnished Office\" visible on /properties"
+    },
+    {
+      "type": "text_visible",
+      "page": "/properties",
+      "text": "Bare Shell",
+      "description": "Text \"Bare Shell\" visible on /properties"
+    },
+    {
+      "type": "text_visible",
+      "page": "/properties",
+      "text": "Serviced Office",
+      "description": "Text \"Serviced Office\" visible on /properties"
+    },
+    {
+      "type": "element_exists",
+      "page": "/properties",
+      "selector": ".pac-container",
+      "description": "Element \".pac-container\" exists on /properties"
+    },
+    {
+      "type": "element_count",
+      "page": "/properties",
+      "selector": ".bg-white.rounded-2xl",
+      "min": 1,
+      "description": "1+ \".bg-white.rounded-2xl\" on /properties"
+    },
+    {
+      "type": "text_visible",
+      "page": "/properties",
+      "text": "Furnishing",
+      "description": "Text \"Furnishing\" visible on /properties"
+    },
+    {
+      "type": "text_visible",
+      "page": "/properties",
+      "text": "Amenities",
+      "description": "Text \"Amenities\" visible on /properties"
+    },
+    {
+      "type": "api_returns",
+      "url": "/public/properties?category_id=1b687034-98bc-4d22-b751-f9531a01e38d&intent=sell",
+      "status": 200,
+      "description": "API /public/properties?category_id=1b687034-98bc-4d22-b751-f9531a01e38d&intent=sell returns 200"
+    }
+  ]
+}

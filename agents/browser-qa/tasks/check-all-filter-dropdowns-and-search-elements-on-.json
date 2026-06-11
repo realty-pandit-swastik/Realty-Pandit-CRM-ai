@@ -1,0 +1,39 @@
+{
+  "description": "Check all filter dropdowns and search elements on properties page",
+  "checks": [
+    {
+      "type": "element_exists",
+      "page": "/properties",
+      "selector": "[data-testid]",
+      "description": "Element \"[data-testid]\" exists on /properties"
+    },
+    {
+      "type": "element_exists",
+      "page": "/properties select",
+      "selector": "",
+      "description": "Element \"\" exists on /properties select"
+    },
+    {
+      "type": "element_exists",
+      "page": "/properties input[type='text']",
+      "selector": "",
+      "description": "Element \"\" exists on /properties input[type='text']"
+    },
+    {
+      "type": "element_exists",
+      "page": "/properties input[type='search']",
+      "selector": "",
+      "description": "Element \"\" exists on /properties input[type='search']"
+    },
+    {
+      "type": "no_console_errors",
+      "page": "/properties",
+      "description": "No JS errors on /properties"
+    },
+    {
+      "type": "responsive",
+      "page": "/properties",
+      "description": "/properties is responsive on mobile"
+    }
+  ]
+}

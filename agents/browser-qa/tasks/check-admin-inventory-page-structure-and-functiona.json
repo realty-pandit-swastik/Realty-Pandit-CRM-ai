@@ -1,0 +1,22 @@
+{
+  "description": "Check admin inventory page structure and functionality",
+  "checks": [
+    {
+      "type": "no_console_errors",
+      "page": "/admin/inventory",
+      "description": "No JS errors on /admin/inventory"
+    },
+    {
+      "type": "page_loads",
+      "page": "/admin/inventory",
+      "max_time": 5000,
+      "description": "/admin/inventory loads under 5000ms"
+    },
+    {
+      "type": "api_returns",
+      "url": "/public/master/tree",
+      "status": 200,
+      "description": "API /public/master/tree returns 200"
+    }
+  ]
+}

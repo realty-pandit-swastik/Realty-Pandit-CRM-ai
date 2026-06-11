@@ -1,0 +1,17 @@
+{
+  "description": "Admin panel leads section UI redesign - compact layout with filters",
+  "checks": [
+    {
+      "type": "api_returns",
+      "url": "/health",
+      "status": 200,
+      "description": "API /health returns 200"
+    },
+    {
+      "type": "page_loads",
+      "page": "//admin.realtypandit.in",
+      "max_time": 5000,
+      "description": "//admin.realtypandit.in loads under 5000ms"
+    }
+  ]
+}

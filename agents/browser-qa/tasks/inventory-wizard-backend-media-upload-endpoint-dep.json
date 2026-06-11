@@ -1,0 +1,33 @@
+{
+  "description": "Inventory wizard + backend media upload endpoint deployed and live",
+  "checks": [
+    {
+      "type": "api_returns",
+      "url": "/health",
+      "status": 200,
+      "description": "API /health returns 200"
+    },
+    {
+      "type": "no_console_errors",
+      "page": "/agent/login",
+      "description": "No JS errors on /agent/login"
+    },
+    {
+      "type": "text_visible",
+      "page": "/agent/login",
+      "text": "Sign",
+      "description": "Text \"Sign\" visible on /agent/login"
+    },
+    {
+      "type": "page_loads",
+      "page": "/agent/inventory",
+      "max_time": 3000,
+      "description": "/agent/inventory loads under 3000ms"
+    },
+    {
+      "type": "no_console_errors",
+      "page": "/agent/inventory",
+      "description": "No JS errors on /agent/inventory"
+    }
+  ]
+}

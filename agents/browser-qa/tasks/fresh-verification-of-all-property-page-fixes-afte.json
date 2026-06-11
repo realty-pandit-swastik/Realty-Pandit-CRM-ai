@@ -1,0 +1,76 @@
+{
+  "description": "Fresh verification of all property page fixes after useMasterData rewrite",
+  "checks": [
+    {
+      "type": "no_console_errors",
+      "page": "/properties",
+      "description": "No JS errors on /properties"
+    },
+    {
+      "type": "page_loads",
+      "page": "/properties",
+      "max_time": 5000,
+      "description": "/properties loads under 5000ms"
+    },
+    {
+      "type": "text_visible",
+      "page": "/properties",
+      "text": "Filters",
+      "description": "Text \"Filters\" visible on /properties"
+    },
+    {
+      "type": "text_visible",
+      "page": "/properties",
+      "text": "Property Type",
+      "description": "Text \"Property Type\" visible on /properties"
+    },
+    {
+      "type": "text_visible",
+      "page": "/properties",
+      "text": "Budget",
+      "description": "Text \"Budget\" visible on /properties"
+    },
+    {
+      "type": "text_visible",
+      "page": "/properties",
+      "text": "No. of Bedrooms",
+      "description": "Text \"No. of Bedrooms\" visible on /properties"
+    },
+    {
+      "type": "text_visible",
+      "page": "/properties",
+      "text": "Residential",
+      "description": "Text \"Residential\" visible on /properties"
+    },
+    {
+      "type": "text_visible",
+      "page": "/properties",
+      "text": "Commercial",
+      "description": "Text \"Commercial\" visible on /properties"
+    },
+    {
+      "type": "text_visible",
+      "page": "/properties",
+      "text": "Agricultural Land",
+      "description": "Text \"Agricultural Land\" visible on /properties"
+    },
+    {
+      "type": "text_visible",
+      "page": "/properties",
+      "text": "Studio",
+      "description": "Text \"Studio\" visible on /properties"
+    },
+    {
+      "type": "text_visible",
+      "page": "/properties",
+      "text": "1 BHK",
+      "description": "Text \"1 BHK\" visible on /properties"
+    },
+    {
+      "type": "text_visible",
+      "page": "/properties",
+      "text": "2 BHK",
+      "description": "Text \"2 BHK\" visible on /properties"
+    }
+  ]
+}

@@ -1,0 +1,73 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: reality_pandit_db
+    restart: always
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: reality_pandit
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d reality_pandit"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: reality_pandit_redis
+    restart: always
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    container_name: reality_pandit_backend
+    restart: always
+    ports:
+      - "7071:3000"
+    env_file:
+      - ../backend/.env
+    environment:
+      DATABASE_URL: postgresql://admin:password@postgres:5432/reality_pandit?schema=public
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - backend_uploads:/app/uploads
+      - backend_logs:/app/logs
+
+  website:
+    build:
+      context: ../website
+      dockerfile: Dockerfile
+    container_name: reality_pandit_website
+    restart: always
+    ports:
+      - "3001:3001"
+    environment:
+      NEXT_PUBLIC_API_URL: http://backend:3000
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:
+  backend_uploads:
+  backend_logs:

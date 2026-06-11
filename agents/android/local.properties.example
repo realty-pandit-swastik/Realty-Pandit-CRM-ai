@@ -1,0 +1,14 @@
+# Android local config. Copy to local.properties (gitignored) and fill in.
+
+# Path to your Android SDK
+sdk.dir=/path/to/Android/Sdk
+
+# GlitchTip DSN — read at build time, baked into BuildConfig.GLITCHTIP_DSN.
+# Android shares the existing backend GlitchTip project (events are filterable
+# by the `service:android` tag set in StaffApp.kt). Paste the SAME DSN value used
+# by the backend in /var/www/.../agents/backend/.env (GLITCHTIP_DSN / SENTRY_DSN).
+#
+# DSNs are public-by-design (they only authorize submission to one project),
+# so this is safe to ship in the APK. We keep it out of git only because each
+# dev / CI machine may target a different project (e.g., dev vs prod).
+GLITCHTIP_DSN=

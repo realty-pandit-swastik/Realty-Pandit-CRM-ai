@@ -1,0 +1,208 @@
+"""
+Minimal async SIP/TLS server for WhatsApp inbound calls.
+
+WhatsApp sends a SIP INVITE (with WebRTC SDP offer) to port 5061 (TLS).
+We extract the SDP offer, pass it to the existing Pipecat pipeline,
+and return the SDP answer in the 200 OK. The WebRTC media then flows
+directly between WhatsApp's infrastructure and our Pipecat/aiortc server.
+"""
+
+import asyncio
+import logging
+import re
+import ssl
+import uuid
+from typing import Awaitable, Callable, Optional
+
+logger = logging.getLogger(__name__)
+
+OnInviteCallback = Callable[[str, str, str], Awaitable[str]]
+
+
+def _parse_sip(raw: str) -> dict:
+    """Parse SIP message into {first_line, headers, body}."""
+    headers: dict[str, str] = {}
+    body_lines: list[str] = []
+    in_body = False
+
+    lines = raw.split("\r\n")
+    first_line = lines[0] if lines else ""
+
+    for line in lines[1:]:
+        if in_body:
+            body_lines.append(line)
+        elif line == "":
+            in_body = True
+        elif ":" in line:
+            k, _, v = line.partition(":")
+            # Keep only the first occurrence (multi-value headers rare for our use)
+            key = k.strip().lower()
+            if key not in headers:
+                headers[key] = v.strip()
+
+    return {"first_line": first_line, "headers": headers, "body": "\r\n".join(body_lines).strip()}
+
+
+def _make_response(msg: dict, code: int, status: str, body: str = "", contact: str = "", dialog_tag: str = "") -> bytes:
+    """Build a SIP response matching the incoming request's Via/From/To/CSeq."""
+    h = msg["headers"]
+    to_hdr = h.get("to", "")
+    # Add tag to To if not already present — use the same tag for all responses in this dialog
+    if "tag=" not in to_hdr and code >= 180:
+        to_hdr = f"{to_hdr};tag={dialog_tag or uuid.uuid4().hex[:8]}"
+
+    parts = [
+        f"SIP/2.0 {code} {status}",
+        f"Via: {h.get('via', '')}",
+        f"From: {h.get('from', '')}",
+        f"To: {to_hdr}",
+        f"Call-ID: {h.get('call-id', '')}",
+        f"CSeq: {h.get('cseq', '')}",
+    ]
+
+    # Mirror Record-Route so SIP proxy keeps routing ACK/BYE through itself
+    if h.get("record-route"):
+        parts.append(f"Record-Route: {h['record-route']}")
+
+    # Contact is REQUIRED in 200 OK for INVITE (RFC 3261 §8.2.6.2)
+    if contact:
+        parts.append(f"Contact: {contact}")
+
+    if body:
+        encoded = body.encode()
+        parts += [
+            "Content-Type: application/sdp",
+            f"Content-Length: {len(encoded)}",
+            "",
+            body,
+        ]
+    else:
+        parts += ["Content-Length: 0", ""]
+
+    return ("\r\n".join(parts)).encode()
+
+
+def _extract_caller(from_header: str) -> str:
+    """Pull phone number from SIP From header like <sip:+919958860411@...>."""
+    m = re.search(r"sip:(\+?[\d]+)@", from_header)
+    return m.group(1) if m else "unknown"
+
+
+class SIPServer:
+    def __init__(
+        self,
+        host: str,
+        port: int,
+        certfile: str,
+        keyfile: str,
+        contact: str = "",
+        on_invite: Optional[OnInviteCallback] = None,
+    ):
+        self.host = host
+        self.port = port
+        self.certfile = certfile
+        self.keyfile = keyfile
+        self._contact = contact
+        self._on_invite = on_invite
+        self._active: dict[str, asyncio.StreamWriter] = {}
+
+    async def _handle(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
+        peer = writer.get_extra_info("peername")
+        logger.info("[SIP] Connection from %s", peer)
+        buf = b""
+
+        try:
+            while True:
+                chunk = await reader.read(65536)
+                if not chunk:
+                    break
+                buf += chunk
+
+                # Wait until we have a full SIP message (headers + body)
+                text = buf.decode("utf-8", errors="replace")
+                if "\r\n\r\n" not in text:
+                    continue
+
+                header_part, _, body_part = text.partition("\r\n\r\n")
+                # Check Content-Length to see if body is complete
+                cl_match = re.search(r"content-length:\s*(\d+)", header_part, re.I)
+                expected_body_len = int(cl_match.group(1)) if cl_match else 0
+                if len(body_part.encode()) < expected_body_len:
+                    continue  # wait for more data
+
+                # Consume exactly this message — keep bytes that follow (e.g. ACK after INVITE)
+                msg_len = len(header_part.encode()) + 4 + expected_body_len
+                buf = buf[msg_len:]
+
+                msg = _parse_sip(text)
+                fl = msg["first_line"]
+                call_id = msg["headers"].get("call-id", "")
+
+                if fl.startswith("INVITE"):
+                    logger.info("[SIP] INVITE call_id=%s", call_id)
+                    logger.info("[SIP] SDP offer:\n%s", msg["body"])
+                    logger.info("[SIP] INVITE headers: from=%s to=%s", msg["headers"].get("from",""), msg["headers"].get("to",""))
+
+                    # Generate dialog tag once — must be same in 180, 200, etc.
+                    dialog_tag = uuid.uuid4().hex[:8]
+
+                    # 100 Trying immediately (no tag per RFC 3261)
+                    writer.write(_make_response(msg, 100, "Trying"))
+                    await writer.drain()
+
+                    # 180 Ringing — tells WhatsApp we are handling the call
+                    writer.write(_make_response(msg, 180, "Ringing", contact=self._contact, dialog_tag=dialog_tag))
+                    await writer.drain()
+
+                    sdp_offer = msg["body"]
+                    caller = _extract_caller(msg["headers"].get("from", ""))
+
+                    if self._on_invite and sdp_offer:
+                        try:
+                            sdp_answer = await self._on_invite(call_id, caller, sdp_offer)
+                            logger.info("[SIP] SDP answer:\n%s", sdp_answer)
+                            writer.write(_make_response(msg, 200, "OK", sdp_answer, contact=self._contact, dialog_tag=dialog_tag))
+                            await writer.drain()
+                            self._active[call_id] = writer
+                            logger.info("[SIP] 200 OK sent for call %s", call_id)
+                        except Exception as exc:
+                            logger.error("[SIP] Pipeline error: %s", exc)
+                            writer.write(_make_response(msg, 500, "Server Internal Error"))
+                            await writer.drain()
+                    else:
+                        writer.write(_make_response(msg, 486, "Busy Here"))
+                        await writer.drain()
+
+                elif fl.startswith("ACK"):
+                    logger.info("[SIP] ACK call_id=%s", call_id)
+                    # No response needed for ACK
+
+                elif fl.startswith("BYE"):
+                    logger.info("[SIP] BYE call_id=%s", call_id)
+                    writer.write(_make_response(msg, 200, "OK"))
+                    await writer.drain()
+                    self._active.pop(call_id, None)
+
+                elif fl.startswith("CANCEL"):
+                    logger.info("[SIP] CANCEL call_id=%s", call_id)
+                    writer.write(_make_response(msg, 200, "OK"))
+                    await writer.drain()
+
+        except asyncio.IncompleteReadError:
+            pass
+        except Exception as exc:
+            logger.error("[SIP] Handler error: %s", exc)
+        finally:
+            writer.close()
+            logger.info("[SIP] Connection closed from %s", peer)
+
+    async def serve(self):
+        ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        ctx.load_cert_chain(self.certfile, self.keyfile)
+        # WhatsApp SIP uses TLSv1.2+
+        ctx.minimum_version = ssl.TLSVersion.TLSv1_2
+
+        server = await asyncio.start_server(self._handle, self.host, self.port, ssl=ctx)
+        logger.info("[SIP] Listening on %s:%d (TLS)", self.host, self.port)
+        async with server:
+            await server.serve_forever()

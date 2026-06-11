@@ -8,6 +8,9 @@ agents/frontend/dist/
 agents/website/.next/
 agents/website/out/
 
+# Deploy tarballs (build artifacts — never commit)
+*.tar.gz
+
 # Environment files — NEVER commit
 agents/backend/.env
 agents/backend/.env.*

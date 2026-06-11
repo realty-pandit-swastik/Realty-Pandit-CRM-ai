@@ -1,0 +1,17 @@
+{
+  "description": "Admin panel leads section - mobile card view, partner badge, matching fix, WhatsApp sharing",
+  "checks": [
+    {
+      "type": "api_returns",
+      "url": "/health",
+      "status": 200,
+      "description": "API /health returns 200"
+    },
+    {
+      "type": "page_loads",
+      "page": "/properties",
+      "max_time": 5000,
+      "description": "/properties loads under 5000ms"
+    }
+  ]
+}

@@ -1,0 +1,23 @@
+{
+  "description": "Deployed 6 new agents: Payment (Razorpay), Notification, Meta/Facebook, Instagram, SEO, Analytics. New backend routes: /api/payments/plans, /webhooks/razorpay, /external/facebook/webhook, /health",
+  "checks": [
+    {
+      "type": "api_returns",
+      "url": "/api/payments/plans",
+      "status": 200,
+      "description": "API /api/payments/plans returns 200"
+    },
+    {
+      "type": "api_returns",
+      "url": "/external/facebook/webhook",
+      "status": 403,
+      "description": "API /external/facebook/webhook returns 403"
+    },
+    {
+      "type": "api_returns",
+      "url": "/health",
+      "status": 200,
+      "description": "API /health returns 200"
+    }
+  ]
+}

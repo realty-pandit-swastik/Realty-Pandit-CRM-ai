@@ -1,0 +1,887 @@
+{
+  "timestamp": "2026-05-09T14:38:18.445Z",
+  "duration": "84.4s",
+  "summary": {
+    "totalIssues": 1,
+    "critical": 0,
+    "warnings": 0,
+    "info": 1,
+    "pagesChecked": 14,
+    "screenshotsTaken": 14
+  },
+  "issues": [
+    {
+      "page": "Homepage",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Form input without label: text",
+      "details": {
+        "viewport": "desktop"
+      },
+      "timestamp": "2026-05-09T14:37:19.064Z"
+    }
+  ],
+  "consoleErrors": [
+    {
+      "url": "https://www.realtypandit.in/",
+      "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.realtypandit.in/",
+      "text": "Connecting to 'https://www.google.com/g/collect?v=2&tid=G-WJF3Y3SXM3&gtm=45je6562v9243687425za200zd9243687425&_p=1778337437454&gcs=G100&gcd=13p3p3l3l5l1&npa=0&dma=0&are=1&cid=1057075865.1778337439&frm=0&pscdl=denied&rcb=9&sr=1920x1080&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uam=&uamb=0&uap=Windows&uapv=10.0.0&uaw=0&ul=en-us&_s=2&tag_exp=0%7E115938466%7E115938468%7E118463262%7E118719170&sid=1778337438&sct=1&seg=0&dl=https%3A%2F%2Fwww.realtypandit.in%2F&dt=Realty+Pandit+-+Find+Your+Dream+Property&en=user_engagement&_et=2801&tfd=4939&gaf=1' violates the following Content Security Policy directive: \"connect-src 'self' https://api.realtypandit.in https://www.google-analytics.com https://analytics.google.com https://maps.googleapis.com https://www.googletagmanager.com\". The action has been blocked.",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.realtypandit.in/",
+      "text": "Fetch API cannot load https://www.google.com/g/collect?v=2&tid=G-WJF3Y3SXM3&gtm=45je6562v9243687425za200zd9243687425&_p=1778337437454&gcs=G100&gcd=13p3p3l3l5l1&npa=0&dma=0&are=1&cid=1057075865.1778337439&frm=0&pscdl=denied&rcb=9&sr=1920x1080&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uam=&uamb=0&uap=Windows&uapv=10.0.0&uaw=0&ul=en-us&_s=2&tag_exp=0%7E115938466%7E115938468%7E118463262%7E118719170&sid=1778337438&sct=1&seg=0&dl=https%3A%2F%2Fwww.realtypandit.in%2F&dt=Realty+Pandit+-+Find+Your+Dream+Property&en=user_engagement&_et=2801&tfd=4939&gaf=1. Refused to connect because it violates the document's Content Security Policy.",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.realtypandit.in/properties",
+      "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.realtypandit.in/properties",
+      "text": "Failed to load resource: the server responded with a status of 408 ()",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.realtypandit.in/properties",
+      "text": "Failed to load resource: the server responded with a status of 408 ()",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.realtypandit.in/properties",
+      "text": "Connecting to 'https://www.google.com/g/collect?v=2&tid=G-WJF3Y3SXM3&gtm=45je6562v9243687425za200zd9243687425&_p=1778337442133&gcs=G100&gcd=13p3p3l3l5l1&npa=0&dma=0&are=1&cid=752603649.1778337443&frm=0&pscdl=denied&rcb=10&sr=1920x1080&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uam=&uamb=0&uap=Windows&uapv=10.0.0&uaw=0&ul=en-us&_s=2&tag_exp=0%7E115938465%7E115938468%7E118463261&sid=1778337442&sct=1&seg=1&dl=https%3A%2F%2Fwww.realtypandit.in%2Fproperties&dt=Properties+for+Sale+%26+Rent+in+India+%7C+Realty+Pandit&en=user_engagement&_et=14070&tfd=15453&gaf=1' violates the following Content Security Policy directive: \"connect-src 'self' https://api.realtypandit.in https://www.google-analytics.com https://analytics.google.com https://maps.googleapis.com https://www.googletagmanager.com\". The action has been blocked.",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.realtypandit.in/properties",
+      "text": "Fetch API cannot load https://www.google.com/g/collect?v=2&tid=G-WJF3Y3SXM3&gtm=45je6562v9243687425za200zd9243687425&_p=1778337442133&gcs=G100&gcd=13p3p3l3l5l1&npa=0&dma=0&are=1&cid=752603649.1778337443&frm=0&pscdl=denied&rcb=10&sr=1920x1080&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uam=&uamb=0&uap=Windows&uapv=10.0.0&uaw=0&ul=en-us&_s=2&tag_exp=0%7E115938465%7E115938468%7E118463261&sid=1778337442&sct=1&seg=1&dl=https%3A%2F%2Fwww.realtypandit.in%2Fproperties&dt=Properties+for+Sale+%26+Rent+in+India+%7C+Realty+Pandit&en=user_engagement&_et=14070&tfd=15453&gaf=1. Refused to connect because it violates the document's Content Security Policy.",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.realtypandit.in/about",
+      "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.realtypandit.in/about",
+      "text": "Connecting to 'https://www.google.com/g/collect?v=2&tid=G-WJF3Y3SXM3&gtm=45je6562v9243687425za200zd9243687425&_p=1778337457322&gcs=G100&gcd=13p3p3l3l5l1&npa=0&dma=0&are=1&cid=2101879097.1778337458&frm=0&pscdl=denied&rcb=17&sr=1920x1080&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uam=&uamb=0&uap=Windows&uapv=10.0.0&uaw=0&ul=en-us&_s=2&tag_exp=0%7E115616985%7E115938466%7E115938469%7E118463262%7E118494633&sid=1778337457&sct=1&seg=0&dl=https%3A%2F%2Fwww.realtypandit.in%2Fabout&dt=About+Us+-+AI+Real+Estate+Platform+%7C+Realty+Pandit&en=user_engagement&_et=2888&tfd=3814&gaf=1' violates the following Content Security Policy directive: \"connect-src 'self' https://api.realtypandit.in https://www.google-analytics.com https://analytics.google.com https://maps.googleapis.com https://www.googletagmanager.com\". The action has been blocked.",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.realtypandit.in/about",
+      "text": "Fetch API cannot load https://www.google.com/g/collect?v=2&tid=G-WJF3Y3SXM3&gtm=45je6562v9243687425za200zd9243687425&_p=1778337457322&gcs=G100&gcd=13p3p3l3l5l1&npa=0&dma=0&are=1&cid=2101879097.1778337458&frm=0&pscdl=denied&rcb=17&sr=1920x1080&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uam=&uamb=0&uap=Windows&uapv=10.0.0&uaw=0&ul=en-us&_s=2&tag_exp=0%7E115616985%7E115938466%7E115938469%7E118463262%7E118494633&sid=1778337457&sct=1&seg=0&dl=https%3A%2F%2Fwww.realtypandit.in%2Fabout&dt=About+Us+-+AI+Real+Estate+Platform+%7C+Realty+Pandit&en=user_engagement&_et=2888&tfd=3814&gaf=1. Refused to connect because it violates the document's Content Security Policy.",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.realtypandit.in/contact",
+      "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.realtypandit.in/contact",
+      "text": "Framing 'https://www.google.com/' violates the following Content Security Policy directive: \"default-src 'self'\". The request has been blocked. Note that 'frame-src' was not explicitly set, so 'default-src' is used as a fallback.\n",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.realtypandit.in/contact",
+      "text": "Failed to load resource: the server responded with a status of 404 (Not Found)",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.realtypandit.in/contact",
+      "text": "Connecting to 'https://www.google.com/g/collect?v=2&tid=G-WJF3Y3SXM3&gtm=45je6562v9243687425za200zd9243687425&_p=1778337461037&gcs=G100&gcd=13p3p3l3l5l1&npa=0&dma=0&are=1&cid=2100928601.1778337462&frm=0&pscdl=denied&rcb=18&sr=1920x1080&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uam=&uamb=0&uap=Windows&uapv=10.0.0&uaw=0&ul=en-us&_s=2&tag_exp=0%7E115938465%7E115938469%7E118463262%7E118719171&sid=1778337461&sct=1&seg=0&dl=https%3A%2F%2Fwww.realtypandit.in%2Fcontact&dt=Contact+Realty+Pandit+-+Get+in+Touch+%7C+Realty+Pandit&en=user_engagement&_et=2246&tfd=3319&gaf=1' violates the following Content Security Policy directive: \"connect-src 'self' https://api.realtypandit.in https://www.google-analytics.com https://analytics.google.com https://maps.googleapis.com https://www.googletagmanager.com\". The action has been blocked.",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.realtypandit.in/contact",
+      "text": "Fetch API cannot load https://www.google.com/g/collect?v=2&tid=G-WJF3Y3SXM3&gtm=45je6562v9243687425za200zd9243687425&_p=1778337461037&gcs=G100&gcd=13p3p3l3l5l1&npa=0&dma=0&are=1&cid=2100928601.1778337462&frm=0&pscdl=denied&rcb=18&sr=1920x1080&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uam=&uamb=0&uap=Windows&uapv=10.0.0&uaw=0&ul=en-us&_s=2&tag_exp=0%7E115938465%7E115938469%7E118463262%7E118719171&sid=1778337461&sct=1&seg=0&dl=https%3A%2F%2Fwww.realtypandit.in%2Fcontact&dt=Contact+Realty+Pandit+-+Get+in+Touch+%7C+Realty+Pandit&en=user_engagement&_et=2246&tfd=3319&gaf=1. Refused to connect because it violates the document's Content Security Policy.",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.realtypandit.in/services",
+      "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.realtypandit.in/services",
+      "text": "Connecting to 'https://www.google.com/g/collect?v=2&tid=G-WJF3Y3SXM3&gtm=45je6562v9243687425za200zd9243687425&_p=1778337464433&gcs=G100&gcd=13p3p3l3l5l1&npa=0&dma=0&are=1&cid=1537333835.1778337465&frm=0&pscdl=denied&rcb=13&sr=1920x1080&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uam=&uamb=0&uap=Windows&uapv=10.0.0&uaw=0&ul=en-us&_s=2&tag_exp=0%7E115616985%7E115938465%7E115938469%7E118463261%7E118864611&sid=1778337464&sct=1&seg=0&dl=https%3A%2F%2Fwww.realtypandit.in%2Fservices&dt=Real+Estate+Services+-+Buy%2C+Sell+%26+Rent+%7C+Realty+Pandit&en=user_engagement&_et=2414&tfd=3611&gaf=1' violates the following Content Security Policy directive: \"connect-src 'self' https://api.realtypandit.in https://www.google-analytics.com https://analytics.google.com https://maps.googleapis.com https://www.googletagmanager.com\". The action has been blocked.",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.realtypandit.in/services",
+      "text": "Fetch API cannot load https://www.google.com/g/collect?v=2&tid=G-WJF3Y3SXM3&gtm=45je6562v9243687425za200zd9243687425&_p=1778337464433&gcs=G100&gcd=13p3p3l3l5l1&npa=0&dma=0&are=1&cid=1537333835.1778337465&frm=0&pscdl=denied&rcb=13&sr=1920x1080&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uam=&uamb=0&uap=Windows&uapv=10.0.0&uaw=0&ul=en-us&_s=2&tag_exp=0%7E115616985%7E115938465%7E115938469%7E118463261%7E118864611&sid=1778337464&sct=1&seg=0&dl=https%3A%2F%2Fwww.realtypandit.in%2Fservices&dt=Real+Estate+Services+-+Buy%2C+Sell+%26+Rent+%7C+Realty+Pandit&en=user_engagement&_et=2414&tfd=3611&gaf=1. Refused to connect because it violates the document's Content Security Policy.",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.realtypandit.in/blog",
+      "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.realtypandit.in/blog",
+      "text": "Connecting to 'https://www.google.com/g/collect?v=2&tid=G-WJF3Y3SXM3&gtm=45je6562v9243687425za200zd9243687425&_p=1778337467612&gcs=G100&gcd=13p3p3l3l5l1&npa=0&dma=0&are=1&cid=1376165841.1778337468&frm=0&pscdl=denied&rcb=1&sr=1920x1080&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uam=&uamb=0&uap=Windows&uapv=10.0.0&uaw=0&ul=en-us&_s=2&tag_exp=0%7E115938466%7E115938469%7E118463262&sid=1778337467&sct=1&seg=0&dl=https%3A%2F%2Fwww.realtypandit.in%2Fblog&dt=Realty+Pandit+-+Find+Your+Dream+Property&en=user_engagement&_et=2368&tfd=3368&gaf=1' violates the following Content Security Policy directive: \"connect-src 'self' https://api.realtypandit.in https://www.google-analytics.com https://analytics.google.com https://maps.googleapis.com https://www.googletagmanager.com\". The action has been blocked.",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.realtypandit.in/blog",
+      "text": "Fetch API cannot load https://www.google.com/g/collect?v=2&tid=G-WJF3Y3SXM3&gtm=45je6562v9243687425za200zd9243687425&_p=1778337467612&gcs=G100&gcd=13p3p3l3l5l1&npa=0&dma=0&are=1&cid=1376165841.1778337468&frm=0&pscdl=denied&rcb=1&sr=1920x1080&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uam=&uamb=0&uap=Windows&uapv=10.0.0&uaw=0&ul=en-us&_s=2&tag_exp=0%7E115938466%7E115938469%7E118463262&sid=1778337467&sct=1&seg=0&dl=https%3A%2F%2Fwww.realtypandit.in%2Fblog&dt=Realty+Pandit+-+Find+Your+Dream+Property&en=user_engagement&_et=2368&tfd=3368&gaf=1. Refused to connect because it violates the document's Content Security Policy.",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.realtypandit.in/post-property",
+      "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.realtypandit.in/post-property",
+      "text": "Failed to load resource: the server responded with a status of 403 (Forbidden)",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.realtypandit.in/post-property",
+      "text": "[useChatWorkflow] startSession error: AxiosError: Request failed with status code 403\n    at eC (https://www.realtypandit.in/_next/static/chunks/6bd7e3ac44b662e9.js:2:39708)\n    at XMLHttpRequest.b (https://www.realtypandit.in/_next/static/chunks/6bd7e3ac44b662e9.js:2:44079)\n    at tt.request (https://www.realtypandit.in/_next/static/chunks/6bd7e3ac44b662e9.js:2:52513)\n    at async x (https://www.realtypandit.in/_next/static/chunks/78473cfaec19c537.js:2:386)\n    at async Object.startSession (https://www.realtypandit.in/_next/static/chunks/78473cfaec19c537.js:2:29786)",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.realtypandit.in/post-property",
+      "text": "Connecting to 'https://www.google.com/g/collect?v=2&tid=G-WJF3Y3SXM3&gtm=45je6562v9243687425za200zd9243687425&_p=1778337470867&gcs=G100&gcd=13p3p3l3l5l1&npa=0&dma=0&are=1&cid=681223333.1778337472&frm=0&pscdl=denied&rcb=17&sr=1920x1080&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uam=&uamb=0&uap=Windows&uapv=10.0.0&uaw=0&ul=en-us&_s=2&tag_exp=0%7E115616985%7E115938465%7E115938469%7E118463261%7E118864611&sid=1778337470&sct=1&seg=0&dl=https%3A%2F%2Fwww.realtypandit.in%2Fpost-property&dt=Realty+Pandit+-+Find+Your+Dream+Property&en=user_engagement&_et=2048&tfd=2951&gaf=1' violates the following Content Security Policy directive: \"connect-src 'self' https://api.realtypandit.in https://www.google-analytics.com https://analytics.google.com https://maps.googleapis.com https://www.googletagmanager.com\". The action has been blocked.",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.realtypandit.in/post-property",
+      "text": "Fetch API cannot load https://www.google.com/g/collect?v=2&tid=G-WJF3Y3SXM3&gtm=45je6562v9243687425za200zd9243687425&_p=1778337470867&gcs=G100&gcd=13p3p3l3l5l1&npa=0&dma=0&are=1&cid=681223333.1778337472&frm=0&pscdl=denied&rcb=17&sr=1920x1080&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uam=&uamb=0&uap=Windows&uapv=10.0.0&uaw=0&ul=en-us&_s=2&tag_exp=0%7E115616985%7E115938465%7E115938469%7E118463261%7E118864611&sid=1778337470&sct=1&seg=0&dl=https%3A%2F%2Fwww.realtypandit.in%2Fpost-property&dt=Realty+Pandit+-+Find+Your+Dream+Property&en=user_engagement&_et=2048&tfd=2951&gaf=1. Refused to connect because it violates the document's Content Security Policy.",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.realtypandit.in/login",
+      "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.realtypandit.in/login",
+      "text": "Connecting to 'https://www.google.com/g/collect?v=2&tid=G-WJF3Y3SXM3&gtm=45je6562v9243687425za200zd9243687425&_p=1778337473786&gcs=G100&gcd=13p3p3l3l5l1&npa=0&dma=0&are=1&cid=2101726104.1778337474&frm=0&pscdl=denied&rcb=11&sr=1920x1080&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uam=&uamb=0&uap=Windows&uapv=10.0.0&uaw=0&ul=en-us&_s=2&tag_exp=0%7E115938466%7E115938469%7E118463262%7E118719172&sid=1778337473&sct=1&seg=0&dl=https%3A%2F%2Fwww.realtypandit.in%2Flogin&dt=Realty+Pandit+-+Find+Your+Dream+Property&en=user_engagement&_et=3568&tfd=4470&gaf=1' violates the following Content Security Policy directive: \"connect-src 'self' https://api.realtypandit.in https://www.google-analytics.com https://analytics.google.com https://maps.googleapis.com https://www.googletagmanager.com\". The action has been blocked.",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.realtypandit.in/login",
+      "text": "Fetch API cannot load https://www.google.com/g/collect?v=2&tid=G-WJF3Y3SXM3&gtm=45je6562v9243687425za200zd9243687425&_p=1778337473786&gcs=G100&gcd=13p3p3l3l5l1&npa=0&dma=0&are=1&cid=2101726104.1778337474&frm=0&pscdl=denied&rcb=11&sr=1920x1080&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uam=&uamb=0&uap=Windows&uapv=10.0.0&uaw=0&ul=en-us&_s=2&tag_exp=0%7E115938466%7E115938469%7E118463262%7E118719172&sid=1778337473&sct=1&seg=0&dl=https%3A%2F%2Fwww.realtypandit.in%2Flogin&dt=Realty+Pandit+-+Find+Your+Dream+Property&en=user_engagement&_et=3568&tfd=4470&gaf=1. Refused to connect because it violates the document's Content Security Policy.",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.realtypandit.in/tools/emi-calculator",
+      "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.realtypandit.in/tools/emi-calculator",
+      "text": "Connecting to 'https://www.google.com/g/collect?v=2&tid=G-WJF3Y3SXM3&gtm=45je6562v9243687425za200zd9243687425&_p=1778337478111&gcs=G100&gcd=13p3p3l3l5l1&npa=0&dma=0&are=1&cid=1615112105.1778337479&frm=0&pscdl=denied&rcb=10&sr=1920x1080&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uam=&uamb=0&uap=Windows&uapv=10.0.0&uaw=0&ul=en-us&_s=2&tag_exp=0%7E115938465%7E115938469%7E118463261%7E118494634%7E118719171&sid=1778337478&sct=1&seg=0&dl=https%3A%2F%2Fwww.realtypandit.in%2Ftools%2Femi-calculator&dt=Real+Estate+Tools+-+EMI+%26+Area+%7C+Realty+Pandit&en=user_engagement&_et=2112&tfd=3041&gaf=1' violates the following Content Security Policy directive: \"connect-src 'self' https://api.realtypandit.in https://www.google-analytics.com https://analytics.google.com https://maps.googleapis.com https://www.googletagmanager.com\". The action has been blocked.",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.realtypandit.in/tools/emi-calculator",
+      "text": "Fetch API cannot load https://www.google.com/g/collect?v=2&tid=G-WJF3Y3SXM3&gtm=45je6562v9243687425za200zd9243687425&_p=1778337478111&gcs=G100&gcd=13p3p3l3l5l1&npa=0&dma=0&are=1&cid=1615112105.1778337479&frm=0&pscdl=denied&rcb=10&sr=1920x1080&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uam=&uamb=0&uap=Windows&uapv=10.0.0&uaw=0&ul=en-us&_s=2&tag_exp=0%7E115938465%7E115938469%7E118463261%7E118494634%7E118719171&sid=1778337478&sct=1&seg=0&dl=https%3A%2F%2Fwww.realtypandit.in%2Ftools%2Femi-calculator&dt=Real+Estate+Tools+-+EMI+%26+Area+%7C+Realty+Pandit&en=user_engagement&_et=2112&tfd=3041&gaf=1. Refused to connect because it violates the document's Content Security Policy.",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.realtypandit.in/tools/area-converter",
+      "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.realtypandit.in/tools/area-converter",
+      "text": "Connecting to 'https://www.google.com/g/collect?v=2&tid=G-WJF3Y3SXM3&gtm=45je6562v9243687425za200zd9243687425&_p=1778337481056&gcs=G100&gcd=13p3p3l3l5l1&npa=0&dma=0&are=1&cid=1998850203.1778337482&frm=0&pscdl=denied&rcb=5&sr=1920x1080&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uam=&uamb=0&uap=Windows&uapv=10.0.0&uaw=0&ul=en-us&_s=2&tag_exp=0%7E115616986%7E115938465%7E115938468%7E118463262%7E118494634&sid=1778337481&sct=1&seg=0&dl=https%3A%2F%2Fwww.realtypandit.in%2Ftools%2Farea-converter&dt=Real+Estate+Tools+-+EMI+%26+Area+%7C+Realty+Pandit&en=user_engagement&_et=2125&tfd=3068&gaf=1' violates the following Content Security Policy directive: \"connect-src 'self' https://api.realtypandit.in https://www.google-analytics.com https://analytics.google.com https://maps.googleapis.com https://www.googletagmanager.com\". The action has been blocked.",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.realtypandit.in/tools/area-converter",
+      "text": "Fetch API cannot load https://www.google.com/g/collect?v=2&tid=G-WJF3Y3SXM3&gtm=45je6562v9243687425za200zd9243687425&_p=1778337481056&gcs=G100&gcd=13p3p3l3l5l1&npa=0&dma=0&are=1&cid=1998850203.1778337482&frm=0&pscdl=denied&rcb=5&sr=1920x1080&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uam=&uamb=0&uap=Windows&uapv=10.0.0&uaw=0&ul=en-us&_s=2&tag_exp=0%7E115616986%7E115938465%7E115938468%7E118463262%7E118494634&sid=1778337481&sct=1&seg=0&dl=https%3A%2F%2Fwww.realtypandit.in%2Ftools%2Farea-converter&dt=Real+Estate+Tools+-+EMI+%26+Area+%7C+Realty+Pandit&en=user_engagement&_et=2125&tfd=3068&gaf=1. Refused to connect because it violates the document's Content Security Policy.",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.realtypandit.in/compare",
+      "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.realtypandit.in/compare",
+      "text": "Connecting to 'https://www.google.com/g/collect?v=2&tid=G-WJF3Y3SXM3&gtm=45je6562v9243687425za200zd9243687425&_p=1778337484064&gcs=G100&gcd=13p3p3l3l5l1&npa=0&dma=0&are=1&cid=759090562.1778337485&frm=0&pscdl=denied&rcb=5&sr=1920x1080&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uam=&uamb=0&uap=Windows&uapv=10.0.0&uaw=0&ul=en-us&_s=2&tag_exp=0%7E115616985%7E115938466%7E115938469%7E118463262%7E118719172&sid=1778337484&sct=1&seg=0&dl=https%3A%2F%2Fwww.realtypandit.in%2Fcompare&dt=Compare+Properties+Side+by+Side+%7C+Realty+Pandit&en=user_engagement&_et=2221&tfd=3096&gaf=1' violates the following Content Security Policy directive: \"connect-src 'self' https://api.realtypandit.in https://www.google-analytics.com https://analytics.google.com https://maps.googleapis.com https://www.googletagmanager.com\". The action has been blocked.",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.realtypandit.in/compare",
+      "text": "Fetch API cannot load https://www.google.com/g/collect?v=2&tid=G-WJF3Y3SXM3&gtm=45je6562v9243687425za200zd9243687425&_p=1778337484064&gcs=G100&gcd=13p3p3l3l5l1&npa=0&dma=0&are=1&cid=759090562.1778337485&frm=0&pscdl=denied&rcb=5&sr=1920x1080&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uam=&uamb=0&uap=Windows&uapv=10.0.0&uaw=0&ul=en-us&_s=2&tag_exp=0%7E115616985%7E115938466%7E115938469%7E118463262%7E118719172&sid=1778337484&sct=1&seg=0&dl=https%3A%2F%2Fwww.realtypandit.in%2Fcompare&dt=Compare+Properties+Side+by+Side+%7C+Realty+Pandit&en=user_engagement&_et=2221&tfd=3096&gaf=1. Refused to connect because it violates the document's Content Security Policy.",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.realtypandit.in/faq",
+      "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.realtypandit.in/faq",
+      "text": "Connecting to 'https://www.google.com/g/collect?v=2&tid=G-WJF3Y3SXM3&gtm=45je6562v9243687425za200zd9243687425&_p=1778337487088&gcs=G100&gcd=13p3p3l3l5l1&npa=0&dma=0&are=1&cid=241717165.1778337488&frm=0&pscdl=denied&rcb=15&sr=1920x1080&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uam=&uamb=0&uap=Windows&uapv=10.0.0&uaw=0&ul=en-us&_s=2&tag_exp=0%7E115938465%7E115938468%7E118463262&sid=1778337487&sct=1&seg=0&dl=https%3A%2F%2Fwww.realtypandit.in%2Ffaq&dt=FAQ+-+Property+Buying+%26+Selling+Guide+%7C+Realty+Pandit&en=user_engagement&_et=2421&tfd=3304&gaf=1' violates the following Content Security Policy directive: \"connect-src 'self' https://api.realtypandit.in https://www.google-analytics.com https://analytics.google.com https://maps.googleapis.com https://www.googletagmanager.com\". The action has been blocked.",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.realtypandit.in/faq",
+      "text": "Fetch API cannot load https://www.google.com/g/collect?v=2&tid=G-WJF3Y3SXM3&gtm=45je6562v9243687425za200zd9243687425&_p=1778337487088&gcs=G100&gcd=13p3p3l3l5l1&npa=0&dma=0&are=1&cid=241717165.1778337488&frm=0&pscdl=denied&rcb=15&sr=1920x1080&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uam=&uamb=0&uap=Windows&uapv=10.0.0&uaw=0&ul=en-us&_s=2&tag_exp=0%7E115938465%7E115938468%7E118463262&sid=1778337487&sct=1&seg=0&dl=https%3A%2F%2Fwww.realtypandit.in%2Ffaq&dt=FAQ+-+Property+Buying+%26+Selling+Guide+%7C+Realty+Pandit&en=user_engagement&_et=2421&tfd=3304&gaf=1. Refused to connect because it violates the document's Content Security Policy.",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.realtypandit.in/privacy",
+      "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.realtypandit.in/privacy",
+      "text": "Connecting to 'https://www.google.com/g/collect?v=2&tid=G-WJF3Y3SXM3&gtm=45je6562v9243687425za200zd9243687425&_p=1778337490307&gcs=G100&gcd=13p3p3l3l5l1&npa=0&dma=0&are=1&cid=1105818601.1778337491&frm=0&pscdl=denied&rcb=4&sr=1920x1080&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uam=&uamb=0&uap=Windows&uapv=10.0.0&uaw=0&ul=en-us&_s=2&tag_exp=0%7E115938465%7E115938469%7E118463262&sid=1778337490&sct=1&seg=0&dl=https%3A%2F%2Fwww.realtypandit.in%2Fprivacy&dt=Realty+Pandit+-+Find+Your+Dream+Property&en=user_engagement&_et=2901&tfd=3735&gaf=1' violates the following Content Security Policy directive: \"connect-src 'self' https://api.realtypandit.in https://www.google-analytics.com https://analytics.google.com https://maps.googleapis.com https://www.googletagmanager.com\". The action has been blocked.",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.realtypandit.in/privacy",
+      "text": "Fetch API cannot load https://www.google.com/g/collect?v=2&tid=G-WJF3Y3SXM3&gtm=45je6562v9243687425za200zd9243687425&_p=1778337490307&gcs=G100&gcd=13p3p3l3l5l1&npa=0&dma=0&are=1&cid=1105818601.1778337491&frm=0&pscdl=denied&rcb=4&sr=1920x1080&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uam=&uamb=0&uap=Windows&uapv=10.0.0&uaw=0&ul=en-us&_s=2&tag_exp=0%7E115938465%7E115938469%7E118463262&sid=1778337490&sct=1&seg=0&dl=https%3A%2F%2Fwww.realtypandit.in%2Fprivacy&dt=Realty+Pandit+-+Find+Your+Dream+Property&en=user_engagement&_et=2901&tfd=3735&gaf=1. Refused to connect because it violates the document's Content Security Policy.",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.realtypandit.in/terms",
+      "text": "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+      "viewport": "desktop"
+    }
+  ],
+  "networkErrors": [
+    {
+      "url": "https://www.google-analytics.com/g/collect?v=2&tid=G-WJF3Y3SXM3&gtm=45je6562v9243687425za200zd9243687425&_p=1778337437454&gcs=G100&gcd=13p3p3l3l5l1&npa=0&dma=0&are=1&cid=1057075865.1778337439&frm=0&pscdl=denied&rcb=9&sr=1920x1080&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uam=&uamb=0&uap=Windows&uapv=10.0.0&uaw=0&ul=en-us&_s=1&tag_exp=0~115938466~115938468~118463262~118719170&sid=1778337438&sct=1&seg=0&dl=https%3A%2F%2Fwww.realtypandit.in%2F&dt=Realty%20Pandit%20-%20Find%20Your%20Dream%20Property&en=page_view&_fv=1&_nsi=1&_ss=1&_ee=1&tfd=2136",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "fetch",
+      "pageUrl": "https://www.realtypandit.in/",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.google-analytics.com/g/collect?v=2&tid=G-WJF3Y3SXM3&gtm=45je6562v9243687425za200zd9243687425&_p=1778337437454&gcs=G100&gcd=13p3p3l3l5l1&npa=0&dma=0&are=1&cid=1057075865.1778337439&frm=0&pscdl=denied&rcb=9&sr=1920x1080&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uam=&uamb=0&uap=Windows&uapv=10.0.0&uaw=0&ul=en-us&_s=2&tag_exp=0~115938466~115938468~118463262~118719170&sid=1778337438&sct=1&seg=0&dl=https%3A%2F%2Fwww.realtypandit.in%2F&dt=Realty%20Pandit%20-%20Find%20Your%20Dream%20Property&en=user_engagement&_et=2801&tfd=4939",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "fetch",
+      "pageUrl": "https://www.realtypandit.in/",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.realtypandit.in/_next/image?url=https%3A%2F%2Fapi.realtypandit.in%2Fuploads%2Fpending%2Fff254271-8ff4-4751-ab63-332ac0fbed18-1775554456105.jpg&w=640&q=75",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "image",
+      "pageUrl": "https://www.realtypandit.in/",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.realtypandit.in/_next/image?url=https%3A%2F%2Fapi.realtypandit.in%2Fuploads%2Fproperties%2Fccd1b6b5-64cb-4401-a0a8-ae424db9a863%2F1775380384464.webp&w=640&q=75",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "image",
+      "pageUrl": "https://www.realtypandit.in/",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://api.realtypandit.in/uploads/pending/ff254271-8ff4-4751-ab63-332ac0fbed18-1775554456105.jpg",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "image",
+      "pageUrl": "https://www.realtypandit.in/",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://api.realtypandit.in/uploads/properties/cd30bddc-eb6f-4b57-a548-00811f56251c/1775645439724.webp",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "image",
+      "pageUrl": "https://www.realtypandit.in/",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://api.realtypandit.in/uploads/pending/7eca956b-1486-46da-bc8c-adb17332537d-1775554056620.jpg",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "image",
+      "pageUrl": "https://www.realtypandit.in/",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://api.realtypandit.in/uploads/pending/d90f3729-b912-46ca-b83f-96d3c9930931-1775554169862.jpg",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "image",
+      "pageUrl": "https://www.realtypandit.in/",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://api.realtypandit.in/uploads/properties/7905398f-721c-451b-86cb-a55c88d6632e/1775491481425.webp",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "image",
+      "pageUrl": "https://www.realtypandit.in/",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://api.realtypandit.in/uploads/properties/ccd1b6b5-64cb-4401-a0a8-ae424db9a863/1775380384464.webp",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "image",
+      "pageUrl": "https://www.realtypandit.in/",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.realtypandit.in/properties/2bhk-builder-floor-for-sale-in-sector-1-vaishali-ghaziabad-00811f56251c?_rsc=yimjc",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "fetch",
+      "pageUrl": "https://www.realtypandit.in/properties",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.google-analytics.com/g/collect?v=2&tid=G-WJF3Y3SXM3&gtm=45je6562v9243687425za200zd9243687425&_p=1778337442133&gcs=G100&gcd=13p3p3l3l5l1&npa=0&dma=0&are=1&cid=752603649.1778337443&frm=0&pscdl=denied&rcb=10&sr=1920x1080&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uam=&uamb=0&uap=Windows&uapv=10.0.0&uaw=0&ul=en-us&_s=1&tag_exp=0~115938465~115938468~118463261&sid=1778337442&sct=1&seg=0&dl=https%3A%2F%2Fwww.realtypandit.in%2Fproperties&dt=Properties%20for%20Sale%20%26%20Rent%20in%20India%20%7C%20Realty%20Pandit&en=page_view&_fv=1&_nsi=1&_ss=1&_ee=1&tfd=1379",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "fetch",
+      "pageUrl": "https://www.realtypandit.in/properties",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.google-analytics.com/g/collect?v=2&tid=G-WJF3Y3SXM3&gtm=45je6562v9243687425za200zd9243687425&_p=1778337442133&gcs=G100&gcd=13p3p3l3l5l1&npa=0&dma=0&are=1&cid=752603649.1778337443&frm=0&pscdl=denied&rcb=10&sr=1920x1080&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uam=&uamb=0&uap=Windows&uapv=10.0.0&uaw=0&ul=en-us&_s=2&tag_exp=0~115938465~115938468~118463261&sid=1778337442&sct=1&seg=1&dl=https%3A%2F%2Fwww.realtypandit.in%2Fproperties&dt=Properties%20for%20Sale%20%26%20Rent%20in%20India%20%7C%20Realty%20Pandit&en=user_engagement&_et=14070&tfd=15453",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "fetch",
+      "pageUrl": "https://www.realtypandit.in/properties",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.google-analytics.com/g/collect?v=2&tid=G-WJF3Y3SXM3&gtm=45je6562v9243687425za200zd9243687425&_p=1778337457322&gcs=G100&gcd=13p3p3l3l5l1&npa=0&dma=0&are=1&cid=2101879097.1778337458&frm=0&pscdl=denied&rcb=17&sr=1920x1080&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uam=&uamb=0&uap=Windows&uapv=10.0.0&uaw=0&ul=en-us&_s=1&tag_exp=0~115616985~115938466~115938469~118463262~118494633&sid=1778337457&sct=1&seg=0&dl=https%3A%2F%2Fwww.realtypandit.in%2Fabout&dt=About%20Us%20-%20AI%20Real%20Estate%20Platform%20%7C%20Realty%20Pandit&en=page_view&_fv=1&_nsi=1&_ss=1&_ee=1&tfd=924",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "fetch",
+      "pageUrl": "https://www.realtypandit.in/about",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.google-analytics.com/g/collect?v=2&tid=G-WJF3Y3SXM3&gtm=45je6562v9243687425za200zd9243687425&_p=1778337457322&gcs=G100&gcd=13p3p3l3l5l1&npa=0&dma=0&are=1&cid=2101879097.1778337458&frm=0&pscdl=denied&rcb=17&sr=1920x1080&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uam=&uamb=0&uap=Windows&uapv=10.0.0&uaw=0&ul=en-us&_s=2&tag_exp=0~115616985~115938466~115938469~118463262~118494633&sid=1778337457&sct=1&seg=0&dl=https%3A%2F%2Fwww.realtypandit.in%2Fabout&dt=About%20Us%20-%20AI%20Real%20Estate%20Platform%20%7C%20Realty%20Pandit&en=user_engagement&_et=2888&tfd=3814",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "fetch",
+      "pageUrl": "https://www.realtypandit.in/about",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.google-analytics.com/g/collect?v=2&tid=G-WJF3Y3SXM3&gtm=45je6562v9243687425za200zd9243687425&_p=1778337461037&gcs=G100&gcd=13p3p3l3l5l1&npa=0&dma=0&are=1&cid=2100928601.1778337462&frm=0&pscdl=denied&rcb=18&sr=1920x1080&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uam=&uamb=0&uap=Windows&uapv=10.0.0&uaw=0&ul=en-us&_s=1&tag_exp=0~115938465~115938469~118463262~118719171&sid=1778337461&sct=1&seg=0&dl=https%3A%2F%2Fwww.realtypandit.in%2Fcontact&dt=Contact%20Realty%20Pandit%20-%20Get%20in%20Touch%20%7C%20Realty%20Pandit&en=page_view&_fv=1&_nsi=1&_ss=1&_ee=1&tfd=1070",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "fetch",
+      "pageUrl": "https://www.realtypandit.in/contact",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.google-analytics.com/g/collect?v=2&tid=G-WJF3Y3SXM3&gtm=45je6562v9243687425za200zd9243687425&_p=1778337461037&gcs=G100&gcd=13p3p3l3l5l1&npa=0&dma=0&are=1&cid=2100928601.1778337462&frm=0&pscdl=denied&rcb=18&sr=1920x1080&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uam=&uamb=0&uap=Windows&uapv=10.0.0&uaw=0&ul=en-us&_s=2&tag_exp=0~115938465~115938469~118463262~118719171&sid=1778337461&sct=1&seg=0&dl=https%3A%2F%2Fwww.realtypandit.in%2Fcontact&dt=Contact%20Realty%20Pandit%20-%20Get%20in%20Touch%20%7C%20Realty%20Pandit&en=user_engagement&_et=2246&tfd=3319",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "fetch",
+      "pageUrl": "https://www.realtypandit.in/contact",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.google-analytics.com/g/collect?v=2&tid=G-WJF3Y3SXM3&gtm=45je6562v9243687425za200zd9243687425&_p=1778337464433&gcs=G100&gcd=13p3p3l3l5l1&npa=0&dma=0&are=1&cid=1537333835.1778337465&frm=0&pscdl=denied&rcb=13&sr=1920x1080&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uam=&uamb=0&uap=Windows&uapv=10.0.0&uaw=0&ul=en-us&_s=1&tag_exp=0~115616985~115938465~115938469~118463261~118864611&sid=1778337464&sct=1&seg=0&dl=https%3A%2F%2Fwww.realtypandit.in%2Fservices&dt=Real%20Estate%20Services%20-%20Buy%2C%20Sell%20%26%20Rent%20%7C%20Realty%20Pandit&en=page_view&_fv=1&_nsi=1&_ss=1&_ee=1&tfd=1193",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "fetch",
+      "pageUrl": "https://www.realtypandit.in/services",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.google-analytics.com/g/collect?v=2&tid=G-WJF3Y3SXM3&gtm=45je6562v9243687425za200zd9243687425&_p=1778337464433&gcs=G100&gcd=13p3p3l3l5l1&npa=0&dma=0&are=1&cid=1537333835.1778337465&frm=0&pscdl=denied&rcb=13&sr=1920x1080&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uam=&uamb=0&uap=Windows&uapv=10.0.0&uaw=0&ul=en-us&_s=2&tag_exp=0~115616985~115938465~115938469~118463261~118864611&sid=1778337464&sct=1&seg=0&dl=https%3A%2F%2Fwww.realtypandit.in%2Fservices&dt=Real%20Estate%20Services%20-%20Buy%2C%20Sell%20%26%20Rent%20%7C%20Realty%20Pandit&en=user_engagement&_et=2414&tfd=3611",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "fetch",
+      "pageUrl": "https://www.realtypandit.in/services",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.realtypandit.in/blog/10-tips-first-time-home-buyers-india?_rsc=3h8go",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "fetch",
+      "pageUrl": "https://www.realtypandit.in/blog",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.realtypandit.in/blog/top-5-mistakes-sellers-avoid?_rsc=dt32r",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "fetch",
+      "pageUrl": "https://www.realtypandit.in/blog",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.realtypandit.in/blog/true-cost-buying-home-india?_rsc=dt32r",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "fetch",
+      "pageUrl": "https://www.realtypandit.in/blog",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.realtypandit.in/blog/noida-vs-gurgaon-investment-2025?_rsc=dt32r",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "fetch",
+      "pageUrl": "https://www.realtypandit.in/blog",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.realtypandit.in/blog/10-tips-first-time-home-buyers-india?_rsc=dt32r",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "fetch",
+      "pageUrl": "https://www.realtypandit.in/blog",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.realtypandit.in/blog/ai-transforming-real-estate-2025?_rsc=dt32r",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "fetch",
+      "pageUrl": "https://www.realtypandit.in/blog",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.realtypandit.in/blog/understanding-rera-complete-guide?_rsc=dt32r",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "fetch",
+      "pageUrl": "https://www.realtypandit.in/blog",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.google-analytics.com/g/collect?v=2&tid=G-WJF3Y3SXM3&gtm=45je6562v9243687425za200zd9243687425&_p=1778337467612&gcs=G100&gcd=13p3p3l3l5l1&npa=0&dma=0&are=1&cid=1376165841.1778337468&frm=0&pscdl=denied&rcb=1&sr=1920x1080&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uam=&uamb=0&uap=Windows&uapv=10.0.0&uaw=0&ul=en-us&_s=1&tag_exp=0~115938466~115938469~118463262&sid=1778337467&sct=1&seg=0&dl=https%3A%2F%2Fwww.realtypandit.in%2Fblog&dt=Realty%20Pandit%20-%20Find%20Your%20Dream%20Property&en=page_view&_fv=1&_nsi=1&_ss=1&_ee=1&tfd=997",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "fetch",
+      "pageUrl": "https://www.realtypandit.in/blog",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.google-analytics.com/g/collect?v=2&tid=G-WJF3Y3SXM3&gtm=45je6562v9243687425za200zd9243687425&_p=1778337467612&gcs=G100&gcd=13p3p3l3l5l1&npa=0&dma=0&are=1&cid=1376165841.1778337468&frm=0&pscdl=denied&rcb=1&sr=1920x1080&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uam=&uamb=0&uap=Windows&uapv=10.0.0&uaw=0&ul=en-us&_s=2&tag_exp=0~115938466~115938469~118463262&sid=1778337467&sct=1&seg=0&dl=https%3A%2F%2Fwww.realtypandit.in%2Fblog&dt=Realty%20Pandit%20-%20Find%20Your%20Dream%20Property&en=user_engagement&_et=2368&tfd=3368",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "fetch",
+      "pageUrl": "https://www.realtypandit.in/blog",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.google-analytics.com/g/collect?v=2&tid=G-WJF3Y3SXM3&gtm=45je6562v9243687425za200zd9243687425&_p=1778337470867&gcs=G100&gcd=13p3p3l3l5l1&npa=0&dma=0&are=1&cid=681223333.1778337472&frm=0&pscdl=denied&rcb=17&sr=1920x1080&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uam=&uamb=0&uap=Windows&uapv=10.0.0&uaw=0&ul=en-us&_s=1&tag_exp=0~115616985~115938465~115938469~118463261~118864611&sid=1778337470&sct=1&seg=0&dl=https%3A%2F%2Fwww.realtypandit.in%2Fpost-property&dt=Realty%20Pandit%20-%20Find%20Your%20Dream%20Property&en=page_view&_fv=1&_nsi=1&_ss=1&_ee=1&tfd=902",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "fetch",
+      "pageUrl": "https://www.realtypandit.in/post-property",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.google-analytics.com/g/collect?v=2&tid=G-WJF3Y3SXM3&gtm=45je6562v9243687425za200zd9243687425&_p=1778337470867&gcs=G100&gcd=13p3p3l3l5l1&npa=0&dma=0&are=1&cid=681223333.1778337472&frm=0&pscdl=denied&rcb=17&sr=1920x1080&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uam=&uamb=0&uap=Windows&uapv=10.0.0&uaw=0&ul=en-us&_s=2&tag_exp=0~115616985~115938465~115938469~118463261~118864611&sid=1778337470&sct=1&seg=0&dl=https%3A%2F%2Fwww.realtypandit.in%2Fpost-property&dt=Realty%20Pandit%20-%20Find%20Your%20Dream%20Property&en=user_engagement&_et=2048&tfd=2951",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "fetch",
+      "pageUrl": "https://www.realtypandit.in/post-property",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.google-analytics.com/g/collect?v=2&tid=G-WJF3Y3SXM3&gtm=45je6562v9243687425za200zd9243687425&_p=1778337473786&gcs=G100&gcd=13p3p3l3l5l1&npa=0&dma=0&are=1&cid=2101726104.1778337474&frm=0&pscdl=denied&rcb=11&sr=1920x1080&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uam=&uamb=0&uap=Windows&uapv=10.0.0&uaw=0&ul=en-us&_s=1&tag_exp=0~115938466~115938469~118463262~118719172&sid=1778337473&sct=1&seg=0&dl=https%3A%2F%2Fwww.realtypandit.in%2Flogin&dt=Realty%20Pandit%20-%20Find%20Your%20Dream%20Property&en=page_view&_fv=1&_nsi=1&_ss=1&_ee=1&tfd=897",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "fetch",
+      "pageUrl": "https://www.realtypandit.in/login",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.google-analytics.com/g/collect?v=2&tid=G-WJF3Y3SXM3&gtm=45je6562v9243687425za200zd9243687425&_p=1778337473786&gcs=G100&gcd=13p3p3l3l5l1&npa=0&dma=0&are=1&cid=2101726104.1778337474&frm=0&pscdl=denied&rcb=11&sr=1920x1080&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uam=&uamb=0&uap=Windows&uapv=10.0.0&uaw=0&ul=en-us&_s=2&tag_exp=0~115938466~115938469~118463262~118719172&sid=1778337473&sct=1&seg=0&dl=https%3A%2F%2Fwww.realtypandit.in%2Flogin&dt=Realty%20Pandit%20-%20Find%20Your%20Dream%20Property&en=user_engagement&_et=3568&tfd=4470",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "fetch",
+      "pageUrl": "https://www.realtypandit.in/login",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.google-analytics.com/g/collect?v=2&tid=G-WJF3Y3SXM3&gtm=45je6562v9243687425za200zd9243687425&_p=1778337478111&gcs=G100&gcd=13p3p3l3l5l1&npa=0&dma=0&are=1&cid=1615112105.1778337479&frm=0&pscdl=denied&rcb=10&sr=1920x1080&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uam=&uamb=0&uap=Windows&uapv=10.0.0&uaw=0&ul=en-us&_s=1&tag_exp=0~115938465~115938469~118463261~118494634~118719171&sid=1778337478&sct=1&seg=0&dl=https%3A%2F%2Fwww.realtypandit.in%2Ftools%2Femi-calculator&dt=Real%20Estate%20Tools%20-%20EMI%20%26%20Area%20%7C%20Realty%20Pandit&en=page_view&_fv=1&_nsi=1&_ss=1&_ee=1&tfd=927",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "fetch",
+      "pageUrl": "https://www.realtypandit.in/tools/emi-calculator",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.google-analytics.com/g/collect?v=2&tid=G-WJF3Y3SXM3&gtm=45je6562v9243687425za200zd9243687425&_p=1778337478111&gcs=G100&gcd=13p3p3l3l5l1&npa=0&dma=0&are=1&cid=1615112105.1778337479&frm=0&pscdl=denied&rcb=10&sr=1920x1080&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uam=&uamb=0&uap=Windows&uapv=10.0.0&uaw=0&ul=en-us&_s=2&tag_exp=0~115938465~115938469~118463261~118494634~118719171&sid=1778337478&sct=1&seg=0&dl=https%3A%2F%2Fwww.realtypandit.in%2Ftools%2Femi-calculator&dt=Real%20Estate%20Tools%20-%20EMI%20%26%20Area%20%7C%20Realty%20Pandit&en=user_engagement&_et=2112&tfd=3041",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "fetch",
+      "pageUrl": "https://www.realtypandit.in/tools/emi-calculator",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.google-analytics.com/g/collect?v=2&tid=G-WJF3Y3SXM3&gtm=45je6562v9243687425za200zd9243687425&_p=1778337481056&gcs=G100&gcd=13p3p3l3l5l1&npa=0&dma=0&are=1&cid=1998850203.1778337482&frm=0&pscdl=denied&rcb=5&sr=1920x1080&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uam=&uamb=0&uap=Windows&uapv=10.0.0&uaw=0&ul=en-us&_s=1&tag_exp=0~115616986~115938465~115938468~118463262~118494634&sid=1778337481&sct=1&seg=0&dl=https%3A%2F%2Fwww.realtypandit.in%2Ftools%2Farea-converter&dt=Real%20Estate%20Tools%20-%20EMI%20%26%20Area%20%7C%20Realty%20Pandit&en=page_view&_fv=1&_nsi=1&_ss=1&_ee=1&tfd=941",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "fetch",
+      "pageUrl": "https://www.realtypandit.in/tools/area-converter",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.google-analytics.com/g/collect?v=2&tid=G-WJF3Y3SXM3&gtm=45je6562v9243687425za200zd9243687425&_p=1778337481056&gcs=G100&gcd=13p3p3l3l5l1&npa=0&dma=0&are=1&cid=1998850203.1778337482&frm=0&pscdl=denied&rcb=5&sr=1920x1080&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uam=&uamb=0&uap=Windows&uapv=10.0.0&uaw=0&ul=en-us&_s=2&tag_exp=0~115616986~115938465~115938468~118463262~118494634&sid=1778337481&sct=1&seg=0&dl=https%3A%2F%2Fwww.realtypandit.in%2Ftools%2Farea-converter&dt=Real%20Estate%20Tools%20-%20EMI%20%26%20Area%20%7C%20Realty%20Pandit&en=user_engagement&_et=2125&tfd=3068",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "fetch",
+      "pageUrl": "https://www.realtypandit.in/tools/area-converter",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.google-analytics.com/g/collect?v=2&tid=G-WJF3Y3SXM3&gtm=45je6562v9243687425za200zd9243687425&_p=1778337484064&gcs=G100&gcd=13p3p3l3l5l1&npa=0&dma=0&are=1&cid=759090562.1778337485&frm=0&pscdl=denied&rcb=5&sr=1920x1080&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uam=&uamb=0&uap=Windows&uapv=10.0.0&uaw=0&ul=en-us&_s=1&tag_exp=0~115616985~115938466~115938469~118463262~118719172&sid=1778337484&sct=1&seg=0&dl=https%3A%2F%2Fwww.realtypandit.in%2Fcompare&dt=Compare%20Properties%20Side%20by%20Side%20%7C%20Realty%20Pandit&en=page_view&_fv=1&_nsi=1&_ss=1&_ee=1&tfd=876",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "fetch",
+      "pageUrl": "https://www.realtypandit.in/compare",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.google-analytics.com/g/collect?v=2&tid=G-WJF3Y3SXM3&gtm=45je6562v9243687425za200zd9243687425&_p=1778337484064&gcs=G100&gcd=13p3p3l3l5l1&npa=0&dma=0&are=1&cid=759090562.1778337485&frm=0&pscdl=denied&rcb=5&sr=1920x1080&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uam=&uamb=0&uap=Windows&uapv=10.0.0&uaw=0&ul=en-us&_s=2&tag_exp=0~115616985~115938466~115938469~118463262~118719172&sid=1778337484&sct=1&seg=0&dl=https%3A%2F%2Fwww.realtypandit.in%2Fcompare&dt=Compare%20Properties%20Side%20by%20Side%20%7C%20Realty%20Pandit&en=user_engagement&_et=2221&tfd=3096",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "fetch",
+      "pageUrl": "https://www.realtypandit.in/compare",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.google-analytics.com/g/collect?v=2&tid=G-WJF3Y3SXM3&gtm=45je6562v9243687425za200zd9243687425&_p=1778337487088&gcs=G100&gcd=13p3p3l3l5l1&npa=0&dma=0&are=1&cid=241717165.1778337488&frm=0&pscdl=denied&rcb=15&sr=1920x1080&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uam=&uamb=0&uap=Windows&uapv=10.0.0&uaw=0&ul=en-us&_s=1&tag_exp=0~115938465~115938468~118463262&sid=1778337487&sct=1&seg=0&dl=https%3A%2F%2Fwww.realtypandit.in%2Ffaq&dt=FAQ%20-%20Property%20Buying%20%26%20Selling%20Guide%20%7C%20Realty%20Pandit&en=page_view&_fv=1&_nsi=1&_ss=1&_ee=1&tfd=880",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "fetch",
+      "pageUrl": "https://www.realtypandit.in/faq",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.google-analytics.com/g/collect?v=2&tid=G-WJF3Y3SXM3&gtm=45je6562v9243687425za200zd9243687425&_p=1778337487088&gcs=G100&gcd=13p3p3l3l5l1&npa=0&dma=0&are=1&cid=241717165.1778337488&frm=0&pscdl=denied&rcb=15&sr=1920x1080&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uam=&uamb=0&uap=Windows&uapv=10.0.0&uaw=0&ul=en-us&_s=2&tag_exp=0~115938465~115938468~118463262&sid=1778337487&sct=1&seg=0&dl=https%3A%2F%2Fwww.realtypandit.in%2Ffaq&dt=FAQ%20-%20Property%20Buying%20%26%20Selling%20Guide%20%7C%20Realty%20Pandit&en=user_engagement&_et=2421&tfd=3304",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "fetch",
+      "pageUrl": "https://www.realtypandit.in/faq",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.google-analytics.com/g/collect?v=2&tid=G-WJF3Y3SXM3&gtm=45je6562v9243687425za200zd9243687425&_p=1778337490307&gcs=G100&gcd=13p3p3l3l5l1&npa=0&dma=0&are=1&cid=1105818601.1778337491&frm=0&pscdl=denied&rcb=4&sr=1920x1080&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uam=&uamb=0&uap=Windows&uapv=10.0.0&uaw=0&ul=en-us&_s=1&tag_exp=0~115938465~115938469~118463262&sid=1778337490&sct=1&seg=0&dl=https%3A%2F%2Fwww.realtypandit.in%2Fprivacy&dt=Realty%20Pandit%20-%20Find%20Your%20Dream%20Property&en=page_view&_fv=1&_nsi=1&_ss=1&_ee=1&tfd=830",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "fetch",
+      "pageUrl": "https://www.realtypandit.in/privacy",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.google-analytics.com/g/collect?v=2&tid=G-WJF3Y3SXM3&gtm=45je6562v9243687425za200zd9243687425&_p=1778337490307&gcs=G100&gcd=13p3p3l3l5l1&npa=0&dma=0&are=1&cid=1105818601.1778337491&frm=0&pscdl=denied&rcb=4&sr=1920x1080&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uam=&uamb=0&uap=Windows&uapv=10.0.0&uaw=0&ul=en-us&_s=2&tag_exp=0~115938465~115938469~118463262&sid=1778337490&sct=1&seg=0&dl=https%3A%2F%2Fwww.realtypandit.in%2Fprivacy&dt=Realty%20Pandit%20-%20Find%20Your%20Dream%20Property&en=user_engagement&_et=2901&tfd=3735",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "fetch",
+      "pageUrl": "https://www.realtypandit.in/privacy",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.google-analytics.com/g/collect?v=2&tid=G-WJF3Y3SXM3&gtm=45je6562v9243687425za200zd9243687425&_p=1778337493912&gcs=G100&gcd=13p3p3l3l5l1&npa=0&dma=0&are=1&cid=697793175.1778337494&frm=0&pscdl=denied&rcb=3&sr=1920x1080&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uam=&uamb=0&uap=Windows&uapv=10.0.0&uaw=0&ul=en-us&_s=1&tag_exp=0~115616985~115938465~115938468~118012008~118463262&sid=1778337493&sct=1&seg=0&dl=https%3A%2F%2Fwww.realtypandit.in%2Fterms&dt=Realty%20Pandit%20-%20Find%20Your%20Dream%20Property&en=page_view&_fv=1&_nsi=1&_ss=1&_ee=1&tfd=789",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "fetch",
+      "pageUrl": "https://www.realtypandit.in/terms",
+      "viewport": "desktop"
+    }
+  ],
+  "performance": [
+    {
+      "page": "Homepage",
+      "viewport": "desktop",
+      "domContentLoaded": 271,
+      "fullLoad": 271,
+      "firstByte": 51,
+      "domInteractive": 271
+    },
+    {
+      "page": "Properties",
+      "viewport": "desktop",
+      "domContentLoaded": 240,
+      "fullLoad": 389,
+      "firstByte": 79,
+      "domInteractive": 240
+    },
+    {
+      "page": "About",
+      "viewport": "desktop",
+      "domContentLoaded": 204,
+      "fullLoad": 211,
+      "firstByte": 134,
+      "domInteractive": 204
+    },
+    {
+      "page": "Contact",
+      "viewport": "desktop",
+      "domContentLoaded": 351,
+      "fullLoad": 352,
+      "firstByte": 184,
+      "domInteractive": 351
+    },
+    {
+      "page": "Services",
+      "viewport": "desktop",
+      "domContentLoaded": 175,
+      "fullLoad": 180,
+      "firstByte": 106,
+      "domInteractive": 175
+    },
+    {
+      "page": "Blog",
+      "viewport": "desktop",
+      "domContentLoaded": 164,
+      "fullLoad": 235,
+      "firstByte": 115,
+      "domInteractive": 164
+    },
+    {
+      "page": "Discovered: /post-property",
+      "viewport": "desktop",
+      "domContentLoaded": 124,
+      "fullLoad": 132,
+      "firstByte": 71,
+      "domInteractive": 123
+    },
+    {
+      "page": "Discovered: /login",
+      "viewport": "desktop",
+      "domContentLoaded": 113,
+      "fullLoad": 209,
+      "firstByte": 74,
+      "domInteractive": 113
+    },
+    {
+      "page": "Discovered: /tools/emi-calculator",
+      "viewport": "desktop",
+      "domContentLoaded": 184,
+      "fullLoad": 410,
+      "firstByte": 85,
+      "domInteractive": 184
+    },
+    {
+      "page": "Discovered: /tools/area-converter",
+      "viewport": "desktop",
+      "domContentLoaded": 160,
+      "fullLoad": 161,
+      "firstByte": 54,
+      "domInteractive": 160
+    },
+    {
+      "page": "Discovered: /compare",
+      "viewport": "desktop",
+      "domContentLoaded": 115,
+      "fullLoad": 196,
+      "firstByte": 80,
+      "domInteractive": 115
+    },
+    {
+      "page": "Discovered: /faq",
+      "viewport": "desktop",
+      "domContentLoaded": 135,
+      "fullLoad": 243,
+      "firstByte": 102,
+      "domInteractive": 134
+    },
+    {
+      "page": "Discovered: /privacy",
+      "viewport": "desktop",
+      "domContentLoaded": 108,
+      "fullLoad": 239,
+      "firstByte": 76,
+      "domInteractive": 108
+    },
+    {
+      "page": "Discovered: /terms",
+      "viewport": "desktop",
+      "domContentLoaded": 109,
+      "fullLoad": 193,
+      "firstByte": 74,
+      "domInteractive": 108
+    }
+  ],
+  "pages": [
+    {
+      "name": "Homepage",
+      "url": "https://www.realtypandit.in/",
+      "viewport": "desktop",
+      "status": "ok",
+      "loadTime": 780,
+      "checks": {
+        "consoleErrors": 0
+      }
+    },
+    {
+      "name": "Properties",
+      "url": "https://www.realtypandit.in/properties",
+      "viewport": "desktop",
+      "status": "ok",
+      "loadTime": 13170,
+      "checks": {
+        "consoleErrors": 3
+      }
+    },
+    {
+      "name": "About",
+      "url": "https://www.realtypandit.in/about",
+      "viewport": "desktop",
+      "status": "ok",
+      "loadTime": 1523,
+      "checks": {
+        "consoleErrors": 1
+      }
+    },
+    {
+      "name": "Contact",
+      "url": "https://www.realtypandit.in/contact",
+      "viewport": "desktop",
+      "status": "ok",
+      "loadTime": 1751,
+      "checks": {
+        "consoleErrors": 3
+      }
+    },
+    {
+      "name": "Services",
+      "url": "https://www.realtypandit.in/services",
+      "viewport": "desktop",
+      "status": "ok",
+      "loadTime": 1806,
+      "checks": {
+        "consoleErrors": 1
+      }
+    },
+    {
+      "name": "Blog",
+      "url": "https://www.realtypandit.in/blog",
+      "viewport": "desktop",
+      "status": "ok",
+      "loadTime": 1641,
+      "checks": {
+        "consoleErrors": 1
+      }
+    },
+    {
+      "name": "Discovered: /post-property",
+      "url": "https://www.realtypandit.in/post-property",
+      "viewport": "desktop",
+      "status": "ok",
+      "loadTime": 1497,
+      "checks": {
+        "consoleErrors": 3
+      }
+    },
+    {
+      "name": "Discovered: /login",
+      "url": "https://www.realtypandit.in/login",
+      "viewport": "desktop",
+      "status": "ok",
+      "loadTime": 2191,
+      "checks": {
+        "consoleErrors": 1
+      }
+    },
+    {
+      "name": "Discovered: /tools/emi-calculator",
+      "url": "https://www.realtypandit.in/tools/emi-calculator",
+      "viewport": "desktop",
+      "status": "ok",
+      "loadTime": 1524,
+      "checks": {
+        "consoleErrors": 1
+      }
+    },
+    {
+      "name": "Discovered: /tools/area-converter",
+      "url": "https://www.realtypandit.in/tools/area-converter",
+      "viewport": "desktop",
+      "status": "ok",
+      "loadTime": 1524,
+      "checks": {
+        "consoleErrors": 1
+      }
+    },
+    {
+      "name": "Discovered: /compare",
+      "url": "https://www.realtypandit.in/compare",
+      "viewport": "desktop",
+      "status": "ok",
+      "loadTime": 1480,
+      "checks": {
+        "consoleErrors": 1
+      }
+    },
+    {
+      "name": "Discovered: /faq",
+      "url": "https://www.realtypandit.in/faq",
+      "viewport": "desktop",
+      "status": "ok",
+      "loadTime": 1478,
+      "checks": {
+        "consoleErrors": 1
+      }
+    },
+    {
+      "name": "Discovered: /privacy",
+      "url": "https://www.realtypandit.in/privacy",
+      "viewport": "desktop",
+      "status": "ok",
+      "loadTime": 1425,
+      "checks": {
+        "consoleErrors": 1
+      }
+    },
+    {
+      "name": "Discovered: /terms",
+      "url": "https://www.realtypandit.in/terms",
+      "viewport": "desktop",
+      "status": "ok",
+      "loadTime": 1371,
+      "checks": {
+        "consoleErrors": 1
+      }
+    }
+  ],
+  "screenshots": [
+    {
+      "page": "Homepage",
+      "viewport": "desktop",
+      "path": "screenshots\\homepage-desktop.png"
+    },
+    {
+      "page": "Properties",
+      "viewport": "desktop",
+      "path": "screenshots\\properties-desktop.png"
+    },
+    {
+      "page": "About",
+      "viewport": "desktop",
+      "path": "screenshots\\about-desktop.png"
+    },
+    {
+      "page": "Contact",
+      "viewport": "desktop",
+      "path": "screenshots\\contact-desktop.png"
+    },
+    {
+      "page": "Services",
+      "viewport": "desktop",
+      "path": "screenshots\\services-desktop.png"
+    },
+    {
+      "page": "Blog",
+      "viewport": "desktop",
+      "path": "screenshots\\blog-desktop.png"
+    },
+    {
+      "page": "Discovered: /post-property",
+      "viewport": "desktop",
+      "path": "screenshots\\discovered---post-property-desktop.png"
+    },
+    {
+      "page": "Discovered: /login",
+      "viewport": "desktop",
+      "path": "screenshots\\discovered---login-desktop.png"
+    },
+    {
+      "page": "Discovered: /tools/emi-calculator",
+      "viewport": "desktop",
+      "path": "screenshots\\discovered---tools-emi-calculator-desktop.png"
+    },
+    {
+      "page": "Discovered: /tools/area-converter",
+      "viewport": "desktop",
+      "path": "screenshots\\discovered---tools-area-converter-desktop.png"
+    },
+    {
+      "page": "Discovered: /compare",
+      "viewport": "desktop",
+      "path": "screenshots\\discovered---compare-desktop.png"
+    },
+    {
+      "page": "Discovered: /faq",
+      "viewport": "desktop",
+      "path": "screenshots\\discovered---faq-desktop.png"
+    },
+    {
+      "page": "Discovered: /privacy",
+      "viewport": "desktop",
+      "path": "screenshots\\discovered---privacy-desktop.png"
+    },
+    {
+      "page": "Discovered: /terms",
+      "viewport": "desktop",
+      "path": "screenshots\\discovered---terms-desktop.png"
+    }
+  ]
+}

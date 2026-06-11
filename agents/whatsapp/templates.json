@@ -1,0 +1,22 @@
+{
+    "missed_call_fallback": {
+        "template_name": "missed_call_followup_v1",
+        "language": "en",
+        "components": [
+            {
+                "type": "body",
+                "text": "Hi {{1}}, we tried calling you regarding your property enquiry but couldn't connect. When is a good time to call you back?"
+            }
+        ]
+    },
+    "welcome_message": {
+        "template_name": "welcome_realty_pandit",
+        "language": "en",
+        "components": [
+            {
+                "type": "body",
+                "text": "Welcome to Realty Pandit! Main hoon Panditji, aapka property assistant. How can I help you today with your property search?"
+            }
+        ]
+    }
+}

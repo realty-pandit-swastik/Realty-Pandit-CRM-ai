@@ -1,0 +1,77 @@
+{
+  "description": "Phase 7 complete — join/agent registration, agent login redesign, agent dashboard, subscription page, public agents listing, agent profile, admin PartnerManagement with search/filter/plan-upgrade, backend package upgrade endpoint",
+  "checks": [
+    {
+      "type": "no_console_errors",
+      "page": "/join/agent",
+      "description": "No JS errors on /join/agent"
+    },
+    {
+      "type": "page_loads",
+      "page": "/join/agent",
+      "max_time": 3000,
+      "description": "/join/agent loads under 3000ms"
+    },
+    {
+      "type": "element_exists",
+      "page": "/join/agent",
+      "selector": "h1",
+      "description": "Element \"h1\" exists on /join/agent"
+    },
+    {
+      "type": "no_console_errors",
+      "page": "/agent/login",
+      "description": "No JS errors on /agent/login"
+    },
+    {
+      "type": "page_loads",
+      "page": "/agent/login",
+      "max_time": 3000,
+      "description": "/agent/login loads under 3000ms"
+    },
+    {
+      "type": "no_console_errors",
+      "page": "/agent/dashboard",
+      "description": "No JS errors on /agent/dashboard"
+    },
+    {
+      "type": "page_loads",
+      "page": "/agent/dashboard",
+      "max_time": 3000,
+      "description": "/agent/dashboard loads under 3000ms"
+    },
+    {
+      "type": "no_console_errors",
+      "page": "/agents",
+      "description": "No JS errors on /agents"
+    },
+    {
+      "type": "page_loads",
+      "page": "/agents",
+      "max_time": 3000,
+      "description": "/agents loads under 3000ms"
+    },
+    {
+      "type": "responsive",
+      "page": "/agents",
+      "description": "/agents is responsive on mobile"
+    },
+    {
+      "type": "api_returns",
+      "url": "/public/agents",
+      "status": 200,
+      "description": "API /public/agents returns 200"
+    },
+    {
+      "type": "api_returns",
+      "url": "/health",
+      "status": 200,
+      "description": "API /health returns 200"
+    },
+    {
+      "type": "no_console_errors",
+      "page": "/agent/subscription",
+      "description": "No JS errors on /agent/subscription"
+    }
+  ]
+}

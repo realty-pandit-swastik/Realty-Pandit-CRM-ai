@@ -1,0 +1,39 @@
+{
+  "description": "Inventory wizard with Google Places, source tracking, amenities, media upload, structured address fields — deployed and accessible",
+  "checks": [
+    {
+      "type": "no_console_errors",
+      "page": "/agent/inventory",
+      "description": "No JS errors on /agent/inventory"
+    },
+    {
+      "type": "page_loads",
+      "page": "/agent/inventory",
+      "max_time": 3000,
+      "description": "/agent/inventory loads under 3000ms"
+    },
+    {
+      "type": "text_visible",
+      "page": "/agent/inventory",
+      "text": "My Inventory",
+      "description": "Text \"My Inventory\" visible on /agent/inventory"
+    },
+    {
+      "type": "text_visible",
+      "page": "/agent/inventory",
+      "text": "Add Property",
+      "description": "Text \"Add Property\" visible on /agent/inventory"
+    },
+    {
+      "type": "element_exists",
+      "page": "/agent/inventory",
+      "selector": "button",
+      "description": "Element \"button\" exists on /agent/inventory"
+    },
+    {
+      "type": "responsive",
+      "page": "/agent/inventory",
+      "description": "/agent/inventory is responsive on mobile"
+    }
+  ]
+}

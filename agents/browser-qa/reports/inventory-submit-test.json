@@ -1,0 +1,60 @@
+{
+  "errors": [],
+  "apiCalls": [
+    {
+      "url": "https://api.realtypandit.in/api/chat/start",
+      "status": 200,
+      "method": "POST",
+      "body": "{\"session_id\":\"05747953-d785-4209-a1b1-a9ef910ac3c4\",\"messages\":[{\"id\":\"aed4a654-361b-4dc4-ac82-60ff257d9280\",\"role\":\"assistant\",\"content\":\"Namaste! I'm Panditji, your property listing assistant. Let's list your property step by step. You can type naturally or use the buttons below.\",\"timestamp\":\"2026-03-06T13:58:29.386Z\",\"type\":\"system\"},{\"id\":\"b7f9f449-7675-4d60-9a09-854c80f70276\",\"role\":\"assistant\",\"content\":\"Who are you?\\nAap kaun hain?\",\"timestamp\":\"2026-03-06T13:58:29.386Z\",\"type\":\"question\",\"step_id\":\"user_role\",\"input_type\":\"radio\",\"quick_replies\":[{\"label\":\"Owner\",\"value\":\"PROPERTY_OWNER\"},{\"label\":\"Broker / Agent\",\"value\":\"AGENT_DEALER\"},{\"label\":\"Builder\",\"value\":\"BUILDER\"}],\"metadata\":{\"progress\":{\"current\":1,\"total\":11,\"group\":\"identity\"},\"options\":[{\"value\":\"PROPERTY_OWNER\",\"label\":\"Owner\"},{\"value\":\"AGENT_DEALER\",\"label\":\"Broker / Agent\"},{\"value\":\"BUILDER\",\"label\":\"Builder\"}]}}]}"
+    },
+    {
+      "url": "https://api.realtypandit.in/api/chat/message",
+      "status": 200,
+      "method": "POST",
+      "body": "{\"messages\":[{\"id\":\"241a27f8-acff-4582-8605-64fb830b77d3\",\"role\":\"user\",\"content\":\"Owner\",\"timestamp\":\"2026-03-06T13:58:34.406Z\",\"type\":\"text\"},{\"id\":\"c737430b-3ee9-48dd-b3dc-9ffb396491b6\",\"role\":\"assistant\",\"content\":\"What is your name?\\nAapka naam kya hai?\",\"timestamp\":\"2026-03-06T13:58:34.410Z\",\"type\":\"question\",\"step_id\":\"uploader_name\",\"input_type\":\"text\",\"metadata\":{\"progress\":{\"current\":2,\"total\":11,\"group\":\"contact\"}}}],\"session_active\":true,\"progress\":{\"current\":2,\"total\":11,\"group\":\"contact\"}}"
+    },
+    {
+      "url": "https://api.realtypandit.in/api/chat/message",
+      "status": 200,
+      "method": "POST",
+      "body": "{\"messages\":[{\"id\":\"58dbf662-e59a-4515-81ac-b14af5acaa66\",\"role\":\"user\",\"content\":\"Rahul Sharma\",\"timestamp\":\"2026-03-06T13:58:40.137Z\",\"type\":\"text\"},{\"id\":\"59de53a4-a201-4430-825f-e325bfe37f07\",\"role\":\"assistant\",\"content\":\"What is your phone number?\\nAapka phone number kya hai?\",\"timestamp\":\"2026-03-06T13:58:40.140Z\",\"type\":\"question\",\"step_id\":\"uploader_phone\",\"input_type\":\"phone\",\"metadata\":{\"progress\":{\"current\":3,\"total\":11,\"group\":\"contact\"}}}],\"session_active\":true,\"progress\":{\"current\":3,\"total\":11,\"group\":\"contact\"}}"
+    },
+    {
+      "url": "https://api.realtypandit.in/api/chat/message",
+      "status": 200,
+      "method": "POST",
+      "body": "{\"messages\":[{\"id\":\"3cef5c77-85fc-4cab-9be1-513b6644150f\",\"role\":\"user\",\"content\":\"9876543210\",\"timestamp\":\"2026-03-06T13:58:45.743Z\",\"type\":\"text\"},{\"id\":\"b5f58b27-c069-461d-9a6d-2f132c37def8\",\"role\":\"assistant\",\"content\":\"Sale or Rent / Lease?\\nBechna ya Kiraye/Lease par dena?\",\"timestamp\":\"2026-03-06T13:58:45.746Z\",\"type\":\"question\",\"step_id\":\"intent\",\"input_type\":\"radio\",\"quick_replies\":[{\"label\":\"Sale\",\"value\":\"sell\"},{\"label\":\"Rent / Lease\",\"value\":\"rent_lease\"}],\"metadata\":{\"progress\":{\"current\":4,\"total\":11,\"group\":\"intent\"},\"options\":[{\"value\":\"sell\",\"label\":\"Sale\"},{\"value\":\"rent_lease\",\"label\":\"Rent / Lease\"}]}}],\"session_active\":true,\"progress\":{\"current\":4,\"total\":11,\"group\":\"intent\"}}"
+    },
+    {
+      "url": "https://api.realtypandit.in/api/chat/message",
+      "status": 200,
+      "method": "POST",
+      "body": "{\"messages\":[{\"id\":\"d1c8ce87-ce1e-4b79-a6cd-d34ed69ef21a\",\"role\":\"user\",\"content\":\"Sale\",\"timestamp\":\"2026-03-06T13:58:49.846Z\",\"type\":\"text\"},{\"id\":\"ad76b9c7-0946-4717-86fa-3dff47781ae5\",\"role\":\"assistant\",\"content\":\"Type of property?\\nProperty ka type?\",\"timestamp\":\"2026-03-06T13:58:49.856Z\",\"type\":\"question\",\"step_id\":\"main_category\",\"input_type\":\"radio\",\"quick_replies\":[{\"label\":\"Residential\",\"value\":\"residential\"},{\"label\":\"Commercial\",\"value\":\"commercial\"},{\"label\":\"Agricultural Land\",\"value\":\"agricultural\"}],\"metadata\":{\"progress\":{\"current\":5,\"total\":11,\"group\":\"property_type\"},\"options\":[{\"value\":\"residential\",\"label\":\"Residential\"},{\"value\":\"commercial\",\"label\":\"Commercial\"},{\"value\":\"agricultural\",\"label\":\"Agricultural Land\"}]}}],\"session_active\":true,\"progress\":{\"current\":5,\"total\":11,\"group\":\"property_type\"}}"
+    },
+    {
+      "url": "https://api.realtypandit.in/api/chat/message",
+      "status": 200,
+      "method": "POST",
+      "body": "{\"messages\":[{\"id\":\"cd17d8b8-bd07-40af-809b-718fe47833b5\",\"role\":\"user\",\"content\":\"Residential\",\"timestamp\":\"2026-03-06T13:58:53.896Z\",\"type\":\"text\"},{\"id\":\"497dbada-1c5f-4930-838e-b055fd8b7ce0\",\"role\":\"assistant\",\"content\":\"What type of property?\\nProperty ka type kya hai?\",\"timestamp\":\"2026-03-06T13:58:53.907Z\",\"type\":\"question\",\"step_id\":\"flat_property_type_id\",\"input_type\":\"dropdown\",\"quick_replies\":[{\"label\":\"Apartment / Gated Society\",\"value\":\"a3677c3e-ccc7-4ef2-9d88-acc0d3821a9b\"},{\"label\":\"Builder Floor\",\"value\":\"5851c078-062a-4583-b702-2b454d5f8814\"},{\"label\":\"Builder Flat Front Facing\",\"value\":\"d86c26dd-a550-4974-81ee-623b34c9fecc\"},{\"label\":\"Builder Flat Back Facing\",\"value\":\"4add4b39-11c1-429c-8115-64e9b4b0ed1d\"},{\"label\":\"Independent House / Villa\",\"value\":\"36e02e1c-8a67-4529-bbcc-655dfa1da693\"},{\"label\":\"Land / Plot\",\"value\":\"03608ab7-5888-49b0-b328-4278a1ce9150\"},{\"label\":\"Farm House\",\"value\":\"6de3e756-543f-4c80-854d-f63bc33f1a67\"},{\"label\":\"Studio Apartment\",\"value\":\"e3"
+    },
+    {
+      "url": "https://api.realtypandit.in/api/chat/message",
+      "status": 200,
+      "method": "POST",
+      "body": "{\"messages\":[{\"id\":\"fd1cdd08-fbda-4aab-a0bf-cf5839cc9527\",\"role\":\"user\",\"content\":\"Apartment / Gated Society\",\"timestamp\":\"2026-03-06T13:58:57.923Z\",\"type\":\"text\"},{\"id\":\"66a62c8c-7e20-44a1-940c-f5deba1a34bd\",\"role\":\"assistant\",\"content\":\"What is the configuration? (e.g., 2 BHK)\\nConfiguration kya hai? (e.g., 2 BHK)\",\"timestamp\":\"2026-03-06T13:58:57.935Z\",\"type\":\"question\",\"step_id\":\"configuration_id\",\"input_type\":\"dropdown\",\"quick_replies\":[{\"label\":\"Studio\",\"value\":\"3b1fade2-13d6-4152-9455-2971fa927b2b\"},{\"label\":\"1 BHK\",\"value\":\"0ce3af33-83f8-44c8-9f1b-397781ed2fff\"},{\"label\":\"2 BHK\",\"value\":\"122b151d-bdde-46b2-a66a-342790f54cf7\"},{\"label\":\"3 BHK\",\"value\":\"c5913720-f0da-441b-a3ae-000c81140304\"},{\"label\":\"4 BHK\",\"value\":\"044ccbb3-bbfc-4a48-8a0b-9e923ebfa11a\"},{\"label\":\"5+ BHK\",\"value\":\"e07d127d-0867-4853-bd77-c427818c46e8\"}],\"metadata\":{\"progress\":{\"current\":7,\"total\":12,\"group\":\"config\"},\"options\":[{\"value\":\"3b1fade2-13d6-4152-9455-2971fa927b2b\",\"label\":\"Studio\"},{\"value\":\"0ce3af33-"
+    },
+    {
+      "url": "https://api.realtypandit.in/api/chat/message",
+      "status": 200,
+      "method": "POST",
+      "body": "{\"messages\":[{\"id\":\"896467b3-b41a-4c8b-8a07-5031a42c1e2b\",\"role\":\"user\",\"content\":\"Studio\",\"timestamp\":\"2026-03-06T13:59:02.277Z\",\"type\":\"text\"},{\"id\":\"1fcb078d-c33d-454b-be2c-f105343cb098\",\"role\":\"assistant\",\"content\":\"Property Address\\nProperty ka address bharein\",\"timestamp\":\"2026-03-06T13:59:02.282Z\",\"type\":\"question\",\"step_id\":\"address_block\",\"input_type\":\"address_block\",\"metadata\":{\"progress\":{\"current\":8,\"total\":12,\"group\":\"address\"},\"address_config\":{\"sub_category_slug\":\"residential_apartment\",\"floor_required\":true,\"bhk_required\":true,\"plot_area_required\":false}}}],\"session_active\":true,\"progress\":{\"current\":8,\"total\":12,\"group\":\"address\"}}"
+    }
+  ],
+  "finalState": {
+    "step": null,
+    "percent": 67,
+    "buttons": [],
+    "hasTextInput": false,
+    "errors": []
+  }
+}

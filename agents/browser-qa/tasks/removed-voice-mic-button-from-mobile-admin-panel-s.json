@@ -1,0 +1,21 @@
+{
+  "description": "Removed voice/mic button from mobile admin panel so it no longer overlaps Add Property FAB button",
+  "checks": [
+    {
+      "type": "no_console_errors",
+      "page": "/",
+      "description": "No JS errors on /"
+    },
+    {
+      "type": "page_loads",
+      "page": "/",
+      "max_time": 3000,
+      "description": "/ loads under 3000ms"
+    },
+    {
+      "type": "responsive",
+      "page": "/",
+      "description": "/ is responsive on mobile"
+    }
+  ]
+}

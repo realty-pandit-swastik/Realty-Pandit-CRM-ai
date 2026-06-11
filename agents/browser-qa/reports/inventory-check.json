@@ -1,0 +1,135 @@
+{
+  "errors": [
+    {
+      "url": "https://www.realtypandit.in/properties/add",
+      "text": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+      "url": "https://www.realtypandit.in/properties/add",
+      "text": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    }
+  ],
+  "networkFails": [],
+  "apiCalls": [
+    {
+      "url": "https://api.realtypandit.in/api/chat/start",
+      "status": 200,
+      "method": "POST"
+    },
+    {
+      "url": "https://api.realtypandit.in/public/properties/add",
+      "status": 404,
+      "method": "GET"
+    },
+    {
+      "url": "https://api.realtypandit.in/public/similar-properties/add",
+      "status": 404,
+      "method": "GET"
+    }
+  ],
+  "pageContent": {
+    "title": "Realty Pandit - Find Your Dream Property",
+    "h1": [
+      "Post Your Property"
+    ],
+    "forms": 0,
+    "buttons": [
+      {
+        "text": "",
+        "type": "submit",
+        "disabled": false,
+        "classes": "p-2.5 rounded-xl transition-colors text-slate-500 dark:text-slate-400 hover:text"
+      },
+      {
+        "text": "Talk to Panditji",
+        "type": "submit",
+        "disabled": false,
+        "classes": "bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl text-sm font-med"
+      },
+      {
+        "text": "",
+        "type": "submit",
+        "disabled": false,
+        "classes": "p-2 rounded-lg text-slate-500 dark:text-slate-400"
+      },
+      {
+        "text": "",
+        "type": "submit",
+        "disabled": false,
+        "classes": "p-2 rounded-lg text-slate-700 dark:text-slate-200"
+      },
+      {
+        "text": "Owner",
+        "type": "submit",
+        "disabled": false,
+        "classes": "px-3.5 py-2 text-sm font-medium rounded-xl border border-emerald-300 dark:border"
+      },
+      {
+        "text": "Broker / Agent",
+        "type": "submit",
+        "disabled": false,
+        "classes": "px-3.5 py-2 text-sm font-medium rounded-xl border border-emerald-300 dark:border"
+      },
+      {
+        "text": "Builder",
+        "type": "submit",
+        "disabled": false,
+        "classes": "px-3.5 py-2 text-sm font-medium rounded-xl border border-emerald-300 dark:border"
+      },
+      {
+        "text": "",
+        "type": "submit",
+        "disabled": true,
+        "classes": "w-10 h-10 rounded-xl flex items-center justify-center transition-all shadow-sm d"
+      },
+      {
+        "text": "Subscribe",
+        "type": "submit",
+        "disabled": false,
+        "classes": "bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-xl text-sm font-mediu"
+      },
+      {
+        "text": "",
+        "type": "submit",
+        "disabled": false,
+        "classes": "w-14 h-14 bg-[#25D366] hover:bg-[#20BD5A] text-white rounded-full shadow-lg flex"
+      },
+      {
+        "text": "Show details",
+        "type": "submit",
+        "disabled": false,
+        "classes": "text-blue-600 text-xs font-medium flex items-center gap-1 mb-3"
+      },
+      {
+        "text": "Accept All",
+        "type": "submit",
+        "disabled": false,
+        "classes": "bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-lg text-sm font-mediu"
+      },
+      {
+        "text": "Essential Only",
+        "type": "submit",
+        "disabled": false,
+        "classes": "bg-slate-100 hover:bg-slate-200 text-slate-700 px-5 py-2 rounded-lg text-sm font"
+      }
+    ],
+    "selects": [],
+    "inputs": [
+      {
+        "type": "email",
+        "name": "",
+        "placeholder": "Enter your email",
+        "id": "",
+        "required": false,
+        "value": ""
+      }
+    ],
+    "textareas": [
+      {
+        "name": "",
+        "placeholder": "Type your message..."
+      }
+    ],
+    "allText": "Home\nProperties\nServices\nAbout\nBlog\nContact\nPost Property Free\nLogin\nTalk to Panditji\nAI-Powered Property Listing\nPost Your Property\n\nChat with Panditji to list your property. Just answer simple questions!\n\nidentity\n1/11 steps · 9%\n\nNamaste! I'm Panditji, your property listing assistant. Let's list your property step by step. You can type naturally or use the buttons below.\n\n07:25 pm\n\nWho are you?\nAap kaun hain?\n\nOwner\nBroker / Agent\nBuilder\n07:25 pm\nStay Updated with Realty Pandit\n\nGet the latest property listings and market insights in your inbox.\n\nSubscribe\n\nAI-powered real estate platform. Buy, sell, or rent properties with Panditji — your personal property assistant available 24/7 on WhatsApp.\n\n+91-8178491914\ninfo@realtypandit.com\nIndia\nCompany\nAbout Us\nServices\nBlog\nContact\nFAQ\nCareers\nProperties\nBuy Property\nRent Property\nCommercial\nPlots & Land\nAll Properties\nServices & Tools\nProperty Management\nLegal Assistance\nHome Loans\nEMI Calculator\nArea Converter\nPopular Searches\nFlats for Sale\nFlats for Sale in Noida\nFlats for Sale in Gurgaon\nFlats for Sale in Delhi\nFlats for Sale in Mumbai\nFlats for Sale in Bangalore\nFlats for Sale in Pune\nFlats for Sale in Hyderabad\nFlats for Sale in Chennai\nFlats for Rent\nFlats for Rent in Noida\nFlats for Rent in Gurgaon\nFlats for Rent in Delhi\nFlats for Rent in Mumbai\nFlats for Rent in Bangalore\nFlats for Rent in Pune\nFlats for Rent in Hyderabad\nFlats for Rent in Chennai\nHouses for Sale\nHouses for Sale in Noida\nHouses for Sale in Gurgaon\nHouses for Sale in Delhi\nHouses for Sale in Mumbai\nHouses for Sale in Bangalore\nHouses for Sale in Pune\nHouses for Sale in Hyderabad\nHouses for Sale in Chennai\nProperties by City\nProperties in Noida\nProperties in Gurgaon\nProperties in Delhi\nProperties in Mumbai\nProperties in Bangalore\nProperties in Pune\nProperties in Hyderabad\nProperties in Chennai\nPopular in Noida\nProperties in Sector 150\nProperties in Sector 137\nProperties in Sector 62\nProperties in Sector 75\nProperties in Greater Noida West\nPopular in Gurgaon\nProperties in DLF Phase 1\nProperties in DLF Phase 3\nProperties in Sohna Road\nProperties in Golf Course Road\nProperties in Sector 49\nPopular in Mumbai\nProperties in Andheri\nProperties in Powai\nProperties in Bandra\nProperties in Thane\nProperties in Navi Mumbai\nPopular in Bangalore\nProperties in Whitefield\nProperties in Indiranagar\nProperties in Koramangala\nProperties in HSR Layout\nProperties in Electronic City\n\n© 2026 Realty Pandit. All rights reserved.\n\nPrivacy Policy\nTerms of Service\nWe value your privacy\n\nWe use cookies to enhance your browsing experience, serve personalized content, and analyze our traffic. By clicking “Accept All”, you consent to our use of cookies for analytics and marketing purposes.\n\nShow details\nAccept All\nEssential Only\nPrivacy Policy"
+  }
+}

@@ -1,0 +1,304 @@
+{
+  "deployments": [
+    {
+      "timestamp": "2026-03-16T04:31:01.446Z",
+      "description": "Fresh verification of all property page fixes after useMasterData rewrite",
+      "taskFile": "fresh-verification-of-all-property-page-fixes-afte.json",
+      "checksCount": 12
+    },
+    {
+      "timestamp": "2026-03-16T04:31:33.577Z",
+      "description": "Verify commercial configs removed from bedroom filter + Google Places + filter functionality",
+      "taskFile": "verify-commercial-configs-removed-from-bedroom-fil.json",
+      "checksCount": 11
+    },
+    {
+      "timestamp": "2026-03-16T04:35:25.195Z",
+      "description": "Final comprehensive verification of all fixes on the properties page",
+      "taskFile": "final-comprehensive-verification-of-all-fixes-on-t.json",
+      "checksCount": 13
+    },
+    {
+      "timestamp": "2026-03-16T05:26:22.256Z",
+      "description": "Check admin inventory page structure and functionality",
+      "taskFile": "check-admin-inventory-page-structure-and-functiona.json",
+      "checksCount": 3
+    },
+    {
+      "timestamp": "2026-03-16T06:08:28.650Z",
+      "description": "Admin inventory redesign: card with thumbnails, dual pricing, completion bar, action buttons. Pricing tab with demand/display/margin. Documents tab. Filter fix (Agricultural Land instead of Industrial).",
+      "taskFile": "admin-inventory-redesign-card-with-thumbnails-dual.json",
+      "checksCount": 4
+    },
+    {
+      "timestamp": "2026-03-16T06:08:42.835Z",
+      "description": "Verify backend document endpoints and classification tree are working",
+      "taskFile": "verify-backend-document-endpoints-and-classificati.json",
+      "checksCount": 4
+    },
+    {
+      "timestamp": "2026-03-18T19:42:49.597Z",
+      "description": "Phase A+B fixes: PM2 ecosystem config, SSR timeout guards, AIChatModal memory leak fix, PropertyDetailClient aria-labels + EMI form labels, WorkflowChatInput accessible label",
+      "taskFile": "phase-a-b-fixes-pm2-ecosystem-config-ssr-timeout-g.json",
+      "checksCount": 7
+    },
+    {
+      "timestamp": "2026-03-18T19:43:22.157Z",
+      "description": "Phase A+B website fixes deployed — verify homepage performance and no errors",
+      "taskFile": "phase-a-b-website-fixes-deployed-verify-homepage-p.json",
+      "checksCount": 5
+    },
+    {
+      "timestamp": "2026-03-18T20:30:33.416Z",
+      "description": "Phase C website Group 2 fixes — verify terms page, blog page SSR, layout overflow, and overall health",
+      "taskFile": "phase-c-website-group-2-fixes-verify-terms-page-bl.json",
+      "checksCount": 7
+    },
+    {
+      "timestamp": "2026-03-18T20:34:11.069Z",
+      "description": "Backend fixes verified — notification preferences, builder OTP, marketing campaigns, JSON parse error handling",
+      "taskFile": "backend-fixes-verified-notification-preferences-bu.json",
+      "checksCount": 4
+    },
+    {
+      "timestamp": "2026-03-19T07:56:11.900Z",
+      "description": "Leads upgrade — 4 new backend endpoints + ExternalLeads UI with slide-over, matches, export, score columns",
+      "taskFile": "leads-upgrade-4-new-backend-endpoints-externallead.json",
+      "checksCount": 3
+    },
+    {
+      "timestamp": "2026-03-19T07:56:20.419Z",
+      "description": "Leads upgrade — backend endpoints live (401=correct, not 404/500), admin panel deployed",
+      "taskFile": "leads-upgrade-backend-endpoints-live-401-correct-n.json",
+      "checksCount": 3
+    },
+    {
+      "timestamp": "2026-03-19T16:07:19.908Z",
+      "description": "Partner referral leads + buyer notifications + smart assignment + property view tracking",
+      "taskFile": "partner-referral-leads-buyer-notifications-smart-a.json",
+      "checksCount": 6
+    },
+    {
+      "timestamp": "2026-03-19T16:20:50.113Z",
+      "description": "Partner referral leads + buyer notifications + smart assignment + property view tracking",
+      "taskFile": "partner-referral-leads-buyer-notifications-smart-a.json",
+      "checksCount": 5
+    },
+    {
+      "timestamp": "2026-03-19T16:21:47.987Z",
+      "description": "Partner referral leads + buyer notifications + smart assignment + property view tracking — all phases complete",
+      "taskFile": "partner-referral-leads-buyer-notifications-smart-a.json",
+      "checksCount": 6
+    },
+    {
+      "timestamp": "2026-03-20T14:51:01.582Z",
+      "description": "Test lead creation and requirements update in admin panel",
+      "taskFile": "test-lead-creation-and-requirements-update-in-admi.json",
+      "checksCount": 3
+    },
+    {
+      "timestamp": "2026-03-20T17:30:43.516Z",
+      "description": "Replaced 3rd Type dropdown with BHK configurations in Leads create modal and edit slide-over. Cascade is now Category → SubCategory → BHK.",
+      "taskFile": "replaced-3rd-type-dropdown-with-bhk-configurations.json",
+      "checksCount": 3
+    },
+    {
+      "timestamp": "2026-03-20T18:26:16.767Z",
+      "description": "Full leads section check - verify all leads load, no errors, editable",
+      "taskFile": "full-leads-section-check-verify-all-leads-load-no-.json",
+      "checksCount": 4
+    },
+    {
+      "timestamp": "2026-03-23T08:05:26.117Z",
+      "description": "Deployed 6 new agents: Payment (Razorpay), Notification, Meta/Facebook, Instagram, SEO, Analytics. New backend routes: /api/payments/plans, /webhooks/razorpay, /external/facebook/webhook, /health",
+      "taskFile": "deployed-6-new-agents-payment-razorpay-notificatio.json",
+      "checksCount": 3
+    },
+    {
+      "timestamp": "2026-03-23T08:08:33.468Z",
+      "description": "Verify new agent endpoints - payment plans (public), Facebook webhook, and API health",
+      "taskFile": "verify-new-agent-endpoints-payment-plans-public-fa.json",
+      "checksCount": 3
+    },
+    {
+      "timestamp": "2026-03-23T08:26:20.465Z",
+      "description": "99acres Pull API integration - sync status endpoint, health check, and integration management",
+      "taskFile": "99acres-pull-api-integration-sync-status-endpoint-.json",
+      "checksCount": 3
+    },
+    {
+      "timestamp": "2026-03-23T09:46:54.889Z",
+      "description": "Partner agent search API endpoint for lead creation - GET /api/partners/search",
+      "taskFile": "partner-agent-search-api-endpoint-for-lead-creatio.json",
+      "checksCount": 3
+    },
+    {
+      "timestamp": "2026-03-23T09:47:06.850Z",
+      "description": "Admin panel loads correctly after partner search UI changes",
+      "taskFile": "admin-panel-loads-correctly-after-partner-search-u.json",
+      "checksCount": 3
+    },
+    {
+      "timestamp": "2026-03-23T10:50:13.842Z",
+      "description": "Admin panel leads section UI redesign - compact layout with filters",
+      "taskFile": "admin-panel-leads-section-ui-redesign-compact-layo.json",
+      "checksCount": 2
+    },
+    {
+      "timestamp": "2026-03-23T12:30:01.667Z",
+      "description": "Major property detail page upgrade: Cinematic Ken Burns gallery, Airbnb image grid, embedded Google Map, AI description, neighborhood scores, price value badge, animated specs, sticky mobile price bar, compare system, smart breadcrumb",
+      "taskFile": "major-property-detail-page-upgrade-cinematic-ken-b.json",
+      "checksCount": 5
+    },
+    {
+      "timestamp": "2026-03-23T12:30:21.455Z",
+      "description": "Property detail page - verify all new components render correctly",
+      "taskFile": "property-detail-page-verify-all-new-components-ren.json",
+      "checksCount": 4
+    },
+    {
+      "timestamp": "2026-03-23T12:30:35.620Z",
+      "description": "Property detail page upgrade - final verification",
+      "taskFile": "property-detail-page-upgrade-final-verification.json",
+      "checksCount": 4
+    },
+    {
+      "timestamp": "2026-03-23T12:50:17.162Z",
+      "description": "Property detail page - all fixes applied: Ken Burns carousel, EMI in sidebar, AI description with English/Hindi toggle, videos fixed",
+      "taskFile": "property-detail-page-all-fixes-applied-ken-burns-c.json",
+      "checksCount": 4
+    },
+    {
+      "timestamp": "2026-03-24T08:42:34.242Z",
+      "description": "Admin panel leads section - mobile card view, partner badge, matching fix, WhatsApp sharing",
+      "taskFile": "admin-panel-leads-section-mobile-card-view-partner.json",
+      "checksCount": 2
+    },
+    {
+      "timestamp": "2026-03-27T14:39:01.441Z",
+      "description": "Fixed layout overflow issues on homepage (TrustBadges, Testimonials, Hero, CTA), login page (fixed→absolute bg), post-property page (overflow-hidden on decorative container), and added aria-labels to 7 buttons across properties page components",
+      "taskFile": "fixed-layout-overflow-issues-on-homepage-trustbadg.json",
+      "checksCount": 7
+    },
+    {
+      "timestamp": "2026-03-27T15:41:17.213Z",
+      "description": "Fixed WhatsApp lead data gap: buyer_workflow_engine now saves category_id, sub_category_id, type_id, geocoords, demand_budget_type. Added /session endpoint. Fixed ExternalLeads admin form with intent dropdown, type_id dropdown, conversation answers display.",
+      "taskFile": "fixed-whatsapp-lead-data-gap-buyer-workflow-engine.json",
+      "checksCount": 4
+    },
+    {
+      "timestamp": "2026-03-29T13:49:28.784Z",
+      "description": "Replaced chat-based inventory upload with modal window containing contact-first SSOT search flow. New InventoryModal opens on 'Add Property' click.",
+      "taskFile": "replaced-chat-based-inventory-upload-with-modal-wi.json",
+      "checksCount": 4
+    },
+    {
+      "timestamp": "2026-03-29T13:49:58.863Z",
+      "description": "Replaced chat-based inventory upload with modal window. InventoryModal opens on Add Property click with contact-first SSOT search.",
+      "taskFile": "replaced-chat-based-inventory-upload-with-modal-wi.json",
+      "checksCount": 2
+    },
+    {
+      "timestamp": "2026-04-09T11:10:18.152Z",
+      "description": "Plan B6: Renovated field in public API response and website badge",
+      "taskFile": "plan-b6-renovated-field-in-public-api-response-and.json",
+      "checksCount": 2
+    },
+    {
+      "timestamp": "2026-04-09T11:10:23.895Z",
+      "description": "Website, admin, and API all healthy after Plan A+B+C deploy",
+      "taskFile": "website-admin-and-api-all-healthy-after-plan-a-b-c.json",
+      "checksCount": 4
+    },
+    {
+      "timestamp": "2026-04-10T07:50:31.406Z",
+      "description": "Phase 1 backend changes: OTP endpoints, assigned_agent in detail, uploader_name in list, schedule-visit agent notification",
+      "taskFile": "phase-1-backend-changes-otp-endpoints-assigned-age.json",
+      "checksCount": 4
+    },
+    {
+      "timestamp": "2026-04-10T08:04:39.631Z",
+      "description": "Full UI/UX improvement — Buy/Rent segmented control, property titles, schedule visit form, phone reveal, bento grid",
+      "taskFile": "full-ui-ux-improvement-buy-rent-segmented-control-.json",
+      "checksCount": 8
+    },
+    {
+      "timestamp": "2026-04-10T09:48:37.059Z",
+      "description": "MediaGallery (unified video+photo toggle), AIDescription fallback, image rendering fix on property detail page",
+      "taskFile": "mediagallery-unified-video-photo-toggle-aidescript.json",
+      "checksCount": 4
+    },
+    {
+      "timestamp": "2026-04-10T11:18:43.524Z",
+      "description": "Fixed B3 (facing underscore), B5 (address title-case), B10 (WhatsApp button mobile position), B11 (Schedule Visit modal uses formatType)",
+      "taskFile": "fixed-b3-facing-underscore-b5-address-title-case-b.json",
+      "checksCount": 7
+    },
+    {
+      "timestamp": "2026-04-10T13:13:44.585Z",
+      "description": "Homepage search bar: replaced AI chat popup with real search input that redirects to /properties. Navbar Properties dropdown: fixed hover gap so dropdown stays open when moving mouse to it.",
+      "taskFile": "homepage-search-bar-replaced-ai-chat-popup-with-re.json",
+      "checksCount": 3
+    },
+    {
+      "timestamp": "2026-04-11T05:29:13.535Z",
+      "description": "media_score column added to inventory — properties with images/videos now appear first on homepage and listing page",
+      "taskFile": "media-score-column-added-to-inventory-properties-w.json",
+      "checksCount": 4
+    },
+    {
+      "timestamp": "2026-04-11T18:07:38.075Z",
+      "description": "Contact system refactor — BUYER/TENANT/LANDLORD enum split. Backend deployed with new ContactType enum (BUYER, TENANT, LANDLORD replacing BUYER_TENANT, SELLER_LANDLORD). DB migrated: 510 BUYER + 111 TENANT + 17 LANDLORD. Frontend admin panel updated with new type labels and dropdowns.",
+      "taskFile": "contact-system-refactor-buyer-tenant-landlord-enum.json",
+      "checksCount": 6
+    },
+    {
+      "timestamp": "2026-04-11T18:07:52.702Z",
+      "description": "Contact system refactor — BUYER/TENANT/LANDLORD enum split deployed. DB migrated, backend + frontend updated.",
+      "taskFile": "contact-system-refactor-buyer-tenant-landlord-enum.json",
+      "checksCount": 6
+    },
+    {
+      "timestamp": "2026-04-12T14:37:26.689Z",
+      "description": "Lead bugs fixed — TransactionType SALE/RENT, contact_type, lead_id backfill, Prisma client regenerated",
+      "taskFile": "lead-bugs-fixed-transactiontype-sale-rent-contact-.json",
+      "checksCount": 4
+    },
+    {
+      "timestamp": "2026-04-12T15:04:40.074Z",
+      "description": "Lead matching fixed — BHK hard filter removed, 99acres BHK extraction, phone normalization",
+      "taskFile": "lead-matching-fixed-bhk-hard-filter-removed-99acre.json",
+      "checksCount": 3
+    },
+    {
+      "timestamp": "2026-04-17T13:18:27.783Z",
+      "description": "Partner ownership / middleman model end-to-end: new backend endpoints exist, partner portal login page loads, browse route exists, inventory page loads, agent deal detail loads, admin loads without errors",
+      "taskFile": "partner-ownership-middleman-model-end-to-end-new-b.json",
+      "checksCount": 7
+    },
+    {
+      "timestamp": "2026-04-18T03:10:36.656Z",
+      "description": "Confirm new middleman-model endpoints are live",
+      "taskFile": "confirm-new-middleman-model-endpoints-are-live.json",
+      "checksCount": 5
+    },
+    {
+      "timestamp": "2026-04-18T03:14:57.901Z",
+      "description": "Partner portal: Browse page loads, My Inventory tab still works, deal detail loads",
+      "taskFile": "partner-portal-browse-page-loads-my-inventory-tab-.json",
+      "checksCount": 5
+    },
+    {
+      "timestamp": "2026-04-20T06:17:06.454Z",
+      "description": "Fixed SW update loop in main.tsx + replaced raw axios with shared client in DealCloseCommissionDialog to fix 403 CSRF errors",
+      "taskFile": "fixed-sw-update-loop-in-main-tsx-replaced-raw-axio.json",
+      "checksCount": 3
+    },
+    {
+      "timestamp": "2026-04-29T02:17:50.761Z",
+      "description": "Phase A bot fixes deployed: A1 stop free-form to never-replied leads, A2 dedup property_share_exhausted, A3 closing-signal + conversational routing on QUALIFIED deals",
+      "taskFile": "phase-a-bot-fixes-deployed-a1-stop-free-form-to-ne.json",
+      "checksCount": 4
+    }
+  ]
+}

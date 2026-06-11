@@ -1,0 +1,79 @@
+{
+  "testsPassed": 6,
+  "testsFailed": 0,
+  "errors": [],
+  "apiCalls": [
+    {
+      "url": "https://api.realtypandit.in/api/chat/start",
+      "status": 200,
+      "method": "POST",
+      "body": "{\"session_id\":\"5dde5cc7-41e2-4a63-a7ba-94b1e4fee820\",\"messages\":[{\"id\":\"dbe3069e-ad53-49ab-abb4-265a75040a1b\",\"role\":\"assistant\",\"content\":\"Namaste! I'm Panditji, your property listing assistant. Let's list your property step by step. You can type naturally or use the buttons below.\",\"timestamp\":\"2026-03-06T14:15:05.507Z\",\"type\":\"system\"},{\"id\":\"7150150f-9928-4024-a811-7cb9ed826f21\",\"role\":\"assistant\",\"content\":\"Who are you?\\nAap kaun hain?\",\"timestamp\":\"2026-03-06T14:15:05.507Z\",\"type\":\"questio"
+    },
+    {
+      "url": "https://api.realtypandit.in/api/chat/message",
+      "status": 200,
+      "method": "POST",
+      "body": "{\"messages\":[{\"id\":\"b198d7ac-829a-46e3-8575-7d9291003349\",\"role\":\"user\",\"content\":\"Owner\",\"timestamp\":\"2026-03-06T14:15:10.302Z\",\"type\":\"text\"},{\"id\":\"6c7c5933-37d6-48ea-aa57-9bb182c5d860\",\"role\":\"assistant\",\"content\":\"What is your name?\\nAapka naam kya hai?\",\"timestamp\":\"2026-03-06T14:15:10.306Z\",\"type\":\"question\",\"step_id\":\"uploader_name\",\"input_type\":\"text\",\"metadata\":{\"progress\":{\"current\":2,\"total\":11,\"group\":\"contact\"}}}],\"session_active\":true,\"progress\":{\"current\":2,\"total\":11,\"group\":\"co"
+    },
+    {
+      "url": "https://api.realtypandit.in/api/chat/message",
+      "status": 200,
+      "method": "POST",
+      "body": "{\"messages\":[{\"id\":\"0775bd16-be42-434e-8d74-d904cf0c49df\",\"role\":\"user\",\"content\":\"Rahul Sharma\",\"timestamp\":\"2026-03-06T14:15:14.019Z\",\"type\":\"text\"},{\"id\":\"38361817-22c2-4923-bc1f-d597b9bf5e14\",\"role\":\"assistant\",\"content\":\"What is your phone number?\\nAapka phone number kya hai?\",\"timestamp\":\"2026-03-06T14:15:14.022Z\",\"type\":\"question\",\"step_id\":\"uploader_phone\",\"input_type\":\"phone\",\"metadata\":{\"progress\":{\"current\":3,\"total\":11,\"group\":\"contact\"}}}],\"session_active\":true,\"progress\":{\"current\""
+    },
+    {
+      "url": "https://api.realtypandit.in/api/chat/message",
+      "status": 200,
+      "method": "POST",
+      "body": "{\"messages\":[{\"id\":\"a7495f97-aea0-4c9c-8f70-ecb0e67865cc\",\"role\":\"user\",\"content\":\"9876543210\",\"timestamp\":\"2026-03-06T14:15:19.127Z\",\"type\":\"text\"},{\"id\":\"5aab39c4-3b06-4938-8da2-2786dca41dd0\",\"role\":\"assistant\",\"content\":\"Sale or Rent / Lease?\\nBechna ya Kiraye/Lease par dena?\",\"timestamp\":\"2026-03-06T14:15:19.130Z\",\"type\":\"question\",\"step_id\":\"intent\",\"input_type\":\"radio\",\"quick_replies\":[{\"label\":\"Sale\",\"value\":\"sell\"},{\"label\":\"Rent / Lease\",\"value\":\"rent_lease\"}],\"metadata\":{\"progress\":{\"c"
+    },
+    {
+      "url": "https://api.realtypandit.in/api/chat/message",
+      "status": 200,
+      "method": "POST",
+      "body": "{\"messages\":[{\"id\":\"e01b5328-5ab6-4865-950b-853d4ffe0868\",\"role\":\"user\",\"content\":\"Sale\",\"timestamp\":\"2026-03-06T14:15:22.198Z\",\"type\":\"text\"},{\"id\":\"3375a8cb-5202-44f3-9979-a747a12d73cb\",\"role\":\"assistant\",\"content\":\"Type of property?\\nProperty ka type?\",\"timestamp\":\"2026-03-06T14:15:22.200Z\",\"type\":\"question\",\"step_id\":\"main_category\",\"input_type\":\"radio\",\"quick_replies\":[{\"label\":\"Residential\",\"value\":\"residential\"},{\"label\":\"Commercial\",\"value\":\"commercial\"},{\"label\":\"Agricultural Land\",\"val"
+    },
+    {
+      "url": "https://api.realtypandit.in/api/chat/message",
+      "status": 200,
+      "method": "POST",
+      "body": "{\"messages\":[{\"id\":\"a2bfb18b-53c7-4e2d-a3ea-aadbc5a01a4b\",\"role\":\"user\",\"content\":\"Residential\",\"timestamp\":\"2026-03-06T14:15:25.337Z\",\"type\":\"text\"},{\"id\":\"7dc00e3b-5996-4243-a0b0-6de7e5577bd5\",\"role\":\"assistant\",\"content\":\"What type of property?\\nProperty ka type kya hai?\",\"timestamp\":\"2026-03-06T14:15:25.342Z\",\"type\":\"question\",\"step_id\":\"flat_property_type_id\",\"input_type\":\"dropdown\",\"quick_replies\":[{\"label\":\"Apartment / Gated Society\",\"value\":\"a3677c3e-ccc7-4ef2-9d88-acc0d3821a9b\"},{\"label"
+    },
+    {
+      "url": "https://api.realtypandit.in/api/chat/message",
+      "status": 200,
+      "method": "POST",
+      "body": "{\"messages\":[{\"id\":\"b68fcefb-2da6-4d67-beba-a0990ea98180\",\"role\":\"user\",\"content\":\"Apartment / Gated Society\",\"timestamp\":\"2026-03-06T14:15:28.442Z\",\"type\":\"text\"},{\"id\":\"9cd451a0-cd93-4042-bdec-9d884a20e642\",\"role\":\"assistant\",\"content\":\"What is the configuration? (e.g., 2 BHK)\\nConfiguration kya hai? (e.g., 2 BHK)\",\"timestamp\":\"2026-03-06T14:15:28.448Z\",\"type\":\"question\",\"step_id\":\"configuration_id\",\"input_type\":\"dropdown\",\"quick_replies\":[{\"label\":\"Studio\",\"value\":\"3b1fade2-13d6-4152-9455-297"
+    },
+    {
+      "url": "https://api.realtypandit.in/api/chat/message",
+      "status": 200,
+      "method": "POST",
+      "body": "{\"messages\":[{\"id\":\"e6b03cab-3509-4856-9ea0-04526b9f5b45\",\"role\":\"user\",\"content\":\"2 BHK\",\"timestamp\":\"2026-03-06T14:15:33.466Z\",\"type\":\"text\"},{\"id\":\"c37e40fb-2a22-4615-ad71-2defdf968652\",\"role\":\"assistant\",\"content\":\"Property Address\\nProperty ka address bharein\",\"timestamp\":\"2026-03-06T14:15:33.470Z\",\"type\":\"question\",\"step_id\":\"address_block\",\"input_type\":\"address_block\",\"metadata\":{\"progress\":{\"current\":8,\"total\":12,\"group\":\"address\"},\"address_config\":{\"sub_category_slug\":\"residential_apart"
+    },
+    {
+      "url": "https://api.realtypandit.in/api/chat/message",
+      "status": 200,
+      "method": "POST",
+      "body": "{\"messages\":[{\"id\":\"034282d3-45df-4374-bb97-8e9229b7406f\",\"role\":\"user\",\"content\":\"{\\\"flat_no\\\":\\\"B-202\\\",\\\"floor_number\\\":\\\"5\\\",\\\"apartment_name\\\":\\\"ATS Pristine\\\",\\\"sub_locality\\\":\\\"Sector 150\\\",\\\"locality\\\":\\\"Noida\\\",\\\"city\\\":\\\"Noida\\\",\\\"state\\\":\\\"Uttar Pradesh\\\"}\",\"timestamp\":\"2026-03-06T14:15:43.708Z\",\"type\":\"text\"},{\"id\":\"369488e5-5531-485e-8839-eb77189eb86d\",\"role\":\"assistant\",\"content\":\"Who holds the key of the property?\\nProperty ki chaabi kiske paas hai?\",\"timestamp\":\"2026-03-06T14:15:"
+    },
+    {
+      "url": "https://api.realtypandit.in/api/chat/message",
+      "status": 200,
+      "method": "POST",
+      "body": "{\"messages\":[{\"id\":\"aa3854da-be60-46cb-9922-7f7417ccd1ae\",\"role\":\"user\",\"content\":\"I have the key\",\"timestamp\":\"2026-03-06T14:15:50.719Z\",\"type\":\"text\"},{\"id\":\"2db7ff12-d022-46f7-a268-01978f6a4857\",\"role\":\"assistant\",\"content\":\"Upload property photos (or skip to add later)\\nProperty ki photos bhejein (ya baad mein add karein)\",\"timestamp\":\"2026-03-06T14:15:50.722Z\",\"type\":\"question\",\"step_id\":\"photos\",\"input_type\":\"media_upload\",\"quick_replies\":[{\"label\":\"Done ✅\",\"value\":\"__done__\"},{\"label\":\"Sk"
+    },
+    {
+      "url": "https://api.realtypandit.in/api/chat/message",
+      "status": 200,
+      "method": "POST",
+      "body": "{\"messages\":[{\"id\":\"96694868-2a1a-45df-bda1-81e33706fc07\",\"role\":\"user\",\"content\":\"__done__\",\"timestamp\":\"2026-03-06T14:15:55.326Z\",\"type\":\"text\"},{\"id\":\"6f5ad8e9-a0aa-4f7d-b381-33c7eaaa5abb\",\"role\":\"assistant\",\"content\":\"Upload property videos (optional)\\nProperty ki videos bhejein (optional)\",\"timestamp\":\"2026-03-06T14:15:55.329Z\",\"type\":\"question\",\"step_id\":\"videos\",\"input_type\":\"video_upload\",\"quick_replies\":[{\"label\":\"Done ✅\",\"value\":\"__done__\"},{\"label\":\"Skip ⏩\",\"value\":\"__skip__\"}],\"metad"
+    },
+    {
+      "url": "https://api.realtypandit.in/api/chat/message",
+      "status": 200,
+      "method": "POST",
+      "body": "{\"messages\":[{\"id\":\"c609baa4-4ff4-42c2-8e21-d1acb2a723b3\",\"role\":\"user\",\"content\":\"__done__\",\"timestamp\":\"2026-03-06T14:15:59.988Z\",\"type\":\"text\"},{\"id\":\"6a929427-9a81-4133-aecb-6b55551a2638\",\"role\":\"assistant\",\"content\":\"Review and save inventory\\nReview karein aur inventory save karein\",\"timestamp\":\"2026-03-06T14:15:59.993Z\",\"type\":\"summary\",\"step_id\":\"confirm_create\",\"input_type\":\"confirm\",\"quick_replies\":[{\"label\":\"Confirm ✅\",\"value\":\"__confirm_yes__\"},{\"label\":\"Go Back & Edit ✏️\",\"value\":\"_"
+    }
+  ]
+}

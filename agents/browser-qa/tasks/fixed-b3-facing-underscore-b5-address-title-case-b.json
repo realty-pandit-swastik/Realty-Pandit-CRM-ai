@@ -1,0 +1,44 @@
+{
+  "description": "Fixed B3 (facing underscore), B5 (address title-case), B10 (WhatsApp button mobile position), B11 (Schedule Visit modal uses formatType)",
+  "checks": [
+    {
+      "type": "no_console_errors",
+      "page": "/properties",
+      "description": "No JS errors on /properties"
+    },
+    {
+      "type": "no_console_errors",
+      "page": "/properties/3bhk-apartment-for-sale-in-sector-4-vaishali-ghaziabad-cb8a81396b59",
+      "description": "No JS errors on /properties/3bhk-apartment-for-sale-in-sector-4-vaishali-ghaziabad-cb8a81396b59"
+    },
+    {
+      "type": "text_visible",
+      "page": "/properties/3bhk-apartment-for-sale-in-sector-4-vaishali-ghaziabad-cb8a81396b59",
+      "text": "South East",
+      "description": "Text \"South East\" visible on /properties/3bhk-apartment-for-sale-in-sector-4-vaishali-ghaziabad-cb8a81396b59"
+    },
+    {
+      "type": "text_visible",
+      "page": "/properties/3bhk-apartment-for-sale-in-sector-4-vaishali-ghaziabad-cb8a81396b59",
+      "text": "Mahagun Villa",
+      "description": "Text \"Mahagun Villa\" visible on /properties/3bhk-apartment-for-sale-in-sector-4-vaishali-ghaziabad-cb8a81396b59"
+    },
+    {
+      "type": "text_visible",
+      "page": "/properties",
+      "text": "Vaishali Sector",
+      "description": "Text \"Vaishali Sector\" visible on /properties"
+    },
+    {
+      "type": "page_loads",
+      "page": "/properties",
+      "max_time": 4000,
+      "description": "/properties loads under 4000ms"
+    },
+    {
+      "type": "responsive",
+      "page": "/properties",
+      "description": "/properties is responsive on mobile"
+    }
+  ]
+}

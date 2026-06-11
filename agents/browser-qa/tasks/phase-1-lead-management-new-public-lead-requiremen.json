@@ -1,0 +1,39 @@
+{
+  "description": "Phase 1: Lead Management — New /public/lead-requirements API endpoint, RequirementCapture component on contact page and homepage popup, DB migration with deal fields",
+  "checks": [
+    {
+      "type": "api_returns",
+      "url": "/health",
+      "status": 200,
+      "description": "API /health returns 200"
+    },
+    {
+      "type": "api_returns",
+      "url": "/public/lead-requirements",
+      "status": 400,
+      "description": "API /public/lead-requirements returns 400"
+    },
+    {
+      "type": "no_console_errors",
+      "page": "/contact",
+      "description": "No JS errors on /contact"
+    },
+    {
+      "type": "no_console_errors",
+      "page": "/",
+      "description": "No JS errors on /"
+    },
+    {
+      "type": "page_loads",
+      "page": "/contact",
+      "max_time": 5000,
+      "description": "/contact loads under 5000ms"
+    },
+    {
+      "type": "element_exists",
+      "page": "/contact",
+      "selector": "",
+      "description": "Element \"\" exists on /contact"
+    }
+  ]
+}

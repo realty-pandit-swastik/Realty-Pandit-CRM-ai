@@ -1,0 +1,23 @@
+{
+  "description": "99acres Pull API integration - sync status endpoint, health check, and integration management",
+  "checks": [
+    {
+      "type": "api_returns",
+      "url": "/api/integrations/sync-status",
+      "status": 200,
+      "description": "API /api/integrations/sync-status returns 200"
+    },
+    {
+      "type": "api_returns",
+      "url": "/health",
+      "status": 200,
+      "description": "API /health returns 200"
+    },
+    {
+      "type": "api_returns",
+      "url": "/api/integrations/99acres/history",
+      "status": 200,
+      "description": "API /api/integrations/99acres/history returns 200"
+    }
+  ]
+}

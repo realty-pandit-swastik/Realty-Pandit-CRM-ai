@@ -1,0 +1,22 @@
+{
+  "description": "Test lead creation and requirements update in admin panel",
+  "checks": [
+    {
+      "type": "no_console_errors",
+      "page": "/leads",
+      "description": "No JS errors on /leads"
+    },
+    {
+      "type": "api_returns",
+      "url": "/api/leads/by-source",
+      "status": 200,
+      "description": "API /api/leads/by-source returns 200"
+    },
+    {
+      "type": "api_returns",
+      "url": "/health",
+      "status": 200,
+      "description": "API /health returns 200"
+    }
+  ]
+}

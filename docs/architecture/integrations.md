@@ -28,6 +28,12 @@
 
 **Root cause of outage:** 99acres server-side issue — returned HTTP 500 + "XML Parsing Error" ERROR-0000 code. Our side was healthy throughout. Sandeep never explained exactly what was fixed but it started working again immediately after his reply.
 
+**Second outage (2026-06) — leads not delivered to our API account:**
+- ~2026-05-31 onward: `getmy99Response` returns leads for OLDER date windows (e.g. 26–28 May = valid data) but an **empty response / 0 leads for recent windows (31 May → today)**, even though new leads ARE visible in the 99acres seller panel (owner confirmed leads generated 1–2 June). So leads stopped reaching our API account `REALTY.PUNDIT2`.
+- Our side verified HEALTHY: poller runs every 12 min (scheduler confirmed via the BullMQ job-scheduler registry — an earlier "scheduler stalled" alarm was a **UTC-vs-IST timestamp misread**: `integration_syncs.last_attempt` is stored UTC, psql mislabels it `+05:30`); manual poll succeeds; rolling 2-day lookback + queryId-parse fixes are deployed. Newest API lead = 31 May.
+- Likely upstream cause (one of): API/Response feed disabled or plan change; leads routed to a **sub-user/login the credential doesn't cover**; or server-side (like April). Every returned lead has an empty `SubUserName`.
+- **2026-06-02: email to Sandeep was DRAFTED but NOT actually sent** (verified via Gmail 2026-06-03 — no June thread to sandeep.upadhyay@99acres.com and no matching draft exist; only the April thread + a stale March draft to Vishal.Singh). **ACTION STILL OPEN: send the email** (to sandeep.upadhyay@99acres.com, cc Realtypandit99@gmail.com, from info@realtypandit.in) — symptom: API returns 0 leads for REALTY.PUNDIT2 since ~31 May while the panel shows new leads; ask him to restore delivery (same playbook as April). Gap leads (31 May→) not in the API → recover via 99acres Response Manager CSV export + `scripts/recover_99acres_gap.ts`.
+
 **Support contacts:** sandeep.upadhyay@99acres.com, Vishal.Singh@99acres.com
 
 **Files:**

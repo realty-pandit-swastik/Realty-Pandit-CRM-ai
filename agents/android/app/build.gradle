@@ -1,0 +1,154 @@
+plugins {
+    id 'com.android.application'
+    id 'kotlin-android'
+    id 'kotlin-kapt'
+    id 'dagger.hilt.android.plugin'
+    id 'io.sentry.android.gradle'
+}
+
+// Read GlitchTip DSN from local.properties (gitignored). Falls back to empty string,
+// in which case Sentry init becomes a no-op at runtime.
+def localProperties = new Properties()
+def localPropsFile = rootProject.file('local.properties')
+if (localPropsFile.exists()) {
+    localPropsFile.withInputStream { localProperties.load(it) }
+}
+def glitchtipDsn = localProperties.getProperty('GLITCHTIP_DSN', System.getenv('GLITCHTIP_DSN') ?: '')
+
+android {
+    namespace 'com.realtypandit.staffapp'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "com.realtypandit.staffapp"
+        minSdk 26
+        targetSdk 34
+        versionCode 1
+        versionName "1.0.0"
+
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+
+        // Backend API URL - change for production
+        buildConfigField "String", "API_BASE_URL", "\"http://10.0.2.2:3000\"" // Android emulator localhost
+        // GlitchTip DSN (Sentry-protocol). Public by design — DSNs only authorize submission.
+        buildConfigField "String", "GLITCHTIP_DSN", "\"${glitchtipDsn}\""
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            buildConfigField "String", "API_BASE_URL", "\"https://api.realtypandit.in\""
+            buildConfigField "String", "GLITCHTIP_DSN", "\"${glitchtipDsn}\""
+        }
+        debug {
+            minifyEnabled false
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    kotlinOptions {
+        jvmTarget = '17'
+    }
+
+    buildFeatures {
+        compose true
+        buildConfig true
+    }
+
+    composeOptions {
+        kotlinCompilerExtensionVersion compose_compiler_version
+    }
+
+    packaging {
+        resources {
+            excludes += '/META-INF/{AL2.0,LGPL2.1}'
+        }
+    }
+}
+
+dependencies {
+    // Core Android
+    implementation 'androidx.core:core-ktx:1.12.0'
+    implementation 'androidx.lifecycle:lifecycle-runtime-ktx:2.6.2'
+    implementation 'androidx.activity:activity-compose:1.8.1'
+
+    // Jetpack Compose
+    implementation platform('androidx.compose:compose-bom:2023.10.01')
+    implementation 'androidx.compose.ui:ui'
+    implementation 'androidx.compose.ui:ui-graphics'
+    implementation 'androidx.compose.ui:ui-tooling-preview'
+    implementation 'androidx.compose.material3:material3'
+    implementation 'androidx.compose.material:material-icons-extended'
+    implementation 'androidx.navigation:navigation-compose:2.7.5'
+
+    // Hilt (Dependency Injection)
+    implementation "com.google.dagger:hilt-android:$hilt_version"
+    kapt "com.google.dagger:hilt-android-compiler:$hilt_version"
+    implementation 'androidx.hilt:hilt-navigation-compose:1.1.0'
+    implementation 'androidx.hilt:hilt-work:1.1.0'
+    kapt 'androidx.hilt:hilt-compiler:1.1.0'
+
+    // Retrofit (Network)
+    implementation "com.squareup.retrofit2:retrofit:$retrofit_version"
+    implementation "com.squareup.retrofit2:converter-gson:$retrofit_version"
+    implementation 'com.squareup.okhttp3:okhttp:4.12.0'
+    implementation 'com.squareup.okhttp3:logging-interceptor:4.12.0'
+
+    // Room (Local Database)
+    implementation "androidx.room:room-runtime:$room_version"
+    implementation "androidx.room:room-ktx:$room_version"
+    kapt "androidx.room:room-compiler:$room_version"
+
+    // WorkManager (Background Jobs)
+    implementation "androidx.work:work-runtime-ktx:$work_version"
+
+    // Coroutines
+    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3'
+
+    // GlitchTip (Sentry-protocol) — error + crash + ANR reporting.
+    // sentry-android-okhttp adds the OkHttp interceptor; sentry-android-timber
+    // could be added later if Timber is introduced.
+    implementation 'io.sentry:sentry-android:7.18.0'
+    implementation 'io.sentry:sentry-android-okhttp:7.18.0'
+
+    // DataStore (Preferences)
+    implementation 'androidx.datastore:datastore-preferences:1.0.0'
+    implementation 'androidx.security:security-crypto:1.1.0-alpha06' // EncryptedSharedPreferences
+
+    // Media (Audio playback)
+    implementation 'androidx.media3:media3-exoplayer:1.2.0'
+    implementation 'androidx.media3:media3-ui:1.2.0'
+
+    // Accompanist (Compose utilities)
+    implementation 'com.google.accompanist:accompanist-permissions:0.32.0'
+    implementation 'com.google.accompanist:accompanist-systemuicontroller:0.32.0'
+
+    // Testing
+    testImplementation 'junit:junit:4.13.2'
+    androidTestImplementation 'androidx.test.ext:junit:1.1.5'
+    androidTestImplementation 'androidx.test.espresso:espresso-core:3.5.1'
+    androidTestImplementation platform('androidx.compose:compose-bom:2023.10.01')
+    androidTestImplementation 'androidx.compose.ui:ui-test-junit4'
+    debugImplementation 'androidx.compose.ui:ui-tooling'
+    debugImplementation 'androidx.compose.ui:ui-test-manifest'
+}
+
+// GlitchTip mapping file upload — required so R8/ProGuard-minified release stack
+// traces are readable. Reads org/project/authToken from sentry.properties (gitignored).
+// If sentry.properties is missing or has no auth token, mapping upload silently skips.
+sentry {
+    // Tells the plugin to upload to GlitchTip instead of sentry.io.
+    // Set in sentry.properties as: defaults.url=https://errors.realtypandit.in
+    includeProguardMapping = true
+    autoUploadProguardMapping = file('../sentry.properties').exists()
+    uploadNativeSymbols = false
+    // Disable telemetry to GlitchTip server (the plugin uses Sentry SaaS telemetry by default)
+    telemetry = false
+    // Don't fail the build if upload fails (e.g., GlitchTip API hiccup) — APK still ships.
+    ignoredVariants = []
+}

@@ -1,0 +1,27 @@
+{
+  "description": "Fixed login page horizontal overflow by adding overflow-hidden to animated background container",
+  "checks": [
+    {
+      "type": "no_console_errors",
+      "page": "/login",
+      "description": "No JS errors on /login"
+    },
+    {
+      "type": "responsive",
+      "page": "/login",
+      "description": "/login is responsive on mobile"
+    },
+    {
+      "type": "element_exists",
+      "page": "/login",
+      "selector": "h1",
+      "description": "Element \"h1\" exists on /login"
+    },
+    {
+      "type": "page_loads",
+      "page": "/login",
+      "max_time": 5000,
+      "description": "/login loads under 5000ms"
+    }
+  ]
+}

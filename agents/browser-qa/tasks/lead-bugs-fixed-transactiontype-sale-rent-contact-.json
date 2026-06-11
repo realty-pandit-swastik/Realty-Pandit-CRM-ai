@@ -1,0 +1,28 @@
+{
+  "description": "Lead bugs fixed — TransactionType SALE/RENT, contact_type, lead_id backfill, Prisma client regenerated",
+  "checks": [
+    {
+      "type": "api_returns",
+      "url": "/api/deals",
+      "status": 401,
+      "description": "API /api/deals returns 401"
+    },
+    {
+      "type": "api_returns",
+      "url": "/api/leads",
+      "status": 401,
+      "description": "API /api/leads returns 401"
+    },
+    {
+      "type": "api_returns",
+      "url": "/health",
+      "status": 200,
+      "description": "API /health returns 200"
+    },
+    {
+      "type": "no_console_errors",
+      "page": "/",
+      "description": "No JS errors on /"
+    }
+  ]
+}

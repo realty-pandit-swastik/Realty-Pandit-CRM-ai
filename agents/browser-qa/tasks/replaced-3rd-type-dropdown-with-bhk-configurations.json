@@ -1,0 +1,22 @@
+{
+  "description": "Replaced 3rd Type dropdown with BHK configurations in Leads create modal and edit slide-over. Cascade is now Category → SubCategory → BHK.",
+  "checks": [
+    {
+      "type": "no_console_errors",
+      "page": "/leads",
+      "description": "No JS errors on /leads"
+    },
+    {
+      "type": "page_loads",
+      "page": "/leads",
+      "max_time": 3000,
+      "description": "/leads loads under 3000ms"
+    },
+    {
+      "type": "api_returns",
+      "url": "/health",
+      "status": 200,
+      "description": "API /health returns 200"
+    }
+  ]
+}

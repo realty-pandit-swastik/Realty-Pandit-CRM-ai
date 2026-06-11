@@ -1,0 +1,32 @@
+{
+  "description": "Phase D: Google Places search autocomplete on /properties and dynamic nearby landmarks on property detail pages",
+  "checks": [
+    {
+      "type": "no_console_errors",
+      "page": "/properties",
+      "description": "No JS errors on /properties"
+    },
+    {
+      "type": "no_console_errors",
+      "page": "/properties/cm9fxj3ai0003uyt4ht9grm5p",
+      "description": "No JS errors on /properties/cm9fxj3ai0003uyt4ht9grm5p"
+    },
+    {
+      "type": "api_returns",
+      "url": "/public/nearby-landmarks/cm9fxj3ai0003uyt4ht9grm5p",
+      "status": 200,
+      "description": "API /public/nearby-landmarks/cm9fxj3ai0003uyt4ht9grm5p returns 200"
+    },
+    {
+      "type": "page_loads",
+      "page": "/properties",
+      "max_time": 5000,
+      "description": "/properties loads under 5000ms"
+    },
+    {
+      "type": "responsive",
+      "page": "/properties",
+      "description": "/properties is responsive on mobile"
+    }
+  ]
+}

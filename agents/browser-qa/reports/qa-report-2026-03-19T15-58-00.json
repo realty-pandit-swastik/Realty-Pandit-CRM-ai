@@ -1,0 +1,557 @@
+{
+  "timestamp": "2026-03-19T15:58:00.467Z",
+  "duration": "117.2s",
+  "summary": {
+    "totalIssues": 18,
+    "critical": 15,
+    "warnings": 1,
+    "info": 2,
+    "pagesChecked": 14,
+    "screenshotsTaken": 2
+  },
+  "issues": [
+    {
+      "page": "Properties",
+      "type": "performance",
+      "severity": "warning",
+      "message": "Slow page load: 5516ms",
+      "details": {
+        "domContentLoaded": 2445,
+        "fullLoad": 5516,
+        "firstByte": 1864,
+        "domInteractive": 2444,
+        "viewport": "desktop"
+      },
+      "timestamp": "2026-03-19T15:56:54.991Z"
+    },
+    {
+      "page": "Properties",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "desktop"
+      },
+      "timestamp": "2026-03-19T15:56:54.997Z"
+    },
+    {
+      "page": "Properties",
+      "type": "accessibility",
+      "severity": "info",
+      "message": "Button without text or aria-label",
+      "details": {
+        "viewport": "desktop"
+      },
+      "timestamp": "2026-03-19T15:56:54.997Z"
+    },
+    {
+      "page": "About",
+      "type": "navigation",
+      "severity": "critical",
+      "message": "Page failed to load: page.goto: Timeout 60000ms exceeded.\nCall log:\n\u001b[2m  - navigating to \"https://www.realtypandit.in/about\", waiting until \"networkidle\"\u001b[22m\n",
+      "details": {
+        "url": "https://www.realtypandit.in/about",
+        "viewport": "desktop"
+      },
+      "timestamp": "2026-03-19T15:57:55.680Z"
+    },
+    {
+      "page": "Contact",
+      "type": "navigation",
+      "severity": "critical",
+      "message": "Page failed to load: page.goto: net::ERR_FAILED at https://www.realtypandit.in/contact\nCall log:\n\u001b[2m  - navigating to \"https://www.realtypandit.in/contact\", waiting until \"networkidle\"\u001b[22m\n",
+      "details": {
+        "url": "https://www.realtypandit.in/contact",
+        "viewport": "desktop"
+      },
+      "timestamp": "2026-03-19T15:57:56.796Z"
+    },
+    {
+      "page": "Services",
+      "type": "navigation",
+      "severity": "critical",
+      "message": "Page failed to load: page.goto: net::ERR_FAILED at https://www.realtypandit.in/services\nCall log:\n\u001b[2m  - navigating to \"https://www.realtypandit.in/services\", waiting until \"networkidle\"\u001b[22m\n",
+      "details": {
+        "url": "https://www.realtypandit.in/services",
+        "viewport": "desktop"
+      },
+      "timestamp": "2026-03-19T15:57:58.166Z"
+    },
+    {
+      "page": "Blog",
+      "type": "navigation",
+      "severity": "critical",
+      "message": "Page failed to load: page.goto: net::ERR_FAILED at https://www.realtypandit.in/blog\nCall log:\n\u001b[2m  - navigating to \"https://www.realtypandit.in/blog\", waiting until \"networkidle\"\u001b[22m\n",
+      "details": {
+        "url": "https://www.realtypandit.in/blog",
+        "viewport": "desktop"
+      },
+      "timestamp": "2026-03-19T15:57:59.594Z"
+    },
+    {
+      "page": "Discovered: /post-property",
+      "type": "navigation",
+      "severity": "critical",
+      "message": "Page failed to load: page.goto: net::ERR_FAILED at https://www.realtypandit.in/post-property\nCall log:\n\u001b[2m  - navigating to \"https://www.realtypandit.in/post-property\", waiting until \"networkidle\"\u001b[22m\n",
+      "details": {
+        "url": "https://www.realtypandit.in/post-property",
+        "viewport": "desktop"
+      },
+      "timestamp": "2026-03-19T15:57:59.627Z"
+    },
+    {
+      "page": "Discovered: /login",
+      "type": "navigation",
+      "severity": "critical",
+      "message": "Page failed to load: page.goto: net::ERR_FAILED at https://www.realtypandit.in/login\nCall log:\n\u001b[2m  - navigating to \"https://www.realtypandit.in/login\", waiting until \"networkidle\"\u001b[22m\n",
+      "details": {
+        "url": "https://www.realtypandit.in/login",
+        "viewport": "desktop"
+      },
+      "timestamp": "2026-03-19T15:57:59.637Z"
+    },
+    {
+      "page": "Discovered: /tools/emi-calculator",
+      "type": "navigation",
+      "severity": "critical",
+      "message": "Page failed to load: page.goto: net::ERR_FAILED at https://www.realtypandit.in/tools/emi-calculator\nCall log:\n\u001b[2m  - navigating to \"https://www.realtypandit.in/tools/emi-calculator\", waiting until \"networkidle\"\u001b[22m\n",
+      "details": {
+        "url": "https://www.realtypandit.in/tools/emi-calculator",
+        "viewport": "desktop"
+      },
+      "timestamp": "2026-03-19T15:57:59.650Z"
+    },
+    {
+      "page": "Discovered: /tools/area-converter",
+      "type": "navigation",
+      "severity": "critical",
+      "message": "Page failed to load: page.goto: net::ERR_FAILED at https://www.realtypandit.in/tools/area-converter\nCall log:\n\u001b[2m  - navigating to \"https://www.realtypandit.in/tools/area-converter\", waiting until \"networkidle\"\u001b[22m\n",
+      "details": {
+        "url": "https://www.realtypandit.in/tools/area-converter",
+        "viewport": "desktop"
+      },
+      "timestamp": "2026-03-19T15:57:59.661Z"
+    },
+    {
+      "page": "Discovered: /compare",
+      "type": "navigation",
+      "severity": "critical",
+      "message": "Page failed to load: page.goto: net::ERR_FAILED at https://www.realtypandit.in/compare\nCall log:\n\u001b[2m  - navigating to \"https://www.realtypandit.in/compare\", waiting until \"networkidle\"\u001b[22m\n",
+      "details": {
+        "url": "https://www.realtypandit.in/compare",
+        "viewport": "desktop"
+      },
+      "timestamp": "2026-03-19T15:57:59.672Z"
+    },
+    {
+      "page": "Discovered: /faq",
+      "type": "navigation",
+      "severity": "critical",
+      "message": "Page failed to load: page.goto: net::ERR_FAILED at https://www.realtypandit.in/faq\nCall log:\n\u001b[2m  - navigating to \"https://www.realtypandit.in/faq\", waiting until \"networkidle\"\u001b[22m\n",
+      "details": {
+        "url": "https://www.realtypandit.in/faq",
+        "viewport": "desktop"
+      },
+      "timestamp": "2026-03-19T15:57:59.686Z"
+    },
+    {
+      "page": "Discovered: /privacy",
+      "type": "navigation",
+      "severity": "critical",
+      "message": "Page failed to load: page.goto: net::ERR_FAILED at https://www.realtypandit.in/privacy\nCall log:\n\u001b[2m  - navigating to \"https://www.realtypandit.in/privacy\", waiting until \"networkidle\"\u001b[22m\n",
+      "details": {
+        "url": "https://www.realtypandit.in/privacy",
+        "viewport": "desktop"
+      },
+      "timestamp": "2026-03-19T15:57:59.699Z"
+    },
+    {
+      "page": "Discovered: /terms",
+      "type": "navigation",
+      "severity": "critical",
+      "message": "Page failed to load: page.goto: net::ERR_FAILED at https://www.realtypandit.in/terms\nCall log:\n\u001b[2m  - navigating to \"https://www.realtypandit.in/terms\", waiting until \"networkidle\"\u001b[22m\n",
+      "details": {
+        "url": "https://www.realtypandit.in/terms",
+        "viewport": "desktop"
+      },
+      "timestamp": "2026-03-19T15:57:59.711Z"
+    },
+    {
+      "page": "API",
+      "type": "api-health",
+      "severity": "critical",
+      "message": "API Root unreachable: apiRequestContext.get: getaddrinfo ENOTFOUND api.realtypandit.in\nCall log:\n\u001b[2m  - → GET https://api.realtypandit.in/\u001b[22m\n\u001b[2m    - user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/145.0.7632.6 Safari/537.36\u001b[22m\n\u001b[2m    - accept: */*\u001b[22m\n\u001b[2m    - accept-encoding: gzip,deflate,br\u001b[22m\n\u001b[2m    - cookie: _ga=GA1.1.1977701212.1773935796; _ga_WJF3Y3SXM3=GS2.1.s1773935796$o1$g1$t1773935877$j60$l0$h0\u001b[22m\n",
+      "details": {
+        "url": "https://api.realtypandit.in/"
+      },
+      "timestamp": "2026-03-19T15:57:59.873Z"
+    },
+    {
+      "page": "API",
+      "type": "api-health",
+      "severity": "critical",
+      "message": "API Health unreachable: apiRequestContext.get: getaddrinfo ENOTFOUND api.realtypandit.in\nCall log:\n\u001b[2m  - → GET https://api.realtypandit.in/health\u001b[22m\n\u001b[2m    - user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/145.0.7632.6 Safari/537.36\u001b[22m\n\u001b[2m    - accept: */*\u001b[22m\n\u001b[2m    - accept-encoding: gzip,deflate,br\u001b[22m\n\u001b[2m    - cookie: _ga=GA1.1.1977701212.1773935796; _ga_WJF3Y3SXM3=GS2.1.s1773935796$o1$g1$t1773935877$j60$l0$h0\u001b[22m\n",
+      "details": {
+        "url": "https://api.realtypandit.in/health"
+      },
+      "timestamp": "2026-03-19T15:57:59.877Z"
+    },
+    {
+      "page": "API",
+      "type": "api-health",
+      "severity": "critical",
+      "message": "API Properties (public) unreachable: apiRequestContext.get: getaddrinfo ENOTFOUND api.realtypandit.in\nCall log:\n\u001b[2m  - → GET https://api.realtypandit.in/public/properties\u001b[22m\n\u001b[2m    - user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/145.0.7632.6 Safari/537.36\u001b[22m\n\u001b[2m    - accept: */*\u001b[22m\n\u001b[2m    - accept-encoding: gzip,deflate,br\u001b[22m\n\u001b[2m    - cookie: _ga=GA1.1.1977701212.1773935796; _ga_WJF3Y3SXM3=GS2.1.s1773935796$o1$g1$t1773935877$j60$l0$h0\u001b[22m\n",
+      "details": {
+        "url": "https://api.realtypandit.in/public/properties"
+      },
+      "timestamp": "2026-03-19T15:57:59.882Z"
+    }
+  ],
+  "consoleErrors": [],
+  "networkErrors": [
+    {
+      "url": "https://www.google-analytics.com/g/collect?v=2&tid=G-WJF3Y3SXM3&gtm=45je63h0v9243687425za200zd9243687425&_p=1773935792565&gcd=13l3l3l3l1l1&npa=0&dma=0&cid=1977701212.1773935796&ul=en-us&sr=1920x1080&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uamb=0&uam=&uap=Windows&uapv=10.0.0&uaw=0&are=1&frm=0&pscdl=noapi&_s=1&tag_exp=103116026~103200004~115938465~115938469~116024733~117484252~118054927&sid=1773935796&sct=1&seg=0&dl=https%3A%2F%2Fwww.realtypandit.in%2F&dt=Realty%20Pandit%20-%20Find%20Your%20Dream%20Property&en=page_view&_fv=1&_nsi=1&_ss=1&_ee=1&tfd=15214",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "fetch",
+      "pageUrl": "https://www.realtypandit.in/",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.realtypandit.in/post-property?_rsc=1804n",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "fetch",
+      "pageUrl": "https://www.realtypandit.in/",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.google-analytics.com/g/collect?v=2&tid=G-WJF3Y3SXM3&gtm=45je63h0v9243687425za200zd9243687425&_p=1773935797378&gcd=13l3l3l3l1l1&npa=0&dma=0&cid=1977701212.1773935796&ul=en-us&sr=1920x1080&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uamb=0&uam=&uap=Windows&uapv=10.0.0&uaw=0&are=1&frm=0&pscdl=noapi&_eu=AAAAAAQ&_s=2&tag_exp=103116026~103200004~115938466~115938468~116024733~117484252&sid=1773935796&sct=1&seg=1&dl=https%3A%2F%2Fwww.realtypandit.in%2F&dt=Realty%20Pandit%20-%20Find%20Your%20Dream%20Property&en=user_engagement&_et=5114&tfd=7513",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "fetch",
+      "pageUrl": "https://www.realtypandit.in/",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.realtypandit.in/post-property?_rsc=x1wd6",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "fetch",
+      "pageUrl": "https://www.realtypandit.in/",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://api.realtypandit.in/public/featured-properties",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "xhr",
+      "pageUrl": "https://www.realtypandit.in/",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://api.realtypandit.in/public/featured-projects?limit=6",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "xhr",
+      "pageUrl": "https://www.realtypandit.in/",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.realtypandit.in/post-property?_rsc=1pn8p",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "fetch",
+      "pageUrl": "https://www.realtypandit.in/",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.realtypandit.in/contact?_rsc=1pn8p",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "fetch",
+      "pageUrl": "https://www.realtypandit.in/",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.realtypandit.in/_next/static/chunks/393a3d86b87a7e76.js",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "script",
+      "pageUrl": "https://www.realtypandit.in/",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.google-analytics.com/g/collect?v=2&tid=G-WJF3Y3SXM3&gtm=45je63h0v9243687425za200zd9243687425&_p=1773935797378&gcd=13l3l3l3l1l1&npa=0&dma=0&cid=1977701212.1773935796&ul=en-us&sr=1920x1080&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uamb=0&uam=&uap=Windows&uapv=10.0.0&uaw=0&are=1&frm=0&pscdl=noapi&_eu=AAAAAAQ&_s=1&tag_exp=103116026~103200004~115938466~115938468~116024733~117484252&sid=1773935796&sct=1&seg=1&dl=https%3A%2F%2Fwww.realtypandit.in%2F&dt=Realty%20Pandit%20-%20Find%20Your%20Dream%20Property&en=page_view&_ee=1&tfd=7398",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "fetch",
+      "pageUrl": "https://www.realtypandit.in/",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.google-analytics.com/g/collect?v=2&tid=G-WJF3Y3SXM3&gtm=45je63h0v9243687425za200zb9243676380zd9243676380&_p=1773935805114&gcd=13l3l3l3l1l1&npa=0&dma=0&cid=1977701212.1773935796&ul=en-us&sr=1920x1080&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uamb=0&uam=&uap=Windows&uapv=10.0.0&uaw=0&are=1&frm=0&pscdl=noapi&_eu=AAAAAAQ&_s=1&tag_exp=103116026~103200004~115616986~115938465~115938468~116024733~117170491~117484252&sid=1773935796&sct=1&seg=1&dl=https%3A%2F%2Fwww.realtypandit.in%2Fproperties&dt=Properties%20for%20Sale%20%26%20Rent%20in%20India%20%7C%20Realty%20Pandit&en=page_view&_ee=1&tfd=7568",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "fetch",
+      "pageUrl": "https://www.realtypandit.in/properties",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.realtypandit.in/properties/3bhk-builder-floor-for-sale-in-niti-khand-2-indirapuram-ghaziabad-b46820accdb9?_rsc=yimjc",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "fetch",
+      "pageUrl": "https://www.realtypandit.in/properties",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.realtypandit.in/properties/1bhk-builder-flat-for-sale-in-sector-3-vasundhara-ghaziabad-11ea41175e7d?_rsc=yimjc",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "fetch",
+      "pageUrl": "https://www.realtypandit.in/properties",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.realtypandit.in/properties/2bhk-apartment-for-sale-in-sector-4-vaishali-ghaziabad-bb9caf1e6152?_rsc=yimjc",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "fetch",
+      "pageUrl": "https://www.realtypandit.in/properties",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.realtypandit.in/properties/1bhk-builder-flat-for-sale-in-sector-2a-rd-sector-2a-block-c-sector-2-vaishali-ghaziabad-0e37e100d807?_rsc=yimjc",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "fetch",
+      "pageUrl": "https://www.realtypandit.in/properties",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.google-analytics.com/g/collect?v=2&tid=G-WJF3Y3SXM3&gtm=45je63h0v9243687425za200zb9243676380zd9243676380&_p=1773935805114&gcd=13l3l3l3l1l1&npa=0&dma=0&cid=1977701212.1773935796&ul=en-us&sr=1920x1080&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uamb=0&uam=&uap=Windows&uapv=10.0.0&uaw=0&are=1&frm=0&pscdl=noapi&_eu=AAAAAAQ&_s=2&tag_exp=103116026~103200004~115616986~115938465~115938468~116024733~117170491~117484252&sid=1773935796&sct=1&seg=1&dl=https%3A%2F%2Fwww.realtypandit.in%2Fproperties&dt=Properties%20for%20Sale%20%26%20Rent%20in%20India%20%7C%20Realty%20Pandit&en=user_engagement&_et=16681&tfd=19257",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "fetch",
+      "pageUrl": "https://www.realtypandit.in/properties",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.google-analytics.com/g/collect?v=2&tid=G-WJF3Y3SXM3&gtm=45je63h0v9243687425za200zd9243687425&_p=1773935821973&gcd=13l3l3l3l1l1&npa=0&dma=0&cid=1977701212.1773935796&ul=en-us&sr=1920x1080&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uamb=0&uam=&uap=Windows&uapv=10.0.0&uaw=0&are=1&frm=0&pscdl=noapi&_eu=AAAAAAQ&_s=1&tag_exp=103116026~103200004~115938465~115938468~116024733~117170491~117384405~117484252&sid=1773935796&sct=1&seg=1&dl=https%3A%2F%2Fwww.realtypandit.in%2Fabout&dt=About%20Us%20-%20AI%20Real%20Estate%20Platform%20%7C%20Realty%20Pandit&en=page_view&_ee=1&tfd=11626",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "fetch",
+      "pageUrl": "https://www.realtypandit.in/about",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.realtypandit.in/contact",
+      "failure": "net::ERR_FAILED",
+      "resourceType": "document",
+      "pageUrl": "https://www.realtypandit.in/about",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.realtypandit.in/services",
+      "failure": "net::ERR_FAILED",
+      "resourceType": "document",
+      "pageUrl": "https://www.realtypandit.in/about",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.realtypandit.in/blog",
+      "failure": "net::ERR_FAILED",
+      "resourceType": "document",
+      "pageUrl": "chrome-error://chromewebdata/",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.realtypandit.in/post-property",
+      "failure": "net::ERR_FAILED",
+      "resourceType": "document",
+      "pageUrl": "chrome-error://chromewebdata/",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.realtypandit.in/login",
+      "failure": "net::ERR_FAILED",
+      "resourceType": "document",
+      "pageUrl": "chrome-error://chromewebdata/",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.realtypandit.in/tools/emi-calculator",
+      "failure": "net::ERR_FAILED",
+      "resourceType": "document",
+      "pageUrl": "chrome-error://chromewebdata/",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.realtypandit.in/tools/area-converter",
+      "failure": "net::ERR_FAILED",
+      "resourceType": "document",
+      "pageUrl": "chrome-error://chromewebdata/",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.realtypandit.in/compare",
+      "failure": "net::ERR_FAILED",
+      "resourceType": "document",
+      "pageUrl": "chrome-error://chromewebdata/",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.realtypandit.in/faq",
+      "failure": "net::ERR_FAILED",
+      "resourceType": "document",
+      "pageUrl": "chrome-error://chromewebdata/",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.realtypandit.in/privacy",
+      "failure": "net::ERR_FAILED",
+      "resourceType": "document",
+      "pageUrl": "chrome-error://chromewebdata/",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.realtypandit.in/terms",
+      "failure": "net::ERR_FAILED",
+      "resourceType": "document",
+      "pageUrl": "chrome-error://chromewebdata/",
+      "viewport": "desktop"
+    }
+  ],
+  "performance": [
+    {
+      "page": "Homepage",
+      "viewport": "desktop",
+      "domContentLoaded": 328,
+      "fullLoad": 2295,
+      "firstByte": 63,
+      "domInteractive": 328
+    },
+    {
+      "page": "Properties",
+      "viewport": "desktop",
+      "domContentLoaded": 2445,
+      "fullLoad": 5516,
+      "firstByte": 1864,
+      "domInteractive": 2444
+    }
+  ],
+  "pages": [
+    {
+      "name": "Homepage",
+      "url": "https://www.realtypandit.in/",
+      "viewport": "desktop",
+      "status": "ok",
+      "loadTime": 793,
+      "checks": {
+        "consoleErrors": 0
+      }
+    },
+    {
+      "name": "Properties",
+      "url": "https://www.realtypandit.in/properties",
+      "viewport": "desktop",
+      "status": "ok",
+      "loadTime": 11283,
+      "checks": {
+        "consoleErrors": 0
+      }
+    },
+    {
+      "name": "About",
+      "url": "https://www.realtypandit.in/about",
+      "viewport": "desktop",
+      "status": "failed",
+      "loadTime": 0,
+      "checks": {}
+    },
+    {
+      "name": "Contact",
+      "url": "https://www.realtypandit.in/contact",
+      "viewport": "desktop",
+      "status": "failed",
+      "loadTime": 0,
+      "checks": {}
+    },
+    {
+      "name": "Services",
+      "url": "https://www.realtypandit.in/services",
+      "viewport": "desktop",
+      "status": "failed",
+      "loadTime": 0,
+      "checks": {}
+    },
+    {
+      "name": "Blog",
+      "url": "https://www.realtypandit.in/blog",
+      "viewport": "desktop",
+      "status": "failed",
+      "loadTime": 0,
+      "checks": {}
+    },
+    {
+      "name": "Discovered: /post-property",
+      "url": "https://www.realtypandit.in/post-property",
+      "viewport": "desktop",
+      "status": "failed",
+      "loadTime": 0,
+      "checks": {}
+    },
+    {
+      "name": "Discovered: /login",
+      "url": "https://www.realtypandit.in/login",
+      "viewport": "desktop",
+      "status": "failed",
+      "loadTime": 0,
+      "checks": {}
+    },
+    {
+      "name": "Discovered: /tools/emi-calculator",
+      "url": "https://www.realtypandit.in/tools/emi-calculator",
+      "viewport": "desktop",
+      "status": "failed",
+      "loadTime": 0,
+      "checks": {}
+    },
+    {
+      "name": "Discovered: /tools/area-converter",
+      "url": "https://www.realtypandit.in/tools/area-converter",
+      "viewport": "desktop",
+      "status": "failed",
+      "loadTime": 0,
+      "checks": {}
+    },
+    {
+      "name": "Discovered: /compare",
+      "url": "https://www.realtypandit.in/compare",
+      "viewport": "desktop",
+      "status": "failed",
+      "loadTime": 0,
+      "checks": {}
+    },
+    {
+      "name": "Discovered: /faq",
+      "url": "https://www.realtypandit.in/faq",
+      "viewport": "desktop",
+      "status": "failed",
+      "loadTime": 0,
+      "checks": {}
+    },
+    {
+      "name": "Discovered: /privacy",
+      "url": "https://www.realtypandit.in/privacy",
+      "viewport": "desktop",
+      "status": "failed",
+      "loadTime": 0,
+      "checks": {}
+    },
+    {
+      "name": "Discovered: /terms",
+      "url": "https://www.realtypandit.in/terms",
+      "viewport": "desktop",
+      "status": "failed",
+      "loadTime": 0,
+      "checks": {}
+    }
+  ],
+  "screenshots": [
+    {
+      "page": "Homepage",
+      "viewport": "desktop",
+      "path": "screenshots\\homepage-desktop.png"
+    },
+    {
+      "page": "Properties",
+      "viewport": "desktop",
+      "path": "screenshots\\properties-desktop.png"
+    }
+  ]
+}

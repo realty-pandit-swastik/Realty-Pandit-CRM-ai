@@ -1,0 +1,38 @@
+{
+  "description": "Partner agent deals pages: /agent/deals list with submit lead form, /agent/deals/:id detail with timeline and queries",
+  "checks": [
+    {
+      "type": "no_console_errors",
+      "page": "/agent/login",
+      "description": "No JS errors on /agent/login"
+    },
+    {
+      "type": "no_console_errors",
+      "page": "/agent/deals",
+      "description": "No JS errors on /agent/deals"
+    },
+    {
+      "type": "api_returns",
+      "url": "/agent/deals",
+      "status": 401,
+      "description": "API /agent/deals returns 401"
+    },
+    {
+      "type": "api_returns",
+      "url": "/agent/deals/test-id",
+      "status": 401,
+      "description": "API /agent/deals/test-id returns 401"
+    },
+    {
+      "type": "page_loads",
+      "page": "/agent/deals",
+      "max_time": 5000,
+      "description": "/agent/deals loads under 5000ms"
+    },
+    {
+      "type": "responsive",
+      "page": "/agent/deals",
+      "description": "/agent/deals is responsive on mobile"
+    }
+  ]
+}

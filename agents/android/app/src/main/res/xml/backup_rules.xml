@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<full-backup-content>
+    <!-- Exclude encrypted preferences and recordings from backup -->
+    <exclude domain="sharedpref" path="staff_auth_prefs.xml"/>
+    <exclude domain="file" path="call_recordings/"/>
+</full-backup-content>

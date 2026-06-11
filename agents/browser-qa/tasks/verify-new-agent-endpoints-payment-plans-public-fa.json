@@ -1,0 +1,23 @@
+{
+  "description": "Verify new agent endpoints - payment plans (public), Facebook webhook, and API health",
+  "checks": [
+    {
+      "type": "api_returns",
+      "url": "/public/payments/plans",
+      "status": 200,
+      "description": "API /public/payments/plans returns 200"
+    },
+    {
+      "type": "api_returns",
+      "url": "/webhooks/facebook/webhook",
+      "status": 403,
+      "description": "API /webhooks/facebook/webhook returns 403"
+    },
+    {
+      "type": "api_returns",
+      "url": "/health",
+      "status": 200,
+      "description": "API /health returns 200"
+    }
+  ]
+}

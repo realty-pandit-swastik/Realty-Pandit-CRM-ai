@@ -1,0 +1,41 @@
+{
+  "description": "Fixed layout overflow issues on homepage (TrustBadges, Testimonials, Hero, CTA), login page (fixed→absolute bg), post-property page (overflow-hidden on decorative container), and added aria-labels to 7 buttons across properties page components",
+  "checks": [
+    {
+      "type": "responsive",
+      "page": "/",
+      "description": "/ is responsive on mobile"
+    },
+    {
+      "type": "responsive",
+      "page": "/login",
+      "description": "/login is responsive on mobile"
+    },
+    {
+      "type": "responsive",
+      "page": "/post-property",
+      "description": "/post-property is responsive on mobile"
+    },
+    {
+      "type": "no_console_errors",
+      "page": "/",
+      "description": "No JS errors on /"
+    },
+    {
+      "type": "no_console_errors",
+      "page": "/login",
+      "description": "No JS errors on /login"
+    },
+    {
+      "type": "no_console_errors",
+      "page": "/properties",
+      "description": "No JS errors on /properties"
+    },
+    {
+      "type": "page_loads",
+      "page": "/",
+      "max_time": 3000,
+      "description": "/ loads under 3000ms"
+    }
+  ]
+}

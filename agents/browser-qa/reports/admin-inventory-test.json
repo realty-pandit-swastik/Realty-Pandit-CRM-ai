@@ -1,0 +1,21 @@
+{
+  "q": {
+    "hasReference": true,
+    "hasDirectOwner": true,
+    "hasAgentDealer": true,
+    "hasFinancer": true
+  },
+  "listHas": {
+    "hasRahulTest": true,
+    "hasRP": false,
+    "snippet": "Realty Pandit\n\nDashboard\n\n◀\n📊\nDashboard\n💬\nChats\n📅\nCalendar\n📧\nEmails\n📞\nCall Log\n🏠\nInventory\n🗺\nProperty Map\n🟢\nLive Status\n📥\nExt. Leads\n🔍\nBuyer Lead\n🤝\nPartner Agents\n👥\nTeam\n📊\nReports\n🤖\nAI Agents\n📝\nAgent Logs\n🛡\nOverride\n🔄\nWorkflows\n📢\nMarketing\n📋\nTasks\n📈\nAnalytics\n🌙Dark Mode\nPuneet Bhardwaj\nSUPER BOSS\n+919958860411\nLogout\nAdd Property (Chat)\nLocation · 67%\n\nNamaste! I'm Panditji, your property listing assistant. Let's list your property step by step. You can type naturally or use the buttons below.\n\n09:29 pm\n\nReference for this inventory?\nIs inventory ka reference kya hai?\n\n09:29 pm\n\nDirect Owner\n\n09:29 pm\n\nWhat is your name?\nAapka naam kya hai?\n\n09:29 pm\n\nRahul Test\n\n09:29 pm\n\nWhat is your phone number?\nAapka phone number kya hai?\n\n09:29 pm\n\n9876543210\n\n09:29 pm\n\nSale or Rent / Lease?\nBechna ya Kiraye/Lease par dena?\n\n09:29 pm\n\nSale\n\n09:29 pm\n\nType of property?\nProperty ka type?\n\n09:29 pm\n\nResidential\n\n09:30 pm\n\nWhat type of property?\nProperty ka type kya hai?\n\n09:30 pm\n\nApartment / Gated Society\n\n09:30 pm\n\nWhat is the configuration? (e.g., 2 BHK)\nConfiguration kya hai? (e.g., 2 BHK)\n\n09:30 pm\n\n2 BHK\n\n09:30 pm\n\nProperty Address\nProperty ka address bharein\n\n09:30 pm\n❓\n🔌\n🎤"
+  },
+  "successScreenVisible": {
+    "hasPropertySaved": false,
+    "hasInventoryId": false,
+    "hasImprove": false,
+    "hasTags": false
+  },
+  "hasSuccessCode": true,
+  "errors": []
+}

@@ -1,0 +1,33 @@
+{
+  "description": "Full inventory edit UI overhaul — admin edit modal with media/amenities/lat-lng/ownership_type, partner full tabbed edit modal, backend DELETE media route for partners",
+  "checks": [
+    {
+      "type": "api_returns",
+      "url": "/health",
+      "status": 200,
+      "description": "API /health returns 200"
+    },
+    {
+      "type": "no_console_errors",
+      "page": "/agent/inventory",
+      "description": "No JS errors on /agent/inventory"
+    },
+    {
+      "type": "page_loads",
+      "page": "/agent/inventory",
+      "max_time": 3000,
+      "description": "/agent/inventory loads under 3000ms"
+    },
+    {
+      "type": "no_console_errors",
+      "page": "/agent/login",
+      "description": "No JS errors on /agent/login"
+    },
+    {
+      "type": "api_returns",
+      "url": "/api/inventory?status=pending_approval",
+      "status": 401,
+      "description": "API /api/inventory?status=pending_approval returns 401"
+    }
+  ]
+}

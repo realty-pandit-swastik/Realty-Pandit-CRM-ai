@@ -1,0 +1,44 @@
+{
+  "description": "Phase 6 fixes: rate limit increased to 200 for public API, canonical URLs added to all pages",
+  "checks": [
+    {
+      "type": "api_returns",
+      "url": "/public/properties",
+      "status": 200,
+      "description": "API /public/properties returns 200"
+    },
+    {
+      "type": "api_returns",
+      "url": "/public/featured-properties",
+      "status": 200,
+      "description": "API /public/featured-properties returns 200"
+    },
+    {
+      "type": "no_console_errors",
+      "page": "/properties",
+      "description": "No JS errors on /properties"
+    },
+    {
+      "type": "no_console_errors",
+      "page": "/",
+      "description": "No JS errors on /"
+    },
+    {
+      "type": "page_loads",
+      "page": "/",
+      "max_time": 5000,
+      "description": "/ loads under 5000ms"
+    },
+    {
+      "type": "page_loads",
+      "page": "/properties",
+      "max_time": 8000,
+      "description": "/properties loads under 8000ms"
+    },
+    {
+      "type": "responsive",
+      "page": "/",
+      "description": "/ is responsive on mobile"
+    }
+  ]
+}

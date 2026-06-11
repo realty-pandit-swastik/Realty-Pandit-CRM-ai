@@ -1,0 +1,23 @@
+{
+  "description": "Lead matching fixed — BHK hard filter removed, 99acres BHK extraction, phone normalization",
+  "checks": [
+    {
+      "type": "api_returns",
+      "url": "/health",
+      "status": 200,
+      "description": "API /health returns 200"
+    },
+    {
+      "type": "api_returns",
+      "url": "/api/leads/+919350146471/match",
+      "status": 401,
+      "description": "API /api/leads/+919350146471/match returns 401"
+    },
+    {
+      "type": "api_returns",
+      "url": "/api/leads/+918168955874/match",
+      "status": 401,
+      "description": "API /api/leads/+918168955874/match returns 401"
+    }
+  ]
+}

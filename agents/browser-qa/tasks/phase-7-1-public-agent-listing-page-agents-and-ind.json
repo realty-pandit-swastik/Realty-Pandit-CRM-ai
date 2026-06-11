@@ -1,0 +1,44 @@
+{
+  "description": "Phase 7.1 — Public agent listing page /agents and individual agent profile /agents/[id], subscription page with real plan tiers and WhatsApp upgrade CTA, and backend /public/agents endpoint",
+  "checks": [
+    {
+      "type": "no_console_errors",
+      "page": "/agents",
+      "description": "No JS errors on /agents"
+    },
+    {
+      "type": "page_loads",
+      "page": "/agents",
+      "max_time": 4000,
+      "description": "/agents loads under 4000ms"
+    },
+    {
+      "type": "responsive",
+      "page": "/agents",
+      "description": "/agents is responsive on mobile"
+    },
+    {
+      "type": "element_exists",
+      "page": "/agents",
+      "selector": "h1",
+      "description": "Element \"h1\" exists on /agents"
+    },
+    {
+      "type": "no_console_errors",
+      "page": "/agent/subscription",
+      "description": "No JS errors on /agent/subscription"
+    },
+    {
+      "type": "page_loads",
+      "page": "/agent/subscription",
+      "max_time": 3000,
+      "description": "/agent/subscription loads under 3000ms"
+    },
+    {
+      "type": "element_exists",
+      "page": "/agent/subscription",
+      "selector": "h1",
+      "description": "Element \"h1\" exists on /agent/subscription"
+    }
+  ]
+}

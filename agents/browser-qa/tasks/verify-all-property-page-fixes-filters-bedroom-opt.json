@@ -1,0 +1,71 @@
+{
+  "description": "Verify all property page fixes: filters, bedroom options, categories, Google Places, inventory count",
+  "checks": [
+    {
+      "type": "no_console_errors",
+      "page": "/properties",
+      "description": "No JS errors on /properties"
+    },
+    {
+      "type": "page_loads",
+      "page": "/properties",
+      "max_time": 5000,
+      "description": "/properties loads under 5000ms"
+    },
+    {
+      "type": "text_visible",
+      "page": "/properties",
+      "text": "Properties for Sale",
+      "description": "Text \"Properties for Sale\" visible on /properties"
+    },
+    {
+      "type": "text_visible",
+      "page": "/properties",
+      "text": "Residential",
+      "description": "Text \"Residential\" visible on /properties"
+    },
+    {
+      "type": "text_visible",
+      "page": "/properties",
+      "text": "Commercial",
+      "description": "Text \"Commercial\" visible on /properties"
+    },
+    {
+      "type": "text_visible",
+      "page": "/properties",
+      "text": "Agricultural Land",
+      "description": "Text \"Agricultural Land\" visible on /properties"
+    },
+    {
+      "type": "text_visible",
+      "page": "/properties",
+      "text": "Studio",
+      "description": "Text \"Studio\" visible on /properties"
+    },
+    {
+      "type": "text_visible",
+      "page": "/properties",
+      "text": "1 BHK",
+      "description": "Text \"1 BHK\" visible on /properties"
+    },
+    {
+      "type": "text_visible",
+      "page": "/properties",
+      "text": "2 BHK",
+      "description": "Text \"2 BHK\" visible on /properties"
+    },
+    {
+      "type": "text_visible",
+      "page": "/properties",
+      "text": "3 BHK",
+      "description": "Text \"3 BHK\" visible on /properties"
+    },
+    {
+      "type": "element_count",
+      "page": "/properties",
+      "selector": ".bg-white.rounded-2xl",
+      "min": 1,
+      "description": "1+ \".bg-white.rounded-2xl\" on /properties"
+    }
+  ]
+}

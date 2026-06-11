@@ -1,0 +1,29 @@
+{
+  "description": "Admin inventory redesign: card with thumbnails, dual pricing, completion bar, action buttons. Pricing tab with demand/display/margin. Documents tab. Filter fix (Agricultural Land instead of Industrial).",
+  "checks": [
+    {
+      "type": "page_loads",
+      "page": "/admin/inventory",
+      "max_time": 5000,
+      "description": "/admin/inventory loads under 5000ms"
+    },
+    {
+      "type": "api_returns",
+      "url": "/public/classification-tree",
+      "status": 200,
+      "description": "API /public/classification-tree returns 200"
+    },
+    {
+      "type": "api_returns",
+      "url": "/health",
+      "status": 200,
+      "description": "API /health returns 200"
+    },
+    {
+      "type": "element_exists",
+      "page": "/admin/inventory",
+      "selector": "select",
+      "description": "Element \"select\" exists on /admin/inventory"
+    }
+  ]
+}

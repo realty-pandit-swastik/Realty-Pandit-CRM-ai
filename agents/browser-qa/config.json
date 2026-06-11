@@ -1,0 +1,33 @@
+{
+  "baseUrl": "https://www.realtypandit.in",
+  "adminUrl": "https://admin.realtypandit.in",
+  "apiUrl": "https://api.realtypandit.in",
+  "viewport": {
+    "desktop": { "width": 1920, "height": 1080 },
+    "tablet": { "width": 768, "height": 1024 },
+    "mobile": { "width": 375, "height": 812 }
+  },
+  "timeout": 60000,
+  "screenshotDir": "./screenshots",
+  "reportDir": "./reports",
+  "pages": [
+    { "name": "Homepage", "path": "/", "critical": true },
+    { "name": "Properties", "path": "/properties", "critical": true },
+    { "name": "Property Detail", "path": "/properties/*", "critical": true },
+    { "name": "About", "path": "/about", "critical": false },
+    { "name": "Contact", "path": "/contact", "critical": false },
+    { "name": "Services", "path": "/services", "critical": false },
+    { "name": "Blog", "path": "/blog", "critical": false }
+  ],
+  "checks": {
+    "consoleErrors": true,
+    "networkErrors": true,
+    "brokenLinks": true,
+    "brokenImages": true,
+    "layoutOverflow": true,
+    "mobileResponsive": true,
+    "performanceMetrics": true,
+    "seoBasics": true,
+    "accessibility": true
+  }
+}

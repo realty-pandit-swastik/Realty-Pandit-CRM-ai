@@ -1,0 +1,55 @@
+{
+  "description": "Count actual property cards and check filter elements",
+  "checks": [
+    {
+      "type": "element_count",
+      "page": "/properties",
+      "selector": ".bg-white.rounded-2xl",
+      "min": 1,
+      "description": "1+ \".bg-white.rounded-2xl\" on /properties"
+    },
+    {
+      "type": "element_count",
+      "page": "/properties",
+      "selector": ".space-y-4 > div",
+      "min": 1,
+      "description": "1+ \".space-y-4 > div\" on /properties"
+    },
+    {
+      "type": "element_exists",
+      "page": "/properties",
+      "selector": "input[placeholder*='Search']",
+      "description": "Element \"input[placeholder*='Search']\" exists on /properties"
+    },
+    {
+      "type": "text_visible",
+      "page": "/properties",
+      "text": "Furnished Office",
+      "description": "Text \"Furnished Office\" visible on /properties"
+    },
+    {
+      "type": "text_visible",
+      "page": "/properties",
+      "text": "Bare Shell",
+      "description": "Text \"Bare Shell\" visible on /properties"
+    },
+    {
+      "type": "text_visible",
+      "page": "/properties",
+      "text": "Serviced Office",
+      "description": "Text \"Serviced Office\" visible on /properties"
+    },
+    {
+      "type": "text_visible",
+      "page": "/properties",
+      "text": "Studio",
+      "description": "Text \"Studio\" visible on /properties"
+    },
+    {
+      "type": "text_visible",
+      "page": "/properties",
+      "text": "1 BHK",
+      "description": "Text \"1 BHK\" visible on /properties"
+    }
+  ]
+}

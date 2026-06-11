@@ -7,7 +7,7 @@
 set -e
 
 SERVER="root@72.62.231.224"
-REMOTE_PATH="/var/www/realtypandit"
+REMOTE_PATH="/var/www/realty-pandit"
 
 # Colors
 GREEN='\033[0;32m'
@@ -19,6 +19,14 @@ NC='\033[0m'
 echo "🚀 Pushing Updates to Realty Pandit Server"
 echo "==========================================="
 echo ""
+
+# Step 0: Tag the release with current git SHA so backend + frontend + pipecat
+# GlitchTip events carry the deploy commit. Must run BEFORE rsync since the
+# server has no git history.
+echo -e "${YELLOW}📌 Tagging release...${NC}"
+bash agents/backend/scripts/write-release.sh
+bash agents/frontend/scripts/write-release.sh
+bash agents/pipecat/scripts/write-release.sh
 
 # Step 1: Upload files
 echo -e "${YELLOW}📤 Uploading changed files...${NC}"

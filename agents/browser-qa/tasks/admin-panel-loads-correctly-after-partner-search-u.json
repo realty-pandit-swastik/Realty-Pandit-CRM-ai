@@ -1,0 +1,22 @@
+{
+  "description": "Admin panel loads correctly after partner search UI changes",
+  "checks": [
+    {
+      "type": "page_loads",
+      "page": "//",
+      "max_time": 3000,
+      "description": "// loads under 3000ms"
+    },
+    {
+      "type": "api_returns",
+      "url": "/health",
+      "status": 200,
+      "description": "API /health returns 200"
+    },
+    {
+      "type": "no_console_errors",
+      "page": "//admin.realtypandit.in",
+      "description": "No JS errors on //admin.realtypandit.in"
+    }
+  ]
+}

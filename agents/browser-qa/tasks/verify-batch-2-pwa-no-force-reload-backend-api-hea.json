@@ -1,0 +1,28 @@
+{
+  "description": "Verify Batch 2 - PWA no force reload, backend API healthy after memory/shutdown fix",
+  "checks": [
+    {
+      "type": "no_console_errors",
+      "page": "/",
+      "description": "No JS errors on /"
+    },
+    {
+      "type": "api_returns",
+      "url": "/health",
+      "status": 200,
+      "description": "API /health returns 200"
+    },
+    {
+      "type": "api_returns",
+      "url": "/public/properties",
+      "status": 200,
+      "description": "API /public/properties returns 200"
+    },
+    {
+      "type": "page_loads",
+      "page": "/",
+      "max_time": 5000,
+      "description": "/ loads under 5000ms"
+    }
+  ]
+}

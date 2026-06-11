@@ -1,0 +1,22 @@
+{
+  "description": "Backend Phase A: Multi-select filters, save_count, new endpoints, schedule-visit fix",
+  "checks": [
+    {
+      "type": "api_returns",
+      "url": "/public/properties",
+      "status": 200,
+      "description": "API /public/properties returns 200"
+    },
+    {
+      "type": "no_console_errors",
+      "page": "/properties",
+      "description": "No JS errors on /properties"
+    },
+    {
+      "type": "page_loads",
+      "page": "/properties",
+      "max_time": 5000,
+      "description": "/properties loads under 5000ms"
+    }
+  ]
+}

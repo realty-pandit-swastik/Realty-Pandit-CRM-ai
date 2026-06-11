@@ -1,0 +1,22 @@
+{
+  "description": "Partner agent search API endpoint for lead creation - GET /api/partners/search",
+  "checks": [
+    {
+      "type": "api_returns",
+      "url": "/api/partners/search?q=test",
+      "status": 200,
+      "description": "API /api/partners/search?q=test returns 200"
+    },
+    {
+      "type": "api_returns",
+      "url": "/health",
+      "status": 200,
+      "description": "API /health returns 200"
+    },
+    {
+      "type": "no_console_errors",
+      "page": "https",
+      "description": "No JS errors on https"
+    }
+  ]
+}

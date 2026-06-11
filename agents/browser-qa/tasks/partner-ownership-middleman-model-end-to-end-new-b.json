@@ -1,0 +1,46 @@
+{
+  "description": "Partner ownership / middleman model end-to-end: new backend endpoints exist, partner portal login page loads, browse route exists, inventory page loads, agent deal detail loads, admin loads without errors",
+  "checks": [
+    {
+      "type": "api_returns",
+      "url": "/agent/inventory/browse",
+      "status": 401,
+      "description": "API /agent/inventory/browse returns 401"
+    },
+    {
+      "type": "api_returns",
+      "url": "/api/partners/test-id/reassign",
+      "status": 403,
+      "description": "API /api/partners/test-id/reassign returns 403"
+    },
+    {
+      "type": "api_returns",
+      "url": "/api/deals/test-id/commission-entries",
+      "status": 401,
+      "description": "API /api/deals/test-id/commission-entries returns 401"
+    },
+    {
+      "type": "api_returns",
+      "url": "/api/team/members/test-id/ownership-summary",
+      "status": 403,
+      "description": "API /api/team/members/test-id/ownership-summary returns 403"
+    },
+    {
+      "type": "page_loads",
+      "page": "/agent/login",
+      "max_time": 5000,
+      "description": "/agent/login loads under 5000ms"
+    },
+    {
+      "type": "page_loads",
+      "page": "/agent/inventory/browse",
+      "max_time": 5000,
+      "description": "/agent/inventory/browse loads under 5000ms"
+    },
+    {
+      "type": "no_console_errors",
+      "page": "/agent/login",
+      "description": "No JS errors on /agent/login"
+    }
+  ]
+}

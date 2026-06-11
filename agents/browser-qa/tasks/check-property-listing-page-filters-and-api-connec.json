@@ -1,0 +1,41 @@
+{
+  "description": "Check property listing page filters and API connectivity",
+  "checks": [
+    {
+      "type": "no_console_errors",
+      "page": "/properties",
+      "description": "No JS errors on /properties"
+    },
+    {
+      "type": "api_returns",
+      "url": "/public/properties",
+      "status": 200,
+      "description": "API /public/properties returns 200"
+    },
+    {
+      "type": "element_exists",
+      "page": "/properties",
+      "selector": "[data-testid='property-card']",
+      "description": "Element \"[data-testid='property-card']\" exists on /properties"
+    },
+    {
+      "type": "page_loads",
+      "page": "/properties",
+      "max_time": 5000,
+      "description": "/properties loads under 5000ms"
+    },
+    {
+      "type": "element_exists",
+      "page": "/properties",
+      "selector": "input[placeholder*='Search']",
+      "description": "Element \"input[placeholder*='Search']\" exists on /properties"
+    },
+    {
+      "type": "element_count",
+      "page": "/properties",
+      "selector": "[data-testid='property-card']",
+      "min": 1,
+      "description": "1+ \"[data-testid='property-card']\" on /properties"
+    }
+  ]
+}

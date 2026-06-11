@@ -1,0 +1,39 @@
+{
+  "description": "Property listing page filters",
+  "checks": [
+    {
+      "type": "element_exists",
+      "page": "/properties",
+      "selector": "[data-testid]",
+      "description": "Element \"[data-testid]\" exists on /properties"
+    },
+    {
+      "type": "element_exists",
+      "page": "/properties",
+      "selector": "select",
+      "description": "Element \"select\" exists on /properties"
+    },
+    {
+      "type": "element_exists",
+      "page": "/properties",
+      "selector": "input[type=text]",
+      "description": "Element \"input[type=text]\" exists on /properties"
+    },
+    {
+      "type": "element_exists",
+      "page": "/properties",
+      "selector": "input[type=search]",
+      "description": "Element \"input[type=search]\" exists on /properties"
+    },
+    {
+      "type": "no_console_errors",
+      "page": "/properties",
+      "description": "No JS errors on /properties"
+    },
+    {
+      "type": "responsive",
+      "page": "/properties",
+      "description": "/properties is responsive on mobile"
+    }
+  ]
+}

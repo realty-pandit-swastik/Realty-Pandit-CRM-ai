@@ -1,0 +1,33 @@
+{
+  "description": "Phase B: Property card redesign with amenities, Schedule Visit and Share on WhatsApp buttons",
+  "checks": [
+    {
+      "type": "no_console_errors",
+      "page": "/properties",
+      "description": "No JS errors on /properties"
+    },
+    {
+      "type": "page_loads",
+      "page": "/properties",
+      "max_time": 5000,
+      "description": "/properties loads under 5000ms"
+    },
+    {
+      "type": "responsive",
+      "page": "/properties",
+      "description": "/properties is responsive on mobile"
+    },
+    {
+      "type": "text_visible",
+      "page": "/properties",
+      "text": "Schedule Visit",
+      "description": "Text \"Schedule Visit\" visible on /properties"
+    },
+    {
+      "type": "text_visible",
+      "page": "/properties",
+      "text": "Share on WhatsApp",
+      "description": "Text \"Share on WhatsApp\" visible on /properties"
+    }
+  ]
+}

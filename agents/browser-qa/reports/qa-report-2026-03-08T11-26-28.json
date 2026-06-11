@@ -1,0 +1,79 @@
+{
+  "timestamp": "2026-03-08T11:26:28.152Z",
+  "duration": "4.7s",
+  "summary": {
+    "totalIssues": 3,
+    "critical": 1,
+    "warnings": 0,
+    "info": 2,
+    "pagesChecked": 1,
+    "screenshotsTaken": 1
+  },
+  "issues": [
+    {
+      "page": "Custom",
+      "type": "seo",
+      "severity": "info",
+      "message": "Missing H1 tag",
+      "details": {},
+      "timestamp": "2026-03-08T11:26:27.459Z"
+    },
+    {
+      "page": "Custom",
+      "type": "seo",
+      "severity": "info",
+      "message": "Missing canonical URL",
+      "details": {},
+      "timestamp": "2026-03-08T11:26:27.461Z"
+    },
+    {
+      "page": "API",
+      "type": "api-health",
+      "severity": "critical",
+      "message": "API Properties returned HTTP 401",
+      "details": {
+        "url": "https://api.realtypandit.in/api/properties"
+      },
+      "timestamp": "2026-03-08T11:26:27.963Z"
+    }
+  ],
+  "consoleErrors": [],
+  "networkErrors": [
+    {
+      "url": "https://www.google-analytics.com/g/collect?v=2&tid=G-WJF3Y3SXM3&gtm=45je6341v9243687425za200zb9243676380zd9243676380&_p=1772969185099&gcd=13l3l3l3l1l1&npa=0&dma=0&cid=994212314.1772969186&ul=en-us&sr=1920x1080&uaa=x86&uab=64&uafvl=Not%253AA-Brand%3B99.0.0.0%7CHeadlessChrome%3B145.0.7632.6%7CChromium%3B145.0.7632.6&uamb=0&uam=&uap=Windows&uapv=10.0.0&uaw=0&are=1&frm=0&pscdl=noapi&_s=1&tag_exp=103116026~103200004~115938465~115938469~116024733~117484252&sid=1772969185&sct=1&seg=0&dl=https%3A%2F%2Fwww.realtypandit.in%2Fagent%2Flogin&dt=Realty%20Pandit%20-%20Find%20Your%20Dream%20Property&en=page_view&_fv=1&_nsi=1&_ss=1&_ee=1&tfd=909",
+      "failure": "net::ERR_ABORTED",
+      "resourceType": "fetch",
+      "pageUrl": "https://www.realtypandit.in/agent/login",
+      "viewport": "desktop"
+    }
+  ],
+  "performance": [
+    {
+      "page": "Custom",
+      "viewport": "desktop",
+      "domContentLoaded": 484,
+      "fullLoad": 1145,
+      "firstByte": 168,
+      "domInteractive": 484
+    }
+  ],
+  "pages": [
+    {
+      "name": "Custom",
+      "url": "https://www.realtypandit.in/agent/login",
+      "viewport": "desktop",
+      "status": "ok",
+      "loadTime": 1785,
+      "checks": {
+        "consoleErrors": 0
+      }
+    }
+  ],
+  "screenshots": [
+    {
+      "page": "Custom",
+      "viewport": "desktop",
+      "path": "screenshots\\custom-desktop.png"
+    }
+  ]
+}

@@ -1,0 +1,38 @@
+{
+  "description": "Deep check of all dropdowns, inputs, and interactive elements on properties page",
+  "checks": [
+    {
+      "type": "element_count",
+      "page": "/properties",
+      "selector": "select",
+      "min": 1,
+      "description": "1+ \"select\" on /properties"
+    },
+    {
+      "type": "element_count",
+      "page": "/properties",
+      "selector": "input",
+      "min": 1,
+      "description": "1+ \"input\" on /properties"
+    },
+    {
+      "type": "element_count",
+      "page": "/properties",
+      "selector": "button",
+      "min": 1,
+      "description": "1+ \"button\" on /properties"
+    },
+    {
+      "type": "element_exists",
+      "page": "/properties",
+      "selector": "[type='search']",
+      "description": "Element \"[type='search']\" exists on /properties"
+    },
+    {
+      "type": "element_exists",
+      "page": "/properties",
+      "selector": "[placeholder]",
+      "description": "Element \"[placeholder]\" exists on /properties"
+    }
+  ]
+}

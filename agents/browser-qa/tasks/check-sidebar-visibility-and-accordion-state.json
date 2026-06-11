@@ -1,0 +1,48 @@
+{
+  "description": "Check sidebar visibility and accordion state",
+  "checks": [
+    {
+      "type": "element_exists",
+      "page": "/properties",
+      "selector": "aside",
+      "description": "Element \"aside\" exists on /properties"
+    },
+    {
+      "type": "element_exists",
+      "page": "/properties",
+      "selector": "aside h3",
+      "description": "Element \"aside h3\" exists on /properties"
+    },
+    {
+      "type": "text_visible",
+      "page": "/properties",
+      "text": "Filters",
+      "description": "Text \"Filters\" visible on /properties"
+    },
+    {
+      "type": "text_visible",
+      "page": "/properties",
+      "text": "Property Type",
+      "description": "Text \"Property Type\" visible on /properties"
+    },
+    {
+      "type": "text_visible",
+      "page": "/properties",
+      "text": "No. of Bedrooms",
+      "description": "Text \"No. of Bedrooms\" visible on /properties"
+    },
+    {
+      "type": "text_visible",
+      "page": "/properties",
+      "text": "Budget",
+      "description": "Text \"Budget\" visible on /properties"
+    },
+    {
+      "type": "element_count",
+      "page": "/properties",
+      "selector": "aside button",
+      "min": 1,
+      "description": "1+ \"aside button\" on /properties"
+    }
+  ]
+}

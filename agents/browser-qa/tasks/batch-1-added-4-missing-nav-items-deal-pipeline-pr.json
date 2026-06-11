@@ -1,0 +1,21 @@
+{
+  "description": "Batch 1: Added 4 missing nav items (Deal Pipeline, Property Map, Live Status, Buyer Lead) to mobile drawer menu and deals route to mobile content",
+  "checks": [
+    {
+      "type": "no_console_errors",
+      "page": "/",
+      "description": "No JS errors on /"
+    },
+    {
+      "type": "responsive",
+      "page": "/",
+      "description": "/ is responsive on mobile"
+    },
+    {
+      "type": "page_loads",
+      "page": "/",
+      "max_time": 3000,
+      "description": "/ loads under 3000ms"
+    }
+  ]
+}

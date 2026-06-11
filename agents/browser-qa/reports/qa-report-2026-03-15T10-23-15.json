@@ -1,0 +1,222 @@
+{
+  "timestamp": "2026-03-15T10:23:15.076Z",
+  "duration": "16.6s",
+  "summary": {
+    "totalIssues": 10,
+    "critical": 10,
+    "warnings": 0,
+    "info": 0,
+    "pagesChecked": 6,
+    "screenshotsTaken": 0
+  },
+  "issues": [
+    {
+      "page": "Discovery",
+      "type": "navigation",
+      "severity": "critical",
+      "message": "Failed to load homepage for discovery: page.goto: net::ERR_NAME_NOT_RESOLVED at https://www.realtypandit.in/\nCall log:\n\u001b[2m  - navigating to \"https://www.realtypandit.in/\", waiting until \"domcontentloaded\"\u001b[22m\n",
+      "details": {},
+      "timestamp": "2026-03-15T10:23:14.600Z"
+    },
+    {
+      "page": "Homepage",
+      "type": "navigation",
+      "severity": "critical",
+      "message": "Page failed to load: page.goto: net::ERR_NAME_NOT_RESOLVED at https://www.realtypandit.in/\nCall log:\n\u001b[2m  - navigating to \"https://www.realtypandit.in/\", waiting until \"networkidle\"\u001b[22m\n",
+      "details": {
+        "url": "https://www.realtypandit.in/",
+        "viewport": "desktop"
+      },
+      "timestamp": "2026-03-15T10:23:14.689Z"
+    },
+    {
+      "page": "Properties",
+      "type": "navigation",
+      "severity": "critical",
+      "message": "Page failed to load: page.goto: net::ERR_NAME_NOT_RESOLVED at https://www.realtypandit.in/properties\nCall log:\n\u001b[2m  - navigating to \"https://www.realtypandit.in/properties\", waiting until \"networkidle\"\u001b[22m\n",
+      "details": {
+        "url": "https://www.realtypandit.in/properties",
+        "viewport": "desktop"
+      },
+      "timestamp": "2026-03-15T10:23:14.707Z"
+    },
+    {
+      "page": "About",
+      "type": "navigation",
+      "severity": "critical",
+      "message": "Page failed to load: page.goto: net::ERR_NAME_NOT_RESOLVED at https://www.realtypandit.in/about\nCall log:\n\u001b[2m  - navigating to \"https://www.realtypandit.in/about\", waiting until \"networkidle\"\u001b[22m\n",
+      "details": {
+        "url": "https://www.realtypandit.in/about",
+        "viewport": "desktop"
+      },
+      "timestamp": "2026-03-15T10:23:14.726Z"
+    },
+    {
+      "page": "Contact",
+      "type": "navigation",
+      "severity": "critical",
+      "message": "Page failed to load: page.goto: net::ERR_NAME_NOT_RESOLVED at https://www.realtypandit.in/contact\nCall log:\n\u001b[2m  - navigating to \"https://www.realtypandit.in/contact\", waiting until \"networkidle\"\u001b[22m\n",
+      "details": {
+        "url": "https://www.realtypandit.in/contact",
+        "viewport": "desktop"
+      },
+      "timestamp": "2026-03-15T10:23:14.746Z"
+    },
+    {
+      "page": "Services",
+      "type": "navigation",
+      "severity": "critical",
+      "message": "Page failed to load: page.goto: net::ERR_NAME_NOT_RESOLVED at https://www.realtypandit.in/services\nCall log:\n\u001b[2m  - navigating to \"https://www.realtypandit.in/services\", waiting until \"networkidle\"\u001b[22m\n",
+      "details": {
+        "url": "https://www.realtypandit.in/services",
+        "viewport": "desktop"
+      },
+      "timestamp": "2026-03-15T10:23:14.761Z"
+    },
+    {
+      "page": "Blog",
+      "type": "navigation",
+      "severity": "critical",
+      "message": "Page failed to load: page.goto: net::ERR_NAME_NOT_RESOLVED at https://www.realtypandit.in/blog\nCall log:\n\u001b[2m  - navigating to \"https://www.realtypandit.in/blog\", waiting until \"networkidle\"\u001b[22m\n",
+      "details": {
+        "url": "https://www.realtypandit.in/blog",
+        "viewport": "desktop"
+      },
+      "timestamp": "2026-03-15T10:23:14.778Z"
+    },
+    {
+      "page": "API",
+      "type": "api-health",
+      "severity": "critical",
+      "message": "API Root unreachable: apiRequestContext.get: getaddrinfo ENOTFOUND api.realtypandit.in\nCall log:\n\u001b[2m  - → GET https://api.realtypandit.in/\u001b[22m\n\u001b[2m    - user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/145.0.7632.6 Safari/537.36\u001b[22m\n\u001b[2m    - accept: */*\u001b[22m\n\u001b[2m    - accept-encoding: gzip,deflate,br\u001b[22m\n",
+      "details": {
+        "url": "https://api.realtypandit.in/"
+      },
+      "timestamp": "2026-03-15T10:23:14.811Z"
+    },
+    {
+      "page": "API",
+      "type": "api-health",
+      "severity": "critical",
+      "message": "API Health unreachable: apiRequestContext.get: getaddrinfo ENOTFOUND api.realtypandit.in\nCall log:\n\u001b[2m  - → GET https://api.realtypandit.in/health\u001b[22m\n\u001b[2m    - user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/145.0.7632.6 Safari/537.36\u001b[22m\n\u001b[2m    - accept: */*\u001b[22m\n\u001b[2m    - accept-encoding: gzip,deflate,br\u001b[22m\n",
+      "details": {
+        "url": "https://api.realtypandit.in/health"
+      },
+      "timestamp": "2026-03-15T10:23:14.814Z"
+    },
+    {
+      "page": "API",
+      "type": "api-health",
+      "severity": "critical",
+      "message": "API Properties (public) unreachable: apiRequestContext.get: getaddrinfo ENOTFOUND api.realtypandit.in\nCall log:\n\u001b[2m  - → GET https://api.realtypandit.in/public/properties\u001b[22m\n\u001b[2m    - user-agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/145.0.7632.6 Safari/537.36\u001b[22m\n\u001b[2m    - accept: */*\u001b[22m\n\u001b[2m    - accept-encoding: gzip,deflate,br\u001b[22m\n",
+      "details": {
+        "url": "https://api.realtypandit.in/public/properties"
+      },
+      "timestamp": "2026-03-15T10:23:14.817Z"
+    }
+  ],
+  "consoleErrors": [],
+  "networkErrors": [
+    {
+      "url": "https://www.realtypandit.in/",
+      "failure": "net::ERR_NAME_NOT_RESOLVED",
+      "resourceType": "document",
+      "pageUrl": "about:blank",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.realtypandit.in/",
+      "failure": "net::ERR_NAME_NOT_RESOLVED",
+      "resourceType": "document",
+      "pageUrl": "about:blank",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.realtypandit.in/properties",
+      "failure": "net::ERR_NAME_NOT_RESOLVED",
+      "resourceType": "document",
+      "pageUrl": "chrome-error://chromewebdata/",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.realtypandit.in/about",
+      "failure": "net::ERR_NAME_NOT_RESOLVED",
+      "resourceType": "document",
+      "pageUrl": "chrome-error://chromewebdata/",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.realtypandit.in/contact",
+      "failure": "net::ERR_NAME_NOT_RESOLVED",
+      "resourceType": "document",
+      "pageUrl": "chrome-error://chromewebdata/",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.realtypandit.in/services",
+      "failure": "net::ERR_NAME_NOT_RESOLVED",
+      "resourceType": "document",
+      "pageUrl": "chrome-error://chromewebdata/",
+      "viewport": "desktop"
+    },
+    {
+      "url": "https://www.realtypandit.in/blog",
+      "failure": "net::ERR_NAME_NOT_RESOLVED",
+      "resourceType": "document",
+      "pageUrl": "chrome-error://chromewebdata/",
+      "viewport": "desktop"
+    }
+  ],
+  "performance": [],
+  "pages": [
+    {
+      "name": "Homepage",
+      "url": "https://www.realtypandit.in/",
+      "viewport": "desktop",
+      "status": "failed",
+      "loadTime": 0,
+      "checks": {}
+    },
+    {
+      "name": "Properties",
+      "url": "https://www.realtypandit.in/properties",
+      "viewport": "desktop",
+      "status": "failed",
+      "loadTime": 0,
+      "checks": {}
+    },
+    {
+      "name": "About",
+      "url": "https://www.realtypandit.in/about",
+      "viewport": "desktop",
+      "status": "failed",
+      "loadTime": 0,
+      "checks": {}
+    },
+    {
+      "name": "Contact",
+      "url": "https://www.realtypandit.in/contact",
+      "viewport": "desktop",
+      "status": "failed",
+      "loadTime": 0,
+      "checks": {}
+    },
+    {
+      "name": "Services",
+      "url": "https://www.realtypandit.in/services",
+      "viewport": "desktop",
+      "status": "failed",
+      "loadTime": 0,
+      "checks": {}
+    },
+    {
+      "name": "Blog",
+      "url": "https://www.realtypandit.in/blog",
+      "viewport": "desktop",
+      "status": "failed",
+      "loadTime": 0,
+      "checks": {}
+    }
+  ],
+  "screenshots": []
+}

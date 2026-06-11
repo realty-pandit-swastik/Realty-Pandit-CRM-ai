@@ -1,0 +1,39 @@
+{
+  "description": "Partner referral leads + buyer notifications + smart assignment + property view tracking — all phases complete",
+  "checks": [
+    {
+      "type": "api_returns",
+      "url": "/health",
+      "status": 200,
+      "description": "API /health returns 200"
+    },
+    {
+      "type": "api_returns",
+      "url": "/api/leads/by-source",
+      "status": 401,
+      "description": "API /api/leads/by-source returns 401"
+    },
+    {
+      "type": "api_returns",
+      "url": "/api/calendar/appointments",
+      "status": 401,
+      "description": "API /api/calendar/appointments returns 401"
+    },
+    {
+      "type": "no_console_errors",
+      "page": "/properties",
+      "description": "No JS errors on /properties"
+    },
+    {
+      "type": "no_console_errors",
+      "page": "/",
+      "description": "No JS errors on /"
+    },
+    {
+      "type": "page_loads",
+      "page": "/properties",
+      "max_time": 5000,
+      "description": "/properties loads under 5000ms"
+    }
+  ]
+}

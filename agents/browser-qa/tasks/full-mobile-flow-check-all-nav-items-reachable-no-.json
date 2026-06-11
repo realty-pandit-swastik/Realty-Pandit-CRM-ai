@@ -1,0 +1,105 @@
+{
+  "description": "Full mobile flow check — all nav items reachable, no errors, responsive",
+  "checks": [
+    {
+      "type": "no_console_errors",
+      "page": "/#dashboard",
+      "description": "No JS errors on /#dashboard"
+    },
+    {
+      "type": "responsive",
+      "page": "/#dashboard",
+      "description": "/#dashboard is responsive on mobile"
+    },
+    {
+      "type": "no_console_errors",
+      "page": "/#chats",
+      "description": "No JS errors on /#chats"
+    },
+    {
+      "type": "responsive",
+      "page": "/#chats",
+      "description": "/#chats is responsive on mobile"
+    },
+    {
+      "type": "no_console_errors",
+      "page": "/#calendar",
+      "description": "No JS errors on /#calendar"
+    },
+    {
+      "type": "responsive",
+      "page": "/#calendar",
+      "description": "/#calendar is responsive on mobile"
+    },
+    {
+      "type": "no_console_errors",
+      "page": "/#inventory",
+      "description": "No JS errors on /#inventory"
+    },
+    {
+      "type": "responsive",
+      "page": "/#inventory",
+      "description": "/#inventory is responsive on mobile"
+    },
+    {
+      "type": "no_console_errors",
+      "page": "/#deals",
+      "description": "No JS errors on /#deals"
+    },
+    {
+      "type": "responsive",
+      "page": "/#deals",
+      "description": "/#deals is responsive on mobile"
+    },
+    {
+      "type": "no_console_errors",
+      "page": "/#emails",
+      "description": "No JS errors on /#emails"
+    },
+    {
+      "type": "no_console_errors",
+      "page": "/#calls",
+      "description": "No JS errors on /#calls"
+    },
+    {
+      "type": "no_console_errors",
+      "page": "/#partners",
+      "description": "No JS errors on /#partners"
+    },
+    {
+      "type": "responsive",
+      "page": "/#partners",
+      "description": "/#partners is responsive on mobile"
+    },
+    {
+      "type": "no_console_errors",
+      "page": "/#property-map",
+      "description": "No JS errors on /#property-map"
+    },
+    {
+      "type": "no_console_errors",
+      "page": "/#live-status",
+      "description": "No JS errors on /#live-status"
+    },
+    {
+      "type": "no_console_errors",
+      "page": "/#buyer-chat",
+      "description": "No JS errors on /#buyer-chat"
+    },
+    {
+      "type": "no_console_errors",
+      "page": "/#tasks",
+      "description": "No JS errors on /#tasks"
+    },
+    {
+      "type": "no_console_errors",
+      "page": "/#team",
+      "description": "No JS errors on /#team"
+    },
+    {
+      "type": "responsive",
+      "page": "/#team",
+      "description": "/#team is responsive on mobile"
+    }
+  ]
+}

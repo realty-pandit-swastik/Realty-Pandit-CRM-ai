@@ -1,0 +1,17 @@
+{
+  "description": "Check if Google Places input is enabled and not showing Loading state",
+  "checks": [
+    {
+      "type": "text_visible",
+      "page": "/properties",
+      "text": "Loading Google Places",
+      "description": "Text \"Loading Google Places\" visible on /properties"
+    },
+    {
+      "type": "element_exists",
+      "page": "/properties",
+      "selector": "input[placeholder='Search by location, city, locality...']:not([disabled])",
+      "description": "Element \"input[placeholder='Search by location, city, locality...']:not([disabled])\" exists on /properties"
+    }
+  ]
+}

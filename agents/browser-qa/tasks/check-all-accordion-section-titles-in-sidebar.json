@@ -1,0 +1,47 @@
+{
+  "description": "Check all accordion section titles in sidebar",
+  "checks": [
+    {
+      "type": "text_visible",
+      "page": "/properties",
+      "text": "Filters",
+      "description": "Text \"Filters\" visible on /properties"
+    },
+    {
+      "type": "text_visible",
+      "page": "/properties",
+      "text": "Property Type",
+      "description": "Text \"Property Type\" visible on /properties"
+    },
+    {
+      "type": "text_visible",
+      "page": "/properties",
+      "text": "Budget",
+      "description": "Text \"Budget\" visible on /properties"
+    },
+    {
+      "type": "text_visible",
+      "page": "/properties",
+      "text": "No. of Bedrooms",
+      "description": "Text \"No. of Bedrooms\" visible on /properties"
+    },
+    {
+      "type": "text_visible",
+      "page": "/properties",
+      "text": "Furnishing",
+      "description": "Text \"Furnishing\" visible on /properties"
+    },
+    {
+      "type": "text_visible",
+      "page": "/properties",
+      "text": "Amenities",
+      "description": "Text \"Amenities\" visible on /properties"
+    },
+    {
+      "type": "text_visible",
+      "page": "/properties",
+      "text": "Monthly Rent",
+      "description": "Text \"Monthly Rent\" visible on /properties"
+    }
+  ]
+}

@@ -1,0 +1,22 @@
+{
+  "description": "Property detail page elements - gallery, images, load time",
+  "checks": [
+    {
+      "type": "element_exists",
+      "page": "/properties",
+      "selector": "img",
+      "description": "Element \"img\" exists on /properties"
+    },
+    {
+      "type": "no_console_errors",
+      "page": "/properties",
+      "description": "No JS errors on /properties"
+    },
+    {
+      "type": "page_loads",
+      "page": "/properties",
+      "max_time": 8000,
+      "description": "/properties loads under 8000ms"
+    }
+  ]
+}

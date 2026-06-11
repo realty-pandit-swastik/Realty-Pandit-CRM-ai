@@ -1,0 +1,63 @@
+{
+  "description": "Sidebar reorder: Property Type first with Residential/Commercial pills, Location with Google Places autocomplete, Budget with dual-range slider, then Bedrooms/Furnishing/Posted By/Amenities",
+  "checks": [
+    {
+      "type": "no_console_errors",
+      "page": "/properties",
+      "description": "No JS errors on /properties"
+    },
+    {
+      "type": "text_visible",
+      "page": "/properties",
+      "text": "Property Type",
+      "description": "Text \"Property Type\" visible on /properties"
+    },
+    {
+      "type": "text_visible",
+      "page": "/properties",
+      "text": "Location",
+      "description": "Text \"Location\" visible on /properties"
+    },
+    {
+      "type": "text_visible",
+      "page": "/properties",
+      "text": "Budget",
+      "description": "Text \"Budget\" visible on /properties"
+    },
+    {
+      "type": "text_visible",
+      "page": "/properties",
+      "text": "No. of Bedrooms",
+      "description": "Text \"No. of Bedrooms\" visible on /properties"
+    },
+    {
+      "type": "text_visible",
+      "page": "/properties",
+      "text": "Furnishing",
+      "description": "Text \"Furnishing\" visible on /properties"
+    },
+    {
+      "type": "text_visible",
+      "page": "/properties",
+      "text": "Amenities",
+      "description": "Text \"Amenities\" visible on /properties"
+    },
+    {
+      "type": "text_visible",
+      "page": "/properties",
+      "text": "Rent a Property",
+      "description": "Text \"Rent a Property\" visible on /properties"
+    },
+    {
+      "type": "responsive",
+      "page": "/properties",
+      "description": "/properties is responsive on mobile"
+    },
+    {
+      "type": "page_loads",
+      "page": "/properties",
+      "max_time": 5000,
+      "description": "/properties loads under 5000ms"
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "name": "realty-pandit-browser-qa",
+  "version": "1.0.0",
+  "description": "Browser QA Agent for Realty Pandit - crawls live site and reports issues",
+  "scripts": {
+    "test": "node run.js",
+    "test:mobile": "node run.js --mobile",
+    "test:full": "node run.js --full",
+    "report": "node report.js"
+  },
+  "dependencies": {
+    "playwright": "^1.49.0"
+  }
+}

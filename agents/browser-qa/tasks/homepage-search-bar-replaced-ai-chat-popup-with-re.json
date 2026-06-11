@@ -1,0 +1,22 @@
+{
+  "description": "Homepage search bar: replaced AI chat popup with real search input that redirects to /properties. Navbar Properties dropdown: fixed hover gap so dropdown stays open when moving mouse to it.",
+  "checks": [
+    {
+      "type": "element_exists",
+      "page": "/",
+      "selector": "search-input",
+      "description": "Element \"search-input\" exists on /"
+    },
+    {
+      "type": "text_visible",
+      "page": "/",
+      "text": "Find Your Dream Property",
+      "description": "Text \"Find Your Dream Property\" visible on /"
+    },
+    {
+      "type": "no_console_errors",
+      "page": "/",
+      "description": "No JS errors on /"
+    }
+  ]
+}

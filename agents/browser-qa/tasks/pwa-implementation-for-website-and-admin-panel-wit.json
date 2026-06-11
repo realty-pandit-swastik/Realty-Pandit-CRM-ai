@@ -1,0 +1,26 @@
+{
+  "description": "PWA implementation for website and admin panel with auto-update",
+  "checks": [
+    {
+      "type": "no_console_errors",
+      "page": "/",
+      "description": "No JS errors on /"
+    },
+    {
+      "type": "page_loads",
+      "page": "/",
+      "max_time": 5000,
+      "description": "/ loads under 5000ms"
+    },
+    {
+      "type": "responsive",
+      "page": "/",
+      "description": "/ is responsive on mobile"
+    },
+    {
+      "type": "no_console_errors",
+      "page": "/properties",
+      "description": "No JS errors on /properties"
+    }
+  ]
+}

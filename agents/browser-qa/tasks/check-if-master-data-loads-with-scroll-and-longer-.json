@@ -1,0 +1,24 @@
+{
+  "description": "Check if master data loads with scroll and longer wait",
+  "checks": [
+    {
+      "type": "element_exists",
+      "page": "/properties",
+      "selector": "aside .space-y-3 > div",
+      "description": "Element \"aside .space-y-3 > div\" exists on /properties"
+    },
+    {
+      "type": "element_count",
+      "page": "/properties",
+      "selector": "aside .space-y-3 > div",
+      "min": 1,
+      "description": "1+ \"aside .space-y-3 > div\" on /properties"
+    },
+    {
+      "type": "text_visible",
+      "page": "/properties",
+      "text": "Residential",
+      "description": "Text \"Residential\" visible on /properties"
+    }
+  ]
+}

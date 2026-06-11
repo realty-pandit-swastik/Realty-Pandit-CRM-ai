@@ -1,0 +1,69 @@
+{
+  "description": "Permission-gated views + load performance + admin reports/analytics",
+  "checks": [
+    {
+      "type": "no_console_errors",
+      "page": "/#reports",
+      "description": "No JS errors on /#reports"
+    },
+    {
+      "type": "no_console_errors",
+      "page": "/#ai-dashboard",
+      "description": "No JS errors on /#ai-dashboard"
+    },
+    {
+      "type": "no_console_errors",
+      "page": "/#agent-logs",
+      "description": "No JS errors on /#agent-logs"
+    },
+    {
+      "type": "no_console_errors",
+      "page": "/#override",
+      "description": "No JS errors on /#override"
+    },
+    {
+      "type": "no_console_errors",
+      "page": "/#workflows",
+      "description": "No JS errors on /#workflows"
+    },
+    {
+      "type": "no_console_errors",
+      "page": "/#marketing",
+      "description": "No JS errors on /#marketing"
+    },
+    {
+      "type": "no_console_errors",
+      "page": "/#analytics",
+      "description": "No JS errors on /#analytics"
+    },
+    {
+      "type": "no_console_errors",
+      "page": "/#leads",
+      "description": "No JS errors on /#leads"
+    },
+    {
+      "type": "page_loads",
+      "page": "/#dashboard",
+      "max_time": 3000,
+      "description": "/#dashboard loads under 3000ms"
+    },
+    {
+      "type": "page_loads",
+      "page": "/#inventory",
+      "max_time": 3000,
+      "description": "/#inventory loads under 3000ms"
+    },
+    {
+      "type": "page_loads",
+      "page": "/#deals",
+      "max_time": 3000,
+      "description": "/#deals loads under 3000ms"
+    },
+    {
+      "type": "page_loads",
+      "page": "/#partners",
+      "max_time": 3000,
+      "description": "/#partners loads under 3000ms"
+    }
+  ]
+}

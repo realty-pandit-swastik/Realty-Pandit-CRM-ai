@@ -1,0 +1,39 @@
+{
+  "description": "Check property listing page - dropdowns, search filters, and all UI elements",
+  "checks": [
+    {
+      "type": "element_exists",
+      "page": "/properties",
+      "selector": "select",
+      "description": "Element \"select\" exists on /properties"
+    },
+    {
+      "type": "element_exists",
+      "page": "/properties",
+      "selector": "input",
+      "description": "Element \"input\" exists on /properties"
+    },
+    {
+      "type": "element_exists",
+      "page": "/properties .filter",
+      "selector": "",
+      "description": "Element \"\" exists on /properties .filter"
+    },
+    {
+      "type": "no_console_errors",
+      "page": "/properties",
+      "description": "No JS errors on /properties"
+    },
+    {
+      "type": "page_loads",
+      "page": "/properties",
+      "max_time": 5000,
+      "description": "/properties loads under 5000ms"
+    },
+    {
+      "type": "responsive",
+      "page": "/properties",
+      "description": "/properties is responsive on mobile"
+    }
+  ]
+}

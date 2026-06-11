@@ -1,0 +1,38 @@
+{
+  "description": "Inventory edit modal: Save/Save&Exit buttons, owner/uploader info in header, dealer auto-registration on website upload",
+  "checks": [
+    {
+      "type": "api_returns",
+      "url": "/health",
+      "status": 200,
+      "description": "API /health returns 200"
+    },
+    {
+      "type": "no_console_errors",
+      "page": "/agent/inventory",
+      "description": "No JS errors on /agent/inventory"
+    },
+    {
+      "type": "no_console_errors",
+      "page": "/agent/login",
+      "description": "No JS errors on /agent/login"
+    },
+    {
+      "type": "page_loads",
+      "page": "/agent/inventory",
+      "max_time": 3000,
+      "description": "/agent/inventory loads under 3000ms"
+    },
+    {
+      "type": "api_returns",
+      "url": "/public/classification-tree",
+      "status": 200,
+      "description": "API /public/classification-tree returns 200"
+    },
+    {
+      "type": "no_console_errors",
+      "page": "/post-property",
+      "description": "No JS errors on /post-property"
+    }
+  ]
+}

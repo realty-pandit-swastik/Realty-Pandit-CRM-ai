@@ -1,0 +1,53 @@
+{
+  "description": "SEO basics - APIs and page load times",
+  "checks": [
+    {
+      "type": "api_returns",
+      "url": "/public/properties",
+      "status": 200,
+      "description": "API /public/properties returns 200"
+    },
+    {
+      "type": "api_returns",
+      "url": "/public/featured-properties",
+      "status": 200,
+      "description": "API /public/featured-properties returns 200"
+    },
+    {
+      "type": "api_returns",
+      "url": "/public/locations",
+      "status": 200,
+      "description": "API /public/locations returns 200"
+    },
+    {
+      "type": "api_returns",
+      "url": "/health",
+      "status": 200,
+      "description": "API /health returns 200"
+    },
+    {
+      "type": "page_loads",
+      "page": "/about",
+      "max_time": 5000,
+      "description": "/about loads under 5000ms"
+    },
+    {
+      "type": "page_loads",
+      "page": "/services",
+      "max_time": 5000,
+      "description": "/services loads under 5000ms"
+    },
+    {
+      "type": "page_loads",
+      "page": "/blog",
+      "max_time": 5000,
+      "description": "/blog loads under 5000ms"
+    },
+    {
+      "type": "page_loads",
+      "page": "/faq",
+      "max_time": 5000,
+      "description": "/faq loads under 5000ms"
+    }
+  ]
+}

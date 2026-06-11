@@ -1,0 +1,28 @@
+{
+  "description": "PWA implementation - manifest and service worker for website and admin panel",
+  "checks": [
+    {
+      "type": "api_returns",
+      "url": "/manifest.json",
+      "status": 200,
+      "description": "API /manifest.json returns 200"
+    },
+    {
+      "type": "no_console_errors",
+      "page": "/",
+      "description": "No JS errors on /"
+    },
+    {
+      "type": "page_loads",
+      "page": "/",
+      "max_time": 3000,
+      "description": "/ loads under 3000ms"
+    },
+    {
+      "type": "element_exists",
+      "page": "/",
+      "selector": "link[rel='manifest']",
+      "description": "Element \"link[rel='manifest']\" exists on /"
+    }
+  ]
+}

@@ -1,0 +1,21 @@
+{
+  "description": "Mobile inventory edit form updated with full feature parity: Investment Type dropdown, Sub Locality field, Amenities checkboxes (20), Assignment/Sharing section with transfer, Video upload support",
+  "checks": [
+    {
+      "type": "no_console_errors",
+      "page": "/",
+      "description": "No JS errors on /"
+    },
+    {
+      "type": "page_loads",
+      "page": "/",
+      "max_time": 5000,
+      "description": "/ loads under 5000ms"
+    },
+    {
+      "type": "responsive",
+      "page": "/",
+      "description": "/ is responsive on mobile"
+    }
+  ]
+}

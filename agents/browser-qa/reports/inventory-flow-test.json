@@ -1,0 +1,17 @@
+{
+  "errors": [],
+  "apiCalls": [
+    {
+      "url": "https://api.realtypandit.in/api/chat/start",
+      "status": 200,
+      "method": "POST",
+      "body": "{\"session_id\":\"f96ed126-3ef2-4353-84fa-c1025ca76c2a\",\"messages\":[{\"id\":\"2ff17127-b18e-4fbc-a317-234e2579ffb5\",\"role\":\"assistant\",\"content\":\"Namaste! I'm Panditji, your property listing assistant. Let's list your property step by step. You can type naturally or use the buttons below.\",\"timestamp\":\"2026-03-06T13:56:41.803Z\",\"type\":\"system\"},{\"id\":\"61fbbed4-24d3-4340-950e-d091a66380da\",\"role\":\"assistant\",\"content\":\"Who are you?\\nAap kaun hain?\",\"timestamp\":\"2026-03-06T13:56:41.803Z\",\"type\":\"questio"
+    },
+    {
+      "url": "https://api.realtypandit.in/api/chat/message",
+      "status": 200,
+      "method": "POST",
+      "body": "{\"messages\":[{\"id\":\"8f9ab832-c12a-4121-b069-f3eb37b3940e\",\"role\":\"user\",\"content\":\"Owner\",\"timestamp\":\"2026-03-06T13:56:47.502Z\",\"type\":\"text\"},{\"id\":\"d824a363-9e57-4ec9-965e-eae07c8d5cca\",\"role\":\"assistant\",\"content\":\"What is your name?\\nAapka naam kya hai?\",\"timestamp\":\"2026-03-06T13:56:47.511Z\",\"type\":\"question\",\"step_id\":\"uploader_name\",\"input_type\":\"text\",\"metadata\":{\"progress\":{\"current\":2,\"total\":11,\"group\":\"contact\"}}}],\"session_active\":true,\"progress\":{\"current\":2,\"total\":11,\"group\":\"co"
+    }
+  ]
+}

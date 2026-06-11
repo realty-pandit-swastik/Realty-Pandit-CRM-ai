@@ -1,0 +1,33 @@
+{
+  "description": "Redesigned Partner Agent Login page with split-screen layout, sidebar with dark gradient and agent profile, and polished dashboard with stats, quick actions, and security card",
+  "checks": [
+    {
+      "type": "no_console_errors",
+      "page": "/agent/login",
+      "description": "No JS errors on /agent/login"
+    },
+    {
+      "type": "page_loads",
+      "page": "/agent/login",
+      "max_time": 3000,
+      "description": "/agent/login loads under 3000ms"
+    },
+    {
+      "type": "responsive",
+      "page": "/agent/login",
+      "description": "/agent/login is responsive on mobile"
+    },
+    {
+      "type": "element_exists",
+      "page": "/agent/login",
+      "selector": "h2",
+      "description": "Element \"h2\" exists on /agent/login"
+    },
+    {
+      "type": "element_exists",
+      "page": "/agent/login",
+      "selector": ".min-h-screen",
+      "description": "Element \".min-h-screen\" exists on /agent/login"
+    }
+  ]
+}

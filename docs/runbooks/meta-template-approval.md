@@ -59,6 +59,61 @@ When templates were deleted + recreated to bypass the category lock, the code re
 
 For a full triggers list, see `backend/src/services/whatsapp_templates.ts`.
 
+## ✅ RESOLVED 2026-05-17: buyer welcome templates moved MARKETING → UTILITY
+
+**Done:** `rp_buyer_lead_received_v4` + `rp_welcome_buyer_v5` created via Graph
+API (`POST /v21.0/<WABA>/message_templates`, category `UTILITY`, bodies
+identical to v3/v4) → Meta-APPROVED → registry `name:` repointed in
+`whatsapp_templates.ts` (logical keys `rp_buyer_lead_received` /
+`rp_welcome_buyer`) → backend deployed → verified live (logs send the v4/v5
+names; Graph confirms `APPROVED / UTILITY`). New-lead welcome now delivers
+(UTILITY is exempt from the marketing opt-out). The procedure below is kept as
+the reusable runbook for the next time this happens.
+
+---
+
+**Symptom (original):** new leads report they never receive the welcome
+WhatsApp, yet backend logs show `[LeadNotify] Buyer confirmation template
+sent` / `[LeadAutoEngage] Template C sent`. Code is correct and the Cloud API
+accepts the send — the messages are **silently not delivered**.
+
+**Cause:** `rp_buyer_lead_received_v3` and `rp_welcome_buyer_v4` are category
+**MARKETING** in Meta. WhatsApp does not deliver MARKETING templates to
+recipients who have *marketing messages* disabled (common default in India).
+A brand-new lead has never opted in, so they get nothing. Verified APPROVED
+but MARKETING via `GET /v21.0/<WABA_ID>/message_templates?fields=name,status,category`.
+These are transactional acknowledgements → they belong in **UTILITY**, which
+is exempt from the marketing opt-out and delivers reliably.
+
+**Fix procedure (Meta-admin only — code is already done):**
+
+1. In Meta WhatsApp Manager → Message Templates, you usually cannot
+   recategorize in place (the **4-week category-lock trap** above). So
+   **create new templates** with a bumped version name and category
+   **UTILITY**:
+   - `rp_buyer_lead_received_v4` (UTILITY) — same body/params as v3
+     (`name`, `link`).
+   - `rp_welcome_buyer_v5` (UTILITY) — same body/params as v4.
+   Keep the body strictly transactional (no promo language) or Meta re-flags
+   it MARKETING.
+2. Wait for `APPROVED` (minutes–days):
+   `GET /v21.0/<WABA_ID>/message_templates?fields=name,status,category&access_token=$WHATSAPP_TOKEN`
+   — confirm `category=UTILITY status=APPROVED` for the new names.
+3. **Repoint the registry** in `backend/src/services/whatsapp_templates.ts`:
+   set the `name:` of logical keys `rp_buyer_lead_received` →
+   `rp_buyer_lead_received_v4` and `rp_welcome_buyer` → `rp_welcome_buyer_v5`.
+   Callers already pass the **logical keys** — never the `_vN` literal (that
+   drift was fixed 2026-05-17; do not reintroduce versioned names at call
+   sites).
+4. Deploy backend (`node deployment/deploy-agent.js backend`).
+5. **Verify delivery for real:** add a test lead with a phone you control →
+   confirm the WhatsApp actually arrives (not just "sent" in logs). Watch the
+   new templates' quality rating stays GREEN after volume.
+
+Until 1–4 are done, new-lead welcome delivery stays broken regardless of code.
+Tracked: memory `project_pending_meta_template_utility.md`; root analysis
+`docs/plans/2026-05-17-deal-sync-and-welcome-investigation.md`.
+
 ## ⚠ Recurring risk: Meta app deletion
 
 The Meta developer app at developer.facebook.com is the parent of the WABA + webhook config. If it's accidentally deleted (happened once on 2026-04-16), ALL WhatsApp functionality stops: templates, inbound webhooks, outbound messages.

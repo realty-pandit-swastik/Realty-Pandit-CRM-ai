@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Realty Pandit Staff</string>
+
+    <!-- Permissions -->
+    <string name="permission_phone_state">Required to detect incoming and outgoing calls</string>
+    <string name="permission_record_audio">Required to record business calls</string>
+    <string name="permission_call_log">Required to identify call details</string>
+    <string name="permission_overlay">Required to show post-call classification</string>
+    <string name="permission_notifications">Required to notify you about uploads and reviews</string>
+
+    <!-- Call Recording -->
+    <string name="call_recording_active">Recording call…</string>
+    <string name="call_classification_title">Classify This Call</string>
+    <string name="btn_business">Business</string>
+    <string name="btn_personal">Personal</string>
+
+    <!-- Upload -->
+    <string name="uploading_call">Uploading call recording…</string>
+    <string name="upload_failed">Upload failed. Will retry.</string>
+    <string name="upload_success">Call uploaded successfully</string>
+
+    <!-- Review -->
+    <string name="review_title">Review Call</string>
+    <string name="btn_submit">Submit to CRM</string>
+    <string name="btn_edit">Edit</string>
+    <string name="btn_discard">Discard</string>
+
+    <!-- Dashboard -->
+    <string name="tab_calls">Calls</string>
+    <string name="tab_contacts">Contacts</string>
+    <string name="tab_stats">Stats</string>
+
+    <!-- Legal -->
+    <string name="consent_title">Recording Consent</string>
+    <string name="consent_message">This app may record calls you classify as \"Business\". All recordings are encrypted and stored securely. By continuing, you consent to this recording policy.</string>
+    <string name="btn_accept">I Accept</string>
+    <string name="btn_decline">Decline</string>
+</resources>

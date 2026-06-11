@@ -1,0 +1,16 @@
+{
+  "description": "Replaced chat-based inventory upload with modal window. InventoryModal opens on Add Property click with contact-first SSOT search.",
+  "checks": [
+    {
+      "type": "no_console_errors",
+      "page": "/admin",
+      "description": "No JS errors on /admin"
+    },
+    {
+      "type": "page_loads",
+      "page": "/admin",
+      "max_time": 5000,
+      "description": "/admin loads under 5000ms"
+    }
+  ]
+}

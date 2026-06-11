@@ -1,0 +1,21 @@
+{
+  "description": "Batch 4: Deal Pipeline mobile card view with stage filter chips, card-based deal list, tap to open detail modal",
+  "checks": [
+    {
+      "type": "no_console_errors",
+      "page": "/#deals",
+      "description": "No JS errors on /#deals"
+    },
+    {
+      "type": "responsive",
+      "page": "/#deals",
+      "description": "/#deals is responsive on mobile"
+    },
+    {
+      "type": "page_loads",
+      "page": "/#deals",
+      "max_time": 3000,
+      "description": "/#deals loads under 3000ms"
+    }
+  ]
+}

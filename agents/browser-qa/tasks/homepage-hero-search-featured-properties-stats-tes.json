@@ -1,0 +1,39 @@
+{
+  "description": "Homepage hero, search, featured properties, stats, testimonials",
+  "checks": [
+    {
+      "type": "element_exists",
+      "page": "/",
+      "selector": "h1",
+      "description": "Element \"h1\" exists on /"
+    },
+    {
+      "type": "element_exists",
+      "page": "/",
+      "selector": "input",
+      "description": "Element \"input\" exists on /"
+    },
+    {
+      "type": "element_exists",
+      "page": "/",
+      "selector": "select",
+      "description": "Element \"select\" exists on /"
+    },
+    {
+      "type": "no_console_errors",
+      "page": "/",
+      "description": "No JS errors on /"
+    },
+    {
+      "type": "page_loads",
+      "page": "/",
+      "max_time": 5000,
+      "description": "/ loads under 5000ms"
+    },
+    {
+      "type": "responsive",
+      "page": "/",
+      "description": "/ is responsive on mobile"
+    }
+  ]
+}

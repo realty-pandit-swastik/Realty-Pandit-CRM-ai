@@ -1,0 +1,17 @@
+{
+  "description": "Plan B6: Renovated field in public API response and website badge",
+  "checks": [
+    {
+      "type": "api_returns",
+      "url": "/public/properties?limit=1",
+      "status": 200,
+      "description": "API /public/properties?limit=1 returns 200"
+    },
+    {
+      "type": "api_returns",
+      "url": "/public/properties?limit=5",
+      "status": 200,
+      "description": "API /public/properties?limit=5 returns 200"
+    }
+  ]
+}

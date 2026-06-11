@@ -1,0 +1,22 @@
+{
+  "description": "Fixed SW update loop in main.tsx + replaced raw axios with shared client in DealCloseCommissionDialog to fix 403 CSRF errors",
+  "checks": [
+    {
+      "type": "no_console_errors",
+      "page": "/admin",
+      "description": "No JS errors on /admin"
+    },
+    {
+      "type": "page_loads",
+      "page": "/admin",
+      "max_time": 5000,
+      "description": "/admin loads under 5000ms"
+    },
+    {
+      "type": "page_loads",
+      "page": "/admin/#/deals",
+      "max_time": 5000,
+      "description": "/admin/#/deals loads under 5000ms"
+    }
+  ]
+}

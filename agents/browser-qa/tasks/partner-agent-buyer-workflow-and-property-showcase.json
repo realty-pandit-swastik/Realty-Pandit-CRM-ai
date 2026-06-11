@@ -1,0 +1,32 @@
+{
+  "description": "Partner agent buyer workflow and property showcase",
+  "checks": [
+    {
+      "type": "no_console_errors",
+      "page": "/agent/login",
+      "description": "No JS errors on /agent/login"
+    },
+    {
+      "type": "no_console_errors",
+      "page": "/agent/inventory",
+      "description": "No JS errors on /agent/inventory"
+    },
+    {
+      "type": "api_returns",
+      "url": "/health",
+      "status": 200,
+      "description": "API /health returns 200"
+    },
+    {
+      "type": "api_returns",
+      "url": "/agent/dashboard",
+      "status": 401,
+      "description": "API /agent/dashboard returns 401"
+    },
+    {
+      "type": "no_console_errors",
+      "page": "/post-property",
+      "description": "No JS errors on /post-property"
+    }
+  ]
+}

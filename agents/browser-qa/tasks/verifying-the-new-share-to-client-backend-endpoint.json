@@ -1,0 +1,38 @@
+{
+  "description": "Verifying the new share-to-client backend endpoint and public property display_id support.",
+  "checks": [
+    {
+      "type": "no_console_errors",
+      "page": "/#inventory",
+      "description": "No JS errors on /#inventory"
+    },
+    {
+      "type": "no_console_errors",
+      "page": "/#deals",
+      "description": "No JS errors on /#deals"
+    },
+    {
+      "type": "no_console_errors",
+      "page": "/#calendar",
+      "description": "No JS errors on /#calendar"
+    },
+    {
+      "type": "api_returns",
+      "url": "/public/properties",
+      "status": 200,
+      "description": "API /public/properties returns 200"
+    },
+    {
+      "type": "api_returns",
+      "url": "/health",
+      "status": 200,
+      "description": "API /health returns 200"
+    },
+    {
+      "type": "page_loads",
+      "page": "/#inventory",
+      "max_time": 3000,
+      "description": "/#inventory loads under 3000ms"
+    }
+  ]
+}

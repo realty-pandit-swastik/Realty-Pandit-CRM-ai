@@ -1,0 +1,40 @@
+{
+  "description": "Added Share to Client and Book Visit buttons on inventory cards in admin dashboard.",
+  "checks": [
+    {
+      "type": "no_console_errors",
+      "page": "/#inventory",
+      "description": "No JS errors on /#inventory"
+    },
+    {
+      "type": "page_loads",
+      "page": "/#inventory",
+      "max_time": 3000,
+      "description": "/#inventory loads under 3000ms"
+    },
+    {
+      "type": "text_visible",
+      "page": "/#inventory",
+      "text": "Share to Client",
+      "description": "Text \"Share to Client\" visible on /#inventory"
+    },
+    {
+      "type": "text_visible",
+      "page": "/#inventory",
+      "text": "Book Visit",
+      "description": "Text \"Book Visit\" visible on /#inventory"
+    },
+    {
+      "type": "api_returns",
+      "url": "/public/properties",
+      "status": 200,
+      "description": "API /public/properties returns 200"
+    },
+    {
+      "type": "api_returns",
+      "url": "/health",
+      "status": 200,
+      "description": "API /health returns 200"
+    }
+  ]
+}

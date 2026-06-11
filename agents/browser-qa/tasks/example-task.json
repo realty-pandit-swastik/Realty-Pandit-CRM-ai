@@ -1,0 +1,44 @@
+{
+  "description": "Verify homepage hero section and property search",
+  "checks": [
+    {
+      "type": "page_loads",
+      "page": "/",
+      "max_time": 5000,
+      "description": "Homepage loads under 5 seconds"
+    },
+    {
+      "type": "no_console_errors",
+      "page": "/",
+      "description": "No JavaScript errors on homepage"
+    },
+    {
+      "type": "text_visible",
+      "page": "/",
+      "text": "Realty Pandit",
+      "description": "Brand name visible on homepage"
+    },
+    {
+      "type": "element_exists",
+      "page": "/properties",
+      "selector": "input, [type='search'], .search",
+      "description": "Property search input exists"
+    },
+    {
+      "type": "responsive",
+      "page": "/",
+      "description": "Homepage works on mobile"
+    },
+    {
+      "type": "responsive",
+      "page": "/properties",
+      "description": "Properties page works on mobile"
+    },
+    {
+      "type": "api_returns",
+      "url": "/api/properties",
+      "status": 200,
+      "description": "Properties API returns 200"
+    }
+  ]
+}

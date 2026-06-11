@@ -1,0 +1,33 @@
+{
+  "description": "Partner inventory approval workflow — pending_approval status, approve/reject buttons in admin, WhatsApp notification on approval",
+  "checks": [
+    {
+      "type": "api_returns",
+      "url": "/health",
+      "status": 200,
+      "description": "API /health returns 200"
+    },
+    {
+      "type": "no_console_errors",
+      "page": "/agent/login",
+      "description": "No JS errors on /agent/login"
+    },
+    {
+      "type": "page_loads",
+      "page": "/agent/login",
+      "max_time": 3000,
+      "description": "/agent/login loads under 3000ms"
+    },
+    {
+      "type": "no_console_errors",
+      "page": "/agent/inventory",
+      "description": "No JS errors on /agent/inventory"
+    },
+    {
+      "type": "api_returns",
+      "url": "/api/inventory?status=pending_approval",
+      "status": 401,
+      "description": "API /api/inventory?status=pending_approval returns 401"
+    }
+  ]
+}

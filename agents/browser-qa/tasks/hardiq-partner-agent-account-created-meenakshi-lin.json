@@ -1,0 +1,21 @@
+{
+  "description": "Hardiq partner agent account created, Meenakshi linked as sub-agent — Hardiq can now log into /agent/login and see Meenakshi's inventory via hierarchy",
+  "checks": [
+    {
+      "type": "api_returns",
+      "url": "/agent/dashboard",
+      "status": 401,
+      "description": "API /agent/dashboard returns 401"
+    },
+    {
+      "type": "no_console_errors",
+      "page": "/agent/login",
+      "description": "No JS errors on /agent/login"
+    },
+    {
+      "type": "no_console_errors",
+      "page": "/agent/inventory",
+      "description": "No JS errors on /agent/inventory"
+    }
+  ]
+}

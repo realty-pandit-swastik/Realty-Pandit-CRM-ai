@@ -1,0 +1,35 @@
+{
+  "description": "Confirm new middleman-model endpoints are live",
+  "checks": [
+    {
+      "type": "api_returns",
+      "url": "/health",
+      "status": 200,
+      "description": "API /health returns 200"
+    },
+    {
+      "type": "api_returns",
+      "url": "/agent/inventory/browse",
+      "status": 401,
+      "description": "API /agent/inventory/browse returns 401"
+    },
+    {
+      "type": "api_returns",
+      "url": "/api/partners/test-id/reassign",
+      "status": 401,
+      "description": "API /api/partners/test-id/reassign returns 401"
+    },
+    {
+      "type": "api_returns",
+      "url": "/api/team/members/test-id/ownership-summary",
+      "status": 401,
+      "description": "API /api/team/members/test-id/ownership-summary returns 401"
+    },
+    {
+      "type": "api_returns",
+      "url": "/api/deals/test-id/commission-entries",
+      "status": 401,
+      "description": "API /api/deals/test-id/commission-entries returns 401"
+    }
+  ]
+}

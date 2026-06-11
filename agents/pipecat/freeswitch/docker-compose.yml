@@ -1,0 +1,16 @@
+version: "3.8"
+
+services:
+  freeswitch:
+    image: drachtio/freeswitch:latest
+    container_name: panditji-freeswitch
+    restart: unless-stopped
+    network_mode: host          # Must share host network for SIP/RTP port access
+    volumes:
+      - ./conf:/etc/freeswitch/conf.d:ro
+    environment:
+      - SIP_PASSWORD=qM5OkVgMRpda2fzQFXLGFnG0BzsmtNku
+      - PIPECAT_URL=http://127.0.0.1:8765
+    ports:
+      - "5061:5061/tcp"         # SIP TLS (WhatsApp connects here)
+      - "16384-16484:16384-16484/udp"  # RTP media ports

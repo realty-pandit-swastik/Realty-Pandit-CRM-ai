@@ -1,0 +1,39 @@
+{
+  "description": "Tools, contact, projects, compare pages",
+  "checks": [
+    {
+      "type": "page_loads",
+      "page": "/tools",
+      "max_time": 5000,
+      "description": "/tools loads under 5000ms"
+    },
+    {
+      "type": "page_loads",
+      "page": "/contact",
+      "max_time": 5000,
+      "description": "/contact loads under 5000ms"
+    },
+    {
+      "type": "page_loads",
+      "page": "/projects",
+      "max_time": 5000,
+      "description": "/projects loads under 5000ms"
+    },
+    {
+      "type": "page_loads",
+      "page": "/compare",
+      "max_time": 5000,
+      "description": "/compare loads under 5000ms"
+    },
+    {
+      "type": "no_console_errors",
+      "page": "/tools",
+      "description": "No JS errors on /tools"
+    },
+    {
+      "type": "no_console_errors",
+      "page": "/contact",
+      "description": "No JS errors on /contact"
+    }
+  ]
+}

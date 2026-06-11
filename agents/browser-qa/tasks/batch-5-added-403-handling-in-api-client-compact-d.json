@@ -1,0 +1,36 @@
+{
+  "description": "Batch 5: Added 403 handling in API client, compact dashboard stat cards on mobile, responsive greeting and recent contacts grid",
+  "checks": [
+    {
+      "type": "no_console_errors",
+      "page": "/#dashboard",
+      "description": "No JS errors on /#dashboard"
+    },
+    {
+      "type": "responsive",
+      "page": "/#dashboard",
+      "description": "/#dashboard is responsive on mobile"
+    },
+    {
+      "type": "page_loads",
+      "page": "/#dashboard",
+      "max_time": 3000,
+      "description": "/#dashboard loads under 3000ms"
+    },
+    {
+      "type": "no_console_errors",
+      "page": "/#deals",
+      "description": "No JS errors on /#deals"
+    },
+    {
+      "type": "no_console_errors",
+      "page": "/#partners",
+      "description": "No JS errors on /#partners"
+    },
+    {
+      "type": "responsive",
+      "page": "/#partners",
+      "description": "/#partners is responsive on mobile"
+    }
+  ]
+}

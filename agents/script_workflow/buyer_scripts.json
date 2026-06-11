@@ -1,0 +1,23 @@
+{
+    "qualification": {
+        "budget": [
+            "What is your approximate budget for this purchase?",
+            "To help me find the best options, could you share your budget range?",
+            "Are you looking for something around 50L, 1Cr, or higher?"
+        ],
+        "location": [
+            "Which specific area or locality in Noida are you interested in?",
+            "Do you have a preferred sector or location?",
+            "Are you looking near the Metro station or highway?"
+        ],
+        "type": [
+            "Are you looking for a ready-to-move Flat or Under Construction?",
+            "Are you interested in a Plot, Villa, or Apartment?",
+            "Is this for Investment or End-use?"
+        ]
+    },
+    "fallback": {
+        "unknown": "I didn't quite catch that. Could you please clarify?",
+        "agent_handover": "I think it's best if my senior colleague talks to you. Arranging a call shortly."
+    }
+}

@@ -1,0 +1,43 @@
+{
+  "description": "Phase C website Group 2 fixes — verify terms page, blog page SSR, layout overflow, and overall health",
+  "checks": [
+    {
+      "type": "page_loads",
+      "page": "/terms",
+      "max_time": 8000,
+      "description": "/terms loads under 8000ms"
+    },
+    {
+      "type": "no_console_errors",
+      "page": "/terms",
+      "description": "No JS errors on /terms"
+    },
+    {
+      "type": "page_loads",
+      "page": "/blog",
+      "max_time": 5000,
+      "description": "/blog loads under 5000ms"
+    },
+    {
+      "type": "no_console_errors",
+      "page": "/blog",
+      "description": "No JS errors on /blog"
+    },
+    {
+      "type": "no_console_errors",
+      "page": "/",
+      "description": "No JS errors on /"
+    },
+    {
+      "type": "no_console_errors",
+      "page": "/properties",
+      "description": "No JS errors on /properties"
+    },
+    {
+      "type": "api_returns",
+      "url": "/health",
+      "status": 200,
+      "description": "API /health returns 200"
+    }
+  ]
+}

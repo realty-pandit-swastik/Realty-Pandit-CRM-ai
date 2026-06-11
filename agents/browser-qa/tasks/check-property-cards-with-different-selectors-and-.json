@@ -1,0 +1,51 @@
+{
+  "description": "Check property cards with different selectors and test API response",
+  "checks": [
+    {
+      "type": "element_count",
+      "page": "/properties",
+      "selector": "article",
+      "min": 1,
+      "description": "1+ \"article\" on /properties"
+    },
+    {
+      "type": "element_count",
+      "page": "/properties",
+      "selector": ".property-card",
+      "min": 1,
+      "description": "1+ \".property-card\" on /properties"
+    },
+    {
+      "type": "element_count",
+      "page": "/properties",
+      "selector": "[class*='card']",
+      "min": 1,
+      "description": "1+ \"[class*='card']\" on /properties"
+    },
+    {
+      "type": "element_count",
+      "page": "/properties",
+      "selector": "[class*='Card']",
+      "min": 1,
+      "description": "1+ \"[class*='Card']\" on /properties"
+    },
+    {
+      "type": "api_returns",
+      "url": "/public/master/configurations",
+      "status": 200,
+      "description": "API /public/master/configurations returns 200"
+    },
+    {
+      "type": "api_returns",
+      "url": "/public/master/categories",
+      "status": 200,
+      "description": "API /public/master/categories returns 200"
+    },
+    {
+      "type": "api_returns",
+      "url": "/public/properties?limit=5",
+      "status": 200,
+      "description": "API /public/properties?limit=5 returns 200"
+    }
+  ]
+}

@@ -1,0 +1,28 @@
+{
+  "description": "Full leads section check - verify all leads load, no errors, editable",
+  "checks": [
+    {
+      "type": "no_console_errors",
+      "page": "/leads",
+      "description": "No JS errors on /leads"
+    },
+    {
+      "type": "page_loads",
+      "page": "/leads",
+      "max_time": 5000,
+      "description": "/leads loads under 5000ms"
+    },
+    {
+      "type": "api_returns",
+      "url": "/api/leads/recent-external",
+      "status": 200,
+      "description": "API /api/leads/recent-external returns 200"
+    },
+    {
+      "type": "api_returns",
+      "url": "/api/leads/by-source",
+      "status": 200,
+      "description": "API /api/leads/by-source returns 200"
+    }
+  ]
+}

@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+*.egg-info/
+
+# Environment
+.env
+.env.local
+
+# Generated release tag (written at deploy time by scripts/write-release.sh)
+.release.txt
+
+# Logs
+*.log

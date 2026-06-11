@@ -1,0 +1,35 @@
+{
+  "description": "Partner portal: Browse page loads, My Inventory tab still works, deal detail loads",
+  "checks": [
+    {
+      "type": "page_loads",
+      "page": "/agent/inventory/browse",
+      "max_time": 5000,
+      "description": "/agent/inventory/browse loads under 5000ms"
+    },
+    {
+      "type": "page_loads",
+      "page": "/agent/inventory",
+      "max_time": 5000,
+      "description": "/agent/inventory loads under 5000ms"
+    },
+    {
+      "type": "page_loads",
+      "page": "/agent/dashboard",
+      "max_time": 5000,
+      "description": "/agent/dashboard loads under 5000ms"
+    },
+    {
+      "type": "page_loads",
+      "page": "/agent/login",
+      "max_time": 5000,
+      "description": "/agent/login loads under 5000ms"
+    },
+    {
+      "type": "page_loads",
+      "page": "/",
+      "max_time": 5000,
+      "description": "/ loads under 5000ms"
+    }
+  ]
+}

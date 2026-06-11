@@ -1,0 +1,56 @@
+{
+  "description": "Phase 5: Full deal management system - WhatsApp bot creates deals via deal_service, notifications on all events, visibility masking, 6 new WhatsApp templates, partner deal endpoints with masking",
+  "checks": [
+    {
+      "type": "api_returns",
+      "url": "/health",
+      "status": 200,
+      "description": "API /health returns 200"
+    },
+    {
+      "type": "api_returns",
+      "url": "/api/deals",
+      "status": 401,
+      "description": "API /api/deals returns 401"
+    },
+    {
+      "type": "api_returns",
+      "url": "/api/deals/pipeline",
+      "status": 401,
+      "description": "API /api/deals/pipeline returns 401"
+    },
+    {
+      "type": "api_returns",
+      "url": "/agent/deals",
+      "status": 401,
+      "description": "API /agent/deals returns 401"
+    },
+    {
+      "type": "no_console_errors",
+      "page": "/",
+      "description": "No JS errors on /"
+    },
+    {
+      "type": "no_console_errors",
+      "page": "/contact",
+      "description": "No JS errors on /contact"
+    },
+    {
+      "type": "no_console_errors",
+      "page": "/properties",
+      "description": "No JS errors on /properties"
+    },
+    {
+      "type": "page_loads",
+      "page": "/",
+      "max_time": 5000,
+      "description": "/ loads under 5000ms"
+    },
+    {
+      "type": "page_loads",
+      "page": "/properties",
+      "max_time": 8000,
+      "description": "/properties loads under 8000ms"
+    }
+  ]
+}

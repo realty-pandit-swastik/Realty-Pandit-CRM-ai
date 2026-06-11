@@ -1,0 +1,32 @@
+{
+  "description": "Fixed agent deals form UI - text visibility, error display, type mismatch",
+  "checks": [
+    {
+      "type": "no_console_errors",
+      "page": "/agent/deals",
+      "description": "No JS errors on /agent/deals"
+    },
+    {
+      "type": "page_loads",
+      "page": "/agent/deals",
+      "max_time": 5000,
+      "description": "/agent/deals loads under 5000ms"
+    },
+    {
+      "type": "responsive",
+      "page": "/agent/deals",
+      "description": "/agent/deals is responsive on mobile"
+    },
+    {
+      "type": "element_exists",
+      "page": "/agent/deals",
+      "selector": "button",
+      "description": "Element \"button\" exists on /agent/deals"
+    },
+    {
+      "type": "no_console_errors",
+      "page": "/agent/dashboard",
+      "description": "No JS errors on /agent/dashboard"
+    }
+  ]
+}

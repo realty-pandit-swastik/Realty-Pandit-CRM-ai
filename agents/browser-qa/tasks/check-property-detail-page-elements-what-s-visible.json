@@ -1,0 +1,35 @@
+{
+  "description": "Check property detail page elements - what's visible when clicking a property",
+  "checks": [
+    {
+      "type": "element_exists",
+      "page": "/properties",
+      "selector": "a[href*='/properties/']",
+      "description": "Element \"a[href*='/properties/']\" exists on /properties"
+    },
+    {
+      "type": "api_returns",
+      "url": "/public/properties",
+      "status": 200,
+      "description": "API /public/properties returns 200"
+    },
+    {
+      "type": "api_returns",
+      "url": "/public/featured-properties",
+      "status": 200,
+      "description": "API /public/featured-properties returns 200"
+    },
+    {
+      "type": "api_returns",
+      "url": "/public/master/categories",
+      "status": 200,
+      "description": "API /public/master/categories returns 200"
+    },
+    {
+      "type": "api_returns",
+      "url": "/public/master/configurations",
+      "status": 200,
+      "description": "API /public/master/configurations returns 200"
+    }
+  ]
+}

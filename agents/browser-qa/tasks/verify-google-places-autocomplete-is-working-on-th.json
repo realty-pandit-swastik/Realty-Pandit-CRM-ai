@@ -1,0 +1,22 @@
+{
+  "description": "Verify Google Places autocomplete is working on the /properties page",
+  "checks": [
+    {
+      "type": "no_console_errors",
+      "page": "/properties",
+      "description": "No JS errors on /properties"
+    },
+    {
+      "type": "element_exists",
+      "page": "/properties",
+      "selector": "input[aria-label='Search by location, city, locality...']",
+      "description": "Element \"input[aria-label='Search by location, city, locality...']\" exists on /properties"
+    },
+    {
+      "type": "element_exists",
+      "page": "/properties",
+      "selector": "input[placeholder='Search by location, city, locality...']",
+      "description": "Element \"input[placeholder='Search by location, city, locality...']\" exists on /properties"
+    }
+  ]
+}

@@ -1,0 +1,22 @@
+{
+  "description": "Batch 2: Fixed video upload - backend now accepts video/mp4, video/webm, video/quicktime. Videos stored to disk, URLs saved to video_urls field. Delete route handles both images and videos.",
+  "checks": [
+    {
+      "type": "api_returns",
+      "url": "/health",
+      "status": 200,
+      "description": "API /health returns 200"
+    },
+    {
+      "type": "no_console_errors",
+      "page": "/",
+      "description": "No JS errors on /"
+    },
+    {
+      "type": "page_loads",
+      "page": "/",
+      "max_time": 3000,
+      "description": "/ loads under 3000ms"
+    }
+  ]
+}

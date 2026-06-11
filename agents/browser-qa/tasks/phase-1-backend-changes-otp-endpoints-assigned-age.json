@@ -1,0 +1,29 @@
+{
+  "description": "Phase 1 backend changes: OTP endpoints, assigned_agent in detail, uploader_name in list, schedule-visit agent notification",
+  "checks": [
+    {
+      "type": "api_returns",
+      "url": "/public/properties?limit=1",
+      "status": 200,
+      "description": "API /public/properties?limit=1 returns 200"
+    },
+    {
+      "type": "api_returns",
+      "url": "/public/properties/1",
+      "status": 200,
+      "description": "API /public/properties/1 returns 200"
+    },
+    {
+      "type": "api_returns",
+      "url": "/public/schedule-visit",
+      "status": 405,
+      "description": "API /public/schedule-visit returns 405"
+    },
+    {
+      "type": "api_returns",
+      "url": "/health",
+      "status": 200,
+      "description": "API /health returns 200"
+    }
+  ]
+}

@@ -1,0 +1,44 @@
+{
+  "description": "Verify Batch 3 - video filtering, login responsive, search type, aria-labels",
+  "checks": [
+    {
+      "type": "no_console_errors",
+      "page": "/properties",
+      "description": "No JS errors on /properties"
+    },
+    {
+      "type": "no_console_errors",
+      "page": "/login",
+      "description": "No JS errors on /login"
+    },
+    {
+      "type": "responsive",
+      "page": "/login",
+      "description": "/login is responsive on mobile"
+    },
+    {
+      "type": "element_exists",
+      "page": "/properties",
+      "selector": "input[type='search']",
+      "description": "Element \"input[type='search']\" exists on /properties"
+    },
+    {
+      "type": "element_exists",
+      "page": "/",
+      "selector": "button[aria-label]",
+      "description": "Element \"button[aria-label]\" exists on /"
+    },
+    {
+      "type": "element_exists",
+      "page": "/",
+      "selector": "input[aria-label]",
+      "description": "Element \"input[aria-label]\" exists on /"
+    },
+    {
+      "type": "page_loads",
+      "page": "/properties",
+      "max_time": 5000,
+      "description": "/properties loads under 5000ms"
+    }
+  ]
+}

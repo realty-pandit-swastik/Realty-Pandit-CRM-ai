@@ -1,0 +1,27 @@
+{
+  "description": "Partner agent inventory page rebuilt as multi-step guided wizard matching internal workflow — progress bar, step-by-step (intent → type → location → specs → pricing → description → confirm → success)",
+  "checks": [
+    {
+      "type": "no_console_errors",
+      "page": "/agent/inventory",
+      "description": "No JS errors on /agent/inventory"
+    },
+    {
+      "type": "page_loads",
+      "page": "/agent/inventory",
+      "max_time": 3000,
+      "description": "/agent/inventory loads under 3000ms"
+    },
+    {
+      "type": "element_exists",
+      "page": "/agent/inventory",
+      "selector": "h1",
+      "description": "Element \"h1\" exists on /agent/inventory"
+    },
+    {
+      "type": "responsive",
+      "page": "/agent/inventory",
+      "description": "/agent/inventory is responsive on mobile"
+    }
+  ]
+}
