@@ -90,11 +90,24 @@ export class LLMService {
 
         const model = this.getModel();
 
+        // P0 reliability (2026-06-11): retry transient Gemini failures (timeout/429/5xx) with backoff
+        // BEFORE the circuit breaker falls back. Most "high traffic" replies were single transient
+        // failures; 3 quick attempts auto-recover them so the customer's message isn't lost.
         return geminiCircuit.call(
             async () => {
-                const result = await model.generateContent(prompt);
-                const response = await result.response;
-                return response.text().trim();
+                let lastErr: unknown;
+                for (let attempt = 1; attempt <= 3; attempt++) {
+                    try {
+                        const result = await model.generateContent(prompt);
+                        const response = await result.response;
+                        return response.text().trim();
+                    } catch (err) {
+                        lastErr = err;
+                        logger.warn(`[LLMService] Gemini attempt ${attempt}/3 failed: ${(err as Error)?.message || err}`);
+                        if (attempt < 3) await new Promise(r => setTimeout(r, 400 * attempt));
+                    }
+                }
+                throw lastErr; // exhausted retries → let the circuit count it + return fallback
             },
             fallback
         );
