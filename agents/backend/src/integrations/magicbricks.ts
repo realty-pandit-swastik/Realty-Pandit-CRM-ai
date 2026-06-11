@@ -6,17 +6,297 @@ import logger from '../utils/logger';
 import { normalizePhone } from '../utils/phone';
 import { sendBuyerConfirmationWhatsApp, sendBuyerConfirmationEmail } from '../services/lead_notifications';
 import { assignViaRoundRobin, assignViaPropertyUploader } from '../services/lead_assignment';
+import { ensureDealForLead } from '../services/ensure_deal';
+import { foldLegacyDemand } from '../utils/demand_canonical';
+import { resolveDemandTaxonomy } from '../utils/demand_taxonomy';
+import { extractLocationFromMsg } from '../utils/parse_lead_location';
+import { geocodeAddress } from '../utils/geocode';
 
 const router = Router();
-router.use(apiKeyAuth);
 
 /**
- * MagicBricks Lead Webhook Adapter.
- * Maps MagicBricks lead format to our SSOT.
+ * MagicBricks PUSH webhook — MagicBricks calls this endpoint with lead data.
+ * Auth: api_key query param (NOT X-API-Key header).
+ * Supports both GET and POST (MagicBricks sends GET with query params).
  *
- * MagicBricks typically sends: { buyer_name, buyer_phone, buyer_email, property_id, city, budget_range, looking_for }
+ * MagicBricks fields: mobile, name, email, msg, project, City, isd, dt, time, source
+ * Our response: plain text "Success: Lead punched in the CRM" / "Failure: Lead already exist"
+ *
+ * Register this endpoint with MagicBricks as:
+ *   https://api.realtypandit.in/external/magicbricks/push
+ * They will append: ?api_key=<MAGICBRICKS_API_KEY>&mobile=9999...&name=...
  */
-router.post('/webhook', async (req, res) => {
+async function handleMagicBricksPush(req: any, res: any) {
+    const params = { ...req.query, ...req.body };
+
+    const {
+        api_key, mobile, name, email, msg, project, City, city, isd, dt, source: src,
+        looking_for, property_for, property_type, prop_type, bhk, bedroom, unit_type,
+        budget, min_budget, max_budget,
+    } = params;
+
+    // Validate api_key
+    const expectedKey = process.env.MAGICBRICKS_API_KEY;
+    if (!expectedKey) {
+        logger.error('[MagicBricks] MAGICBRICKS_API_KEY not configured');
+        return res.status(500).send('Service not configured');
+    }
+    if (api_key !== expectedKey) {
+        logger.warn('[MagicBricks] Invalid api_key attempt:', api_key);
+        return res.status(401).send('Unauthorized');
+    }
+
+    const rawPhone = mobile || params.phone;
+    const phoneNumber = normalizePhone(rawPhone ? String(rawPhone) : '');
+    if (!phoneNumber) {
+        logger.warn('[MagicBricks] Missing or invalid mobile:', rawPhone);
+        return res.status(400).send('mobile is required');
+    }
+
+    logger.info('[MagicBricks] Push lead:', JSON.stringify(params));
+
+    try {
+        const tenant = await prisma.tenant.findFirst();
+        if (!tenant) return res.status(500).send('System not configured');
+
+        // Check duplicate
+        const existing = await prisma.contact.findUnique({ where: { phone_number: phoneNumber } });
+        if (existing) {
+            // Update last interaction + re-log the enquiry. If the new msg carries a granular area and the
+            // stored preferred_location is blank or just the city, upgrade it (+ geocode) — never downgrade.
+            const reGranular = extractLocationFromMsg(msg ? String(msg) : null);
+            const updateData: any = { last_channel: 'magicbricks', last_interaction: new Date() };
+            const stored = (existing.preferred_location || '').trim();
+            const cityVal = String(City || city || '').trim();
+            if (reGranular && (!stored || stored.toLowerCase() === cityVal.toLowerCase())) {
+                updateData.preferred_location = reGranular;
+            }
+            await prisma.contact.update({ where: { phone_number: phoneNumber }, data: updateData });
+            if (updateData.preferred_location) {
+                geocodeAddress(updateData.preferred_location)
+                    .then(geo => geo && prisma.contact.update({
+                        where: { phone_number: phoneNumber },
+                        data: { preferred_lat: geo.lat, preferred_lng: geo.lng },
+                    }))
+                    .catch(err => logger.warn('[MagicBricks] geocode failed:', (err as Error).message));
+            }
+            await prisma.interaction.create({
+                data: {
+                    tenant_id: tenant.id,
+                    phone_number: phoneNumber,
+                    channel: 'magicbricks',
+                    direction: 'inbound',
+                    event_type: 'lead_capture',
+                    content: msg ? String(msg) : `MagicBricks re-enquiry for ${project || 'property'}`,
+                    metadata: {
+                        source: 'magicbricks', project, city: City || city,
+                        looking_for: looking_for || property_for,
+                        property_type: property_type || prop_type,
+                        bhk: bhk || bedroom,
+                        budget_max: max_budget || budget,
+                        isd, dt,
+                        original_data: params,
+                    },
+                },
+            });
+            logger.info(`[MagicBricks] Duplicate lead: ${phoneNumber}`);
+            return res.send('Failure: Lead already exist');
+        }
+
+        const leadCity = String(City || city || '').trim() || null;
+        const leadName = name ? String(name).trim() : null;
+        const leadEmail = email ? String(email).trim() : null;
+        const notes = msg ? String(msg).trim() : null;
+        const projectName = project ? String(project).trim() : null;
+        // MagicBricks puts the real area only inside `msg` ("...for Sale in Sector 6 Vaishali, Ghaziabad...");
+        // the `City` field is just the city. Capture the granular location, falling back to the city.
+        const granularLocation = extractLocationFromMsg(notes) || leadCity;
+
+        // Intent: buy / rent
+        const rawIntent = String(looking_for || property_for || '').toLowerCase();
+        let intent: string | null = null;
+        if (rawIntent.includes('rent') || rawIntent.includes('lease')) intent = 'rent';
+        else if (rawIntent.includes('buy') || rawIntent.includes('sale') || rawIntent.includes('purchase')) intent = 'buy';
+        else intent = 'buy'; // default for MagicBricks enquiries
+
+        // Property type: residential / commercial
+        const rawPropType = String(property_type || prop_type || unit_type || '').toLowerCase();
+        let mappedPropertyType: string | null = null;
+        if (rawPropType.includes('commercial') || rawPropType.includes('office') || rawPropType.includes('shop')) {
+            mappedPropertyType = 'commercial';
+        } else if (rawPropType.includes('residential') || rawPropType.includes('apartment') || rawPropType.includes('flat') || rawPropType.includes('villa') || rawPropType.includes('plot')) {
+            mappedPropertyType = 'residential';
+        } else if (rawPropType) {
+            mappedPropertyType = rawPropType;
+        }
+
+        // BHK — extract integer from "3 BHK", "3", "3BHK", etc.
+        const rawBhk = String(bhk || bedroom || '').trim();
+        const bhkValue = rawBhk || null;
+        const bhkInt = rawBhk ? (parseInt(rawBhk.replace(/\D.*/, ''), 10) || null) : null;
+
+        // Classification slugs derived from property type
+        let demandMainCategory: string | null = null;
+        let demandCategory: string | null = null;
+        let demandTypeSlug: string | null = null;
+        const lowerPropType = (property_type || prop_type || unit_type || '').toLowerCase();
+        if (lowerPropType.includes('flat') || lowerPropType.includes('apartment')) {
+            demandMainCategory = 'residential'; demandCategory = 'apartment'; demandTypeSlug = 'flat';
+        } else if (lowerPropType.includes('villa')) {
+            demandMainCategory = 'residential'; demandCategory = 'individual_housing'; demandTypeSlug = 'villa';
+        } else if (lowerPropType.includes('house') || lowerPropType.includes('independent')) {
+            demandMainCategory = 'residential'; demandCategory = 'individual_housing'; demandTypeSlug = 'independent_house';
+        } else if (lowerPropType.includes('plot') || lowerPropType.includes('land')) {
+            demandMainCategory = 'residential'; demandCategory = 'plot_land'; demandTypeSlug = 'residential_plot';
+        } else if (lowerPropType.includes('office')) {
+            demandMainCategory = 'commercial'; demandCategory = 'office'; demandTypeSlug = 'commercial_office_space';
+        } else if (lowerPropType.includes('shop') || lowerPropType.includes('retail')) {
+            demandMainCategory = 'commercial'; demandCategory = 'retail'; demandTypeSlug = 'retail_shop';
+        } else if (lowerPropType.includes('commercial')) {
+            demandMainCategory = 'commercial';
+        } else if (lowerPropType.includes('residential') || mappedPropertyType === 'residential') {
+            demandMainCategory = 'residential';
+            // MagicBricks sends generic "Residential" — extract specific type from msg
+            const msgLower = String(msg || '').toLowerCase();
+            if (msgLower.includes('builder floor')) {
+                demandCategory = 'apartment'; demandTypeSlug = 'builder_floor';
+            } else if (msgLower.includes('penthouse')) {
+                demandCategory = 'apartment'; demandTypeSlug = 'penthouse';
+            } else if (msgLower.includes('studio')) {
+                demandCategory = 'apartment'; demandTypeSlug = 'studio_apartment';
+            } else if (msgLower.includes('villa')) {
+                demandCategory = 'individual_housing'; demandTypeSlug = 'villa';
+            } else if (msgLower.includes('independent house') || msgLower.includes('row house') || msgLower.includes('bungalow')) {
+                demandCategory = 'individual_housing'; demandTypeSlug = 'independent_house';
+            } else if (msgLower.includes('plot') || msgLower.includes('land')) {
+                demandCategory = 'plot_land'; demandTypeSlug = 'residential_plot';
+            } else if (msgLower.includes('multistorey') || msgLower.includes('multi storey') || msgLower.includes('apartment') || msgLower.includes('flat')) {
+                demandCategory = 'apartment'; demandTypeSlug = 'flat';
+            } else {
+                // Residential but no specific type found — default to apartment
+                demandCategory = 'apartment'; demandTypeSlug = 'flat';
+            }
+        }
+
+        // Budget
+        const budgetMax = max_budget ? parseFloat(String(max_budget).replace(/[^\d.]/g, ''))
+            : budget ? parseFloat(String(budget).replace(/[^\d.]/g, '')) : null;
+        const budgetMin = min_budget ? parseFloat(String(min_budget).replace(/[^\d.]/g, '')) : null;
+
+        // Stage 3 (2026-05-31): resolve the requirement into the canonical taxonomy node.
+        const demandTax = await resolveDemandTaxonomy({ main_category: demandMainCategory || undefined, property_type: demandTypeSlug || mappedPropertyType || undefined, bhk: bhkInt ?? null });
+
+        const contact = await prisma.contact.create({
+            data: {
+                phone_number: phoneNumber,
+                name: leadName,
+                email: leadEmail,
+                source: 'magicbricks',
+                contact_type: 'BUYER',
+                intent,
+                preferred_location: granularLocation,
+                property_type: mappedPropertyType,
+                budget_max: budgetMax,
+                budget_min: budgetMin,
+                demand_taxonomy_node_id: demandTax.demand_taxonomy_node_id ?? undefined,
+                needs_taxonomy_review: demandTax.needs_review || undefined,
+                // Persist legacy classification from the resolved node (2026-05-31).
+                sub_category_id: demandTax.sub_category_id ?? undefined,
+                category_id: demandTax.category_id ?? undefined,
+                type_id: demandTax.type_id ?? undefined,
+                // Phase 1 dual-write — canonical demand SoT.
+                ...(foldLegacyDemand({ demand_bhk: bhkInt }) as any),
+                tenant_id: tenant.id,
+                last_channel: 'magicbricks',
+                last_interaction: new Date(),
+                lead_status: 'warm',
+            },
+        });
+
+        // Geocode the granular location for map + proximity matching — fire-and-forget so it never blocks or
+        // breaks the webhook response. geocodeAddress is non-throwing; lat/lng stay null on failure (as before).
+        if (granularLocation) {
+            geocodeAddress(granularLocation)
+                .then(geo => geo && prisma.contact.update({
+                    where: { phone_number: phoneNumber },
+                    data: { preferred_lat: geo.lat, preferred_lng: geo.lng },
+                }))
+                .catch(err => logger.warn('[MagicBricks] geocode failed:', (err as Error).message));
+        }
+
+        const intentLabel = intent === 'rent' ? 'Rent' : 'Buy';
+        const typeLabel = mappedPropertyType || 'Property';
+        const bhkLabel = bhkValue ? `${bhkValue} BHK ` : '';
+        await prisma.interaction.create({
+            data: {
+                tenant_id: tenant.id,
+                phone_number: phoneNumber,
+                channel: 'magicbricks',
+                direction: 'inbound',
+                event_type: 'lead_capture',
+                content: notes || `MagicBricks lead: ${leadName || 'Unknown'} wants to ${intentLabel} ${bhkLabel}${typeLabel} in ${leadCity || 'N/A'}`,
+                metadata: {
+                    source: 'magicbricks',
+                    project: projectName,
+                    city: leadCity,
+                    intent,
+                    property_type: mappedPropertyType,
+                    bhk: bhkValue,
+                    budget_min: budgetMin,
+                    budget_max: budgetMax,
+                    isd, dt,
+                    original_data: params,
+                },
+            },
+        });
+
+        // Smart assignment: property uploader if project matches, else round-robin
+        let agentId: string | null = null;
+        if (projectName) {
+            agentId = await assignViaPropertyUploader(projectName);
+        }
+        if (!agentId) {
+            agentId = await assignViaRoundRobin();
+        }
+        if (agentId) {
+            await prisma.contact.update({ where: { phone_number: phoneNumber }, data: { assigned_agent_id: agentId } });
+            const { createQualifyTask } = await import('../services/workflow_task_service');
+            createQualifyTask({ tenantId: tenant.id, contactPhone: phoneNumber, assignedTo: agentId, source: 'magicbricks' })
+                .catch(err => logger.warn('[MagicBricks] Workflow task failed:', (err as Error).message));
+        }
+
+        // Auto-create NEW deal so AI qualification cadence kicks in (B1).
+        ensureDealForLead({
+            contactPhone: phoneNumber,
+            source: 'magicbricks',
+            assignedAgentId: agentId ?? null,
+        }).catch((err) => {
+            logger.error(`[MagicBricks] ensureDealForLead failed for ${phoneNumber}: ${(err as Error).message}`);
+        });
+
+        sendBuyerConfirmationWhatsApp(phoneNumber, leadName, 'magicbricks')
+            .catch(err => logger.warn('[MagicBricks] Buyer WA failed:', (err as Error).message));
+        if (leadEmail) {
+            sendBuyerConfirmationEmail(leadEmail, leadName)
+                .catch(err => logger.warn('[MagicBricks] Buyer email failed:', (err as Error).message));
+        }
+
+        logger.info(`[MagicBricks] Lead captured: ${phoneNumber} (${leadName || 'unnamed'})`);
+        return res.send('Success: Lead punched in the CRM');
+    } catch (error) {
+        logger.error('[MagicBricks] Error:', error);
+        return res.status(500).send('Internal error');
+    }
+}
+
+// MagicBricks PUSH endpoint — GET + POST (no header auth, uses api_key query param)
+router.get('/push', handleMagicBricksPush);
+router.post('/push', handleMagicBricksPush);
+
+/**
+ * Existing POST /webhook — kept for backward compat. Uses X-API-Key header.
+ */
+router.post('/webhook', apiKeyAuth, async (req, res) => {
     logger.info('[MagicBricks] Incoming lead:', JSON.stringify(req.body));
 
     const {
@@ -92,7 +372,6 @@ router.post('/webhook', async (req, res) => {
             }
         });
 
-        // Smart assignment: use property uploader if property_id present, else round-robin
         const isNew = !contact.assigned_agent_id;
         if (isNew) {
             let agentId: string | null = null;
@@ -107,14 +386,21 @@ router.post('/webhook', async (req, res) => {
                     where: { phone_number: phoneNumber },
                     data: { assigned_agent_id: agentId },
                 });
-                // Create workflow qualification task
                 const { createQualifyTask } = await import('../services/workflow_task_service');
                 createQualifyTask({ tenantId: tenant.id, contactPhone: phoneNumber, assignedTo: agentId, source: 'magicbricks' })
                     .catch(err => logger.warn('[MagicBricks] Workflow task failed:', (err as Error).message));
             }
+
+            // Auto-create NEW deal so AI qualification cadence kicks in (B1 — legacy /webhook path).
+            ensureDealForLead({
+                contactPhone: phoneNumber,
+                source: 'magicbricks',
+                assignedAgentId: agentId,
+            }).catch((err) => {
+                logger.error(`[MagicBricks] ensureDealForLead failed for ${phoneNumber}: ${(err as Error).message}`);
+            });
         }
 
-        // Notify buyer immediately (fire-and-forget)
         sendBuyerConfirmationWhatsApp(phoneNumber, leadName || null, 'magicbricks')
             .catch(err => logger.warn('[MagicBricks] Buyer WA failed:', err.message));
         if (leadEmail) {

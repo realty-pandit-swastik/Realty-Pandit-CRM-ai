@@ -1,6 +1,7 @@
 
 import prisma from '../db';
 import logger from '../utils/logger';
+import { normalizePhone } from '../utils/phone';
 
 interface VapiPayload {
     message: {
@@ -204,5 +205,76 @@ export class VoiceService {
             const decisionEngine = new DecisionEngine();
             await decisionEngine.handleMissedCall(contact.phone_number, contact.phone_number);
         }
+    }
+
+    // ─── Pipecat (WhatsApp Calling API) ────────────────────────────────────────
+    public async savePipecatCallRecord(params: {
+        call_id: string;
+        caller_number: string;
+        transcript: string;
+    }): Promise<void> {
+        const { call_id, transcript } = params;
+        // Meta's webhook sends numbers without the "+" prefix (e.g. "919958860411"),
+        // but DB records are stored in E.164 form (+91...). Without normalizing,
+        // findUnique misses existing contacts and creates duplicate rows with
+        // contact_type UNKNOWN, losing team-member / client classifications.
+        const caller_number = normalizePhone(params.caller_number) || params.caller_number;
+        const now = new Date();
+
+        const tenant = await prisma.tenant.findFirst();
+        if (!tenant) return;
+
+        let contact = await prisma.contact.findUnique({
+            where: { phone_number: caller_number }
+        });
+
+        if (!contact) {
+            contact = await prisma.contact.create({
+                data: {
+                    phone_number: caller_number,
+                    tenant_id: tenant.id,
+                    source: 'voice',
+                    lead_status: 'warm',
+                    contact_type: 'UNKNOWN',
+                }
+            });
+        }
+
+        await prisma.voiceCall.create({
+            data: {
+                tenant_id: tenant.id,
+                phone_number: caller_number,
+                call_sid: call_id,
+                direction: 'inbound',
+                call_status: 'completed',
+                duration: 0,
+                transcript: transcript,
+                ai_call_summary: transcript.split('\n').slice(-3).join(' '),
+                started_at: now,
+                ended_at: now,
+            }
+        });
+
+        await prisma.interaction.create({
+            data: {
+                tenant_id: tenant.id,
+                phone_number: caller_number,
+                channel: 'voice',
+                direction: 'inbound',
+                event_type: 'whatsapp_call',
+                content: 'WhatsApp voice call via Panditji AI',
+                metadata: { call_id, source: 'pipecat' },
+            }
+        });
+
+        await prisma.contact.update({
+            where: { phone_number: caller_number },
+            data: {
+                last_channel: 'voice',
+                last_interaction: now,
+            }
+        });
+
+        logger.info(`[VoiceService] Pipecat call saved for ${caller_number}`);
     }
 }

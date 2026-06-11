@@ -1,0 +1,122 @@
+{
+  "version": "7.1",
+  "data_api_version": "3.0",
+  "routing_model": {
+    "SEARCH_SCREEN": ["RESULT_SCREEN"],
+    "RESULT_SCREEN": []
+  },
+  "screens": [
+    {
+      "id": "SEARCH_SCREEN",
+      "title": "Find Properties",
+      "terminal": false,
+      "data": {
+        "cities": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string" },
+              "title": { "type": "string" }
+            }
+          },
+          "__example__": [{"id":"Delhi","title":"Delhi"},{"id":"Noida","title":"Noida"}]
+        },
+        "property_types": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string" },
+              "title": { "type": "string" }
+            }
+          },
+          "__example__": [{"id":"flat","title":"Flat"},{"id":"villa","title":"Villa"}]
+        }
+      },
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          { "type": "TextHeading", "text": "Property Search" },
+          {
+            "type": "Dropdown",
+            "name": "city",
+            "label": "City",
+            "required": true,
+            "data-source": "${data.cities}"
+          },
+          {
+            "type": "RadioButtonsGroup",
+            "name": "intent",
+            "label": "Purpose",
+            "required": true,
+            "data-source": [
+              { "id": "BUY", "title": "Buy" },
+              { "id": "RENT", "title": "Rent" }
+            ]
+          },
+          {
+            "type": "RadioButtonsGroup",
+            "name": "category",
+            "label": "Category",
+            "required": true,
+            "data-source": [
+              { "id": "residential", "title": "Residential" },
+              { "id": "commercial", "title": "Commercial" }
+            ]
+          },
+          {
+            "type": "Dropdown",
+            "name": "property_type",
+            "label": "Property Type",
+            "data-source": "${data.property_types}"
+          },
+          {
+            "type": "Dropdown",
+            "name": "bhk",
+            "label": "BHK",
+            "data-source": [
+              {"id": "1", "title": "1 BHK"},
+              {"id": "2", "title": "2 BHK"},
+              {"id": "3", "title": "3 BHK"},
+              {"id": "4", "title": "4+ BHK"}
+            ]
+          },
+          {
+            "type": "Footer",
+            "label": "Search",
+            "on-click-action": {
+              "name": "data_exchange",
+              "payload": {
+                "city": "${form.city}",
+                "intent": "${form.intent}",
+                "category": "${form.category}",
+                "property_type": "${form.property_type}",
+                "bhk": "${form.bhk}"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "RESULT_SCREEN",
+      "title": "Search Results",
+      "terminal": true,
+      "data": {
+        "result_message": { "type": "string", "__example__": "5 properties found! Check your WhatsApp." }
+      },
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          { "type": "TextBody", "text": "${data.result_message}" },
+          {
+            "type": "Footer",
+            "label": "Done",
+            "on-click-action": { "name": "complete", "payload": {} }
+          }
+        ]
+      }
+    }
+  ]
+}

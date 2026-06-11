@@ -8,6 +8,7 @@
  */
 
 import cron from 'node-cron';
+import * as SentrySDK from '@sentry/node';
 import prisma from '../db';
 import logger from '../utils/logger';
 import { notify, type NotifyRecipient } from './notify';
@@ -29,6 +30,16 @@ export function initNotificationCrons(): void {
             await sendTaskOverdueAlerts();
         } catch (err) {
             logger.error('[NotifCron] Task reminder error:', err);
+        }
+    });
+
+    // ─── Self-scheduled REMINDER tasks — every 5 min, precise at/before alerts (T8) ───
+    cron.schedule('*/5 * * * *', async () => {
+        try {
+            await sendReminderTaskAlerts();
+        } catch (err) {
+            logger.error('[NotifCron] Reminder task alert error:', err);
+            SentrySDK.captureException(err, { tags: { cron: 'reminder_task_alerts' } });
         }
     });
 
@@ -103,6 +114,107 @@ async function sendAppointmentReminders(): Promise<void> {
 
     if (appointments.length > 0) {
         logger.info(`[NotifCron] Sent ${appointments.length} appointment reminders`);
+    }
+}
+
+// ─── Self-scheduled REMINDER task alerts (T8) ────────────────────────────────
+// A team member can set a reminder on a deal (e.g. "customer asked for a callback
+// at 3:30pm"). They are notified once BEFORE (advance window) and once AT the due
+// time. Fired-state is tracked in task.stage_metadata to stay idempotent.
+// Exported so the ACTIVE scheduler (BullMQ scheduled_worker) can run it.
+// Historically this only ran via initNotificationCrons() → startLegacySchedulers()
+// which is the BullMQ-DOWN fallback — i.e. it never executed in normal prod.
+// See docs/plans/2026-05-18-google-calendar-task-reminder-sync.md
+export async function sendReminderTaskAlerts(): Promise<void> {
+    const now = new Date();
+
+    const tasks = await prisma.task.findMany({
+        where: {
+            task_type: 'REMINDER',
+            status: { in: ['TODO', 'IN_PROGRESS'] },
+            due_date: { gte: new Date(now.getTime() - 24 * 60 * 60 * 1000) }, // ignore very old
+        },
+        select: {
+            id: true, title: true, description: true, due_date: true,
+            assigned_to: true, deal_id: true, contact_phone: true, stage_metadata: true,
+        },
+    });
+
+    for (const task of tasks) {
+        const meta: any = task.stage_metadata || {};
+        const advanceMin: number = Number(meta.advance_minutes) > 0 ? Number(meta.advance_minutes) : 30;
+        const due = new Date(task.due_date);
+        const advanceAt = new Date(due.getTime() - advanceMin * 60 * 1000);
+
+        const fireAdvance = !meta.advance_fired && advanceAt <= now && due > now;
+        const fireDue = !meta.due_fired && due <= now;
+        if (!fireAdvance && !fireDue) continue;
+
+        const agent = await prisma.agent.findUnique({
+            where: { id: task.assigned_to },
+            select: { id: true, phone: true, email: true, name: true },
+        });
+        if (!agent) continue;
+
+        const recipient: NotifyRecipient = {
+            id: agent.id, type: 'agent', phone: agent.phone,
+            email: agent.email || undefined, name: agent.name,
+        };
+
+        const timeStr = due.toLocaleString('en-IN', {
+            timeZone: 'Asia/Kolkata', dateStyle: 'medium', timeStyle: 'short',
+        });
+
+        // Resolve the customer name for the WhatsApp/push body (the member
+        // entered name/phone/note when creating the reminder). Prefer the
+        // live contact name; fall back to the task title ("Follow-up: <name>").
+        let customerName: string | null = null;
+        if (task.contact_phone) {
+            const c = await prisma.contact.findUnique({
+                where: { phone_number: task.contact_phone },
+                select: { name: true },
+            });
+            customerName = c?.name || null;
+        }
+        if (!customerName) {
+            customerName = (task.title || '').replace(/^Follow-up:\s*/i, '').trim() || null;
+        }
+        const reminderData = {
+            task_id: task.id,
+            deal_id: task.deal_id || undefined,
+            agent_name: agent.name || undefined,
+            customer_name: customerName || undefined,
+            customer_phone: task.contact_phone || undefined,
+            note: task.description || undefined,
+        };
+
+        if (fireAdvance) {
+            notify('deal_reminder_due', [recipient], {
+                ...reminderData,
+                time_until: `in ${advanceMin} min (at ${timeStr})`,
+            });
+        }
+        if (fireDue) {
+            notify('deal_reminder_due', [recipient], {
+                ...reminderData,
+                time_until: `now (${timeStr})`,
+            });
+        }
+
+        await prisma.task.update({
+            where: { id: task.id },
+            data: {
+                stage_metadata: {
+                    ...meta,
+                    advance_fired: meta.advance_fired || fireAdvance,
+                    due_fired: meta.due_fired || fireDue,
+                },
+            },
+        });
+    }
+
+    if (tasks.length > 0) {
+        logger.info(`[NotifCron] Reminder alert sweep: scanned ${tasks.length} REMINDER tasks`);
     }
 }
 

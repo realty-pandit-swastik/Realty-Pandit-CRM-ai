@@ -1,13 +1,30 @@
 import rateLimit from 'express-rate-limit';
 
-// Auth routes - strict on /auth/login, but /auth/me is called frequently by the SPA
+/**
+ * Strict login-only limiter — applied solely to POST /auth/login.
+ * 5 attempts per IP per minute prevents credential stuffing while
+ * still allowing a human to retry a typo.
+ * NOTE: For multi-instance deployments (PM2 cluster / multiple nodes)
+ * replace the default memory store with a Redis store using rate-limit-redis
+ * so the window is shared across instances.
+ */
+export const loginLimiter = rateLimit({
+    windowMs: 60 * 1000, // 1 minute
+    max: 5,
+    message: { error: 'Too many login attempts. Please wait 1 minute before trying again.' },
+    standardHeaders: true,
+    legacyHeaders: false,
+    skipSuccessfulRequests: false,
+});
+
+// Auth routes - /auth/me is called frequently by the SPA, so a generous limit is fine here
 export const authLimiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
     max: 100,
-    message: { error: 'Too many login attempts. Please try again after 15 minutes.' },
+    message: { error: 'Too many requests. Please try again after 15 minutes.' },
     standardHeaders: true,
     legacyHeaders: false,
-    skip: (req) => req.path === '/me' || req.path === '/refresh', // don't rate-limit token refreshes
+    skip: (req) => req.path === '/me' || req.path === '/refresh' || req.path === '/csrf',
 });
 
 // Public API - generous for website browsing (properties page makes multiple API calls per load)

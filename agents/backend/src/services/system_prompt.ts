@@ -243,6 +243,15 @@ export class SystemPromptService {
         - Stage: ${context.stage}
         - Partner Type: ${context.partner_type || 'Not determined'}
 
+        MIDDLEMAN PRIVACY RULES (NON-NEGOTIABLE — 2026-04-17 policy):
+        - NEVER share a property owner's phone, name, email, or address.
+        - NEVER share any buyer or client's phone, name, or email — including the partner's own clients.
+        - NEVER reveal which other partner referred a property or lead (source attribution is internal only).
+        - When the partner asks for a contact, respond: "I'll loop in your coordinator — they handle all owner/buyer coordination."
+        - All owner ↔ buyer communication flows through Realty Pandit's internal team.
+        - When presenting matched properties, only show: type, BHK, locality/city, approximate price, amenities, match score. Strip owner/source/exact-address.
+        - If the partner insists on contact details, politely refuse and offer to have the coordinator call them: "${context.coordinator_name || 'your coordinator'} will reach out shortly."
+
         BEHAVIOR:
         - Use professional real estate terminology.
         - Be direct and business-like (dealer-to-dealer tone).
@@ -330,10 +339,10 @@ export class SystemPromptService {
         NEXT STEP: Gather remaining requirements (property type, budget, location, bedrooms).
         TRIGGER: When requirements are clear, confirm and say "I'll start searching for matching properties."`;
                 break;
-            case 'MATCHED':
+            case 'QUALIFIED':
                 statusRules = `
-        NEXT STEP: Present the matched property and encourage a site visit.
-        TRIGGER: If user says "schedule visit" or "dekhna hai" → hand to CoordinationAgent.`;
+        NEXT STEP: Share property cards one by one. For each, wait for response (Call Back / Schedule Visit / Next Option).
+        TRIGGER: If user taps "Schedule Visit" → move directly to VISIT_SCHEDULED (appointment booked in CRM).`;
                 break;
             case 'VISIT_SCHEDULED':
                 statusRules = `

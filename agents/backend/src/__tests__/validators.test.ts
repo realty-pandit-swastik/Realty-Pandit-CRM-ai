@@ -74,6 +74,27 @@ describe('Public Validators', () => {
             expect(result.success).toBe(false);
         });
 
+        // Regression: website forms must store E.164 so the lead opens in admin.
+        // See docs/plans/2026-05-17-website-phone-normalization-fix.md
+        it('normalizes bare 10-digit phone to +91 E.164', () => {
+            const result = contactSchema.safeParse({ name: 'Hitesh', phone: '9873333182' });
+            expect(result.success).toBe(true);
+            if (result.success) expect(result.data.phone).toBe('+919873333182');
+        });
+
+        it('normalizes 91-prefixed and +91 phone to canonical E.164', () => {
+            for (const input of ['919873333182', '+919873333182']) {
+                const result = contactSchema.safeParse({ name: 'X', phone: input });
+                expect(result.success).toBe(true);
+                if (result.success) expect(result.data.phone).toBe('+919873333182');
+            }
+        });
+
+        it('rejects a phone that cannot resolve to an Indian mobile', () => {
+            const result = contactSchema.safeParse({ name: 'X', phone: '+15868395952' });
+            expect(result.success).toBe(false);
+        });
+
         it('accepts with optional fields', () => {
             const result = contactSchema.safeParse({
                 name: 'Raj', phone: '+919876543210',
@@ -96,16 +117,66 @@ describe('Public Validators', () => {
     });
 
     describe('scheduleVisitSchema', () => {
-        it('accepts valid visit', () => {
+        // 5 days out, within the today..+30 window
+        const validDate = (() => {
+            const d = new Date(); d.setUTCDate(d.getUTCDate() + 5);
+            return d.toISOString().split('T')[0];
+        })();
+
+        it('accepts valid visit with date + time slot', () => {
             const result = scheduleVisitSchema.safeParse({
-                property_id: 'prop-123', name: 'Priya', phone: '+919876543210'
+                property_id: 'prop-123', name: 'Priya', phone: '+919876543210',
+                preferred_date: validDate, preferred_time: 'morning'
             });
             expect(result.success).toBe(true);
         });
 
         it('rejects missing property_id', () => {
-            const result = scheduleVisitSchema.safeParse({ name: 'Priya', phone: '+919876543210' });
+            const result = scheduleVisitSchema.safeParse({
+                name: 'Priya', phone: '+919876543210',
+                preferred_date: validDate, preferred_time: 'morning'
+            });
             expect(result.success).toBe(false);
+        });
+
+        // Regression: date + time are mandatory for every client booking.
+        // See docs/plans/2026-05-17-website-visit-not-visible-in-crm.md
+        it('rejects missing preferred_date', () => {
+            const result = scheduleVisitSchema.safeParse({
+                property_id: 'prop-123', name: 'Priya', phone: '+919876543210',
+                preferred_time: 'morning'
+            });
+            expect(result.success).toBe(false);
+        });
+
+        it('rejects missing preferred_time', () => {
+            const result = scheduleVisitSchema.safeParse({
+                property_id: 'prop-123', name: 'Priya', phone: '+919876543210',
+                preferred_date: validDate
+            });
+            expect(result.success).toBe(false);
+        });
+
+        it('rejects "flexible" / unknown time slot', () => {
+            for (const slot of ['flexible', '10:00', '', 'anytime']) {
+                const result = scheduleVisitSchema.safeParse({
+                    property_id: 'prop-123', name: 'Priya', phone: '+919876543210',
+                    preferred_date: validDate, preferred_time: slot
+                });
+                expect(result.success).toBe(false);
+            }
+        });
+
+        it('rejects a date in the past or beyond 30 days', () => {
+            const past = new Date(); past.setUTCDate(past.getUTCDate() - 1);
+            const farOff = new Date(); farOff.setUTCDate(farOff.getUTCDate() + 45);
+            for (const bad of [past, farOff]) {
+                const result = scheduleVisitSchema.safeParse({
+                    property_id: 'prop-123', name: 'Priya', phone: '+919876543210',
+                    preferred_date: bad.toISOString().split('T')[0], preferred_time: 'evening'
+                });
+                expect(result.success).toBe(false);
+            }
         });
     });
 

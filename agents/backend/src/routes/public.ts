@@ -10,16 +10,28 @@ import { cacheGet, cacheSet, cacheDel } from '../utils/redis';
 import logger from '../utils/logger';
 import { ensureOwner } from '../services/ensure_owner';
 import { INDIAN_STATES, DISTRICTS_BY_STATE } from '../data/india_geo';
-import { normalizePhone, phoneVariants } from '../utils/phone';
+import { normalizePhone, phoneVariants, resolveStoredContactPhone } from '../utils/phone';
+import { findInventoryIdsByAddress } from '../utils/inventory_search';
 import { generateUniqueSlug } from '../utils/slug';
 import { sendBuyerConfirmationWhatsApp, sendBuyerConfirmationEmail } from '../services/lead_notifications';
+import { ensureDealForLead } from '../services/ensure_deal';
 import { WhatsAppService } from '../services/whatsapp';
 import crypto from 'crypto';
 import { LLMService } from '../services/llm';
+import { captureRouteError } from '../utils/capture';
+import { slotToScheduledAt, type VisitSlot } from '../utils/visit_schedule';
+import { CalendarService } from '../services/calendar';
+import { foldLegacyDemand } from '../utils/demand_canonical';
+import { resolveDemandTaxonomy, resolveTypeFilter } from '../utils/demand_taxonomy';
+import { specsScalarFilter, specsArrayContainsFilter } from '../utils/specs_filter';
+import { resolveWebsiteLeadHandler, buildDemandFromInventory } from '../utils/website_lead';
+import { createLeadActionTask } from '../services/workflow_task_service';
 
 const whatsappService = new WhatsAppService();
 
 const llmService = new LLMService();
+
+const calendarService = new CalendarService();
 
 const router = Router();
 
@@ -36,9 +48,11 @@ router.get('/properties', cache(300), async (req, res) => {
     const {
         location, type, category, intent,
         category_id, sub_category_id, type_id, configuration_id,
+        taxonomy_node_id,
         usage_type_id, investment_type_id,
         price_min, price_max, sort,
         furnishing, ownership_type, amenities,
+        bhk, rooms, facing, age,
         page = '1', limit = '12'
     } = req.query;
 
@@ -49,16 +63,15 @@ router.get('/properties', cache(300), async (req, res) => {
     const where: any = { status: 'active' };
 
     if (location) {
+        // Word-aware address match (reuses the admin inventory matcher): tokenized, word-boundary on numbers
+        // so "Sector 4" ≠ "Sector 5"/a pincode, and searches ALL address columns incl. sub_locality. Strip the
+        // Google formatted-address cruft (trailing ", India" + 6-digit pincode) that would over-constrain to
+        // zero; fall back to the raw value if stripping empties it (a deliberate pincode-only search still works).
+        const raw = String(location).trim();
+        const cleaned = raw.replace(/,?\s*\bindia\b\s*$/i, '').replace(/\b\d{6}\b/g, ' ').replace(/\s{2,}/g, ' ').trim() || raw;
+        const ids = await findInventoryIdsByAddress(cleaned, { includePhone: false });
         where.AND = where.AND || [];
-        where.AND.push({
-            OR: [
-                { location: { contains: location as string, mode: 'insensitive' } },
-                { locality: { contains: location as string, mode: 'insensitive' } },
-                { city: { contains: location as string, mode: 'insensitive' } },
-                { district: { contains: location as string, mode: 'insensitive' } },
-                { state: { contains: location as string, mode: 'insensitive' } },
-            ]
-        });
+        where.AND.push({ id: { in: ids } });
     }
     if (intent) where.intent = intent as string;
 
@@ -84,8 +97,16 @@ router.get('/properties', cache(300), async (req, res) => {
     }
     const subCatFilter = multiFilter(sub_category_id);
     if (subCatFilter) where.sub_category_id = subCatFilter;
-    const typeFilter = multiFilter(type_id);
-    if (typeFilter) where.type_id = typeFilter;
+    // Canonical taxonomy filter: resolve node id(s) → the legacy sub_category_id that joins 1:1
+    // to inventory (reuses MatchingEngine's resolveTypeFilter). Overrides any legacy sub_cat above.
+    const nodeIds = String(taxonomy_node_id ?? '').split(',').map(s => s.trim()).filter(Boolean);
+    if (nodeIds.length) {
+        const resolved = await Promise.all(nodeIds.map(id => resolveTypeFilter({ demand_taxonomy_node_id: id })));
+        const subIds = Array.from(new Set(resolved.map(r => r.sub_category_id).filter(Boolean))) as string[];
+        if (subIds.length) where.sub_category_id = subIds.length === 1 ? subIds[0] : { in: subIds };
+    }
+    // type_id is only ~26% populated on inventory — a hard filter silently dropped ~74% of valid
+    // rows (2026-06-04). No longer hard-filtered; rely on the node → sub_category_id join above.
     const configFilter = multiFilter(configuration_id);
     if (configFilter) where.configuration_id = configFilter;
     const usageFilter = multiFilter(usage_type_id);
@@ -93,23 +114,31 @@ router.get('/properties', cache(300), async (req, res) => {
     const investFilter = multiFilter(investment_type_id);
     if (investFilter) where.investment_type_id = investFilter;
 
-    // Furnishing filter (multi-select)
-    const furnishFilter = multiFilter(furnishing);
-    if (furnishFilter) where.furnishing = furnishFilter;
+    // Furnishing filter (multi-select) — reads specs.furnishing; the `furnishing` column was
+    // dropped 2026-05-28 (specs unification). Filtering it directly 500'd (GlitchTip #70).
+    const furnishVals = String(furnishing ?? '').split(',').map(s => s.trim()).filter(Boolean);
+    const furnishFrag = specsScalarFilter('furnishing', furnishVals);
+    if (furnishFrag) { where.AND = where.AND || []; where.AND.push(furnishFrag); }
 
-    // Ownership type filter (multi-select: OWNER, EXTERNAL_AGENT, AGENT_OWNER)
+    // Ownership type filter (multi-select: OWNER, EXTERNAL_AGENT, AGENT_OWNER) — kept column
     const ownerFilter = multiFilter(ownership_type);
     if (ownerFilter) where.ownership_type = ownerFilter;
 
-    // Amenities filter — JSON path queries on features field
-    if (amenities) {
-        const amenityList = String(amenities).split(',').map(a => a.trim()).filter(Boolean);
-        if (amenityList.length > 0) {
-            where.AND = where.AND || [];
-            for (const amenity of amenityList) {
-                where.AND.push({ features: { path: [amenity], equals: true } });
-            }
-        }
+    // Amenities filter (multi-select) — reads the specs.amenities array; the `features` column
+    // was dropped 2026-05-28. AND semantics: a listing must contain every selected amenity.
+    const amenityVals = String(amenities ?? '').split(',').map(s => s.trim()).filter(Boolean);
+    const amenityClauses = specsArrayContainsFilter('amenities', amenityVals);
+    if (amenityClauses.length) { where.AND = where.AND || []; where.AND.push(...amenityClauses); }
+
+    // Per-type scalar specs filters (specs.* keyed by FieldDefinition.key). bhk/facing are stored
+    // strings; the variant-matching in specsScalarFilter absorbs slug↔label casing differences.
+    const specFilters: Array<[unknown, string]> = [
+        [bhk, 'bhk'], [rooms, 'rooms'], [facing, 'facing'], [age, 'age-of-construction'],
+    ];
+    for (const [raw, key] of specFilters) {
+        const vals = String(raw ?? '').split(',').map(s => s.trim()).filter(Boolean);
+        const frag = specsScalarFilter(key, vals);
+        if (frag) { where.AND = where.AND || []; where.AND.push(frag); }
     }
 
     // Legacy filters (backward compatibility)
@@ -122,24 +151,33 @@ router.get('/properties', cache(300), async (req, res) => {
         if (price_max) where.price.lte = parseFloat(price_max as string);
     }
 
-    let orderBy: any = [{ media_score: 'desc' }, { created_at: 'desc' }];
+    // 2026-05-13: previously default sort was media_score DESC, which pushed every fresh
+    // upload (media_score=0 at create time) to the bottom of the listing page. 265 of 336
+    // active inventories had media_score=0 — users complained website never refreshed.
+    // Recency now wins; media_score is the tiebreaker for same-day uploads.
+    let orderBy: any = [{ created_at: 'desc' }, { media_score: 'desc' }];
     if (sort === 'price_asc') orderBy = { price: 'asc' };
     else if (sort === 'price_desc') orderBy = { price: 'desc' };
-    else if (sort === 'newest') orderBy = [{ media_score: 'desc' }, { created_at: 'desc' }];
+    else if (sort === 'newest') orderBy = [{ created_at: 'desc' }, { media_score: 'desc' }];
+    else if (sort === 'media_score') orderBy = [{ media_score: 'desc' }, { created_at: 'desc' }];
 
     try {
         const [properties, total] = await Promise.all([
             prisma.inventory.findMany({
                 where, orderBy, skip, take: limitNum,
                 select: {
-                    id: true, slug: true, category: true, type: true, specs: true, features: true,
+                    id: true, slug: true, category: true, type: true, specs: true,
                     location: true, price: true, price_unit: true, status: true,
                     intent: true, media_urls: true, created_at: true,
                     display_price: true, city: true, district: true, locality: true,
-                    furnishing: true, floor_number: true, total_floors: true,
+                    floor_number: true,
+                    // features/furnishing/total_floors dropped Phase 4 — read from specs.*
                     apartment_name: true, is_enriched: true, ownership_type: true, renovated: true,
+                    pre_rented: true, pre_rented_monthly_rent: true,
                     sub_locality: true,
                     flat_property_type: { select: { name: true, main_category: true } },
+                    taxonomy_node: { select: { id: true, name: true, slug: true } },
+                    needs_taxonomy_review: true,
                     contact: { select: { name: true } },
                     assigned_agent: { select: { name: true } },
                     uploaded_by_agent: { select: { name: true } },
@@ -154,8 +192,10 @@ router.get('/properties', cache(300), async (req, res) => {
             ...p,
             price: p.display_price || p.price,
             city: p.city || p.district,
-            owner_name: p.contact?.name || null,
-            listed_by: p.assigned_agent?.name || p.uploaded_by_agent?.name || 'Realty Pandit Team',
+            // Privacy: never expose the team member's or owner's name publicly — the
+            // OTP-gated "Contact Agent" reveal is the only way to surface a real contact.
+            owner_name: null,
+            listed_by: 'Realty Pandit',
             save_count: p._count?.saved_properties || 0,
             display_price: undefined,
             district: undefined,
@@ -175,6 +215,7 @@ router.get('/properties', cache(300), async (req, res) => {
             }
         });
     } catch (error) {
+        captureRouteError(error, req, { route: 'public#1' });
         res.status(500).json({ error: (error as Error).message });
     }
 });
@@ -193,23 +234,29 @@ router.get('/properties/:id', cache(300), async (req, res) => {
         } else if (isUUID) {
             where = { id: identifier };
         } else {
-            // Treat as slug
-            where = { slug: identifier };
+            // Treat as slug. Every slug ends in the property id's last segment (…-<12hex>), so also
+            // accept a match on that suffix — this keeps OLD/typo'd slugs resolving after a slug is
+            // corrected (e.g. a fixed location) instead of 404-ing, and consolidates to the canonical.
+            const suffix = identifier.match(/-([0-9a-f]{12})$/i)?.[1];
+            where = suffix ? { OR: [{ slug: identifier }, { id: { endsWith: suffix } }] } : { slug: identifier };
         }
 
         const property = await prisma.inventory.findFirst({
             where,
             select: {
-                id: true, slug: true, display_id: true, category: true, type: true, specs: true, features: true,
+                id: true, slug: true, display_id: true, category: true, type: true, specs: true,
                 location: true, price: true, price_unit: true, status: true,
                 intent: true, media_urls: true, video_urls: true, created_at: true, updated_at: true,
                 owner_phone: true, tenant_id: true,
                 display_price: true, city: true, district: true,
-                description: true, furnishing: true, floor_number: true,
-                total_floors: true, facing: true, property_age: true,
+                description: true, floor_number: true,
+                // features/furnishing/total_floors/facing/property_age dropped Phase 4 — read from specs.*
                 locality: true, sub_locality: true, state: true, pincode: true, apartment_name: true,
                 latitude: true, longitude: true, renovated: true,
+                pre_rented: true, pre_rented_monthly_rent: true,
                 flat_property_type: { select: { name: true, main_category: true } },
+                taxonomy_node: { select: { id: true, name: true, slug: true } },
+                needs_taxonomy_review: true,
                 contact: { select: { name: true } },
                 assigned_agent: { select: { name: true, phone: true } },
                 uploaded_by_agent: { select: { name: true, phone: true } },
@@ -220,16 +267,15 @@ router.get('/properties/:id', cache(300), async (req, res) => {
             return res.status(404).json({ error: 'Property not found' });
         }
 
-        // Internal team member: prefer assigned agent, fall back to whoever uploaded it
-        const internalAgent = property.assigned_agent || property.uploaded_by_agent;
-
         res.json({
             ...property,
             price: property.display_price || property.price,
             city: property.city || property.district,
-            owner_name: property.contact?.name || 'Owner',
-            listed_by: internalAgent?.name || 'Realty Pandit Team',
-            listed_by_phone: internalAgent?.phone || null,
+            // Privacy: don't expose the team member's/owner's name or the agent's phone
+            // publicly — the OTP-gated "Contact Agent" reveal is the only path to a real contact.
+            owner_name: 'Owner',
+            listed_by: 'Realty Pandit',
+            listed_by_phone: null,
             display_price: undefined,
             district: undefined,
             contact: undefined,
@@ -237,24 +283,32 @@ router.get('/properties/:id', cache(300), async (req, res) => {
             uploaded_by_agent: undefined,
         });
     } catch (error) {
+        captureRouteError(error, req, { route: 'public#2' });
         res.status(500).json({ error: (error as Error).message });
     }
 });
 
 // GET /public/featured-properties - Curated featured listings
-router.get('/featured-properties', cache(600), async (_req, res) => {
+router.get('/featured-properties', cache(120), async (_req, res) => {
     try {
+        // 2026-05-16 (T7): showcase must reflect NEW inventory. Previously ordered by
+        // media_score desc which pinned the same well-photographed older listings and
+        // never surfaced fresh ones. Now: newest-first among listings that have media
+        // (carousel needs images), media_score only as a tiebreaker. Cache 120s + an
+        // explicit bust on inventory create so a new listing appears within ~minutes.
         const properties = await prisma.inventory.findMany({
-            where: { status: 'active' },
-            orderBy: [{ media_score: 'desc' }, { created_at: 'desc' }],
-            take: 6,
+            where: { status: 'active', media_urls: { isEmpty: false } },
+            orderBy: [{ created_at: 'desc' }, { media_score: 'desc' }],
+            take: 12,
             select: {
-                id: true, slug: true, category: true, type: true, specs: true, features: true,
+                // features dropped Phase 4 — read from specs.amenities
+                id: true, slug: true, category: true, type: true, specs: true,
                 location: true, price: true, price_unit: true, status: true,
                 intent: true, media_urls: true, created_at: true,
                 display_price: true, city: true, district: true, locality: true,
                 apartment_name: true, sub_locality: true,
                 flat_property_type: { select: { name: true, main_category: true } },
+                taxonomy_node: { select: { id: true, name: true, slug: true } },
             }
         });
         const mapped = properties.map((p: any) => ({
@@ -266,6 +320,7 @@ router.get('/featured-properties', cache(600), async (_req, res) => {
         }));
         res.json({ properties: mapped });
     } catch (error) {
+        captureRouteError(error, _req, { route: 'public#3' });
         res.status(500).json({ error: (error as Error).message });
     }
 });
@@ -275,13 +330,16 @@ router.get('/similar-properties/:id', cache(600), async (req, res) => {
     try {
         const property = await prisma.inventory.findUnique({
             where: { id: req.params.id },
-            select: { category: true, type: true, location: true, intent: true, category_id: true, sub_category_id: true, type_id: true }
+            select: { category: true, type: true, location: true, intent: true, category_id: true, sub_category_id: true, type_id: true, taxonomy_node_id: true }
         });
 
         if (!property) return res.status(404).json({ error: 'Property not found' });
 
-        // Build similarity criteria - prefer classification hierarchy, fallback to legacy
+        // Build similarity criteria - prefer the taxonomy node, then classification hierarchy, then legacy
         const orConditions: any[] = [];
+        if (property.taxonomy_node_id) {
+            orConditions.push({ taxonomy_node_id: property.taxonomy_node_id });
+        }
         if (property.sub_category_id) {
             orConditions.push({ sub_category_id: property.sub_category_id });
         } else if (property.category && property.type) {
@@ -300,14 +358,17 @@ router.get('/similar-properties/:id', cache(600), async (req, res) => {
             take: 4,
             orderBy: [{ media_score: 'desc' }, { created_at: 'desc' }],
             select: {
-                id: true, slug: true, category: true, type: true, specs: true, features: true,
+                // features dropped Phase 4 — read from specs.amenities
+                id: true, slug: true, category: true, type: true, specs: true,
                 location: true, price: true, price_unit: true, status: true,
                 intent: true, media_urls: true, created_at: true,
                 city: true, district: true, locality: true,
+                taxonomy_node: { select: { id: true, name: true, slug: true } },
             }
         });
         res.json({ properties: similar });
     } catch (error) {
+        captureRouteError(error, req, { route: 'public#4' });
         res.status(500).json({ error: (error as Error).message });
     }
 });
@@ -327,6 +388,7 @@ router.get('/locations', cache(1800), async (_req, res) => {
                 .map(l => ({ name: l.location!, count: l._count.id }))
         });
     } catch (error) {
+        captureRouteError(error, _req, { route: 'public#5' });
         res.status(500).json({ error: (error as Error).message });
     }
 });
@@ -346,6 +408,7 @@ router.get('/stats', cache(600), async (_req, res) => {
             totalClients: totalContacts
         });
     } catch (error) {
+        captureRouteError(error, _req, { route: 'public#6' });
         res.status(500).json({ error: (error as Error).message });
     }
 });
@@ -365,13 +428,17 @@ router.get('/testimonials', cache(3600), async (_req, res) => {
 
 // POST /public/contact - Lead capture from website contact form
 router.post('/contact', validate(contactSchema), async (req, res) => {
-    const { name, phone, email, message, property_id, intent } = req.body;
+    const { name, email, message, property_id, intent } = req.body;
 
     try {
         const tenant = await prisma.tenant.findFirst();
         if (!tenant) {
             return res.status(500).json({ error: 'System not configured' });
         }
+
+        // Resolve to the actual stored contact PK so a legacy bare/dash-stored
+        // contact is matched, not duplicated by the normalized phone.
+        const phone = (await resolveStoredContactPhone(req.body.phone, prisma)) ?? req.body.phone;
 
         // Upsert contact
         const contact = await prisma.contact.upsert({
@@ -382,7 +449,7 @@ router.post('/contact', validate(contactSchema), async (req, res) => {
                 name,
                 email,
                 source: 'website',
-                contact_type: 'UNKNOWN',
+                contact_type: 'BUYER',
                 intent: intent || null,
                 tenant_id: tenant.id,
                 last_channel: 'website',
@@ -413,6 +480,7 @@ router.post('/contact', validate(contactSchema), async (req, res) => {
 
         res.status(201).json({ success: true, message: 'Panditji will contact you on WhatsApp shortly!' });
     } catch (error) {
+        captureRouteError(error, req, { route: 'public#7' });
         res.status(500).json({ error: (error as Error).message });
     }
 });
@@ -426,7 +494,11 @@ router.post('/lead', validate(leadSchema), async (req, res) => {
     }
 
     try {
-        // Store in WebsiteLead for tracking
+        // Resolve to the actual stored contact PK so a legacy bare/dash-stored
+        // contact is matched, not duplicated by the normalized phone.
+        const storedPhone = phone ? ((await resolveStoredContactPhone(phone, prisma)) ?? phone) : null;
+
+        // Store in WebsiteLead for tracking (tracking row, no Contact FK)
         const lead = await prisma.websiteLead.create({
             data: {
                 name: name || null,
@@ -446,7 +518,7 @@ router.post('/lead', validate(leadSchema), async (req, res) => {
             const tenant = await prisma.tenant.findFirst();
             if (tenant) {
                 await prisma.contact.upsert({
-                    where: { phone_number: phone },
+                    where: { phone_number: storedPhone! },
                     update: {
                         name: name || undefined,
                         email: email || undefined,
@@ -455,11 +527,11 @@ router.post('/lead', validate(leadSchema), async (req, res) => {
                         intent: interest === 'browse' ? null : interest || null
                     },
                     create: {
-                        phone_number: phone,
+                        phone_number: storedPhone!,
                         name: name || null,
                         email: email || null,
                         source: 'website',
-                        contact_type: 'UNKNOWN',
+                        contact_type: (interest === 'rent' || interest === 'rent_lease') ? 'TENANT' : 'BUYER',
                         intent: interest === 'browse' ? null : interest || null,
                         tenant_id: tenant.id,
                         last_channel: 'website',
@@ -471,7 +543,7 @@ router.post('/lead', validate(leadSchema), async (req, res) => {
                 await prisma.interaction.create({
                     data: {
                         tenant_id: tenant.id,
-                        phone_number: phone,
+                        phone_number: storedPhone!,
                         channel: 'website',
                         direction: 'inbound',
                         event_type: 'lead_capture',
@@ -483,13 +555,20 @@ router.post('/lead', validate(leadSchema), async (req, res) => {
         }
 
         // Notify buyer immediately if phone was provided (fire-and-forget)
-        if (phone) {
-            sendBuyerConfirmationWhatsApp(phone, name || null, source || 'website')
+        if (phone && storedPhone) {
+            sendBuyerConfirmationWhatsApp(storedPhone, name || null, source || 'website')
                 .catch(err => logger.warn('[Public/lead] Buyer WA failed:', err.message));
+
+            // B1: auto-create NEW deal so AI qualification cadence kicks in.
+            ensureDealForLead({
+                contactPhone: storedPhone,
+                source: 'website',
+            }).catch(err => logger.error(`[Public/lead] ensureDealForLead failed: ${(err as Error).message}`));
         }
 
         res.status(201).json({ success: true, lead_id: lead.id });
     } catch (error) {
+        captureRouteError(error, req, { route: 'public#8' });
         res.status(500).json({ error: (error as Error).message });
     }
 });
@@ -508,6 +587,11 @@ router.post('/lead-requirements', validate(leadRequirementsSchema), async (req, 
             return res.status(500).json({ error: 'System not configured' });
         }
 
+        // Resolve the requirement into the canonical taxonomy node up-front so BOTH the no-phone
+        // and main branches can pass it to the matching engine (previously resolved only after
+        // the no-phone early-return, so instant matches ignored the taxonomy node entirely).
+        const demandTax = await resolveDemandTaxonomy({ main_category: category || undefined, property_type: type_slug || category || undefined, amenities: amenities || undefined });
+
         // Determine contact phone — required for SSOT
         if (!phone) {
             // No phone → just run matching without creating contact
@@ -515,6 +599,10 @@ router.post('/lead-requirements', validate(leadRequirementsSchema), async (req, 
             const matches = await matchingEngine.findMatches({
                 intent: intent === 'rent_lease' ? 'rent' : 'buy',
                 property_type: type_slug,
+                demand_taxonomy_node_id: demandTax.demand_taxonomy_node_id ?? undefined,
+                sub_category_id: demandTax.sub_category_id ?? undefined,
+                category_id: demandTax.category_id ?? undefined,
+                demand_schema_values: demandTax.demand_schema_values ?? undefined,
                 budget_min: budget_min || undefined,
                 budget_max: budget_max || undefined,
                 preferred_location: location,
@@ -528,41 +616,53 @@ router.post('/lead-requirements', validate(leadRequirementsSchema), async (req, 
             });
         }
 
+        // Resolve to the actual stored contact PK so a legacy bare/dash-stored
+        // contact is matched, not duplicated by the normalized phone.
+        const storedPhone = (await resolveStoredContactPhone(phone, prisma)) ?? phone;
+
         // Upsert Contact SSOT with full requirements
         const contact = await prisma.contact.upsert({
-            where: { phone_number: phone },
+            where: { phone_number: storedPhone },
             update: {
                 name: name || undefined,
                 email: email || undefined,
                 intent: intent === 'rent_lease' ? 'rent' : 'buy',
                 contact_type: (intent === 'rent' || intent === 'rent_lease') ? 'TENANT' : 'BUYER',
-                demand_category: category,
-                demand_type_slug: type_slug,
                 demand_budget_type: budget_type || (intent === 'buy' ? 'one_time' : 'per_month'),
-                demand_amenities: amenities || undefined,
+                demand_taxonomy_node_id: demandTax.demand_taxonomy_node_id ?? undefined,
+                needs_taxonomy_review: demandTax.needs_review || undefined,
+                // Persist legacy classification from the resolved node (2026-05-31).
+                sub_category_id: demandTax.sub_category_id ?? undefined,
+                category_id: demandTax.category_id ?? undefined,
+                type_id: demandTax.type_id ?? undefined,
+                // Phase 1 dual-write — canonical demand SoT.
+                ...(foldLegacyDemand({ demand_amenities: amenities ?? null }) as any),
                 budget_min: budget_min || undefined,
                 budget_max: budget_max || undefined,
                 preferred_location: location,
-                demand_main_category: category,
                 last_channel: 'website',
                 last_interaction: new Date(),
             },
             create: {
-                phone_number: phone,
+                phone_number: storedPhone,
                 tenant_id: tenant.id,
                 name: name || null,
                 email: email || null,
                 source: source || 'website',
                 contact_type: (intent === 'rent' || intent === 'rent_lease') ? 'TENANT' : 'BUYER',
                 intent: intent === 'rent_lease' ? 'rent' : 'buy',
-                demand_category: category,
-                demand_type_slug: type_slug,
                 demand_budget_type: budget_type || (intent === 'buy' ? 'one_time' : 'per_month'),
-                demand_amenities: amenities || undefined,
+                demand_taxonomy_node_id: demandTax.demand_taxonomy_node_id ?? undefined,
+                needs_taxonomy_review: demandTax.needs_review || undefined,
+                // Persist legacy classification from the resolved node (2026-05-31).
+                sub_category_id: demandTax.sub_category_id ?? undefined,
+                category_id: demandTax.category_id ?? undefined,
+                type_id: demandTax.type_id ?? undefined,
+                // Phase 1 dual-write — canonical demand SoT.
+                ...(foldLegacyDemand({ demand_amenities: amenities ?? null }) as any),
                 budget_min: budget_min || undefined,
                 budget_max: budget_max || undefined,
                 preferred_location: location,
-                demand_main_category: category,
                 last_channel: 'website',
                 last_interaction: new Date(),
             }
@@ -572,7 +672,7 @@ router.post('/lead-requirements', validate(leadRequirementsSchema), async (req, 
         await prisma.interaction.create({
             data: {
                 tenant_id: tenant.id,
-                phone_number: phone,
+                phone_number: storedPhone,
                 channel: 'website',
                 direction: 'inbound',
                 event_type: 'lead_requirements',
@@ -581,28 +681,39 @@ router.post('/lead-requirements', validate(leadRequirementsSchema), async (req, 
             }
         });
 
-        // Run matching engine
+        // Run matching engine — pass the resolved taxonomy node so it hard-filters by type
+        // (node → sub_category_id) and scores on demand_schema_values, not just a loose string.
         const matchingEngine = new MatchingEngine();
         const matches = await matchingEngine.findMatches({
             intent: intent === 'rent_lease' ? 'rent' : 'buy',
             property_type: type_slug,
+            demand_taxonomy_node_id: demandTax.demand_taxonomy_node_id ?? undefined,
+            sub_category_id: demandTax.sub_category_id ?? undefined,
+            category_id: demandTax.category_id ?? undefined,
+            demand_schema_values: demandTax.demand_schema_values ?? undefined,
             budget_min: budget_min || undefined,
             budget_max: budget_max || undefined,
             preferred_location: location,
         }, 10);
 
         // Notify buyer immediately (fire-and-forget)
-        sendBuyerConfirmationWhatsApp(phone, name || null, 'website')
+        sendBuyerConfirmationWhatsApp(storedPhone, name || null, 'website')
             .catch(err => logger.warn('[Public/lead-requirements] Buyer WA failed:', err.message));
         if (email) {
             sendBuyerConfirmationEmail(email, name || null)
                 .catch(err => logger.warn('[Public/lead-requirements] Buyer email failed:', err.message));
         }
 
+        // B1: auto-create NEW deal so AI qualification cadence kicks in.
+        ensureDealForLead({
+            contactPhone: storedPhone,
+            source: 'website',
+        }).catch(err => logger.error(`[Public/lead-requirements] ensureDealForLead failed: ${(err as Error).message}`));
+
         res.status(201).json({
             success: true,
             contact_created: true,
-            contact_phone: phone,
+            contact_phone: storedPhone,
             matches,
             total_matches: matches.length,
             message: matches.length > 0
@@ -610,6 +721,7 @@ router.post('/lead-requirements', validate(leadRequirementsSchema), async (req, 
                 : 'Requirements saved! Panditji will notify you when matching properties are available.'
         });
     } catch (error) {
+        captureRouteError(error, req, { route: 'public#9' });
         logger.error('Lead requirements error:', error);
         res.status(500).json({ error: (error as Error).message });
     }
@@ -633,21 +745,43 @@ router.post('/newsletter', validate(newsletterSchema), async (req, res) => {
 
         res.status(201).json({ success: true, id: subscriber.id });
     } catch (error) {
+        captureRouteError(error, req, { route: 'public#10' });
         res.status(500).json({ error: (error as Error).message });
     }
 });
 
 // POST /public/schedule-visit - Schedule a property site visit (SSOT)
 router.post('/schedule-visit', validate(scheduleVisitSchema), async (req, res) => {
-    const { property_id, name, phone, email, preferred_date, preferred_time, message } = req.body;
+    const { property_id, name, email, preferred_date, message } = req.body;
+    // phone is normalized to +91… by scheduleVisitSchema.phoneField; slot is
+    // validated to morning|afternoon|evening by scheduleVisitSchema.
+    const phone: string = req.body.phone;
+    const preferred_time = req.body.preferred_time as VisitSlot;
 
     try {
-        // Upsert contact FIRST (contact_id is required for ScheduledVisit)
         const tenant = await prisma.tenant.findFirst();
         if (!tenant) return res.status(500).json({ error: 'Tenant not found' });
 
+        // One property lookup — drives lead routing + requirement capture below.
+        const property = await prisma.inventory.findUnique({
+            where: { id: property_id },
+            select: {
+                assigned_agent_id: true, owning_manager_id: true, uploaded_by_agent_id: true,
+                intent: true, taxonomy_node_id: true, specs: true,
+                locality: true, city: true, district: true, location: true,
+            },
+        });
+
+        // Route the lead: EXISTING → their agent; NEW → the inventory manager (assigned
+        // agent → owning manager → uploader → super_boss). resolveStoredContactPhone is
+        // applied inside so a legacy bare/dash-stored contact is matched, not duplicated.
+        const { storedPhone, isNew, handlerId } = await resolveWebsiteLeadHandler(phone, property || { assigned_agent_id: null, owning_manager_id: null, uploaded_by_agent_id: null });
+
+        // Upsert contact FIRST (contact_id is required for ScheduledVisit). A NEW lead is
+        // OWNED by the handler (visible in CRM/PWA) + gets a requirement mirroring the
+        // inventory it enquired on; an EXISTING lead is preserved (agent + requirement).
         await prisma.contact.upsert({
-            where: { phone_number: phone },
+            where: { phone_number: storedPhone },
             update: {
                 name,
                 email: email || undefined,
@@ -655,37 +789,42 @@ router.post('/schedule-visit', validate(scheduleVisitSchema), async (req, res) =
                 last_interaction: new Date()
             },
             create: {
-                phone_number: phone,
+                phone_number: storedPhone,
                 name,
                 email: email || null,
                 source: 'website',
-                contact_type: 'BUYER',
-                intent: 'buy',
                 tenant_id: tenant.id,
                 last_channel: 'website',
-                last_interaction: new Date()
+                last_interaction: new Date(),
+                assigned_agent_id: handlerId,
+                owning_manager_id: handlerId,
+                ...(property ? buildDemandFromInventory(property) : { contact_type: 'BUYER', intent: 'buy' }),
             }
         });
 
         const visit = await prisma.scheduledVisit.create({
             data: {
-                contact_id: phone,
+                contact_id: storedPhone,
                 property_id,
                 name,
-                phone,
+                phone: storedPhone,
                 email: email || null,
-                preferred_date: preferred_date ? new Date(preferred_date) : null,
-                preferred_time: preferred_time || null,
+                preferred_date: new Date(`${preferred_date}T00:00:00Z`),
+                preferred_time,
                 message: message || null,
                 source: 'website_form',
-                status: 'pending'
+                status: 'pending',
+                // Internal staff coordinating this visit — the resolved handler
+                // (existing customer's agent, else the inventory manager). agent_id
+                // stays for true external agents only.
+                internal_handler_id: handlerId,
             }
         });
 
         await prisma.interaction.create({
             data: {
                 tenant_id: tenant.id,
-                phone_number: phone,
+                phone_number: storedPhone,
                 channel: 'website',
                 direction: 'inbound',
                 event_type: 'schedule_visit',
@@ -694,32 +833,35 @@ router.post('/schedule-visit', validate(scheduleVisitSchema), async (req, res) =
             }
         });
 
-        // Notify buyer immediately (fire-and-forget)
-        sendBuyerConfirmationWhatsApp(phone, name || null, 'website')
-            .catch(err => logger.warn('[Public/schedule-visit] Buyer WA failed:', err.message));
+        // Create the canonical Appointment so the visit is visible/actionable
+        // in the CRM (lead-detail Visits tab + employee calendar). This also
+        // sends the single buyer WhatsApp + seller/superboss/lead-agent
+        // notifications — same path the website-chat flow uses, so we no
+        // longer send the bespoke buyer/agent WhatsApp here (avoids doubles).
+        try {
+            const scheduled_at = slotToScheduledAt(preferred_date, preferred_time);
+            await calendarService.createPropertyVisitAppointment({
+                contact_id: storedPhone,
+                property_id,
+                scheduled_at,
+                source: 'website_form',
+                assigned_to_agent_id: handlerId ?? undefined,
+            });
+        } catch (calErr) {
+            // Booking is already persisted; surface to GlitchTip, don't fail.
+            captureRouteError(calErr, req, { route: 'public#11:appointment' });
+            logger.error('[Public/schedule-visit] Appointment creation failed:', (calErr as Error).message);
+        }
+
+        // Email confirmation is not covered by the calendar service (WA only).
         if (email) {
             sendBuyerConfirmationEmail(email, name || null)
                 .catch(err => logger.warn('[Public/schedule-visit] Buyer email failed:', err.message));
         }
 
-        // Notify assigned internal agent about the visit request (fire-and-forget)
-        prisma.inventory.findFirst({
-            where: { id: property_id },
-            select: { assigned_agent: { select: { phone: true, name: true } }, display_id: true }
-        }).then((prop: any) => {
-            const agentPhone = prop?.assigned_agent?.phone;
-            const agentName = prop?.assigned_agent?.name || 'Team';
-            if (agentPhone) {
-                const waPhone = agentPhone.replace(/^\+/, '').replace(/^91/, '');
-                const dateStr = preferred_date ? new Date(preferred_date).toLocaleDateString('en-IN') : 'TBD';
-                const msg = `🏠 *New Visit Request*\n\nHi ${agentName}, a buyer wants to visit a property.\n\n*Property:* ${prop.display_id || property_id}\n*Buyer:* ${name} (${phone})\n*Date:* ${dateStr}\n*Time:* ${preferred_time || 'Flexible'}\n${message ? `*Note:* ${message}\n` : ''}\nPlease confirm the visit with the buyer.`;
-                whatsappService.sendText(`91${waPhone}`, msg)
-                    .catch((err: Error) => logger.warn('[Public/schedule-visit] Agent WA failed:', err.message));
-            }
-        }).catch((err: Error) => logger.warn('[Public/schedule-visit] Agent lookup failed:', err.message));
-
         res.status(201).json({ success: true, visit_id: visit.id, message: 'Visit scheduled! Panditji will confirm on WhatsApp.' });
     } catch (error) {
+        captureRouteError(error, req, { route: 'public#11' });
         res.status(500).json({ error: (error as Error).message });
     }
 });
@@ -766,24 +908,33 @@ router.post('/track-property-view', async (req, res) => {
 
         res.json({ success: true });
     } catch (error) {
+        captureRouteError(error, req, { route: 'public#12' });
         res.status(500).json({ error: (error as Error).message });
     }
 });
 
 // POST /public/save-property - Save/favorite a property (creates contact + saved link)
 router.post('/save-property', async (req, res) => {
-    const { phone, name, property_id } = req.body;
-    if (!phone || !property_id) return res.status(400).json({ error: 'phone and property_id are required' });
+    const { name, property_id } = req.body;
+    // Normalize to E.164 so the contact PK is openable in admin (no validate() on this route)
+    const phone = normalizePhone(req.body.phone || '');
+    if (!phone || !/^\+91[6-9]\d{9}$/.test(phone) || !property_id) {
+        return res.status(400).json({ error: 'valid phone and property_id are required' });
+    }
 
     try {
         const tenant = await prisma.tenant.findFirst();
         if (!tenant) return res.status(500).json({ error: 'Tenant not found' });
 
+        // Resolve to the actual stored contact PK so a legacy bare/dash-stored
+        // contact is matched, not duplicated by the normalized phone.
+        const storedPhone = (await resolveStoredContactPhone(phone, prisma)) ?? phone;
+
         await prisma.contact.upsert({
-            where: { phone_number: phone },
+            where: { phone_number: storedPhone },
             update: { name: name || undefined, last_channel: 'website', last_interaction: new Date() },
             create: {
-                phone_number: phone, name: name || null, source: 'website',
+                phone_number: storedPhone, name: name || null, source: 'website',
                 contact_type: 'BUYER', intent: 'buy',
                 tenant_id: tenant.id, last_channel: 'website', last_interaction: new Date()
             }
@@ -791,14 +942,14 @@ router.post('/save-property', async (req, res) => {
 
         // Upsert to prevent duplicates (unique constraint on contact_id + inventory_id)
         const saved = await prisma.savedProperty.upsert({
-            where: { contact_id_inventory_id: { contact_id: phone, inventory_id: property_id } },
+            where: { contact_id_inventory_id: { contact_id: storedPhone, inventory_id: property_id } },
             update: {},
-            create: { tenant_id: tenant.id, contact_id: phone, inventory_id: property_id, source: 'website' }
+            create: { tenant_id: tenant.id, contact_id: storedPhone, inventory_id: property_id, source: 'website' }
         });
 
         await prisma.interaction.create({
             data: {
-                tenant_id: tenant.id, phone_number: phone, channel: 'website',
+                tenant_id: tenant.id, phone_number: storedPhone, channel: 'website',
                 direction: 'inbound', event_type: 'property_saved',
                 content: `Saved property ${property_id} to favorites`,
                 metadata: { property_id, saved_id: saved.id }
@@ -807,25 +958,35 @@ router.post('/save-property', async (req, res) => {
 
         res.status(201).json({ success: true, saved_id: saved.id });
     } catch (error) {
+        captureRouteError(error, req, { route: 'public#13' });
         res.status(500).json({ error: (error as Error).message });
     }
 });
 
 // POST /public/share-property-whatsapp - Share property details via WhatsApp + auto-save
 router.post('/share-property-whatsapp', async (req, res) => {
-    const { phone, name, property_id } = req.body;
-    if (!phone || !name || !property_id) return res.status(400).json({ error: 'phone, name, and property_id are required' });
+    const { name, property_id } = req.body;
+    // Normalize to E.164 so the contact PK is openable in admin (no validate() on this route)
+    const phone = normalizePhone(req.body.phone || '');
+    if (!phone || !/^\+91[6-9]\d{9}$/.test(phone) || !name || !property_id) {
+        return res.status(400).json({ error: 'valid phone, name, and property_id are required' });
+    }
 
     try {
         const tenant = await prisma.tenant.findFirst();
         if (!tenant) return res.status(500).json({ error: 'Tenant not found' });
 
+        // Resolve to the actual stored contact PK so a legacy bare/dash-stored
+        // contact is matched, not duplicated by the normalized phone.
+        // (phone stays normalized E.164 for the outbound WhatsApp send.)
+        const storedPhone = (await resolveStoredContactPhone(phone, prisma)) ?? phone;
+
         // Upsert contact
         await prisma.contact.upsert({
-            where: { phone_number: phone },
+            where: { phone_number: storedPhone },
             update: { name, last_channel: 'website', last_interaction: new Date() },
             create: {
-                phone_number: phone, name, source: 'website',
+                phone_number: storedPhone, name, source: 'website',
                 contact_type: 'BUYER', intent: 'buy',
                 tenant_id: tenant.id, last_channel: 'website', last_interaction: new Date()
             }
@@ -863,15 +1024,15 @@ router.post('/share-property-whatsapp', async (req, res) => {
 
         // Auto-save as favorite
         await prisma.savedProperty.upsert({
-            where: { contact_id_inventory_id: { contact_id: phone, inventory_id: property_id } },
+            where: { contact_id_inventory_id: { contact_id: storedPhone, inventory_id: property_id } },
             update: {},
-            create: { tenant_id: tenant.id, contact_id: phone, inventory_id: property_id, source: 'whatsapp' }
+            create: { tenant_id: tenant.id, contact_id: storedPhone, inventory_id: property_id, source: 'whatsapp' }
         });
 
         // Log interaction
         await prisma.interaction.create({
             data: {
-                tenant_id: tenant.id, phone_number: phone, channel: 'website',
+                tenant_id: tenant.id, phone_number: storedPhone, channel: 'website',
                 direction: 'inbound', event_type: 'property_shared',
                 content: `Shared property ${property_id} via WhatsApp`,
                 metadata: { property_id, channel: 'whatsapp' }
@@ -880,6 +1041,7 @@ router.post('/share-property-whatsapp', async (req, res) => {
 
         res.json({ success: true, message: 'Property details sent to your WhatsApp!' });
     } catch (error) {
+        captureRouteError(error, req, { route: 'public#14' });
         res.status(500).json({ error: (error as Error).message });
     }
 });
@@ -929,6 +1091,7 @@ router.get('/nearby-landmarks/:propertyId', cache(3600), async (req, res) => {
 
         res.json({ landmarks });
     } catch (error) {
+        captureRouteError(error, req, { route: 'public#15' });
         res.status(500).json({ error: (error as Error).message });
     }
 });
@@ -957,14 +1120,10 @@ router.get('/properties/:id/ai-description', cache(300), async (req, res) => {
                 price_unit: true,
                 intent: true,
                 specs: true,
-                features: true,
-                furnishing: true,
-                facing: true,
-                property_age: true,
+                // features/furnishing/facing/property_age/total_floors dropped Phase 4 — read from specs.*
                 description: true,
                 apartment_name: true,
                 floor_number: true,
-                total_floors: true,
                 property_configuration: { select: { name: true } },
             }
         });
@@ -984,19 +1143,22 @@ router.get('/properties/:id/ai-description', cache(300), async (req, res) => {
             price: property.price,
             price_unit: property.price_unit,
             intent: property.intent,
+            // Phase 4 dedup (2026-05-28): legacy keys preserved in the shape sent to the
+            // description generator, sourced from specs.* (canonical SoT).
             specs: property.specs,
-            features: property.features,
-            furnishing: property.furnishing,
-            facing: property.facing,
-            property_age: property.property_age,
+            features: (property.specs as any)?.amenities ?? null,
+            furnishing: (property.specs as any)?.furnishing ?? null,
+            facing: (property.specs as any)?.facing ?? null,
+            property_age: (property.specs as any)?.['age-of-construction'] ?? null,
             description: property.description,
             apartment_name: property.apartment_name,
             floor_number: property.floor_number,
-            total_floors: property.total_floors,
+            total_floors: (property.specs as any)?.floors ?? null,
         }, lang);
 
         res.json({ description: description || null });
     } catch (error) {
+        captureRouteError(error, req, { route: 'public#16' });
         logger.error('[Public] AI description error:', error);
         res.json({ description: null });
     }
@@ -1009,7 +1171,7 @@ router.post('/post-property', validate(postPropertySchema), async (req, res) => 
         category, type, // Legacy fields
         category_id, sub_category_id, type_id, configuration_id, // Classification hierarchy
         usage_type_id, investment_type_id, // Usage & investment classification
-        location, price, price_unit, specs, features, description, furnishing, owner_name, phone, email
+        location, price, price_unit, specs, features, description, furnishing, owner_name, email
     } = req.body;
 
     try {
@@ -1017,6 +1179,10 @@ router.post('/post-property', validate(postPropertySchema), async (req, res) => 
         if (!tenant) {
             return res.status(500).json({ error: 'System not configured' });
         }
+
+        // Resolve to the actual stored contact PK so a legacy bare/dash-stored
+        // contact is matched, not duplicated by the normalized phone.
+        const phone = (await resolveStoredContactPhone(req.body.phone, prisma)) ?? req.body.phone;
 
         // Upsert contact as LANDLORD
         const contact = await prisma.contact.upsert({
@@ -1157,8 +1323,9 @@ router.post('/post-property', validate(postPropertySchema), async (req, res) => 
                     ...specs,
                     description: description || undefined,
                     furnishing: furnishing || undefined,
+                    // `features` column dropped 2026-05-28 → amenities live in specs.amenities (array of labels).
+                    ...(Array.isArray(features) && features.length ? { amenities: features } : {}),
                 },
-                features: features || {},
                 status: 'active',
                 media_urls: [],
 
@@ -1204,6 +1371,7 @@ router.post('/post-property', validate(postPropertySchema), async (req, res) => 
 
         res.status(201).json({ success: true, property_id: property.id, message: 'Property submitted! Panditji will verify and list it within 24 hours.' });
     } catch (error) {
+        captureRouteError(error, req, { route: 'public#17' });
         logger.error('Post Property Error:', error);
         res.status(500).json({ error: (error as Error).message });
     }
@@ -1240,9 +1408,12 @@ router.get('/matches', cache(180), async (req, res) => {
             take: 10,
             orderBy: [{ media_score: 'desc' }, { created_at: 'desc' }],
             select: {
-                id: true, category: true, type: true, specs: true, features: true,
+                id: true, category: true, type: true, specs: true,
+                // features dropped Phase 4 — read from specs.amenities
                 location: true, price: true, price_unit: true, status: true,
-                intent: true, media_urls: true, created_at: true, owner_phone: true,
+                intent: true, media_urls: true, created_at: true,
+                // owner_phone removed 2026-06-04 — was leaking to unauthenticated /matches callers.
+                taxonomy_node: { select: { id: true, name: true, slug: true } },
             }
         });
 
@@ -1306,6 +1477,7 @@ router.get('/matches', cache(180), async (req, res) => {
         });
 
     } catch (error) {
+        captureRouteError(error, req, { route: 'public#18' });
         logger.error('Unified matching error:', error);
         res.status(500).json({ error: (error as Error).message });
     }
@@ -1433,6 +1605,7 @@ router.post('/project-enquiry', validate(leadSchema), async (req, res) => {
         });
 
     } catch (error) {
+        captureRouteError(error, req, { route: 'public#19' });
         logger.error('Project enquiry error:', error);
         res.status(500).json({ error: (error as Error).message });
     }
@@ -1515,6 +1688,7 @@ router.get('/master/flat-property-types', cache(1800), async (req, res) => {
 
         res.json({ types });
     } catch (error) {
+        captureRouteError(error, req, { route: 'public#20' });
         res.status(500).json({ error: (error as Error).message });
     }
 });
@@ -1571,6 +1745,7 @@ router.get('/agents', cache(120), async (req, res) => {
             },
         });
     } catch (error) {
+        captureRouteError(error, req, { route: 'public#21' });
         res.status(500).json({ error: (error as Error).message });
     }
 });
@@ -1614,6 +1789,7 @@ router.get('/agents/:id', cache(120), async (req, res) => {
 
         res.json({ agent: { ...agent, listing_count: listingCount } });
     } catch (error) {
+        captureRouteError(error, req, { route: 'public#22' });
         res.status(500).json({ error: (error as Error).message });
     }
 });
@@ -1654,6 +1830,7 @@ router.post('/properties/:id/request-otp', async (req, res) => {
         await whatsappService.sendText(`91${waPhone}`, message);
         res.json({ success: true, message: 'OTP sent to your WhatsApp', expires_in: 600 });
     } catch (err) {
+        captureRouteError(err, req, { route: 'public#23' });
         logger.error('[Public/request-otp] WhatsApp send failed:', (err as Error).message);
         res.status(500).json({ error: 'Failed to send OTP. Please try again.' });
     }
@@ -1709,36 +1886,57 @@ router.post('/properties/:id/verify-otp', async (req, res) => {
     // OTP matched — delete it (single use)
     await cacheDel(otpKey);
 
-    // Fetch the assigned internal agent for this inventory
     let agentName = 'Realty Pandit Team';
     let agentPhone = '+918178491914'; // Fallback: Realty Pandit main number
 
     try {
+        const tenant = await prisma.tenant.findFirst();
+        // Inventory routing + requirement fields.
         const inventory = await prisma.inventory.findUnique({
             where: { id },
             select: {
-                assigned_agent: { select: { name: true, phone: true } },
-                display_id: true,
+                assigned_agent_id: true, owning_manager_id: true, uploaded_by_agent_id: true,
+                intent: true, taxonomy_node_id: true, specs: true,
+                locality: true, city: true, district: true, location: true,
             },
         });
 
-        if (inventory?.assigned_agent?.phone) {
-            agentName = inventory.assigned_agent.name;
-            agentPhone = inventory.assigned_agent.phone;
+        // Route: EXISTING → their agent; NEW → the inventory manager.
+        const { storedPhone, handlerId } = await resolveWebsiteLeadHandler(
+            normalizedPhone,
+            inventory || { assigned_agent_id: null, owning_manager_id: null, uploaded_by_agent_id: null }
+        );
+
+        // Capture + OWN the lead so the buyer who reveals the number is never lost.
+        // NEW → assigned to the handler + a requirement mirroring the inventory; EXISTING preserved.
+        if (tenant) {
+            await prisma.contact.upsert({
+                where: { phone_number: storedPhone },
+                update: { last_channel: 'website', last_interaction: new Date() },
+                create: {
+                    phone_number: storedPhone,
+                    source: 'website',
+                    tenant_id: tenant.id,
+                    last_channel: 'website',
+                    last_interaction: new Date(),
+                    assigned_agent_id: handlerId,
+                    owning_manager_id: handlerId,
+                    ...(inventory ? buildDemandFromInventory(inventory) : { contact_type: 'BUYER', intent: 'buy' }),
+                },
+            });
         }
 
-        // Log Interaction for phone reveal
-        const waPhone = normalizedPhone.replace(/^\+?91/, '');
-        const contact = await prisma.contact.findFirst({
-            where: { phone_number: { in: phoneVariants(normalizedPhone) } },
-            select: { tenant_id: true },
-        });
+        // Reveal the HANDLER's contact (existing → their agent; new → inventory manager).
+        if (handlerId) {
+            const handler = await prisma.agent.findUnique({ where: { id: handlerId }, select: { name: true, phone: true } });
+            if (handler?.phone) { agentName = handler.name; agentPhone = handler.phone; }
+        }
 
-        if (contact) {
+        if (tenant) {
             await prisma.interaction.create({
                 data: {
-                    tenant_id: contact.tenant_id,
-                    phone_number: normalizedPhone,
+                    tenant_id: tenant.id,
+                    phone_number: storedPhone,
                     channel: 'website',
                     direction: 'inbound',
                     event_type: 'phone_reveal',
@@ -1746,9 +1944,20 @@ router.post('/properties/:id/verify-otp', async (req, res) => {
                     metadata: { property_id: id, agent_name: agentName },
                 },
             });
+
+            // Callback lead-action task for the handler (push + 15-min SLA escalation) so the
+            // request lands in their PWA Tasks and never slips. Fire-and-forget; never throws.
+            createLeadActionTask({
+                phone: storedPhone,
+                action: 'CALLBACK_REQUEST',
+                tenantId: tenant.id,
+                propertyId: id,
+                sourceChannel: 'website',
+                rawNote: 'Buyer requested agent contact (Contact Agent) on the website',
+            }).catch(err => logger.warn('[Public/verify-otp] callback task failed:', (err as Error).message));
         }
     } catch (err) {
-        logger.warn('[Public/verify-otp] Agent lookup failed:', (err as Error).message);
+        logger.warn('[Public/verify-otp] Agent lookup/capture failed:', (err as Error).message);
         // Continue with fallback — don't fail the request
     }
 

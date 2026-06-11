@@ -5,8 +5,8 @@
 //
 // Rules:
 //   super_boss  -> sees ALL contacts
-//   manager     -> sees contacts created by self + direct subordinates
-//   employee    -> sees ONLY contacts they created
+//   manager     -> sees contacts assigned to / created by self + direct subordinates
+//   employee    -> sees contacts assigned to them OR created by them
 //   null agent  -> no access (returns impossible filter)
 
 import prisma from '../db';
@@ -32,14 +32,21 @@ export function buildContactVisibilityFilter(
   if (agentRole === 'manager') {
     return {
       OR: [
+        { assigned_agent_id: agentId },
         { created_by: agentId },
+        { assigned_agent: { reports_to_id: agentId } },
         { created_by_agent: { reports_to_id: agentId } },
       ],
     };
   }
 
-  // employee -- only their own
-  return { created_by: agentId };
+  // employee -- assigned to them OR created by them (handles pre-Apr-17 leads with no created_by)
+  return {
+    OR: [
+      { assigned_agent_id: agentId },
+      { created_by: agentId },
+    ],
+  };
 }
 
 /**
@@ -91,13 +98,13 @@ export async function isContactVisibleTo(
 
   const contact = await prisma.contact.findUnique({
     where: { phone_number: phoneNumber },
-    select: { created_by: true },
+    select: { created_by: true, assigned_agent_id: true },
   });
 
   if (!contact) return false;
 
-  // Own contact
-  if (contact.created_by === agentId) return true;
+  // Own contact (created by or assigned to)
+  if (contact.created_by === agentId || contact.assigned_agent_id === agentId) return true;
 
   // Subordinate's contact (manager check)
   if (agentRole === 'manager') {

@@ -22,6 +22,7 @@ import { transitionTransaction } from './transaction_state_machine';
 import { MatchingEngine } from './matching_engine';
 import { ensurePartnerAgent } from './partner_auto_create';
 import { TransactionStatus } from '@prisma/client';
+import { foldLegacyDemand } from '../utils/demand_canonical';
 
 // ── Constants ──────────────────────────────────────────────────────
 
@@ -139,6 +140,182 @@ async function createWorkflowTask(params: {
 
     logger.info(`[WorkflowTask] Created ${taskType} task ${task.id} for ${contactPhone} (round ${round})`);
     return task;
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Lead Action Tasks (callback / visit requests from WhatsApp / Voice)
+// ─────────────────────────────────────────────────────────────────
+//
+// Separate from the 5-stage workflow above. These are HIGH/URGENT tasks
+// created when a lead actively signals interest (taps Call Back on a property
+// card, types "call me back", or asks during a voice call). They have tight
+// SLAs and auto-escalate to super_boss if the assigned agent misses them.
+
+export const LEAD_ACTION_TASK_TYPES = {
+    CALLBACK_REQUEST: 'CALLBACK_REQUEST',
+    VISIT_REQUEST: 'VISIT_REQUEST',
+} as const;
+
+export type LeadActionType = typeof LEAD_ACTION_TASK_TYPES[keyof typeof LEAD_ACTION_TASK_TYPES];
+
+const LEAD_ACTION_SLA_MIN: Record<LeadActionType, number> = {
+    CALLBACK_REQUEST: 15,
+    VISIT_REQUEST: 30,
+};
+
+const LEAD_ACTION_LABEL: Record<LeadActionType, string> = {
+    CALLBACK_REQUEST: '📞 Callback request',
+    VISIT_REQUEST: '📅 Visit request',
+};
+
+let _superBossCache: { id: string; phone: string | null; name: string | null; email: string | null } | null = null;
+let _superBossCacheAt = 0;
+
+async function resolveSuperBoss() {
+    if (_superBossCache && Date.now() - _superBossCacheAt < 5 * 60 * 1000) return _superBossCache;
+    const sb = await prisma.agent.findFirst({
+        where: { role: 'super_boss', status: 'active' },
+        select: { id: true, phone: true, name: true, email: true },
+    });
+    if (sb) {
+        _superBossCache = sb;
+        _superBossCacheAt = Date.now();
+    }
+    return sb;
+}
+
+export interface CreateLeadActionTaskInput {
+    phone: string;
+    action: LeadActionType;
+    tenantId: string;
+    propertyId?: string;
+    dealId?: string;
+    sourceChannel: 'whatsapp-button' | 'whatsapp-text' | 'voice' | 'backfill' | 'website';
+    rawNote?: string;
+}
+
+/**
+ * Centralized creator for lead-action tasks (callback + visit requests).
+ * Resolves the assignee (contact.assigned_agent_id → super_boss fallback),
+ * enforces idempotency, persists task + interaction + notification,
+ * and schedules an SLA breach check via the existing scheduledJobsQueue.
+ *
+ * Safe to call from: WhatsApp button handler, text classifier, voice tool,
+ * backfill script. Always fire-and-forget at the call site; this fn never throws.
+ */
+export async function createLeadActionTask(input: CreateLeadActionTaskInput): Promise<any | null> {
+    const { phone, action, tenantId, propertyId, dealId, sourceChannel, rawNote } = input;
+    const slaMin = LEAD_ACTION_SLA_MIN[action];
+    const label = LEAD_ACTION_LABEL[action];
+
+    try {
+        // Idempotency window: skip if an open task of same type + phone exists in last 60 min
+        const existing = await prisma.task.findFirst({
+            where: {
+                contact_phone: phone,
+                task_type: action,
+                status: { not: 'DONE' },
+                created_at: { gte: new Date(Date.now() - 60 * 60 * 1000) },
+            },
+            select: { id: true },
+        });
+        if (existing) {
+            logger.info(`[LeadActionTask] Skipping duplicate ${action} for ${phone} — open task ${existing.id} exists`);
+            return existing;
+        }
+
+        // Resolve assignee
+        const contact = await prisma.contact.findUnique({
+            where: { phone_number: phone },
+            select: { name: true, assigned_agent_id: true },
+        });
+        const contactName = contact?.name || phone;
+        const superBoss = await resolveSuperBoss();
+
+        let assignee: { id: string; phone: string | null; name: string | null; email: string | null } | null = null;
+        let directToSuperBoss = false;
+        if (contact?.assigned_agent_id) {
+            assignee = await prisma.agent.findUnique({
+                where: { id: contact.assigned_agent_id },
+                select: { id: true, phone: true, name: true, email: true },
+            });
+        }
+        if (!assignee && superBoss) {
+            assignee = superBoss;
+            directToSuperBoss = true;
+        }
+        if (!assignee) {
+            logger.error(`[LeadActionTask] No assignee found (no contact.assigned_agent_id, no super_boss) — cannot create task for ${phone}`);
+            return null;
+        }
+
+        const dueDate = new Date(Date.now() + slaMin * 60 * 1000);
+        const priority = directToSuperBoss ? 'URGENT' : 'HIGH';
+
+        const task = await prisma.task.create({
+            data: {
+                title: `${label}: ${contactName}`,
+                description: `${rawNote || 'Lead requested action via ' + sourceChannel}. SLA ${slaMin} min.${directToSuperBoss ? ' (Auto-routed to super_boss — no agent assigned to this contact.)' : ''}`,
+                assigned_to: assignee.id,
+                due_date: dueDate,
+                priority,
+                status: 'TODO',
+                contact_phone: phone,
+                tags: ['lead-action', action.toLowerCase(), `via:${sourceChannel}`],
+                task_type: action,
+                deal_id: dealId,
+                stage_metadata: { property_id: propertyId, source_channel: sourceChannel, sla_minutes: slaMin },
+            },
+        });
+
+        await prisma.interaction.create({
+            data: {
+                tenant_id: tenantId,
+                phone_number: phone,
+                channel: 'system',
+                direction: 'outbound',
+                event_type: 'lead_action_task_created',
+                content: `${label} task created → ${assignee.name || assignee.id}${directToSuperBoss ? ' (super_boss fallback)' : ''}`,
+                metadata: { task_id: task.id, task_type: action, source_channel: sourceChannel, deal_id: dealId, property_id: propertyId },
+            },
+        });
+
+        notify('lead_action_task_created', [
+            { id: assignee.id, type: 'agent', phone: assignee.phone ?? undefined, email: assignee.email ?? undefined, name: assignee.name ?? undefined },
+        ], {
+            task_id: task.id,
+            action_label: label,
+            contact_name: contactName,
+            contact_phone: phone,
+            due_date: dueDate.toISOString(),
+            sla_minutes: slaMin,
+            source_channel: sourceChannel,
+        });
+
+        // Schedule SLA breach check
+        try {
+            const { scheduledJobsQueue } = await import('../queues/index');
+            await scheduledJobsQueue.add('task-sla-check', {
+                task_id: task.id,
+                contact_phone: phone,
+                original_assignee_id: assignee.id,
+                action,
+            }, {
+                delay: slaMin * 60 * 1000,
+                attempts: 2,
+                removeOnComplete: true,
+                removeOnFail: { count: 100 },
+            });
+        } catch (err) {
+            logger.warn(`[LeadActionTask] Failed to schedule SLA check: ${(err as Error).message}`);
+        }
+
+        logger.info(`[LeadActionTask] Created ${action} task ${task.id} for ${phone} → ${assignee.name || assignee.id} (SLA ${slaMin}min, priority ${priority})`);
+        return task;
+    } catch (err) {
+        logger.error(`[LeadActionTask] Failed to create ${action} for ${phone}:`, err);
+        return null;
+    }
 }
 
 // ── Helper: Get tenant ID from agent ──────────────────────────────
@@ -268,8 +445,14 @@ export async function completeQualifyTask(taskId: string, params: {
             if (cd.preferred_lat !== undefined) contactUpdate.preferred_lat = cd.preferred_lat;
             if (cd.preferred_lng !== undefined) contactUpdate.preferred_lng = cd.preferred_lng;
             if (cd.intent) contactUpdate.intent = cd.intent;
-            if (cd.demand_bhk) contactUpdate.demand_bhk = cd.demand_bhk;
             if (cd.contact_type) contactUpdate.contact_type = cd.contact_type;
+            // demand_bhk column DROPPED 2026-05-29 — the dual-write below folds it into
+            // the canonical demand_schema_values (writing the column threw 500).
+            if (cd.demand_bhk) {
+                const _bhkAsInt = typeof cd.demand_bhk === 'string' ? parseInt(cd.demand_bhk, 10) : cd.demand_bhk;
+                const _canon = foldLegacyDemand({ demand_bhk: _bhkAsInt });
+                if (_canon.demand_schema_values) contactUpdate.demand_schema_values = _canon.demand_schema_values;
+            }
         }
         await prisma.contact.update({ where: { phone_number: contactPhone }, data: contactUpdate });
 
@@ -285,14 +468,25 @@ export async function completeQualifyTask(taskId: string, params: {
             demand_location: contact?.preferred_location || undefined,
             demand_budget_min: contact?.budget_min ? Number(contact.budget_min) : undefined,
             demand_budget_max: contact?.budget_max ? Number(contact.budget_max) : undefined,
-            demand_bedrooms: contact?.demand_bhk || undefined,
+            // Phase 5 (2026-05-29): legacy demand_bedrooms / demand_bhk dropped.
+            // Canonical bhk now lives in demand_schema_values.bhk; pass the full
+            // canonical block through to deal_service + matching engine.
+            demand_taxonomy_node_id: (contact as any)?.demand_taxonomy_node_id ?? null,
+            demand_schema_values: (contact as any)?.demand_schema_values ?? null,
         };
         const dealResult = await createDeal(dealInput, params.agentId, 'admin');
         deal = dealResult.deal || dealResult;
         const dealId = deal.id;
 
-        // Run matching engine
+        // Run matching engine. Derive bhk integer from canonical schema.
         const engine = new MatchingEngine();
+        const contactSchema = ((contact as any)?.demand_schema_values ?? {}) as Record<string, any>;
+        const bhkRawValue = contactSchema.bhk;
+        const bhkInt: number | undefined = (() => {
+            if (bhkRawValue == null) return undefined;
+            const m = String(bhkRawValue).match(/\d+/);
+            return m ? parseInt(m[0], 10) : undefined;
+        })();
         const matches = await engine.findMatches({
             intent: contact?.intent as any,
             budget_min: contact?.budget_min ? Number(contact.budget_min) : undefined,
@@ -300,7 +494,9 @@ export async function completeQualifyTask(taskId: string, params: {
             preferred_location: contact?.preferred_location || undefined,
             preferred_lat: contact?.preferred_lat || undefined,
             preferred_lng: contact?.preferred_lng || undefined,
-            bhk: contact?.demand_bhk ? parseInt(contact.demand_bhk) : undefined,
+            bhk: bhkInt,
+            demand_taxonomy_node_id: (contact as any)?.demand_taxonomy_node_id ?? null,
+            demand_schema_values: (contact as any)?.demand_schema_values ?? null,
         });
 
         // Create Stage 2 task
@@ -577,9 +773,17 @@ export async function completeVisitFeedbackTask(taskId: string, params: {
             } catch { /* may already be at MATCHED or VISITED, ignore */ }
         }
 
-        // Run new matching
+        // Run new matching. Phase 5: legacy demand_bhk column dropped — derive
+        // bhk integer from canonical demand_schema_values.bhk on the contact.
         const contact = await prisma.contact.findUnique({ where: { phone_number: contactPhone } });
         const engine = new MatchingEngine();
+        const contactSchema = ((contact as any)?.demand_schema_values ?? {}) as Record<string, any>;
+        const bhkRawValue = contactSchema.bhk;
+        const bhkInt: number | undefined = (() => {
+            if (bhkRawValue == null) return undefined;
+            const m = String(bhkRawValue).match(/\d+/);
+            return m ? parseInt(m[0], 10) : undefined;
+        })();
         const matches = await engine.findMatches({
             intent: contact?.intent as any,
             budget_min: contact?.budget_min ? Number(contact.budget_min) : undefined,
@@ -587,7 +791,9 @@ export async function completeVisitFeedbackTask(taskId: string, params: {
             preferred_location: contact?.preferred_location || undefined,
             preferred_lat: contact?.preferred_lat || undefined,
             preferred_lng: contact?.preferred_lng || undefined,
-            bhk: contact?.demand_bhk ? parseInt(contact.demand_bhk) : undefined,
+            bhk: bhkInt,
+            demand_taxonomy_node_id: (contact as any)?.demand_taxonomy_node_id ?? null,
+            demand_schema_values: (contact as any)?.demand_schema_values ?? null,
         });
 
         nextTask = await createWorkflowTask({
@@ -906,7 +1112,7 @@ export async function getWorkflowQueue(agentId: string, role: string): Promise<a
                     phone_number: true, name: true, email: true, source: true,
                     intent: true, preferred_location: true, budget_min: true, budget_max: true,
                     lead_status: true, lifecycle_stage: true, verification_status: true,
-                    demand_bhk: true,
+                    demand_schema_values: true, demand_taxonomy_node_id: true,
                 },
             },
         },

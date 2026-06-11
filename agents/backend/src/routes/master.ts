@@ -1,6 +1,7 @@
 
 import { Router } from 'express';
 import prisma from '../db';
+import { captureRouteError } from '../utils/capture';
 
 const router = Router();
 
@@ -27,6 +28,7 @@ router.get('/categories', async (_req, res) => {
         });
         res.json(categories);
     } catch (error) {
+        captureRouteError(error, _req, { route: 'master#1' });
         res.status(500).json({ error: (error as Error).message });
     }
 });
@@ -47,6 +49,7 @@ router.get('/categories/:id/subcategories', async (req, res) => {
         });
         res.json(subcategories);
     } catch (error) {
+        captureRouteError(error, req, { route: 'master#2' });
         res.status(500).json({ error: (error as Error).message });
     }
 });
@@ -60,6 +63,7 @@ router.get('/subcategories/:id/types', async (req, res) => {
         });
         res.json(types);
     } catch (error) {
+        captureRouteError(error, req, { route: 'master#3' });
         res.status(500).json({ error: (error as Error).message });
     }
 });
@@ -79,6 +83,7 @@ router.get('/subcategories/:id', async (req, res) => {
         if (!subcategory) return res.status(404).json({ error: 'Subcategory not found' });
         res.json(subcategory);
     } catch (error) {
+        captureRouteError(error, req, { route: 'master#4' });
         res.status(500).json({ error: (error as Error).message });
     }
 });
@@ -92,6 +97,7 @@ router.get('/configurations', async (_req, res) => {
         });
         res.json(configs);
     } catch (error) {
+        captureRouteError(error, _req, { route: 'master#5' });
         res.status(500).json({ error: (error as Error).message });
     }
 });
@@ -105,6 +111,7 @@ router.get('/usage-types', async (_req, res) => {
         });
         res.json(types);
     } catch (error) {
+        captureRouteError(error, _req, { route: 'master#6' });
         res.status(500).json({ error: (error as Error).message });
     }
 });
@@ -118,6 +125,7 @@ router.get('/investment-types', async (_req, res) => {
         });
         res.json(types);
     } catch (error) {
+        captureRouteError(error, _req, { route: 'master#7' });
         res.status(500).json({ error: (error as Error).message });
     }
 });
@@ -163,6 +171,7 @@ router.get('/tree', async (_req, res) => {
             investment_types: investmentTypes
         });
     } catch (error) {
+        captureRouteError(error, _req, { route: 'master#8' });
         res.status(500).json({ error: (error as Error).message });
     }
 });

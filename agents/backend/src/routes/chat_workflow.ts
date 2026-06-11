@@ -18,6 +18,7 @@ import jwt from 'jsonwebtoken';
 import { ChatWorkflowAdapter } from '../workflows/chat_workflow_adapter';
 import { BuyerChatWorkflowAdapter } from '../workflows/buyer_chat_workflow_adapter';
 import logger from '../utils/logger';
+import { captureRouteError } from '../utils/capture';
 
 const router = Router();
 const adapter = new ChatWorkflowAdapter();
@@ -82,6 +83,7 @@ router.post('/start', async (req: Request, res: Response) => {
         const result = await adapter.startSession(session_id, source || 'web');
         res.json(result);
     } catch (err) {
+        captureRouteError(err, req, { route: 'chat_workflow#1' });
         logger.error('[ChatWorkflow] /start error:', err);
         res.status(500).json({ error: 'Failed to start chat session' });
     }
@@ -107,6 +109,7 @@ router.post('/message', async (req: Request, res: Response) => {
         const result = await adapter.handleMessage(session_id, text, quick_reply_value);
         res.json(result);
     } catch (err) {
+        captureRouteError(err, req, { route: 'chat_workflow#2' });
         logger.error('[ChatWorkflow] /message error:', err);
         res.status(500).json({ error: 'Failed to process message' });
     }
@@ -154,6 +157,7 @@ router.post('/upload-media', (req: Request, res: Response) => {
             const result = await adapter.handleUpload(session_id, uploadType, urls, docMeta);
             res.json(result);
         } catch (err) {
+        captureRouteError(err, req, { route: 'chat_workflow#3' });
             logger.error('[ChatWorkflow] /upload-media error:', err);
             res.status(500).json({ error: 'Failed to upload media' });
         }
@@ -188,6 +192,7 @@ router.post('/confirm', async (req: Request, res: Response) => {
         const result = await adapter.handleConfirm(session_id, confirmed, agentId);
         res.json(result);
     } catch (err) {
+        captureRouteError(err, req, { route: 'chat_workflow#4' });
         logger.error('[ChatWorkflow] /confirm error:', err);
         res.status(500).json({ error: 'Failed to process confirmation' });
     }
@@ -210,6 +215,7 @@ router.get('/session/:id', async (req: Request, res: Response) => {
         const result = await adapter.getSession(req.params.id as string);
         res.json(result);
     } catch (err) {
+        captureRouteError(err, req, { route: 'chat_workflow#5' });
         logger.error('[ChatWorkflow] /session error:', err);
         res.status(500).json({ error: 'Failed to get session' });
     }
@@ -232,6 +238,7 @@ router.post('/buyer/action', async (req: Request, res: Response) => {
         const result = await buyerAdapter.handleAction(session_id, action, source || 'web');
         res.json(result);
     } catch (err) {
+        captureRouteError(err, req, { route: 'chat_workflow#6' });
         logger.error('[ChatWorkflow] /buyer/action error:', err);
         res.status(500).json({ error: 'Failed to process buyer action' });
     }
@@ -258,6 +265,7 @@ router.post('/buyer/book', async (req: Request, res: Response) => {
         );
         res.json(result);
     } catch (err) {
+        captureRouteError(err, req, { route: 'chat_workflow#7' });
         logger.error('[ChatWorkflow] /buyer/book error:', err);
         res.status(500).json({ error: 'Failed to book visit' });
     }

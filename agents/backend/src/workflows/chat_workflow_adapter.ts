@@ -46,6 +46,7 @@ export interface ChatMessage {
         progress?: { current: number; total: number; group: string };
         address_config?: any;
         document_types?: Array<{ value: string; label: string }>;
+        schema_fields?: Array<{ key: string; label: string; input_type: string; required: boolean; options: string[] | null; unit: string | null }>;
     };
 }
 
@@ -231,7 +232,7 @@ export class ChatWorkflowAdapter {
             // For address_block / owner_block / uploader_block: parse JSON objects
             let parsedValue: any = quickReplyValue;
             const currentStep = this.core.getStepDefinition(session.current_step_id || '');
-            if (currentStep && ['address_block', 'owner_block', 'uploader_block'].includes(currentStep.input_type)) {
+            if (currentStep && ['address_block', 'owner_block', 'uploader_block', 'schema_fields'].includes(currentStep.input_type)) {
                 try {
                     const obj = JSON.parse(quickReplyValue);
                     if (typeof obj === 'object' && obj !== null) parsedValue = obj;
@@ -620,6 +621,9 @@ export class ChatWorkflowAdapter {
         }
         if (metadata?.address_config) {
             msgMetadata!.address_config = metadata.address_config;
+        }
+        if (metadata?.schema_fields) {
+            msgMetadata!.schema_fields = metadata.schema_fields;
         }
         if (step.input_type === 'document_upload') {
             msgMetadata!.document_types = DOCUMENT_TYPES;

@@ -112,6 +112,52 @@ export class AuthService {
         };
     }
 
+    /**
+     * P1b — sign in a member via their connected Google account.
+     *
+     * Gate: the member must have ALREADY linked Google from their profile
+     * (P1) — we require a stored google_refresh_token, which is only ever set
+     * by the authenticated /api/team/me/google connect flow. No password:
+     * Google has already authenticated them and we matched the verified email.
+     */
+    public async loginByGoogleEmail(googleEmail: string) {
+        const agent = await prisma.agent.findFirst({
+            where: {
+                status: 'active',
+                google_refresh_token: { not: null },
+                google_email: { equals: googleEmail, mode: 'insensitive' },
+            },
+        });
+        if (!agent) {
+            throw new Error(
+                'This Google account is not linked to an active team member. Log in with your phone number, then connect Google from your profile first.'
+            );
+        }
+
+        const token = jwt.sign(
+            { id: agent.id, email: agent.email, role: agent.role, tenant_id: agent.tenant_id },
+            JWT_SECRET,
+            { expiresIn: JWT_EXPIRES_IN }
+        );
+
+        const refreshToken = jwt.sign(
+            { id: agent.id },
+            JWT_SECRET,
+            { expiresIn: REFRESH_EXPIRES_IN }
+        );
+
+        await prisma.agent.update({
+            where: { id: agent.id },
+            data: { refresh_token: refreshToken, last_login_at: new Date() }
+        });
+
+        return {
+            token,
+            refreshToken,
+            agent: { id: agent.id, name: agent.name, email: agent.email, role: agent.role }
+        };
+    }
+
     public verifyToken(token: string): any {
         return jwt.verify(token, JWT_SECRET);
     }

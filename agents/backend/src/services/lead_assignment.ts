@@ -43,11 +43,14 @@ export async function assignViaRoundRobin(): Promise<string | null> {
 }
 
 /**
- * Resolve an active employee agent by their email address.
+ * Resolve an active agent by their personal email address.
  * Used for SubUserName-based routing from 99acres leads.
  *
- * The 99acres SubUserName field equals the Gmail of the team member
- * whose listing received the enquiry — this directly maps to Agent.email.
+ * The 99acres SubUserName field equals the Gmail of the team member whose listing received the enquiry —
+ * matched here against Agent.personal_email. The lister can be an EMPLOYEE or a MANAGER (managers like
+ * Ashwani also list + handle client buy/sell), so both active roles are matched — NOT employees only,
+ * which used to drop a manager-lister's leads to the super_boss fallback. super_boss is intentionally
+ * excluded so it stays the final fallback for genuinely-unmatched leads.
  *
  * Does NOT update last_assigned_at — the round-robin pointer is only
  * advanced when round-robin actually fires, not for direct routing.
@@ -60,7 +63,7 @@ export async function resolveAgentByEmail(email: string | null | undefined): Pro
         const agent = await prisma.agent.findFirst({
             where: {
                 personal_email: { equals: email.trim(), mode: 'insensitive' },
-                role: 'employee',
+                role: { in: ['employee', 'manager'] },
                 status: 'active',
             },
             select: { id: true, name: true },

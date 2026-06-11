@@ -17,6 +17,7 @@ import { moderateImages, ModerationResult } from '../services/image_moderation';
 import { authMiddleware } from '../middleware/auth';
 import logger from '../utils/logger';
 import prisma from '../db';
+import { captureRouteError } from '../utils/capture';
 
 const router = Router();
 const engine = new WorkflowEngine();
@@ -96,6 +97,7 @@ router.get('/definition', (_req: Request, res: Response) => {
             enrichment_groups: ENRICHMENT_GROUPS,
         });
     } catch (err) {
+        captureRouteError(err, _req, { route: 'workflow#1' });
         logger.error('[Workflow] Error fetching definition', err);
         res.status(500).json({ error: 'Failed to fetch workflow definition' });
     }
@@ -127,6 +129,7 @@ router.post('/next-step', async (req: Request, res: Response) => {
 
         res.json({ done: false, step: result.step, options: result.options || [], metadata: result.metadata || null });
     } catch (err) {
+        captureRouteError(err, req, { route: 'workflow#2' });
         logger.error('[Workflow] next-step error', err);
         res.status(500).json({ error: 'Failed to get next step' });
     }
@@ -153,6 +156,7 @@ router.post('/previous-step', async (req: Request, res: Response) => {
 
         res.json({ step: result.step, options: result.options || [] });
     } catch (err) {
+        captureRouteError(err, req, { route: 'workflow#3' });
         logger.error('[Workflow] previous-step error', err);
         res.status(500).json({ error: 'Failed to get previous step' });
     }
@@ -174,6 +178,7 @@ router.post('/validate', async (req: Request, res: Response) => {
         const result = await engine.validateStep(step_id, value, answers || {});
         res.json(result);
     } catch (err) {
+        captureRouteError(err, req, { route: 'workflow#4' });
         logger.error('[Workflow] validate error', err);
         res.status(500).json({ error: 'Validation failed' });
     }
@@ -202,6 +207,7 @@ router.post('/options', async (req: Request, res: Response) => {
         const options = await engine.getStepOptions(step, answers || {});
         res.json({ options });
     } catch (err) {
+        captureRouteError(err, req, { route: 'workflow#5' });
         logger.error('[Workflow] options error', err);
         res.status(500).json({ error: 'Failed to fetch options' });
     }
@@ -218,6 +224,7 @@ router.post('/visible-steps', async (req: Request, res: Response) => {
         const steps = await engine.getVisibleSteps(answers || {});
         res.json({ steps, groups: WORKFLOW_GROUPS });
     } catch (err) {
+        captureRouteError(err, req, { route: 'workflow#6' });
         logger.error('[Workflow] visible-steps error', err);
         res.status(500).json({ error: 'Failed to get visible steps' });
     }
@@ -239,6 +246,7 @@ router.post('/summary', async (req: Request, res: Response) => {
         const summary = await engine.buildSummary(answers);
         res.json({ summary });
     } catch (err) {
+        captureRouteError(err, req, { route: 'workflow#7' });
         logger.error('[Workflow] summary error', err);
         res.status(500).json({ error: 'Failed to build summary' });
     }
@@ -263,16 +271,32 @@ router.post('/commit', async (req: Request, res: Response) => {
             return res.status(400).json({ error: `source must be one of: ${validSources.join(', ')}` });
         }
 
-        // Optional agent identity from Bearer token
+        // Optional agent identity — supports both HttpOnly cookie (admin SPA) and
+        // Bearer header (legacy API clients). Mirrors authMiddleware's dual-mode pattern.
+        // Bug fix 2026-05-12: previously only read Bearer, which broke every admin
+        // submit since the admin frontend uses cookies, not Bearer tokens.
         let agentId: string | undefined;
+        const cookieToken: string | undefined = req.cookies?.['rp_access_token'];
         const authHeader = req.headers.authorization;
-        if (authHeader?.startsWith('Bearer ')) {
+        const bearerToken = authHeader?.startsWith('Bearer ') ? authHeader.split(' ')[1] : undefined;
+        const token = cookieToken ?? bearerToken;
+
+        if (token) {
             try {
-                const decoded: any = jwt.verify(authHeader.split(' ')[1], process.env.JWT_SECRET || process.env.AGENT_JWT_SECRET || 'secret');
+                const decoded: any = jwt.verify(token, process.env.JWT_SECRET || process.env.AGENT_JWT_SECRET || 'secret');
                 if (decoded?.id) agentId = decoded.id;
             } catch {
-                // Ignore invalid token — public users don't need auth
+                // Invalid/expired token. Public users (web/whatsapp/voice) don't need auth.
+                // Admin must reject to avoid NULL uploaded_by_agent_id in DB.
+                if (source === 'admin') {
+                    return res.status(401).json({ error: 'Session expired. Please refresh the page and try again.' });
+                }
             }
+        }
+
+        // Admin submissions always require an authenticated agent
+        if (source === 'admin' && !agentId) {
+            return res.status(401).json({ error: 'Session expired. Please refresh the page and try again.' });
         }
 
         // Inject _source for engine to read
@@ -281,6 +305,7 @@ router.post('/commit', async (req: Request, res: Response) => {
         const result = await engine.commit(answers, source, agentId);
         res.status(201).json({ success: true, ...result });
     } catch (err) {
+        captureRouteError(err, req, { route: 'workflow#8' });
         logger.error('[Workflow] commit error', err);
         res.status(500).json({ error: (err as Error).message || 'Failed to commit inventory' });
     }
@@ -395,7 +420,7 @@ router.post('/upload-media', authMiddleware, (req: Request, res: Response) => {
                             const affectedInventory = await prisma.inventory.findMany({
                                 where: {
                                     status: { in: ['active', 'draft'] },
-                                    image_urls: { hasSome: rejectedUrls },
+                                    media_urls: { hasSome: rejectedUrls },
                                 },
                                 select: { id: true },
                             });
@@ -423,6 +448,7 @@ router.post('/upload-media', authMiddleware, (req: Request, res: Response) => {
                 }
             });
         } catch (error) {
+        captureRouteError(error, req, { route: 'workflow#9' });
             logger.error('[Upload] Unexpected error in upload handler', { error });
             if (!res.headersSent) {
                 res.status(500).json({ error: 'Upload failed due to server error' });

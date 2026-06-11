@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
+import multer from 'multer';
 import logger from '../utils/logger';
 import { alertCritical } from '../utils/alerter';
 
@@ -46,6 +47,29 @@ export function errorHandler(err: Error, req: Request, res: Response, _next: Nex
         });
 
         res.status(err.statusCode).json({ error: err.message });
+        return;
+    }
+
+    // Multer upload errors — return a clean 4xx to the client instead of a 500 + alert + GlitchTip noise.
+    if (err instanceof multer.MulterError) {
+        const map: Record<string, [number, string]> = {
+            LIMIT_FILE_SIZE: [413, 'File too large.'],
+            LIMIT_FILE_COUNT: [400, 'Too many files.'],
+            LIMIT_UNEXPECTED_FILE: [400, `Unexpected file field${err.field ? `: ${err.field}` : ''}.`],
+            LIMIT_PART_COUNT: [400, 'Too many parts in upload.'],
+            LIMIT_FIELD_KEY: [400, 'Upload field name too long.'],
+            LIMIT_FIELD_VALUE: [400, 'Upload field value too long.'],
+            LIMIT_FIELD_COUNT: [400, 'Too many fields in upload.'],
+        };
+        const [status, message] = map[err.code] ?? [400, err.message];
+        logger.warn('Multer upload error', {
+            requestId,
+            code: err.code,
+            field: err.field,
+            path: req.path,
+            method: req.method,
+        });
+        res.status(status).json({ error: message });
         return;
     }
 

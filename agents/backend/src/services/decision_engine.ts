@@ -1,4 +1,4 @@
-
+﻿
 import prisma from '../db';
 import { WhatsAppService } from './whatsapp';
 import { VoiceService } from './voice';
@@ -51,7 +51,7 @@ export class DecisionEngine {
 
         if (contact.next_action_type === 'whatsapp_missed_call') {
             const message = "Hi! We noticed we missed your call. How can we help you regarding property details? Reply to connect with Panditji, your AI property assistant.";
-            await this.whatsappService.sendTemplate(contact.phone_number, 'rp_missed_call', {});
+            await this.whatsappService.sendTemplate(contact.phone_number, 'rp_missed_call_v2', {});
 
             // Log Interaction
             const tenant = await prisma.tenant.findFirst();

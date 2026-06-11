@@ -15,6 +15,7 @@ import { validate } from '../validators';
 import { callSubmitSchema } from '../validators/calls.validator';
 import logger from '../utils/logger';
 import jwt from 'jsonwebtoken';
+import { captureRouteError } from '../utils/capture';
 
 const JWT_SECRET = process.env.AGENT_JWT_SECRET || 'agent-secret';
 
@@ -28,6 +29,7 @@ const authenticateAgent = async (req: any, res: any, next: any) => {
         req.agent = { id: decoded.id, phone: decoded.phone };
         next();
     } catch (err) {
+        captureRouteError(err, req, { route: 'staff_calls#1' });
         return res.status(403).json({ error: 'Invalid token' });
     }
 };
@@ -137,6 +139,7 @@ router.post('/upload', authenticateAgent, upload.single('audio'), async (req, re
             message: 'Call recording uploaded successfully. Processing will begin shortly.',
         });
     } catch (error) {
+        captureRouteError(error, req, { route: 'staff_calls#2' });
         logger.error('[StaffCall] Upload error:', error);
         res.status(500).json({ error: (error as Error).message });
     }
@@ -201,6 +204,7 @@ router.get('/:id', authenticateAgent, async (req, res) => {
             submitted_at: staffCall.submitted_at,
         });
     } catch (error) {
+        captureRouteError(error, req, { route: 'staff_calls#3' });
         logger.error('[StaffCall] Get error:', error);
         res.status(500).json({ error: (error as Error).message });
     }
@@ -354,6 +358,7 @@ router.post('/:id/submit', authenticateAgent, validate(callSubmitSchema), async 
             message: 'Call submitted to CRM successfully. Contact, VoiceCall, Interaction, and LeadScore updated.',
         });
     } catch (error) {
+        captureRouteError(error, req, { route: 'staff_calls#4' });
         logger.error('[StaffCall] Submit error:', error);
         res.status(500).json({ error: (error as Error).message });
     }
@@ -404,6 +409,7 @@ router.post('/:id/reject', authenticateAgent, async (req, res) => {
             message: 'Call rejected and recording deleted',
         });
     } catch (error) {
+        captureRouteError(error, req, { route: 'staff_calls#5' });
         logger.error('[StaffCall] Reject error:', error);
         res.status(500).json({ error: (error as Error).message });
     }
@@ -465,6 +471,7 @@ router.get('/', authenticateAgent, async (req, res) => {
             },
         });
     } catch (error) {
+        captureRouteError(error, req, { route: 'staff_calls#6' });
         logger.error('[StaffCall] History error:', error);
         res.status(500).json({ error: (error as Error).message });
     }
@@ -519,6 +526,7 @@ router.get('/stats/overview', authenticateAgent, async (req, res) => {
             today_calls: todayCalls,
         });
     } catch (error) {
+        captureRouteError(error, req, { route: 'staff_calls#7' });
         logger.error('[StaffCall] Stats error:', error);
         res.status(500).json({ error: (error as Error).message });
     }
@@ -559,6 +567,7 @@ router.get('/voice-log/all', authMiddleware, checkPermission('view_reports'), as
 
         res.json({ calls, total: calls.length });
     } catch (error) {
+        captureRouteError(error, req, { route: 'staff_calls#8' });
         logger.error('[VoiceCall] Log error:', error);
         res.status(500).json({ error: (error as Error).message });
     }

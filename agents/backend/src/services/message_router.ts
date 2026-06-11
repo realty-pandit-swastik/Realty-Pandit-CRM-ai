@@ -89,6 +89,36 @@ export class MessageRouter {
             logger.info(`[MasterOrchestrator] Continuing from website chat (${conversationContext.historyCount} messages)`);
         }
 
+        // ─── Fast-path: explicit callback request in free text ────────
+        // Detects "call me back", "callback chahiye", "वापस कॉल", "phone karo", etc.
+        // Creates a HIGH priority task assigned to the lead's agent (or super_boss
+        // fallback). Without this, free-text callback asks vanished into the LLM
+        // reply flow with no actionable surface for the team.
+        const callbackRegex = /\b(call ?back|callback|call me|call me back|mujhe call|phone karo|phone kar|kal call|वापस ?कॉल|कॉल ?करो|callback chahiye|callback chah)\b/i;
+        if (callbackRegex.test(message) && contactType !== 'PARTNER_AGENT' && contactType !== 'MANAGEMENT') {
+            try {
+                const tenant = await prisma.tenant.findFirst({ select: { id: true } });
+                if (tenant) {
+                    const { createLeadActionTask } = await import('./workflow_task_service');
+                    await createLeadActionTask({
+                        phone,
+                        action: 'CALLBACK_REQUEST',
+                        tenantId: tenant.id,
+                        sourceChannel: 'whatsapp-text',
+                        rawNote: `Free-text request: "${message.substring(0, 200)}"`,
+                    });
+                    logger.info(`[MasterOrchestrator] Text-callback fast-path matched for ${phone}`);
+                    return {
+                        action: 'reply',
+                        reply_script: 'Thanks — our manager will call you within 15 minutes. 🙏',
+                        quality_hint: 'confident',
+                    };
+                }
+            } catch (err) {
+                logger.warn(`[MasterOrchestrator] Text-callback fast-path failed (non-blocking):`, (err as Error).message);
+            }
+        }
+
         // ─── Consolidated LLM Classification (R013: 3 calls → 1 for UNKNOWN) ────
         // For UNKNOWN contacts, classify contact_type + domain_intent + language in ONE call.
         // Results are cached and reused below, saving ~66% Gemini API calls.
@@ -429,6 +459,7 @@ export class MessageRouter {
             budget_min: contact.budget_min ? Number(contact.budget_min) : null,
             budget_max: contact.budget_max ? Number(contact.budget_max) : null,
             preferred_location: contact.preferred_location,
+            demand_bhk: (contact.demand_schema_values as any)?.bhk ? (parseInt(String((contact.demand_schema_values as any).bhk), 10) || null) : null, // demand_bhk col dropped 2026-05-29 → read schema_values.bhk
             timeline: contact.timeline,
             lead_status: contact.lead_status || 'cold',
             lifecycle_stage: contact.lifecycle_stage || 'NEW',

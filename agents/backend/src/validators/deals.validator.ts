@@ -8,7 +8,7 @@ export const createDealSchema = z.object({
     supply_handler_type: z.enum(['PARTNER', 'TEAM_MEMBER']).optional(),
     supply_handler_id: z.string().optional(),
     inventory_id: z.string().optional(),
-    type: z.enum(['BUY', 'RENT', 'LEASE'], { required_error: 'Transaction type required' }),
+    type: z.enum(['SALE', 'RENT'], { required_error: 'Transaction type required' }),
     source: z.string().max(100).optional(),
     demand_intent: z.string().max(50).optional(),
     demand_category: z.string().max(50).optional(),
@@ -31,7 +31,7 @@ export const matchPropertySchema = z.object({
 });
 
 export const updateDealStatusSchema = z.object({
-    status: z.enum(['NEW', 'MATCHED', 'VISIT_SCHEDULED', 'VISITED', 'NEGOTIATION', 'CLOSED_WON', 'CLOSED_LOST', 'ON_HOLD'], {
+    status: z.enum(['NEW', 'MATCHED', 'QUALIFIED', 'MATCHING_APPOINTMENT', 'VISIT_SCHEDULED', 'VISITED', 'NEGOTIATION', 'CLOSED_WON', 'CLOSED_LOST', 'ON_HOLD'], { // MATCHING_APPOINTMENT kept for legacy deal updates
         required_error: 'Status is required',
     }),
     reason: z.string().max(1000).optional(),
@@ -46,11 +46,12 @@ export const answerDealQuerySchema = z.object({
     answer: z.string().min(1, 'Answer is required').max(5000),
 });
 
-// Partner-submitted deal (simpler - customer name required, phone optional)
+// Partner-submitted deal (simpler — BOTH customer name and phone optional: partners often won't share
+// their client's identity. The lead is attributed to the partner and worked through them.)
 export const partnerCreateDealSchema = z.object({
-    customer_name: z.string().min(1, 'Customer name is required').max(100),
+    customer_name: z.string().max(100).optional(),
     customer_phone: z.string().regex(/^\+?[1-9]\d{7,14}$/, 'Invalid phone number').optional(),
-    type: z.enum(['BUY', 'RENT', 'LEASE'], { required_error: 'Transaction type required' }),
+    type: z.enum(['SALE', 'RENT'], { required_error: 'Transaction type required' }),
     demand_intent: z.string().max(50).optional(),
     demand_category: z.string().max(50).optional(),
     demand_type_slug: z.string().max(100).optional(),

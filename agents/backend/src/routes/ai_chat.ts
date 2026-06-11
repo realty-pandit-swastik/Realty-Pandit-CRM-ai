@@ -3,6 +3,7 @@ import { ChatHandler } from '../services/chat_handler';
 import prisma from '../db';
 import { WhatsAppService } from '../services/whatsapp';
 import { cacheSet, cacheGet } from '../utils/redis';
+import { captureRouteError } from '../utils/capture';
 
 const whatsappService = new WhatsAppService();
 
@@ -87,6 +88,7 @@ router.post('/ai-chat', async (req, res) => {
             ...result,
         });
     } catch (error: any) {
+        captureRouteError(error, req, { route: 'ai_chat#1' });
         console.error('AI Chat error:', error);
         return res.status(500).json({
             success: false,
@@ -120,6 +122,7 @@ router.post('/ai-chat/book-visit', async (req, res) => {
             ...result,
         });
     } catch (error: any) {
+        captureRouteError(error, req, { route: 'ai_chat#2' });
         console.error('Booking error:', error);
         return res.status(500).json({
             success: false,
@@ -178,6 +181,7 @@ router.post('/auth/send-confirmation', async (req, res) => {
             message: 'Confirmation code sent to your WhatsApp',
         });
     } catch (error: any) {
+        captureRouteError(error, req, { route: 'ai_chat#3' });
         console.error('Send confirmation error:', error);
         return res.status(500).json({
             success: false,
@@ -211,6 +215,7 @@ router.post('/auth/verify-confirmation', async (req, res) => {
 
         return res.json({ success: true, message: 'Phone number verified successfully' });
     } catch (error: any) {
+        captureRouteError(error, req, { route: 'ai_chat#4' });
         console.error('Verify confirmation error:', error);
         return res.status(500).json({ success: false, error: 'Failed to verify code', message: error.message });
     }

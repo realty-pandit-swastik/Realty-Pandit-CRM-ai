@@ -319,17 +319,28 @@ export class BuyerChatWorkflowAdapter {
             };
         }
 
-        // Build appointment date
-        let scheduledAt: Date;
-        if (preferredDate && preferredTime) {
-            scheduledAt = new Date(`${preferredDate}T${preferredTime}`);
-        } else if (preferredDate) {
-            scheduledAt = new Date(`${preferredDate}T10:00:00`);
-        } else {
-            // Default: tomorrow at 10 AM
-            scheduledAt = new Date();
-            scheduledAt.setDate(scheduledAt.getDate() + 1);
-            scheduledAt.setHours(10, 0, 0, 0);
+        // Date AND time are mandatory for every client booking — no defaults.
+        // See docs/plans/2026-05-17-website-visit-not-visible-in-crm.md
+        if (!preferredDate || !preferredTime) {
+            return {
+                messages: [this.makeMessage(
+                    'assistant',
+                    'Please tell me your preferred date AND time for the visit (e.g. "20 May at 3 PM") so I can confirm it.',
+                    'error',
+                )],
+                session_active: true,
+            };
+        }
+        const scheduledAt = new Date(`${preferredDate}T${preferredTime}`);
+        if (Number.isNaN(scheduledAt.getTime())) {
+            return {
+                messages: [this.makeMessage(
+                    'assistant',
+                    'I couldn\'t read that date/time. Please use a format like "2026-05-20" and "15:00".',
+                    'error',
+                )],
+                session_active: true,
+            };
         }
 
         try {

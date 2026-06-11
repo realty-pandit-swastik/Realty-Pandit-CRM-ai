@@ -1,8 +1,9 @@
 
-import { Router } from 'express';
+import { Router, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import { AuthService } from '../services/auth';
-import { authMiddleware, requireRole, checkPermission } from '../middleware/auth';
+import { authMiddleware, requireRole, checkPermission, setAuthCookies, clearAuthCookies } from '../middleware/auth';
+import { generateCsrfToken, setCsrfCookie } from '../middleware/csrf';
 import { getAllPermissions } from '../config/permissions';
 import { validate } from '../validators';
 import { loginSchema, registerSchema, refreshTokenSchema, setupSchema, forgotPasswordSchema, resetPasswordOtpSchema, setupPasswordSchema } from '../validators/auth.validator';
@@ -11,9 +12,11 @@ import logger from '../utils/logger';
 import { normalizePhone } from '../utils/phone';
 import { cacheGet, cacheSet, cacheDel } from '../utils/redis';
 import { sendOtp } from '../services/otp_sender';
+import { captureRouteError } from '../utils/capture';
 
 const router = Router();
 const authService = new AuthService();
+const ADMIN_PANEL_URL = process.env.ADMIN_PANEL_URL || 'https://admin.realtypandit.in';
 
 // Redis OTP helpers (works across PM2 cluster instances, survives restarts)
 const OTP_TTL = 600; // 10 minutes
@@ -46,15 +49,74 @@ async function checkOtpRateLimit(phone: string): Promise<{ allowed: boolean; rem
 }
 
 // POST /auth/login — accepts phone + password
+// Returns token in body (legacy clients) AND sets HttpOnly cookies (browser SPA).
 router.post('/login', validate(loginSchema), async (req, res) => {
     const { phone, password } = req.body;
     const normalizedPhone = normalizePhone(phone);
 
     try {
         const result = await authService.loginByPhone(normalizedPhone, password);
+
+        // Set HttpOnly access-token + refresh-token + CSRF cookies for browser SPA
+        setAuthCookies(res, result.token, result.refreshToken);
+
+        // Also return tokens in body for API / legacy clients during transition period
         res.json(result);
     } catch (error) {
         res.status(401).json({ error: (error as Error).message });
+    }
+});
+
+// GET /auth/google — P1b: start "Sign in with Google" (PUBLIC).
+// Top-level browser navigation, so a 302 to Google is correct here.
+router.get('/google', async (req, res) => {
+    try {
+        const { isGoogleOAuthConfigured, signSignInState, buildSignInUrl } = await import('../services/google_oauth');
+        if (!isGoogleOAuthConfigured()) {
+            return res.redirect(`${ADMIN_PANEL_URL}/?login_error=google_unavailable`);
+        }
+        return res.redirect(buildSignInUrl(signSignInState()));
+    } catch (err: any) {
+        captureRouteError(err, req, { route: 'auth#google-start' });
+        logger.error('[Auth] google sign-in start error:', err);
+        return res.redirect(`${ADMIN_PANEL_URL}/?login_error=google_error`);
+    }
+});
+
+// GET /auth/google/callback — P1b: Google sign-in redirect target (PUBLIC).
+// Matches the OAuth client's registered sign-in redirect URI exactly.
+router.get('/google/callback', async (req, res) => {
+    try {
+        const { code, state, error } = req.query || {};
+        if (error) return res.redirect(`${ADMIN_PANEL_URL}/?login_error=google_denied`);
+        if (!code || !state) return res.redirect(`${ADMIN_PANEL_URL}/?login_error=google_error`);
+
+        const { verifySignInState, exchangeSignInCode } = await import('../services/google_oauth');
+
+        try {
+            verifySignInState(String(state));
+        } catch {
+            return res.redirect(`${ADMIN_PANEL_URL}/?login_error=google_expired`);
+        }
+
+        const email = await exchangeSignInCode(String(code));
+        if (!email) return res.redirect(`${ADMIN_PANEL_URL}/?login_error=google_error`);
+
+        let result;
+        try {
+            result = await authService.loginByGoogleEmail(email);
+        } catch {
+            // Not linked / inactive — send them back to phone login with a note.
+            return res.redirect(`${ADMIN_PANEL_URL}/?login_error=google_unlinked`);
+        }
+
+        setAuthCookies(res, result.token, result.refreshToken);
+        logger.info(`[Auth] Google sign-in OK for agent ${result.agent.id} (${email})`);
+        return res.redirect(`${ADMIN_PANEL_URL}/?login=google`);
+    } catch (err: any) {
+        captureRouteError(err, req, { route: 'auth#google-callback' });
+        logger.error('[Auth] google sign-in callback error:', err);
+        return res.redirect(`${ADMIN_PANEL_URL}/?login_error=google_error`);
     }
 });
 
@@ -81,15 +143,57 @@ router.post('/register', authMiddleware, checkPermission('create_agents'), valid
 });
 
 // POST /auth/refresh
-router.post('/refresh', validate(refreshTokenSchema), async (req, res) => {
-    const { refreshToken } = req.body;
+// Accepts refresh token from body (legacy) OR from the rp_refresh_token cookie (browser SPA).
+router.post('/refresh', async (req, res) => {
+    // Cookie-based clients send the refresh token as an HttpOnly cookie
+    const cookieRefreshToken: string | undefined = req.cookies?.['rp_refresh_token'];
+    // Legacy / API clients send it in the request body
+    const bodyRefreshToken: string | undefined = req.body?.refreshToken;
+
+    const refreshToken = cookieRefreshToken ?? bodyRefreshToken;
+
+    if (!refreshToken) {
+        return res.status(401).json({ error: 'Refresh token required' });
+    }
 
     try {
         const result = await authService.refreshToken(refreshToken);
+
+        // Refresh the access-token cookie and rotate the CSRF token
+        setAuthCookies(res, result.token);
+
         res.json(result);
     } catch (error) {
+        // Clear stale cookies so the client lands on the login page
+        clearAuthCookies(res);
         res.status(401).json({ error: (error as Error).message });
     }
+});
+
+// POST /auth/logout — clear all auth cookies and invalidate the refresh token in DB
+router.post('/logout', authMiddleware, async (req, res) => {
+    try {
+        // Invalidate stored refresh token so the old token can't be reused
+        await prisma.agent.update({
+            where: { id: req.agent!.id },
+            data: { refresh_token: null },
+        });
+
+        logger.info(`[Auth] Agent ${req.agent!.id} logged out`);
+    } catch {
+        // Non-fatal — we still clear the cookies even if DB update fails
+        logger.warn('[Auth] Could not clear refresh token from DB during logout');
+    }
+
+    clearAuthCookies(res);
+    res.json({ success: true, message: 'Logged out successfully.' });
+});
+
+// GET /auth/csrf — issue a fresh CSRF token (called once on app boot by browser SPA)
+router.get('/csrf', authMiddleware, (req, res) => {
+    const token = generateCsrfToken();
+    setCsrfCookie(res, token);
+    res.json({ csrf_token: token });
 });
 
 // GET /auth/me - Get current user info
@@ -115,6 +219,7 @@ router.get('/me', authMiddleware, async (req, res) => {
             permissions: getAllPermissions(agent.role)
         });
     } catch (error) {
+        captureRouteError(error, req, { route: 'auth/me' });
         res.status(500).json({ error: (error as Error).message });
     }
 });
@@ -137,6 +242,7 @@ router.post('/setup', validate(setupSchema), async (req, res) => {
 
         const agent = await authService.register(name, email, password, 'super_boss', tenant.id);
         const loginResult = await authService.login(email, password);
+        setAuthCookies(res, loginResult.token, loginResult.refreshToken);
         res.status(201).json(loginResult);
     } catch (error) {
         res.status(400).json({ error: (error as Error).message });
@@ -187,7 +293,7 @@ router.post('/forgot-password', validate(forgotPasswordSchema), async (req, res)
         logger.info(`[Auth] OTP sent to ${normalizedPhone} (wa: ${result.whatsappSent}, email: ${result.emailSent}, remaining: ${rateCheck.remaining})`);
         res.json({ message: result.message, remaining: rateCheck.remaining });
     } catch (error) {
-        logger.error('[Auth] Forgot password error:', error);
+        captureRouteError(error, req, { route: 'auth/forgot-password' });
         res.status(500).json({ error: 'Failed to send OTP. Please check your phone number and try again.' });
     }
 });
@@ -224,7 +330,7 @@ router.post('/verify-reset-otp', validate(resetPasswordOtpSchema), async (req, r
         logger.info(`[Auth] Password reset successful for ${normalizedPhone} (agent: ${agent.name})`);
         res.json({ message: 'Password reset successfully. You can now login with your new password.' });
     } catch (error) {
-        logger.error('[Auth] Verify reset OTP error:', error);
+        captureRouteError(error, req, { route: 'auth/verify-reset-otp' });
         res.status(500).json({ error: 'Failed to reset password. Please try again.' });
     }
 });
@@ -273,7 +379,7 @@ router.post('/resend-otp', async (req, res) => {
         logger.info(`[Auth] OTP resent to ${normalizedPhone} (wa: ${result.whatsappSent}, email: ${result.emailSent}, remaining: ${rateCheck.remaining})`);
         res.json({ message: result.message, remaining: rateCheck.remaining });
     } catch (error) {
-        logger.error('[Auth] Resend OTP error:', error);
+        captureRouteError(error, req, { route: 'auth/resend-otp' });
         res.status(500).json({ error: 'Failed to resend OTP. Please try again.' });
     }
 });
@@ -318,7 +424,7 @@ router.post('/change-password', authMiddleware, async (req, res) => {
         logger.info(`[Auth] Password changed by ${agent.name} (${agent.id})`);
         res.json({ success: true, message: 'Password changed successfully.' });
     } catch (error) {
-        logger.error('[Auth] Change password error:', error);
+        captureRouteError(error, req, { route: 'auth/change-password' });
         res.status(500).json({ error: 'Failed to change password. Please try again.' });
     }
 });
@@ -346,7 +452,7 @@ router.get('/validate-setup-token', async (req, res) => {
 
         res.json({ valid: true, name: agent.name, email: agent.email });
     } catch (error) {
-        logger.error('[Auth] Validate setup token error:', error);
+        captureRouteError(error, req, { route: 'auth/validate-setup-token' });
         res.status(500).json({ valid: false, error: 'Failed to validate token' });
     }
 });
@@ -383,7 +489,7 @@ router.post('/setup-password', validate(setupPasswordSchema), async (req, res) =
         logger.info(`[Auth] Password setup completed for ${agent.email} (${agent.name})`);
         res.json({ success: true, message: 'Password set successfully. You can now login.', email: agent.email });
     } catch (error) {
-        logger.error('[Auth] Setup password error:', error);
+        captureRouteError(error, req, { route: 'auth/setup-password' });
         res.status(500).json({ success: false, error: 'Failed to set password. Please try again.' });
     }
 });

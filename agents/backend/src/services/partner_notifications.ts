@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Partner Notifications Service
  * Sends WhatsApp welcome + email with T&C on partner registration
  */
@@ -28,7 +28,7 @@ export async function sendPartnerWelcomeWhatsApp(
 
     // Try rp_partner_welcome_confirmed (rich template with header + button)
     try {
-        await whatsappService.sendTemplate(waPhone, 'rp_partner_welcome_confirmed', {
+        await whatsappService.sendTemplate(waPhone, 'rp_partner_welcome_v2', {
             name,
             category: categoryLabel,
             coordinator,
@@ -42,7 +42,7 @@ export async function sendPartnerWelcomeWhatsApp(
 
     // Fallback: try rp_partner_registered (simpler template without header/button)
     try {
-        await whatsappService.sendTemplate(waPhone, 'rp_partner_registered', {
+        await whatsappService.sendTemplate(waPhone, 'rp_partner_registered_v2', {
             name,
             category: categoryLabel,
             coordinator

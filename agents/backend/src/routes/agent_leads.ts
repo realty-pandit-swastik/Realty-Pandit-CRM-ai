@@ -13,8 +13,10 @@
 
 import { Router, Request, Response } from 'express';
 import { authMiddleware } from '../middleware/auth';
+import { buildContactVisibilityFilter } from '../middleware/contact_visibility';
 import prisma from '../db';
 import logger from '../utils/logger';
+import { captureRouteError } from '../utils/capture';
 
 const router = Router();
 router.use(authMiddleware);
@@ -32,15 +34,12 @@ router.get('/buyer-leads', async (req: Request, res: Response) => {
         const status = req.query.status as string | undefined;
         const intent = req.query.intent as string | undefined;
 
+        const visibilityFilter = buildContactVisibilityFilter(agentId, (req as any).agent?.role || 'employee');
+
         const where: any = {
             contact_type: { in: ['BUYER', 'TENANT'] },
+            ...visibilityFilter,
         };
-
-        // If agent is not super_boss/manager, only show their assigned leads
-        const agentRole = (req as any).agent?.role;
-        if (agentRole !== 'super_boss' && agentRole !== 'manager') {
-            where.assigned_agent_id = agentId;
-        }
 
         if (status) where.lead_status = status;
         if (intent) where.intent = intent;
@@ -60,8 +59,8 @@ router.get('/buyer-leads', async (req: Request, res: Response) => {
                     lead_score: true,
                     intent: true,
                     preferred_location: true,
-                    demand_bhk: true,
-                    demand_main_category: true,
+                    demand_taxonomy_node_id: true,
+                    demand_schema_values: true,
                     budget_min: true,
                     budget_max: true,
                     source: true,
@@ -83,6 +82,7 @@ router.get('/buyer-leads', async (req: Request, res: Response) => {
             },
         });
     } catch (err) {
+        captureRouteError(err, req, { route: 'agent_leads#1' });
         logger.error('[AgentLeads] buyer-leads error:', err);
         res.status(500).json({ error: 'Failed to fetch buyer leads' });
     }
@@ -111,6 +111,7 @@ router.get('/buyer-leads/:phone', async (req: Request, res: Response) => {
 
         res.json(contact);
     } catch (err) {
+        captureRouteError(err, req, { route: 'agent_leads#2' });
         logger.error('[AgentLeads] buyer-lead detail error:', err);
         res.status(500).json({ error: 'Failed to fetch lead details' });
     }
@@ -165,6 +166,7 @@ router.get('/appointments', async (req: Request, res: Response) => {
             },
         });
     } catch (err) {
+        captureRouteError(err, req, { route: 'agent_leads#3' });
         logger.error('[AgentLeads] appointments error:', err);
         res.status(500).json({ error: 'Failed to fetch appointments' });
     }
@@ -192,6 +194,7 @@ router.post('/appointments/:id/status', async (req: Request, res: Response) => {
 
         res.json({ success: true, appointment });
     } catch (err) {
+        captureRouteError(err, req, { route: 'agent_leads#4' });
         logger.error('[AgentLeads] appointment status update error:', err);
         res.status(500).json({ error: 'Failed to update appointment status' });
     }

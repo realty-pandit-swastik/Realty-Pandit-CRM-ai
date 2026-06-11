@@ -119,8 +119,9 @@ router.post('/webhook', async (req, res) => {
         });
 
         // Round-robin assignment if lead has no CRM agent yet
-        if (!contact.assigned_agent_id) {
-            const agentId = await assignViaRoundRobin();
+        let agentId: string | null = contact.assigned_agent_id ?? null;
+        if (!agentId) {
+            agentId = await assignViaRoundRobin();
             if (agentId) {
                 await prisma.contact.update({
                     where: { phone_number: phoneNumber },
@@ -136,6 +137,11 @@ router.post('/webhook', async (req, res) => {
             sendBuyerConfirmationEmail(email, name || null)
                 .catch(err => logger.warn('[99acres] Buyer email failed:', err.message));
         }
+
+        // Auto-create NEW deal so AI qualification cadence kicks in.
+        const { ensureDealForLead } = await import('../services/ensure_deal');
+        ensureDealForLead({ contactPhone: phoneNumber, source: '99acres', assignedAgentId: agentId })
+            .catch(err => logger.error(`[99acres] ensureDealForLead failed for ${phoneNumber}: ${(err as Error).message}`));
 
         logger.info(`[99acres] Lead captured: ${phoneNumber} (${name || 'unnamed'})`);
         res.status(201).json({ success: true, contact_id: contact.phone_number });

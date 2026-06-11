@@ -29,12 +29,12 @@ export interface AgentMetrics {
 export interface ConversionFunnel {
     NEW: number;
     QUALIFIED: number;
-    MATCHED: number;
     VISIT_SCHEDULED: number;
     VISITED: number;
     NEGOTIATION: number;
     CLOSED_WON: number;
     CLOSED_LOST: number;
+    ON_HOLD: number;
 }
 
 export interface SystemHealth {
@@ -179,12 +179,12 @@ export class PerformanceMonitor {
         const funnel: ConversionFunnel = {
             NEW: 0,
             QUALIFIED: 0,
-            MATCHED: 0,
             VISIT_SCHEDULED: 0,
             VISITED: 0,
             NEGOTIATION: 0,
             CLOSED_WON: 0,
             CLOSED_LOST: 0,
+            ON_HOLD: 0,
         };
 
         for (const stage of stages) {

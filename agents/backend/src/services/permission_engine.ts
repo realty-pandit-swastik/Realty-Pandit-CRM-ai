@@ -303,3 +303,45 @@ export function maskName(name: string): string {
 
     return masked.join(' ');
 }
+
+// ========================================================================
+// Role-layer helpers (2026-04-17 — middleman model, locked Stage-2 decision)
+//
+// Stacks ON TOP of the existing plan-based masking above. Plan rules still apply
+// (e.g. FREE partner still has FREE-tier restrictions). The role layer further
+// strips owner/source from responses when the viewer is not the owning manager.
+// ========================================================================
+
+import { sanitizationService, Viewer } from './sanitization_service';
+export { Viewer } from './sanitization_service';
+
+/**
+ * Build a Viewer object from an authenticated internal agent.
+ * `role` must be one of 'super_boss' | 'manager' | 'employee'.
+ */
+export function viewerFromAgent(agentId: string, role: string): Viewer {
+    return { role: 'agent', agentId, isSuperBoss: role === 'super_boss' };
+}
+
+/**
+ * Build a Viewer object from an authenticated partner agent.
+ */
+export function viewerFromPartner(partnerAgentId: string): Viewer {
+    return { role: 'partner', partnerAgentId };
+}
+
+/**
+ * Apply role-based masking to a single row (inventory or contact shape) before returning
+ * it in a response. Safe to call on any row — non-owning viewers get owner/source stripped;
+ * the owning manager + super_boss get the row untouched.
+ */
+export function applyRoleMask<T extends Record<string, any>>(row: T, viewer: Viewer): T {
+    return sanitizationService.sanitizeInventory(row, viewer);
+}
+
+/**
+ * List variant of applyRoleMask.
+ */
+export function applyRoleMaskList<T extends Record<string, any>>(rows: T[], viewer: Viewer): T[] {
+    return sanitizationService.sanitizeInventoryList(rows, viewer);
+}

@@ -16,7 +16,7 @@ const MAX_ACTIVE_TRANSACTIONS = 20;
 // Active transaction statuses for workload calculation
 const ACTIVE_STATUSES: TransactionStatus[] = [
     TransactionStatus.NEW,
-    TransactionStatus.MATCHED,
+    TransactionStatus.QUALIFIED,
     TransactionStatus.VISIT_SCHEDULED,
     TransactionStatus.VISITED,
     TransactionStatus.NEGOTIATION,

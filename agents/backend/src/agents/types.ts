@@ -63,6 +63,8 @@ export interface ContactData {
     budget_min?: number | null;
     budget_max?: number | null;
     preferred_location?: string | null;
+    demand_bhk?: number | null; // [LEGACY type field] column dropped 2026-05-29 — read demand_schema_values.bhk
+    demand_schema_values?: Record<string, any> | null; // canonical demand SoT (bhk/amenities/…)
     timeline?: string | null;
     lead_status: string;
     lifecycle_stage?: string;
@@ -167,17 +169,17 @@ export interface AgentActionLogEntry {
 export type LifecycleStage =
     | 'NEW'
     | 'QUALIFIED'
-    | 'MATCHED'
     | 'VISIT_SCHEDULED'
     | 'VISITED'
     | 'NEGOTIATION'
     | 'CLOSED_WON'
-    | 'CLOSED_LOST';
+    | 'CLOSED_LOST'
+    | 'ON_HOLD';
 
-// Map from old lead_status to lifecycle_stage
+// Map from lead_status to lifecycle_stage
 export const LEAD_STATUS_TO_LIFECYCLE: Record<string, LifecycleStage> = {
     'cold': 'NEW',
-    'warm': 'MATCHED',
+    'warm': 'QUALIFIED',
     'hot': 'NEGOTIATION',
     'closed': 'CLOSED_WON',
     'lost': 'CLOSED_LOST',

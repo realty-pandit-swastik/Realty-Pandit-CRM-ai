@@ -4,6 +4,7 @@ import path from 'path';
 import cors from 'cors';
 import helmet from 'helmet';
 import compression from 'compression';
+import cookieParser from 'cookie-parser';
 import prisma from './db';
 import webhookRoutes from './routes/webhooks';
 import apiRoutes from './routes/api';
@@ -21,6 +22,7 @@ import facebookRoutes from './integrations/facebook'; // Facebook Lead Ads webho
 import masterRoutes from './routes/master';
 import staffCallRoutes from './routes/staff_calls';
 import classificationRoutes from './routes/classification';
+import taxonomyRoutes, { adminTaxonomyRouter } from './routes/taxonomy';
 import userAuthRoutes from './routes/user_auth';
 import aiChatRoutes from './routes/ai_chat';
 import authOTPRoutes from './routes/auth_otp'; // Website chat OTP authentication
@@ -30,6 +32,7 @@ import teamRoutes from './routes/team'; // Team management + bulk upload
 import agentDashboardRoutes from './routes/agent_dashboard'; // Multi-agent dashboard
 import transactionRoutes from './routes/transactions'; // Transaction Engine
 import dealRoutes from './routes/deals'; // Deal Management (Phase 7)
+import omnidimWebhookRouter from './routes/omnidim'; // Omnidim outbound calling webhook (DEC-003)
 import workflowRoutes from './routes/workflow'; // Unified Inventory Workflow
 import chatWorkflowRoutes from './routes/chat_workflow'; // Chat-based Inventory Workflow
 import analyticsRoutes from './routes/analytics'; // Analytics for dashboard tabs
@@ -42,11 +45,18 @@ import notificationsRoutes from './routes/notifications'; // Notification Prefer
 import agentLeadRoutes from './routes/agent_leads'; // Agent/Dealer buyer lead access
 import integrationRoutes from './routes/integrations'; // Integration sync management (99acres poll API)
 import paymentRoutes, { razorpayWebhookRouter } from './routes/payments'; // Razorpay Payment Gateway
-import { authLimiter, publicLimiter, webhookLimiter, externalLimiter, agentLimiter, apiLimiter, workflowLimiter, chatLimiter } from './middleware/rate_limit';
+import internalToolsRouter from './routes/internal_tools'; // Panditji voice bot internal tool endpoints
+import { loginLimiter, authLimiter, publicLimiter, webhookLimiter, externalLimiter, agentLimiter, apiLimiter, workflowLimiter, chatLimiter } from './middleware/rate_limit';
+import { csrfMiddleware } from './middleware/csrf';
 import { requestLogger } from './middleware/request_logger';
 import { errorHandler } from './middleware/error_handler';
+import * as SentrySDK from '@sentry/node';
 import swaggerUi from 'swagger-ui-express';
 import { swaggerSpec } from './swagger';
+
+// GlitchTip is initialized in instrument.ts (loaded as the first import in server.ts).
+// This module only references the SDK to mount the Express error handler.
+const GLITCHTIP_DSN = process.env.GLITCHTIP_DSN || process.env.SENTRY_DSN;
 
 const app = express();
 app.set('trust proxy', 'loopback');
@@ -66,7 +76,7 @@ app.use(helmet({
             scriptSrc: ["'self'", "'unsafe-inline'"],
             styleSrc: ["'self'", "'unsafe-inline'"],
             imgSrc: ["'self'", "data:", "https:"],
-            connectSrc: ["'self'"],
+            connectSrc: ["'self'", "https://api.realtypandit.in", "https://crm.realtypandit.in", "https://agents.realtypandit.in"],
         },
     },
     crossOriginResourcePolicy: { policy: 'cross-origin' },
@@ -87,6 +97,8 @@ const allowedOrigins = process.env.ALLOWED_ORIGINS
         'http://realtypandit.in',
         'https://www.realtypandit.in',
         'http://www.realtypandit.in',
+        'https://agents.realtypandit.in', // Marketing / Agent+Builder portal
+        'http://agents.realtypandit.in',
         'http://72.62.231.224:5173',  // Production admin IP
         'http://72.62.231.224:3000',  // Production website IP
       ];
@@ -102,14 +114,29 @@ app.use(cors({
     },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-API-Key'],
+    // X-CSRF-Token: required for double-submit CSRF protection
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-API-Key', 'X-CSRF-Token'],
+    exposedHeaders: ['RateLimit-Limit', 'RateLimit-Remaining', 'RateLimit-Reset'],
 }));
+
+// Cookie parser — must come before CSRF middleware and auth middleware
+app.use(cookieParser());
+
+// CSRF protection — double-submit cookie pattern
+// Exempts: safe methods, Bearer-authenticated requests, webhooks, public routes
+app.use(csrfMiddleware);
 
 // Response compression
 app.use(compression());
 
-// Body parsers
-app.use(express.json({ limit: '10mb' }));
+// Body parsers — preserve raw body so the WhatsApp webhook forwarder can pass
+// Meta's signed payload through to Pipecat without breaking the HMAC.
+app.use(express.json({
+    limit: '10mb',
+    verify: (req: any, _res, buf: Buffer) => {
+        req.rawBody = buf;
+    },
+}));
 app.use(express.urlencoded({ extended: true }));
 
 // Handle malformed JSON bodies — must come right after body parsers
@@ -190,16 +217,39 @@ app.use('/uploads', express.static(path.join(process.cwd(), 'uploads'), {
     }
 }));
 
+// CSP violation report endpoint — receives reports from Content-Security-Policy-Report-Only header
+// No auth required; accept JSON and csp-report content types
+app.post('/csp-report', express.json({ type: ['application/json', 'application/csp-report'] }), (req, res) => {
+    const report = req.body?.['csp-report'] ?? req.body;
+    if (report && report['blocked-uri']) {
+        const logger = require('./utils/logger').default;
+        logger.warn('[CSP] Violation report', {
+            blocked: report['blocked-uri'],
+            directive: report['violated-directive'],
+            document: report['document-uri'],
+            source: report['source-file'],
+            line: report['line-number'],
+        });
+    }
+    res.status(204).end();
+});
+
 // Public Routes (no auth required)
+// loginLimiter is applied only to POST /auth/login (5/min per IP)
+app.post('/auth/login', loginLimiter);
 app.use('/auth', authLimiter, authRoutes);
 app.use('/user', publicLimiter, userAuthRoutes); // Customer user authentication
 app.use('/webhooks', webhookLimiter, webhookRoutes);
+app.use('/webhooks/internal/tools', webhookLimiter, internalToolsRouter); // Panditji voice bot internal tools
 app.use('/webhooks', webhookLimiter, razorpayWebhookRouter); // Razorpay payment webhooks
+app.use('/webhooks/omnidim', webhookLimiter, omnidimWebhookRouter); // Omnidim AI calling provider
 app.use('/public', publicLimiter, publicRoutes);
 app.use('/public', publicLimiter, aiChatRoutes); // AI Chat for property search
 app.use('/public/auth', authLimiter, authOTPRoutes); // Website chat OTP authentication
 app.use('/public/master', publicLimiter, masterRoutes);
-app.use('/public', publicLimiter, classificationRoutes); // Property Classification API
+app.use('/public', publicLimiter, classificationRoutes); // Property Classification API (legacy 3-tier)
+app.use('/public/taxonomy', publicLimiter, taxonomyRoutes); // Canonical taxonomy read (Phase 1a)
+app.use('/api/taxonomy', apiLimiter, adminTaxonomyRouter); // Taxonomy admin — super_boss only (Phase 1c)
 app.use('/api/workflow', workflowLimiter, workflowRoutes); // Unified Inventory Workflow (high volume: 2 calls per step)
 app.use('/api/chat', chatLimiter, chatWorkflowRoutes); // Chat-based Inventory Workflow
 
@@ -228,6 +278,58 @@ app.get('/api/team/inventory/bulk-template', publicLimiter, (_req, res) => {
     res.setHeader('Content-Type', 'text/csv');
     res.setHeader('Content-Disposition', 'attachment; filename="inventory_template.csv"');
     res.send(template);
+});
+
+/**
+ * GET /api/team/google/callback — Google OAuth redirect target (PUBLIC, 2026-05-18).
+ *
+ * Hoisted here (above the `/api` JWT auth) for the same reason as the
+ * bulk-template route: Google hits this with no auth cookie/header. Identity +
+ * CSRF come from the signed `state` JWT we minted in /me/google/connect. On
+ * success we store the AES-256-GCM-encrypted refresh token and bounce the
+ * member back to their profile in the admin panel.
+ */
+app.get('/api/team/google/callback', publicLimiter, async (req, res) => {
+    const ADMIN_PANEL_URL = process.env.ADMIN_PANEL_URL || 'https://admin.realtypandit.in';
+    const back = (qs: string) => res.redirect(`${ADMIN_PANEL_URL}/profile?${qs}`);
+    const { default: logger } = await import('./utils/logger');
+    try {
+        const { code, state, error } = req.query || {};
+        if (error) return back('google=denied');
+        if (!code || !state) return back('google=error');
+
+        const { verifyState, exchangeCode } = await import('./services/google_oauth');
+
+        let agentId: string;
+        try {
+            ({ agentId } = verifyState(String(state)));
+        } catch {
+            return back('google=expired');
+        }
+
+        const { refreshToken, email } = await exchangeCode(String(code));
+        const { encryptSecret } = await import('./utils/crypto');
+
+        await prisma.agent.update({
+            where: { id: agentId },
+            data: {
+                google_refresh_token: encryptSecret(refreshToken),
+                google_email: email,
+                google_connected_at: new Date(),
+                google_sync_enabled: true,
+            },
+        });
+
+        logger.info(`[TeamAPI] Google connected for agent ${agentId} (${email || 'unknown email'})`);
+        return back('google=connected');
+    } catch (err: any) {
+        try {
+            const { captureRouteError } = await import('./utils/capture');
+            captureRouteError(err, req, { route: 'team#google-callback' });
+        } catch { /* capture is best-effort */ }
+        logger.error('[TeamAPI] google callback error:', err);
+        return back('google=error');
+    }
 });
 
 // API Routes (JWT auth)
@@ -313,6 +415,22 @@ app.get('/health', async (req, res) => {
 
     res.json(checks);
 });
+
+// GlitchTip Express error handler — must come before custom errorHandler, after all routes.
+// shouldHandleError filters out 4xx and known operational errors so we only report real 5xx.
+if (GLITCHTIP_DSN) {
+  SentrySDK.setupExpressErrorHandler(app, {
+    shouldHandleError(err: any) {
+      // Multer upload errors are handled by errorHandler -> clean 4xx response. Don't report.
+      if (err?.name === 'MulterError') return false;
+      // CORS rejections are operational, not bugs.
+      if (typeof err?.message === 'string' && err.message.startsWith('CORS:')) return false;
+      // Only report 5xx (and errors without a status, which default to 500).
+      const status = err?.status ?? err?.statusCode ?? 500;
+      return status >= 500;
+    },
+  });
+}
 
 // Global error handler (must be last)
 app.use(errorHandler);

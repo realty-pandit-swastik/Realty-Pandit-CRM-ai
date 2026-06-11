@@ -1,4 +1,4 @@
-
+﻿
 import { Router } from 'express';
 import { randomUUID } from 'crypto';
 import multer from 'multer';
@@ -7,10 +7,13 @@ import bcrypt from 'bcryptjs';
 import prisma from '../db';
 import logger from '../utils/logger';
 import { authMiddleware, checkPermission } from '../middleware/auth';
+import { requireSuperBoss } from '../middleware/require_super_boss';
 import { emailProvisioner } from '../services/email_provisioner';
 import { ensureOwner } from '../services/ensure_owner';
 import { WhatsAppService } from '../services/whatsapp';
 import { notify } from '../services/notify';
+import { ownershipService } from '../services/ownership_service';
+import { captureRouteError } from '../utils/capture';
 
 const whatsappService = new WhatsAppService();
 const ADMIN_PANEL_URL = process.env.ADMIN_PANEL_URL || 'https://admin.realtypandit.in';
@@ -32,8 +35,404 @@ router.get('/inventory/bulk-template', (req, res) => {
     res.send(template);
 });
 
+// NOTE: the public Google OAuth callback (GET /api/team/google/callback) is
+// registered at the APP level in app.ts (before the `/api` JWT auth), NOT
+// here — the same hoisting the inventory bulk-template route needs. See the
+// "Public team endpoints" block in app.ts.
+
 // All team routes below require authentication
 router.use(authMiddleware);
+
+// =============================================================
+// SELF-SERVICE
+// =============================================================
+
+/**
+ * GET /api/team/me — current logged-in agent's profile.
+ * Used by the team profile UI to seed the editable Portal Account Email field.
+ */
+router.get('/me', async (req: any, res) => {
+    try {
+        const agentId = req.agent?.id;
+        if (!agentId) return res.status(401).json({ success: false, error: 'Unauthenticated' });
+        const me = await prisma.agent.findUnique({
+            where: { id: agentId },
+            select: {
+                id: true, name: true, role: true, email: true, phone: true,
+                personal_email: true, status: true, department: true,
+                email_mailbox_activated: true,
+            },
+        });
+        return res.json({ success: true, data: me });
+    } catch (err: any) {
+        captureRouteError(err, req, { route: 'team#1' });
+        logger.error('[TeamAPI] /me error:', err);
+        return res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+/**
+ * PATCH /api/team/me/portal-email — agent self-updates personal_email.
+ * This email keys 99acres SubUserName / Housing broker_email matching, so incoming
+ * external leads are routed to the team member who owns the listing on that portal.
+ * Empty string clears it.
+ */
+router.patch('/me/portal-email', async (req: any, res) => {
+    try {
+        const agentId = req.agent?.id;
+        if (!agentId) return res.status(401).json({ success: false, error: 'Unauthenticated' });
+        const { portal_email } = req.body || {};
+        if (typeof portal_email !== 'string') {
+            return res.status(400).json({ success: false, error: 'portal_email must be a string' });
+        }
+        const trimmed = portal_email.trim();
+        const value = trimmed === '' ? null : trimmed;
+        if (value && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
+            return res.status(400).json({ success: false, error: 'Invalid email format' });
+        }
+        await prisma.agent.update({
+            where: { id: agentId },
+            data: { personal_email: value },
+        });
+        return res.json({ success: true, personal_email: value });
+    } catch (err: any) {
+        captureRouteError(err, req, { route: 'team#2' });
+        logger.error('[TeamAPI] portal-email update error:', err);
+        return res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+/**
+ * PATCH /api/team/me/profile — agent self-updates their OWN name only
+ * (2026-05-19). Auth-only, NO admin permission (mirrors the other /me
+ * self-service routes). **Phone is intentionally NOT self-editable**: it is
+ * the account identity (phone login + WhatsApp OTP reset + Panditji
+ * recognition). Any `phone` in the body is ignored; only an admin can change
+ * it via PATCH /members/:id. role/department/manager/personal_email also stay
+ * admin-managed / their own endpoints. See
+ * docs/plans/2026-05-18-member-self-profile.md
+ */
+router.patch('/me/profile', async (req: any, res) => {
+    try {
+        const agentId = req.agent?.id;
+        if (!agentId) return res.status(401).json({ success: false, error: 'Unauthenticated' });
+        const { name } = req.body || {};
+        // Note: `phone` (and any other field) is deliberately not read here.
+
+        const data: any = {};
+        if (name !== undefined) {
+            const n = String(name).trim();
+            if (n.length < 2) return res.status(400).json({ success: false, error: 'Name must be at least 2 characters' });
+            data.name = n;
+        }
+        if (Object.keys(data).length === 0) {
+            return res.status(400).json({ success: false, error: 'Nothing to update' });
+        }
+
+        const updated = await prisma.agent.update({
+            where: { id: agentId },
+            data,
+            select: {
+                id: true, name: true, email: true, phone: true,
+                role: true, department: true, status: true, personal_email: true,
+            },
+        });
+
+        logger.info(`[TeamAPI] Self profile updated by agent ${agentId} (${Object.keys(data).join(', ')})`);
+        return res.json({ success: true, data: updated });
+    } catch (err: any) {
+        captureRouteError(err, req, { route: 'team#me-profile' });
+        logger.error('[TeamAPI] self profile update error:', err);
+        return res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+/**
+ * POST /api/team/me/mailbox-password — member sets/activates their OWN
+ * @realtypandit.in mailbox password (self-hosted Dovecot), 2026-05-19.
+ * Auth-only. On success flips `email_mailbox_activated=true` so the profile
+ * then reveals the Outlook IMAP/SMTP setup details.
+ *
+ * SECURITY: the password is interpolated into a shell `sed` command inside
+ * emailProvisioner.updatePassword, so it is strictly allow-listed here to
+ * exclude every shell- and sed-special character (| \ / & " ' $ ` space …).
+ */
+router.post('/me/mailbox-password', async (req: any, res) => {
+    try {
+        const agentId = req.agent?.id;
+        if (!agentId) return res.status(401).json({ success: false, error: 'Unauthenticated' });
+
+        const newPassword = String((req.body || {}).newPassword ?? '');
+        // Allow-list only: letters, digits, and a safe symbol set. Anything
+        // outside this (incl. | \ / & " ' $ ` and whitespace) is rejected.
+        if (!/^[A-Za-z0-9!@#%^*()_\-+=.:?]{8,64}$/.test(newPassword)) {
+            return res.status(400).json({
+                success: false,
+                error: 'Password must be 8–64 chars, using letters, digits, and ! @ # % ^ * ( ) _ - + = . : ? only',
+            });
+        }
+
+        const me = await prisma.agent.findUnique({
+            where: { id: agentId },
+            select: { email: true },
+        });
+        // The mail server keys every mailbox by the lowercase address (that's
+        // how the provisioner generates them); agent.email can be mixed-case,
+        // so normalize before touching Postfix/Dovecot.
+        const mailbox = String(me?.email || '').trim().toLowerCase();
+        // Defense in depth: only operate on a well-formed in-house mailbox.
+        if (!/^[a-z0-9._-]+@realtypandit\.in$/.test(mailbox)) {
+            return res.status(400).json({ success: false, error: 'Your account has no Realty Pandit mailbox' });
+        }
+
+        // provision() is idempotent: it creates the Maildir + Postfix vmailbox
+        // + Dovecot entry if missing, or just updates the password if present.
+        // (updatePassword() alone would silently no-op for a member whose
+        // mailbox was never provisioned → false "activated".)
+        await emailProvisioner.provision(mailbox, newPassword);
+        await prisma.agent.update({
+            where: { id: agentId },
+            data: { email_mailbox_activated: true },
+        });
+
+        logger.info(`[TeamAPI] Mailbox provisioned + activated for agent ${agentId} (${mailbox})`);
+        return res.json({ success: true, data: { mailbox } });
+    } catch (err: any) {
+        captureRouteError(err, req, { route: 'team#me-mailbox-password' });
+        logger.error('[TeamAPI] set mailbox password error:', err);
+        return res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+/**
+ * GET /api/team/me/email-config — current agent's outbound email config (T9b).
+ * Never returns the stored password — only whether one is set.
+ */
+router.get('/me/email-config', async (req: any, res) => {
+    try {
+        const agentId = req.agent?.id;
+        if (!agentId) return res.status(401).json({ success: false, error: 'Unauthenticated' });
+        const a = await prisma.agent.findUnique({
+            where: { id: agentId },
+            select: {
+                email: true,
+                email_provider: true, email_smtp_host: true, email_smtp_port: true,
+                email_smtp_secure: true, email_smtp_username: true,
+                email_smtp_password: true, email_configured_at: true,
+            },
+        });
+        if (!a) return res.status(404).json({ success: false, error: 'Agent not found' });
+        return res.json({
+            success: true,
+            data: {
+                account_email: a.email,
+                provider: a.email_provider,
+                smtp_host: a.email_smtp_host,
+                smtp_port: a.email_smtp_port,
+                smtp_secure: a.email_smtp_secure,
+                smtp_username: a.email_smtp_username,
+                password_set: !!a.email_smtp_password,
+                configured_at: a.email_configured_at,
+            },
+        });
+    } catch (err: any) {
+        captureRouteError(err, req, { route: 'team#email-config-get' });
+        logger.error('[TeamAPI] email-config get error:', err);
+        return res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+/**
+ * PUT /api/team/me/email-config — agent self-configures their sending mailbox
+ * (Outlook/Office365/Gmail/custom). Password is AES-256-GCM encrypted at rest.
+ * Send `password: ''` (omit) to keep the existing password; `clear: true` wipes config.
+ */
+router.put('/me/email-config', async (req: any, res) => {
+    try {
+        const agentId = req.agent?.id;
+        if (!agentId) return res.status(401).json({ success: false, error: 'Unauthenticated' });
+        const { provider, smtp_host, smtp_port, smtp_secure, smtp_username, password, clear } = req.body || {};
+
+        if (clear === true) {
+            await prisma.agent.update({
+                where: { id: agentId },
+                data: {
+                    email_provider: null, email_smtp_host: null, email_smtp_port: null,
+                    email_smtp_secure: null, email_smtp_username: null,
+                    email_smtp_password: null, email_configured_at: null,
+                },
+            });
+            return res.json({ success: true, cleared: true });
+        }
+
+        if (!smtp_host || !smtp_port || !smtp_username) {
+            return res.status(400).json({ success: false, error: 'smtp_host, smtp_port and smtp_username are required' });
+        }
+        const port = parseInt(String(smtp_port), 10);
+        if (isNaN(port) || port < 1 || port > 65535) {
+            return res.status(400).json({ success: false, error: 'smtp_port must be a valid port number' });
+        }
+
+        const data: any = {
+            email_provider: provider || 'custom',
+            email_smtp_host: String(smtp_host).trim(),
+            email_smtp_port: port,
+            email_smtp_secure: smtp_secure === true || port === 465,
+            email_smtp_username: String(smtp_username).trim(),
+            email_configured_at: new Date(),
+        };
+
+        if (password && String(password).length > 0) {
+            const { encryptSecret } = await import('../utils/crypto');
+            data.email_smtp_password = encryptSecret(String(password));
+        } else {
+            // Keep existing password; reject if none stored yet.
+            const existing = await prisma.agent.findUnique({
+                where: { id: agentId }, select: { email_smtp_password: true },
+            });
+            if (!existing?.email_smtp_password) {
+                return res.status(400).json({ success: false, error: 'password is required for first-time setup' });
+            }
+        }
+
+        await prisma.agent.update({ where: { id: agentId }, data });
+        logger.info(`[TeamAPI] Email config saved for agent ${agentId} (${data.email_provider})`);
+        return res.json({ success: true });
+    } catch (err: any) {
+        captureRouteError(err, req, { route: 'team#email-config-put' });
+        logger.error('[TeamAPI] email-config put error:', err);
+        return res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// =============================================================
+// GOOGLE ACCOUNT LINK (2026-05-18) — self-service, mirrors email-config
+// =============================================================
+
+/**
+ * GET /api/team/me/google/connect — returns the Google consent URL.
+ * Frontend opens it (we return JSON, not a 302, because this route is behind
+ * Bearer/cookie auth and a redirect would lose the auth context).
+ */
+router.get('/me/google/connect', async (req: any, res) => {
+    try {
+        const agentId = req.agent?.id;
+        if (!agentId) return res.status(401).json({ success: false, error: 'Unauthenticated' });
+
+        const { isGoogleOAuthConfigured, signState, buildConnectUrl } = await import('../services/google_oauth');
+        if (!isGoogleOAuthConfigured()) {
+            return res.status(503).json({ success: false, error: 'Google integration is not configured' });
+        }
+
+        const url = buildConnectUrl(signState(agentId));
+        return res.json({ success: true, data: { url } });
+    } catch (err: any) {
+        captureRouteError(err, req, { route: 'team#google-connect' });
+        logger.error('[TeamAPI] google connect error:', err);
+        return res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+/**
+ * GET /api/team/me/google-config — connection status (never the token).
+ */
+router.get('/me/google-config', async (req: any, res) => {
+    try {
+        const agentId = req.agent?.id;
+        if (!agentId) return res.status(401).json({ success: false, error: 'Unauthenticated' });
+
+        const a = await prisma.agent.findUnique({
+            where: { id: agentId },
+            select: {
+                google_email: true,
+                google_refresh_token: true,
+                google_connected_at: true,
+                google_sync_enabled: true,
+            },
+        });
+        if (!a) return res.status(404).json({ success: false, error: 'Agent not found' });
+
+        const { isGoogleOAuthConfigured } = await import('../services/google_oauth');
+        return res.json({
+            success: true,
+            data: {
+                available: isGoogleOAuthConfigured(),
+                connected: !!a.google_refresh_token,
+                google_email: a.google_email,
+                connected_at: a.google_connected_at,
+                sync_enabled: a.google_sync_enabled,
+            },
+        });
+    } catch (err: any) {
+        captureRouteError(err, req, { route: 'team#google-config-get' });
+        logger.error('[TeamAPI] google-config get error:', err);
+        return res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+/**
+ * PUT /api/team/me/google-config — toggle sync on/off (opt-out without
+ * disconnecting). Body: { sync_enabled: boolean }.
+ */
+router.put('/me/google-config', async (req: any, res) => {
+    try {
+        const agentId = req.agent?.id;
+        if (!agentId) return res.status(401).json({ success: false, error: 'Unauthenticated' });
+
+        const { sync_enabled } = req.body || {};
+        if (typeof sync_enabled !== 'boolean') {
+            return res.status(400).json({ success: false, error: 'sync_enabled (boolean) is required' });
+        }
+
+        await prisma.agent.update({
+            where: { id: agentId },
+            data: { google_sync_enabled: sync_enabled },
+        });
+        logger.info(`[TeamAPI] Google sync ${sync_enabled ? 'enabled' : 'disabled'} for agent ${agentId}`);
+        return res.json({ success: true });
+    } catch (err: any) {
+        captureRouteError(err, req, { route: 'team#google-config-put' });
+        logger.error('[TeamAPI] google-config put error:', err);
+        return res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+/**
+ * DELETE /api/team/me/google — disconnect: best-effort revoke at Google, then
+ * wipe the local columns regardless.
+ */
+router.delete('/me/google', async (req: any, res) => {
+    try {
+        const agentId = req.agent?.id;
+        if (!agentId) return res.status(401).json({ success: false, error: 'Unauthenticated' });
+
+        const a = await prisma.agent.findUnique({
+            where: { id: agentId },
+            select: { google_refresh_token: true },
+        });
+
+        if (a?.google_refresh_token) {
+            const { revokeRefreshToken } = await import('../services/google_oauth');
+            await revokeRefreshToken(a.google_refresh_token);
+        }
+
+        await prisma.agent.update({
+            where: { id: agentId },
+            data: {
+                google_refresh_token: null,
+                google_email: null,
+                google_connected_at: null,
+                google_sync_enabled: true,
+            },
+        });
+        logger.info(`[TeamAPI] Google disconnected for agent ${agentId}`);
+        return res.json({ success: true });
+    } catch (err: any) {
+        captureRouteError(err, req, { route: 'team#google-disconnect' });
+        logger.error('[TeamAPI] google disconnect error:', err);
+        return res.status(500).json({ success: false, error: err.message });
+    }
+});
 
 // =============================================================
 // TEAM MEMBER MANAGEMENT
@@ -49,6 +448,7 @@ router.get('/members-list', checkPermission('view_inventory'), async (req, res) 
         });
         res.json(members);
     } catch (error) {
+        captureRouteError(error, req, { route: 'team#3' });
         logger.error('Team members-list fetch error:', error);
         res.status(500).json({ error: (error as Error).message });
     }
@@ -70,6 +470,7 @@ router.get('/members', checkPermission('manage_team'), async (req, res) => {
         });
         res.json(members);
     } catch (error) {
+        captureRouteError(error, req, { route: 'team#4' });
         logger.error('Team members fetch error:', error);
         res.status(500).json({ error: (error as Error).message });
     }
@@ -85,13 +486,14 @@ router.get('/email-preview', checkPermission('manage_team'), async (req, res) =>
         const email = await emailProvisioner.generateUniqueEmail(name);
         res.json({ email });
     } catch (error) {
+        captureRouteError(error, req, { route: 'team#5' });
         res.status(500).json({ error: (error as Error).message });
     }
 });
 
 // POST /api/team/members - Create a new team member
 router.post('/members', checkPermission('create_agents'), async (req, res) => {
-    const { name, phone, role, department, reports_to_id, customEmail, customPassword } = req.body;
+    const { name, phone, role, department, reports_to_id, customEmail, customPassword, personal_email } = req.body;
 
     if (!name || !phone) {
         return res.status(400).json({ error: 'name and phone are required' });
@@ -135,6 +537,7 @@ router.post('/members', checkPermission('create_agents'), async (req, res) => {
                 password_hash: passwordHash,
                 tenant_id: req.agent!.tenant_id,
                 reports_to_id: reports_to_id || null,
+                personal_email: personal_email ? personal_email.trim().toLowerCase() : null,
                 status: 'active'
             },
             select: {
@@ -194,7 +597,7 @@ router.post('/members', checkPermission('create_agents'), async (req, res) => {
         const setupLink = `${ADMIN_PANEL_URL}/setup-password?token=${setupToken}`;
 
         // Send WhatsApp welcome message (non-blocking)
-        sendWelcomeWhatsApp(normalizedPhone, name, targetRole, department, email, setupLink, req.agent!.tenant_id)
+        sendWelcomeWhatsApp(normalizedPhone, name, targetRole, department, email, setupLink, req.agent!.tenant_id, req.agent!.name)
             .catch(err => logger.warn(`[Team] WhatsApp welcome failed for ${normalizedPhone}: ${err.message}`));
 
         // Notify all admins about new team member
@@ -220,7 +623,30 @@ router.post('/members', checkPermission('create_agents'), async (req, res) => {
             }
         });
     } catch (error) {
+        captureRouteError(error, req, { route: 'team#6' });
         logger.error('Create team member error:', error);
+        res.status(500).json({ error: (error as Error).message });
+    }
+});
+
+// GET /api/team/members/:id - Get individual member profile
+router.get('/members/:id', checkPermission('manage_team'), async (req, res) => {
+    try {
+        const member = await prisma.agent.findFirst({
+            where: { id: req.params.id, tenant_id: req.agent!.tenant_id },
+            select: {
+                id: true, name: true, email: true, phone: true,
+                role: true, department: true, status: true,
+                last_login_at: true, created_at: true, personal_email: true,
+                reports_to: { select: { id: true, name: true, role: true } },
+                subordinates: { select: { id: true, name: true, role: true, department: true, status: true } },
+                _count: { select: { assigned_leads: true } },
+            },
+        });
+        if (!member) return res.status(404).json({ error: 'Member not found' });
+        res.json(member);
+    } catch (error) {
+        captureRouteError(error, req, { route: 'team#7' });
         res.status(500).json({ error: (error as Error).message });
     }
 });
@@ -228,11 +654,15 @@ router.post('/members', checkPermission('create_agents'), async (req, res) => {
 // PATCH /api/team/members/:id - Update member details
 router.patch('/members/:id', checkPermission('manage_team'), async (req, res) => {
     const { id } = req.params;
-    const { name, phone, department, role, personal_email } = req.body;
+    const { name, phone, department, role, personal_email, reports_to_id } = req.body;
 
     // Role changes: only super_boss
     if (role && req.agent!.role !== 'super_boss') {
         return res.status(403).json({ error: 'Only super_boss can change roles' });
+    }
+    // Manager assignment: only super_boss
+    if (reports_to_id !== undefined && req.agent!.role !== 'super_boss') {
+        return res.status(403).json({ error: 'Only super_boss can change manager assignment' });
     }
 
     try {
@@ -244,6 +674,7 @@ router.patch('/members/:id', checkPermission('manage_team'), async (req, res) =>
         if (personal_email !== undefined) {
             updateData.personal_email = personal_email ? personal_email.trim().toLowerCase() : null;
         }
+        if (reports_to_id !== undefined) updateData.reports_to_id = reports_to_id || null;
 
         const agent = await prisma.agent.update({
             where: { id },
@@ -277,14 +708,54 @@ router.patch('/members/:id', checkPermission('manage_team'), async (req, res) =>
 
         res.json(agent);
     } catch (error) {
+        captureRouteError(error, req, { route: 'team#8' });
         logger.error('Update team member error:', error);
         res.status(500).json({ error: (error as Error).message });
     }
 });
 
+// POST /api/team/members/:id/transfer-assets — 2026-05-12 two-step deactivation flow.
+// Admin selects a target agent and (optionally) specific asset buckets. Use this to
+// drain a leaving team member's pipeline before flipping them to inactive.
+router.post('/members/:id/transfer-assets', checkPermission('manage_settings'), async (req, res) => {
+    const fromAgentId = String(req.params.id);
+    const { to_agent_id, asset_types, reason } = req.body as {
+        to_agent_id?: string;
+        asset_types?: { partners?: boolean; inventory?: boolean; contacts?: boolean; leads?: boolean; transactions?: boolean };
+        reason?: string;
+    };
+
+    if (!to_agent_id) return res.status(400).json({ error: 'to_agent_id is required' });
+    if (fromAgentId === req.agent!.id) return res.status(400).json({ error: 'Cannot transfer assets from yourself via this endpoint' });
+
+    try {
+        const result = await ownershipService.transferAssets(
+            fromAgentId,
+            to_agent_id,
+            req.agent!.id,
+            asset_types,
+        );
+        logger.warn(
+            `[Team] Asset transfer ${fromAgentId} -> ${to_agent_id} by ${req.agent!.id} ` +
+            `(reason="${reason ?? ''}"; partners=${result.counts.partners} ` +
+            `inv=${result.counts.inventory} contacts=${result.counts.contacts} ` +
+            `leads=${result.counts.leads} txn=${result.counts.transactions})`,
+        );
+        res.json({ success: true, ...result });
+    } catch (error) {
+        captureRouteError(error, req, { route: 'team#transfer-assets' });
+        res.status(500).json({ error: (error as Error).message });
+    }
+});
+
 // PATCH /api/team/members/:id/deactivate - Deactivate or reactivate a member
+//
+// 2026-05-12 (two-step deactivation): if the agent still owns ANY assets when status='inactive',
+// the route REJECTS with 400 + `requires_transfer:true` and the current summary. Admin must
+// drain the pipeline via POST .../transfer-assets first. The cascade safety net stays in
+// `cascadeOnAgentDeactivation` but is no longer the primary UX path.
 router.patch('/members/:id/deactivate', checkPermission('manage_settings'), async (req, res) => {
-    const { id } = req.params;
+    const id = String(req.params.id);
     const { status } = req.body; // 'active' or 'inactive'
 
     if (id === req.agent!.id) {
@@ -292,13 +763,54 @@ router.patch('/members/:id/deactivate', checkPermission('manage_settings'), asyn
     }
 
     try {
+        if (status === 'inactive') {
+            const summary = await ownershipService.getOwnershipSummary(id);
+            const total =
+                summary.partners + summary.inventory + summary.contacts + summary.leads + summary.transactions;
+
+            if (total > 0) {
+                return res.status(400).json({
+                    error: `This agent still owns ${total} assets. Use 'Transfer Assets' to redistribute their pipeline first.`,
+                    requires_transfer: true,
+                    summary,
+                });
+            }
+
+            // Clean — just flip the status. No cascade needed.
+            const agent = await prisma.agent.update({
+                where: { id },
+                data: { status: 'inactive' },
+                select: { id: true, name: true, email: true, status: true },
+            });
+            logger.warn(`[Team] Agent ${id} deactivated (assets already drained).`);
+            return res.json({
+                ...agent,
+                message: 'Account inactive.',
+                cascade: { partners: 0, inventory: 0, contacts: 0, leads: 0, transactions: 0 },
+            });
+        }
+
+        // Reactivation path (status='active' or any other value) — unchanged
         const agent = await prisma.agent.update({
             where: { id },
             data: { status: status === 'active' ? 'active' : 'inactive' },
-            select: { id: true, name: true, email: true, status: true }
+            select: { id: true, name: true, email: true, status: true },
         });
         res.json({ ...agent, message: `Account ${agent.status}` });
     } catch (error) {
+        captureRouteError(error, req, { route: 'team#9' });
+        res.status(500).json({ error: (error as Error).message });
+    }
+});
+
+// GET /api/team/members/:id/ownership-summary — preview cascade impact for the admin UI.
+// Super_boss only (because the answer reveals cross-team asset ownership).
+router.get('/members/:id/ownership-summary', requireSuperBoss, async (req, res) => {
+    try {
+        const summary = await ownershipService.getOwnershipSummary(req.params.id);
+        res.json(summary);
+    } catch (error) {
+        captureRouteError(error, req, { route: 'team#10' });
         res.status(500).json({ error: (error as Error).message });
     }
 });
@@ -346,6 +858,7 @@ router.patch('/members/:id/reset-password', checkPermission('manage_team'), asyn
             note: agent.phone ? 'A password setup link has been sent to their WhatsApp.' : 'No phone on file — share the password manually.',
         });
     } catch (error) {
+        captureRouteError(error, req, { route: 'team#11' });
         res.status(500).json({ error: (error as Error).message });
     }
 });
@@ -403,6 +916,7 @@ router.patch('/members/:id/set-password', checkPermission('manage_team'), async 
         logger.info(`[Team] Password set for ${target.name} (${target.email}) by ${req.agent!.id}`);
         res.json({ success: true, message: `Password updated for ${target.name}.` });
     } catch (error) {
+        captureRouteError(error, req, { route: 'team#12' });
         logger.error('Set password error:', error);
         res.status(500).json({ error: (error as Error).message });
     }
@@ -436,6 +950,7 @@ router.post('/members/:id/resend-setup', checkPermission('manage_team'), async (
         logger.info(`[Team] Resent setup link for ${agent.name} (${agent.phone})`);
         res.json({ success: true, message: `Setup link resent to ${agent.phone}`, setupLink });
     } catch (error) {
+        captureRouteError(error, req, { route: 'team#13' });
         logger.error('Resend setup link error:', error);
         res.status(500).json({ error: (error as Error).message });
     }
@@ -453,6 +968,7 @@ router.get('/members-without-phone', checkPermission('manage_team'), async (req,
         });
         res.json({ count });
     } catch (error) {
+        captureRouteError(error, req, { route: 'team#14' });
         res.status(500).json({ error: (error as Error).message });
     }
 });
@@ -588,6 +1104,15 @@ router.post('/inventory/bulk-upload', checkPermission('bulk_upload'), upload.sin
                     else if (row.price_unit.toLowerCase() === 'crore') csvPrice *= 10000000;
                 }
 
+                // Fold dropped columns (furnishing/facing/property_age/total_floors/features)
+                // into specs.* (SoT since 2026-05-28) — writing the columns would throw.
+                if (row.furnishing) specs.furnishing = row.furnishing;
+                if (row.facing) specs.facing = row.facing;
+                if (row.property_age) specs['age-of-construction'] = row.property_age;
+                if (row.total_floors) specs.floors = parseInt(row.total_floors) || undefined;
+                // features is a {slug:true} map in the CSV path → specs.amenities expects an array.
+                if (features && Object.keys(features).length) specs.amenities = Object.keys(features);
+
                 // Create inventory record
                 await prisma.inventory.create({
                     data: {
@@ -618,13 +1143,8 @@ router.post('/inventory/bulk-upload', checkPermission('bulk_upload'), upload.sin
                         pincode: csvPincode,
                         full_address: csvFullAddress,
 
-                        // New fields
-                        features: features || undefined,
-                        furnishing: row.furnishing || undefined,
+                        // furnishing/facing/property_age/total_floors/features folded into specs above.
                         floor_number: row.floor_number ? parseInt(row.floor_number) : undefined,
-                        total_floors: row.total_floors ? parseInt(row.total_floors) : undefined,
-                        facing: row.facing || undefined,
-                        property_age: row.property_age || undefined,
                         description: row.description || undefined,
 
                         // Key holder
@@ -660,6 +1180,7 @@ router.post('/inventory/bulk-upload', checkPermission('bulk_upload'), upload.sin
             message: `Imported ${results.imported} of ${records.length} properties.`
         });
     } catch (error: any) {
+        captureRouteError(error, req, { route: 'team#15' });
         logger.error('Bulk upload error:', error);
         res.status(400).json({ error: `CSV parse error: ${error.message}` });
     }
@@ -678,6 +1199,7 @@ async function sendWelcomeWhatsApp(
     phone: string, name: string, role: string,
     department: string | null, email: string,
     setupLink: string, tenantId: string,
+    managerName: string = 'your manager',
 ): Promise<void> {
     const roleLabel = role === 'super_boss' ? 'Super Boss' : role === 'manager' ? 'Manager' : 'Team Member';
     const deptLine = department ? ` in *${department}*` : '';
@@ -686,7 +1208,7 @@ async function sendWelcomeWhatsApp(
     const waPhone = phone.replace(/^\+/, '');
 
     // Send template first (opens 24h session window)
-    await whatsappService.sendTemplate(waPhone, 'rp_team_welcome', {});
+    await whatsappService.sendTemplate(waPhone, 'rp_team_welcome', { name, manager: managerName });
 
     // Follow up with the actual setup link as a text message
     const setupMessage = `Hi *${name}*! 👋\n\nYou've been added as *${roleLabel}*${deptLine} at Realty Pandit.\n\n📧 Email: ${email}\n\n🔐 *Set your password here:*\n${setupLink}\n\n⏳ This link is valid for *48 hours*. Click it to create your password and start using the admin panel.`;

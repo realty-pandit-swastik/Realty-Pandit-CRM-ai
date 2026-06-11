@@ -19,6 +19,35 @@ const alertCooldowns = new Map<string, number>();
 const COOLDOWN_MS = 5 * 60 * 1000;
 
 /**
+ * 2026-05-19 — owner asked for NO odd-hour / per-finding WhatsApp spam; the
+ * noise (behaviour-audit findings + scattered cron reports) was removed/folded
+ * into the 08:00/20:00 owner digest. But genuine "system is down / data loss"
+ * events MUST still page in real-time (a server crash or the WhatsApp
+ * processor dying at 2 AM cannot wait until 08:00). This allowlist is the
+ * set of errorTypes the codebase actually emits as CRITICAL that are true
+ * outages — verified against every alertCritical() call site 2026-05-19.
+ * The 1-alert-per-type-per-5-min cooldown already prevents these from
+ * storming. Anything NOT here is log-only.
+ * See docs/plans/2026-05-19-report-cadence-and-bot-reply.md
+ */
+const REALTIME_CRITICAL_TYPES = new Set<string>([
+    // Process-level crashes (server.ts)
+    'uncaught_exception',
+    'unhandled_rejection',
+    // API throwing 500s in a sustained way (error_handler.ts; cooldown caps it)
+    'server_5xx',
+    // The WhatsApp inbound pipeline failed all retries → bot literally can't
+    // reply to clients (this IS the "AI not replying" failure mode).
+    'whatsapp_job_failed',
+    // Lead-source ingestion auth broken → silent loss of all portal leads.
+    '99acres_auth_failed',
+    // Forward-looking infra types (not yet emitted but reserved so future
+    // system-down alerts page immediately without another code change).
+    'gemini_circuit_open', 'db_pool_exhausted', 'database_down',
+    'redis_down', 'worker_dead', 'whatsapp_api_down', 'webhook_processing_down',
+]);
+
+/**
  * Send a structured alert. Rate-limited per errorType.
  *
  * @param level   - INFO (log only), WARN (log), CRITICAL (log + WhatsApp to boss)
@@ -49,7 +78,13 @@ export async function alert(
     }
     alertCooldowns.set(errorType, Date.now());
 
-    // 3. For CRITICAL: send WhatsApp to management
+    // 3. For CRITICAL: send WhatsApp to management — ONLY for true
+    // system-down error types. All other CRITICALs are log-only and roll
+    // up into the next 08:00/20:00 owner digest (no odd-hour spam).
+    if (level === 'CRITICAL' && !REALTIME_CRITICAL_TYPES.has(errorType)) {
+        logger.warn(`[Alerter] CRITICAL '${errorType}' logged-only (not a real-time outage type) — folded into next owner digest, no real-time WhatsApp`);
+        return;
+    }
     if (level === 'CRITICAL') {
         try {
             // Lazy-import WhatsAppService to avoid circular dependency

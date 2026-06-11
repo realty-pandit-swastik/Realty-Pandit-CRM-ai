@@ -1,0 +1,122 @@
+{
+  "version": "7.1",
+  "data_api_version": "3.0",
+  "routing_model": {
+    "DATE_SCREEN": ["TIME_SCREEN"],
+    "TIME_SCREEN": ["CONFIRM_SCREEN"],
+    "CONFIRM_SCREEN": []
+  },
+  "screens": [
+    {
+      "id": "DATE_SCREEN",
+      "title": "Book Site Visit",
+      "terminal": false,
+      "data": {
+        "property_name": { "type": "string", "__example__": "2BHK Flat, Noida" },
+        "property_id":   { "type": "string", "__example__": "abc-123" },
+        "available_dates": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string" },
+              "title": { "type": "string" }
+            }
+          },
+          "__example__": [{"id":"2026-04-22","title":"Tue, Apr 22"}]
+        }
+      },
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          { "type": "TextHeading", "text": "${data.property_name}" },
+          {
+            "type": "Dropdown",
+            "name": "visit_date",
+            "label": "Select Date",
+            "required": true,
+            "data-source": "${data.available_dates}"
+          },
+          {
+            "type": "Footer",
+            "label": "Choose Time",
+            "on-click-action": {
+              "name": "data_exchange",
+              "payload": {
+                "visit_date": "${form.visit_date}",
+                "property_id": "${data.property_id}",
+                "property_name": "${data.property_name}"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "TIME_SCREEN",
+      "title": "Select Time",
+      "terminal": false,
+      "data": {
+        "visit_date":    { "type": "string", "__example__": "2026-04-22" },
+        "property_id":   { "type": "string", "__example__": "abc-123" },
+        "property_name": { "type": "string", "__example__": "2BHK Flat, Noida" },
+        "available_slots": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string" },
+              "title": { "type": "string" }
+            }
+          },
+          "__example__": [{"id":"10:00 AM","title":"10:00 AM"},{"id":"2:00 PM","title":"2:00 PM"}]
+        }
+      },
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          { "type": "TextBody", "text": "Available slots on ${data.visit_date}:" },
+          {
+            "type": "RadioButtonsGroup",
+            "name": "visit_time",
+            "label": "Time Slot",
+            "required": true,
+            "data-source": "${data.available_slots}"
+          },
+          {
+            "type": "Footer",
+            "label": "Confirm Booking",
+            "on-click-action": {
+              "name": "data_exchange",
+              "payload": {
+                "visit_date": "${data.visit_date}",
+                "visit_time": "${form.visit_time}",
+                "property_id": "${data.property_id}",
+                "property_name": "${data.property_name}"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "CONFIRM_SCREEN",
+      "title": "Booking Confirmed",
+      "terminal": true,
+      "data": {
+        "confirmation_message": { "type": "string", "__example__": "Visit booked for Tue Apr 22 at 10 AM!" }
+      },
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          { "type": "TextBody", "text": "${data.confirmation_message}" },
+          {
+            "type": "Footer",
+            "label": "Done",
+            "on-click-action": { "name": "complete", "payload": {} }
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Deal Notification Service (Phase 7 - Phase 4)
  *
  * Sends WhatsApp + Email notifications on EVERY deal activity to ALL relevant parties.
@@ -8,7 +8,7 @@
  * |-------------------|-------------------------------------|----------------------------|
  * | Deal created      | Coordinator + demand handler        | rp_deal_created            |
  * | Property matched  | All 3 parties                       | rp_deal_matched            |
- * | Status changed    | All 3 parties                       | rp_deal_status_update      |
+ * | Status changed    | Stage-specific (see switch below)   | per-stage templates        |
  * | Query raised      | Coordinator + other party           | rp_deal_query              |
  * | Query answered    | Query raiser                        | rp_deal_query_answered     |
  * | Deal closed (won) | All 3 parties                       | rp_tx_deal_closed          |
@@ -20,6 +20,7 @@ import { emailService } from './email_service';
 import { maskDealForViewer } from './deal_visibility';
 import prisma from '../db';
 import logger from '../utils/logger';
+import * as SentrySDK from '@sentry/node';
 
 const whatsapp = new WhatsAppService();
 
@@ -56,7 +57,12 @@ export async function notifyDealEvent(ctx: DealEventContext): Promise<void> {
                 demand_contact: { select: { name: true, phone_number: true, email: true } },
                 supply_contact: { select: { name: true, phone_number: true, email: true } },
                 coordinator: { select: { name: true, phone: true, email: true } },
-                inventory: { select: { type: true, location: true, price: true } },
+                inventory: {
+                    select: {
+                        type: true, location: true, price: true, latitude: true, longitude: true,
+                        referral_partner: { select: { name: true, phone_number: true, managing_agent: { select: { name: true } } } },
+                    },
+                },
             },
         });
 
@@ -69,15 +75,26 @@ export async function notifyDealEvent(ctx: DealEventContext): Promise<void> {
         const now = new Date();
         const currentHour = now.getHours();
 
-        // Build common context
-        const propertyType = deal.demand_property_type || deal.demand_type_slug || deal.inventory?.type || 'Property';
+        // Build common context. Phase 5 (demand canonical): legacy demand_property_type
+        // / demand_type_slug columns dropped on Transaction. Derive a human label
+        // from the canonical demand_schema_values, then fall back to the matched
+        // inventory's type, then a generic placeholder.
+        const demandSchema = ((deal as any).demand_schema_values
+            ?? {}) as Record<string, any>;
+        const propertyType = (typeof demandSchema.property_type === 'string' && demandSchema.property_type)
+            || (typeof demandSchema.type === 'string' && demandSchema.type)
+            || deal.inventory?.type
+            || 'Property';
         const location = deal.demand_location || deal.inventory?.location || 'Unknown';
         const budget = formatBudgetRange(deal.demand_budget_min, deal.demand_budget_max);
         const coordinatorName = deal.coordinator?.name || 'Team';
         const customerName = deal.demand_contact?.name || 'Customer';
+        const mapsLink = (deal.inventory?.latitude && deal.inventory?.longitude)
+            ? `https://maps.google.com/?q=${deal.inventory.latitude},${deal.inventory.longitude}`
+            : null;
 
         // Determine recipients based on event
-        const recipients = getRecipientsForEvent(ctx.event, deal);
+        const recipients = getRecipientsForEvent(ctx.event, deal, ctx);
 
         // Send to each recipient
         for (const recipient of recipients) {
@@ -88,7 +105,7 @@ export async function notifyDealEvent(ctx: DealEventContext): Promise<void> {
                 // Send WhatsApp
                 if (recipient.phone && !isQuietHours) {
                     await sendWhatsAppNotification(ctx, recipient, {
-                        propertyType, location, budget, coordinatorName, customerName,
+                        propertyType, location, budget, coordinatorName, customerName, mapsLink,
                     });
                 }
 
@@ -124,6 +141,11 @@ export async function notifyDealEvent(ctx: DealEventContext): Promise<void> {
             }
         }
 
+        // Partner-specific notifications on match event
+        if (ctx.event === 'matched' && deal) {
+            await notifyPartnersOnMatch(deal, coordinatorName);
+        }
+
         logger.info(`[DealNotify] ${ctx.event} notifications sent for deal ${ctx.dealId} to ${recipients.length} recipients`);
     } catch (err) {
         logger.error(`[DealNotify] Failed to process deal event ${ctx.event} for ${ctx.dealId}:`, err);
@@ -131,9 +153,62 @@ export async function notifyDealEvent(ctx: DealEventContext): Promise<void> {
 }
 
 /**
- * Determine who gets notified for each event type
+ * Notify partner agents when a deal is matched.
+ * - Supply partner (whose property was matched): rp_partner_inventory_matched
+ * - Demand partner (whose client was matched):   rp_partner_client_matched
  */
-function getRecipientsForEvent(event: DealEvent, deal: any): Recipient[] {
+async function notifyPartnersOnMatch(deal: any, coordinatorName: string): Promise<void> {
+    const propertyType = deal.demand_property_type || deal.inventory?.type || 'Property';
+    const location = deal.demand_location || deal.inventory?.location || 'Unknown';
+    const price = deal.inventory?.price ? formatPrice(deal.inventory.price) : formatBudgetRange(deal.demand_budget_min, deal.demand_budget_max);
+    const customerName = deal.demand_contact?.name || 'Customer';
+
+    // Notify the partner who owns the matched inventory (supply side)
+    const inventoryPartner = deal.inventory?.referral_partner;
+    if (inventoryPartner?.phone_number) {
+        try {
+            await whatsapp.sendTemplate(inventoryPartner.phone_number, 'rp_partner_inventory_matched', {
+                name: inventoryPartner.name,
+                property_type: propertyType,
+                location,
+                buyer_budget: price,
+                coordinator: inventoryPartner.managing_agent?.name || coordinatorName,
+            });
+            logger.info(`[DealNotify] Inventory partner ${inventoryPartner.phone_number} notified of match`);
+        } catch (err) {
+            logger.warn(`[DealNotify] Failed to notify inventory partner: ${(err as Error).message}`);
+        }
+    }
+
+    // Notify the partner who referred the buyer (demand side)
+    // demand_handler_id is a PartnerAgent.id when demand_handler_type === 'PARTNER'
+    if (deal.demand_handler_type === 'PARTNER' && deal.demand_handler_id) {
+        try {
+            const demandPartner = await prisma.partnerAgent.findUnique({
+                where: { id: deal.demand_handler_id },
+                select: { name: true, phone_number: true, managing_agent: { select: { name: true } } },
+            });
+            if (demandPartner?.phone_number) {
+                await whatsapp.sendTemplate(demandPartner.phone_number, 'rp_partner_client_matched', {
+                    name: demandPartner.name,
+                    property_type: propertyType,
+                    location,
+                    price,
+                    coordinator: demandPartner.managing_agent?.name || coordinatorName,
+                });
+                logger.info(`[DealNotify] Demand partner ${demandPartner.phone_number} notified of match`);
+            }
+        } catch (err) {
+            logger.warn(`[DealNotify] Failed to notify demand partner: ${(err as Error).message}`);
+        }
+    }
+}
+
+/**
+ * Determine who gets notified for each event type.
+ * For status_changed, recipients vary by the target stage to avoid noise.
+ */
+function getRecipientsForEvent(event: DealEvent, deal: any, ctx?: DealEventContext): Recipient[] {
     const recipients: Recipient[] = [];
 
     const coordinator: Recipient | null = deal.coordinator ? {
@@ -150,41 +225,70 @@ function getRecipientsForEvent(event: DealEvent, deal: any): Recipient[] {
         role: 'customer',
     } : null;
 
-    // For partner handlers, we need to look up their contact info
-    // (demand_handler and supply_handler are PartnerAgent IDs)
-
     switch (event) {
         case 'created':
-            // Coordinator + demand handler (partner who brought the customer)
             if (coordinator) recipients.push(coordinator);
             break;
 
         case 'matched':
         case 'closed_won':
         case 'closed_lost':
-            // All parties
             if (coordinator) recipients.push(coordinator);
             if (customer) recipients.push(customer);
             break;
 
-        case 'status_changed':
-            // All parties
-            if (coordinator) recipients.push(coordinator);
-            if (customer) recipients.push(customer);
+        case 'status_changed': {
+            const ns = ctx?.newStatus;
+            if (ns === 'VISIT_SCHEDULED') {
+                // Customer only — coordinator booked via Deal Workspace so they already know
+                if (customer) recipients.push(customer);
+            } else if (ns === 'NEGOTIATION') {
+                // Customer only — AI asks for availability; coordinator drove the move
+                if (customer) recipients.push(customer);
+            } else if (ns === 'ON_HOLD') {
+                // Coordinator only — customer is not notified on hold (per KRA)
+                if (coordinator) recipients.push(coordinator);
+            } else if (ns === 'QUALIFIED' || ns === 'VISITED') {
+                // Internal transitions — no WhatsApp noise
+            } else {
+                // NEW and any unexpected value — keep both (legacy behaviour)
+                if (coordinator) recipients.push(coordinator);
+                if (customer) recipients.push(customer);
+            }
             break;
+        }
 
         case 'query_raised':
-            // Coordinator always gets notified about queries
             if (coordinator) recipients.push(coordinator);
             break;
 
         case 'query_answered':
-            // The person who raised the query
-            // (queryRaisedById would be resolved by caller)
+            // Caller resolves queryRaisedById separately
             break;
     }
 
     return recipients;
+}
+
+/**
+ * Fetch the scheduled_at datetime of the latest appointment linked to a deal,
+ * formatted as "27 Apr at 11:00 AM" (IST). Returns "Check CRM" on failure.
+ */
+async function getLatestAppointmentDatetime(dealId: string): Promise<string> {
+    try {
+        const appt = await prisma.appointment.findFirst({
+            where: { transaction_id: dealId },
+            orderBy: { scheduled_at: 'desc' },
+            select: { scheduled_at: true },
+        });
+        if (appt?.scheduled_at) {
+            return appt.scheduled_at.toLocaleString('en-IN', {
+                day: '2-digit', month: 'short', year: 'numeric',
+                hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata',
+            });
+        }
+    } catch { /* fall through */ }
+    return 'Check CRM';
 }
 
 /**
@@ -193,7 +297,7 @@ function getRecipientsForEvent(event: DealEvent, deal: any): Recipient[] {
 async function sendWhatsAppNotification(
     ctx: DealEventContext,
     recipient: Recipient,
-    data: { propertyType: string; location: string; budget: string; coordinatorName: string; customerName: string }
+    data: { propertyType: string; location: string; budget: string; coordinatorName: string; customerName: string; mapsLink: string | null }
 ): Promise<void> {
     const phone = recipient.phone;
     if (!phone) return;
@@ -217,14 +321,41 @@ async function sendWhatsAppNotification(
             });
             break;
 
-        case 'status_changed':
-            await whatsapp.sendTemplate(phone, 'rp_deal_status_update', {
-                property_type: data.propertyType,
-                location: data.location,
-                new_status: getStatusLabel(ctx.newStatus || ''),
-                extra_info: ctx.reason || '',
-            });
+        case 'status_changed': {
+            const ns = ctx.newStatus;
+            if (ns === 'VISIT_SCHEDULED') {
+                // Customer gets visit confirmation with Google Maps location.
+                // Template pending Meta approval — fall back to plaintext on failure.
+                const datetime = await getLatestAppointmentDatetime(ctx.dealId);
+                const maps = data.mapsLink || data.location;
+                const fallback = `✅ Visit Confirmed!\n📅 ${datetime}\n🏠 ${data.propertyType}, ${data.location}\n📍 ${maps}\n\nTime pe pahunchen — hum wait karenge!`;
+                await whatsapp.sendTemplateOrText(phone, 'rp_visit_confirmed_customer', {
+                    datetime,
+                    property: `${data.propertyType}, ${data.location}`,
+                    maps_link: maps,
+                }, fallback);
+            } else if (ns === 'NEGOTIATION') {
+                // Customer gets availability-collection message (per Stage 6 KRA entry action)
+                await whatsapp.sendTemplate(phone, 'rp_negotiation_availability', {});
+            } else if (ns === 'ON_HOLD') {
+                // Coordinator gets deal-on-hold alert (customer not notified per KRA)
+                await whatsapp.sendTemplate(phone, 'rp_deal_onhold', {
+                    customer_name: data.customerName,
+                    property_type: data.propertyType,
+                    location: data.location,
+                    reason: ctx.reason || 'Koi progress nahi tha',
+                });
+            } else {
+                // NEW and any other transitions — generic status update
+                await whatsapp.sendTemplate(phone, 'rp_deal_status_update', {
+                    property_type: data.propertyType,
+                    location: data.location,
+                    new_status: getStatusLabel(ns || ''),
+                    extra_info: ctx.reason || '',
+                });
+            }
             break;
+        }
 
         case 'query_raised':
             await whatsapp.sendTemplate(phone, 'rp_deal_query', {
@@ -243,7 +374,7 @@ async function sendWhatsAppNotification(
             break;
 
         case 'closed_won':
-            await whatsapp.sendTemplate(phone, 'rp_tx_deal_closed', {
+            await whatsapp.sendTemplate(phone, 'rp_tx_deal_closed_v2', {
                 property_type: data.propertyType,
                 location: data.location,
                 price_info: data.budget ? ` at ${data.budget}` : '',
@@ -326,6 +457,12 @@ function buildEmailBody(
 
 // ─── Helpers ────────────────────────────────────────────────────
 
+function formatPrice(price: number): string {
+    if (price >= 10000000) return `${(price / 10000000).toFixed(1)} Cr`;
+    if (price >= 100000) return `${(price / 100000).toFixed(1)} Lakh`;
+    return `${(price / 1000).toFixed(0)}K`;
+}
+
 function formatBudgetRange(min: number | null, max: number | null): string {
     if (!min && !max) return 'Not specified';
     const fmt = (v: number) => v >= 10000000 ? `${(v / 10000000).toFixed(1)}Cr` : v >= 100000 ? `${(v / 100000).toFixed(1)}L` : `${(v / 1000).toFixed(0)}K`;
@@ -334,10 +471,74 @@ function formatBudgetRange(min: number | null, max: number | null): string {
     return `${fmt(min!)}+`;
 }
 
+/**
+ * Fires 3 WhatsApp notifications when an appointment is booked via Deal Workspace:
+ * 1. Customer — visit confirmation
+ * 2. Coordinator — visit details alert
+ * 3. Key holder — masked customer phone + visit time
+ */
+export async function notifyAppointmentBooked(params: {
+    deal: any;
+    inv: any;
+    appointment: any;
+    visitDate: string;
+    visitTime: string;
+    bookedByName: string;
+}): Promise<void> {
+    const { deal, inv } = params;
+    const wa = new WhatsAppService();
+    // Room count: canonical taxonomy keys (bhk/rooms) → legacy (bhk_count/bedrooms).
+    const _rooms = inv.specs?.bhk ?? inv.specs?.rooms ?? inv.specs?.bhk_count ?? inv.specs?.bedrooms;
+    const propertyLabel = _rooms
+        ? `${_rooms}BHK ${inv.classification?.name || inv.type || 'Property'}`
+        : (inv.classification?.name || inv.type || 'Property');
+    const dateLabel = new Date(`${params.visitDate}T${params.visitTime}:00+05:30`)
+        .toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'medium', timeStyle: 'short' });
+
+    if (deal.demand_contact?.phone_number) {
+        try {
+            await wa.sendTemplate(deal.demand_contact.phone_number, 'rp_visit_confirmation_customer', {
+                customer_name: deal.demand_contact.name || 'Customer',
+                property_label: propertyLabel,
+                location: inv.location || inv.locality || '-',
+                visit_datetime: dateLabel,
+            });
+        } catch (e) { logger.warn('[Notify] Customer visit confirmation failed:', e); SentrySDK.captureException(e, { tags: { notify: 'visit_customer' } }); }
+    }
+
+    if (deal.coordinator?.phone) {
+        try {
+            await wa.sendTemplate(deal.coordinator.phone, 'rp_visit_booked_manager', {
+                manager_name: deal.coordinator.name || 'Team',
+                customer_name: deal.demand_contact?.name || 'Customer',
+                customer_phone: deal.demand_contact?.phone_number || '-',
+                property_label: propertyLabel,
+                location: inv.location || inv.locality || '-',
+                visit_datetime: dateLabel,
+            });
+        } catch (e) { logger.warn('[Notify] Manager visit notification failed:', e); SentrySDK.captureException(e, { tags: { notify: 'visit_manager' } }); }
+    }
+
+    if (inv.key_holder_phone) {
+        const rawPhone = deal.demand_contact?.phone_number || '';
+        const masked = rawPhone.length > 4 ? `XXXXXX${rawPhone.slice(-4)}` : 'XXXXXX';
+        try {
+            await wa.sendTemplate(inv.key_holder_phone, 'rp_visit_keyholder_alert', {
+                keyholder_name: inv.key_holder_name || 'Key Holder',
+                property_label: propertyLabel,
+                location: inv.location || inv.locality || '-',
+                visit_datetime: dateLabel,
+                customer_masked_phone: masked,
+            });
+        } catch (e) { logger.warn('[Notify] Key holder visit notification failed:', e); SentrySDK.captureException(e, { tags: { notify: 'visit_keyholder' } }); }
+    }
+}
+
 function getStatusLabel(status: string): string {
     const labels: Record<string, string> = {
         NEW: 'New Inquiry',
-        MATCHED: 'Property Matched',
+        QUALIFIED: 'Qualified',
+        MATCHING_APPOINTMENT: 'Booking Appointment (Legacy)',
         VISIT_SCHEDULED: 'Visit Scheduled',
         VISITED: 'Visit Completed',
         NEGOTIATION: 'In Negotiation',

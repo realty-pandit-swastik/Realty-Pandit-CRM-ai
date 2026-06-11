@@ -9,6 +9,7 @@
  */
 
 import { Worker } from 'bullmq';
+import * as SentrySDK from '@sentry/node';
 import { redisConnection } from '../connection';
 import { processInboundMessage } from '../../services/webhook_processor';
 import logger from '../../utils/logger';
@@ -50,6 +51,12 @@ export function startWhatsAppInboundWorker(): void {
     worker.on('failed', (job, err) => {
         logger.error(`[WhatsAppWorker] Job ${job?.id} failed (attempt ${job?.attemptsMade}/${job?.opts?.attempts}): ${err.message}`);
 
+        // Report to GlitchTip — note: `from` phone number is masked by the global beforeSend scrubber.
+        SentrySDK.captureException(err, {
+            tags: { worker: 'whatsapp_inbound', job: String(job?.id ?? 'unknown') },
+            extra: { from: job?.data?.from, attemptsMade: job?.attemptsMade, maxAttempts: job?.opts?.attempts },
+        });
+
         // Alert if job exhausted all retries (entered DLQ)
         if (job && job.attemptsMade >= (job.opts?.attempts || 3)) {
             alertCritical(
@@ -62,6 +69,7 @@ export function startWhatsAppInboundWorker(): void {
 
     worker.on('error', (err) => {
         logger.error('[WhatsAppWorker] Worker error:', err.message);
+        SentrySDK.captureException(err, { tags: { worker: 'whatsapp_inbound', source: 'worker.error' } });
     });
 
     logger.info('[WhatsAppWorker] Started with concurrency=1 (serial processing)');

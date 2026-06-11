@@ -7,6 +7,7 @@
  */
 
 import { Queue, Worker } from 'bullmq';
+import * as SentrySDK from '@sentry/node';
 import { redisConnection } from '../queues/connection';
 import prisma from '../db';
 import logger from '../utils/logger';
@@ -122,12 +123,20 @@ export function initNotificationRetryWorker(): void {
     worker.on('failed', (job, err) => {
         if (job && job.attemptsMade >= 3) {
             logger.error(`[NotifRetry] Permanently failed after 3 attempts: ${job.data?.channel} to ${job.data?.to}`);
-            // Mark notification as failed
+            SentrySDK.captureException(err, {
+                tags: { worker: 'notification_retry', channel: job.data?.channel ?? 'unknown', terminal: 'true' },
+                extra: { jobId: job.id, notification_id: job.data?.notification_id, to: job.data?.to, attemptsMade: job.attemptsMade },
+            });
             if (job.data?.notification_id) {
                 prisma.notification.update({
                     where: { id: job.data.notification_id },
                     data: { channels_sent: [...([] as string[]), `failed_${job.data.channel}`] },
-                }).catch(() => {});
+                }).catch((prismaErr) => {
+                    SentrySDK.captureException(prismaErr, {
+                        tags: { worker: 'notification_retry', stage: 'mark_failed' },
+                        extra: { notification_id: job.data.notification_id },
+                    });
+                });
             }
         }
     });

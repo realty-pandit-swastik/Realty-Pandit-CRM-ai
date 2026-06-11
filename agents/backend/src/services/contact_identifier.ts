@@ -20,6 +20,8 @@ export interface IdentifiedContact {
     source_id: string;
     department?: string | null;
     role?: string | null;
+    gender?: string | null;
+    preferred_language?: string | null;
 }
 
 /**
@@ -33,7 +35,7 @@ export async function identifyContact(phone: string): Promise<IdentifiedContact 
         // 1. Check Agent table (internal team: management, sales agents, employees)
         const agent = await prisma.agent.findFirst({
             where: { phone: { in: variants }, status: 'active' },
-            select: { id: true, name: true, email: true, department: true, role: true },
+            select: { id: true, name: true, email: true, department: true, role: true, gender: true, preferred_language: true },
         });
 
         if (agent) {
@@ -48,6 +50,8 @@ export async function identifyContact(phone: string): Promise<IdentifiedContact 
                 source_id: agent.id,
                 department: agent.department,
                 role: agent.role,
+                gender: agent.gender,
+                preferred_language: agent.preferred_language,
             };
         }
 

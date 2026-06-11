@@ -8,6 +8,7 @@
 import { Router, Request, Response } from 'express';
 import { paymentService } from '../services/payment';
 import logger from '../utils/logger';
+import { captureRouteError } from '../utils/capture';
 
 const router = Router();
 
@@ -36,7 +37,7 @@ router.post('/create-order', async (req: Request, res: Response) => {
         const order = await paymentService.createOrder(owner_id, plan_type);
         res.json({ success: true, order });
     } catch (error: any) {
-        logger.error(`[PaymentRoutes] Create order failed: ${error.message}`);
+        captureRouteError(error, req, { route: 'payments/create-order' });
         res.status(400).json({ error: error.message });
     }
 });
@@ -62,7 +63,7 @@ router.post('/verify', async (req: Request, res: Response) => {
 
         res.json(result);
     } catch (error: any) {
-        logger.error(`[PaymentRoutes] Verify payment failed: ${error.message}`);
+        captureRouteError(error, req, { route: 'payments/verify' });
         res.status(400).json({ error: error.message });
     }
 });
@@ -83,7 +84,7 @@ router.post('/create-link', async (req: Request, res: Response) => {
         const link = await paymentService.createPaymentLink(owner_id, plan_type);
         res.json({ success: true, ...link });
     } catch (error: any) {
-        logger.error(`[PaymentRoutes] Create payment link failed: ${error.message}`);
+        captureRouteError(error, req, { route: 'payments/create-link' });
         res.status(400).json({ error: error.message });
     }
 });
@@ -104,7 +105,7 @@ router.post('/refund', async (req: Request, res: Response) => {
         const refund = await paymentService.refund(payment_id, amount, reason);
         res.json({ success: true, refund });
     } catch (error: any) {
-        logger.error(`[PaymentRoutes] Refund failed: ${error.message}`);
+        captureRouteError(error, req, { route: 'payments/refund' });
         res.status(400).json({ error: error.message });
     }
 });
@@ -118,6 +119,7 @@ router.get('/:payment_id', async (req: Request, res: Response) => {
         const payment = await paymentService.getPayment(req.params.payment_id);
         res.json({ success: true, payment });
     } catch (error: any) {
+        captureRouteError(error, req, { route: 'payments/get-by-id', payment_id: String(req.params.payment_id) });
         res.status(400).json({ error: error.message });
     }
 });
@@ -140,7 +142,7 @@ razorpayWebhookRouter.post('/razorpay', async (req: Request, res: Response) => {
         const result = await paymentService.handleWebhook(req.body, signature);
         res.json(result);
     } catch (error: any) {
-        logger.error(`[PaymentRoutes] Webhook failed: ${error.message}`);
+        captureRouteError(error, req, { route: 'webhook/razorpay' });
         res.status(400).json({ error: error.message });
     }
 });

@@ -20,6 +20,7 @@ import { sessionStore } from '../services/session/store';
 import { phoneVariants, normalizePhone } from '../utils/phone';
 import prisma from '../db';
 import logger from '../utils/logger';
+import { foldLegacyDemand } from '../utils/demand_canonical';
 
 // ─── Partner Buyer Session Types ─────────────────────────────────────────────
 
@@ -104,6 +105,19 @@ export class PartnerAgentHandler implements BaseAgent {
         this.llmService = new LLMService();
         this.inventoryMachine = new InventoryStateMachine();
         this.matchingEngine = new MatchingEngine();
+    }
+
+    /**
+     * Build a manager-contact footer for partner replies (middleman model, 2026-04-17).
+     * Appended to any reply that could prompt the partner to ask for owner/buyer details —
+     * we pre-empt them with their coordinator's direct line instead.
+     * Returns '' if the partner has no manager assigned (rare — super_boss fallback handles it).
+     */
+    private buildCoordinatorFooter(partnerProfile: any): string {
+        const mgr = partnerProfile?.managing_agent;
+        if (!mgr?.name) return '';
+        const phone = mgr.phone ? ` (${mgr.phone})` : '';
+        return `\n\n👤 *For any coordination, contact ${mgr.name}${phone}* — your dedicated manager at Realty Pandit.`;
     }
 
     async handle(context: AgentContext): Promise<AgentResponse> {
@@ -518,7 +532,7 @@ export class PartnerAgentHandler implements BaseAgent {
 
         return {
             action: 'reply',
-            reply_script: `✅ Visit scheduled for *${propDesc}*!\n📅 ${dateInfo.timeStr || message}\n\nOur coordinator will confirm the exact timing with the property owner.${nextMsg}`,
+            reply_script: `✅ Visit scheduled for *${propDesc}*!\n📅 ${dateInfo.timeStr || message}\n\nOur coordinator will confirm the exact timing with the property owner.${nextMsg}${this.buildCoordinatorFooter(partnerProfile)}`,
             quality_hint: 'confident',
             metadata: { mode: 'visit_scheduled', property_id: currentProperty.id },
         };
@@ -594,6 +608,8 @@ export class PartnerAgentHandler implements BaseAgent {
                     demand_budget_max: budget?.max || undefined,
                     demand_budget_type: req.intent === 'rent_lease' ? 'per_month' : 'one_time',
                     demand_bedrooms: req.bhk ? `${req.bhk}BHK` : undefined,
+                    // Phase 1 dual-write — canonical demand SoT mirror.
+                    ...(foldLegacyDemand({ demand_bedrooms: req.bhk ? `${req.bhk}BHK` : null }) as any),
                     demand_notes: `Partner: ${partnerProfile.name}. Customer: ${req.customer_name || 'unnamed'}`,
                 },
                 `partner:${partnerProfile.id}`,
@@ -633,7 +649,7 @@ export class PartnerAgentHandler implements BaseAgent {
                         budget_max: budget?.max || undefined,
                         preferred_location: req.location || undefined,
                         bhk: req.bhk ? parseInt(req.bhk, 10) : undefined,
-                    }, 10);
+                    }, 10, { role: 'partner', partnerAgentId: partnerProfile.id });
                 } catch {}
             }
 
@@ -659,6 +675,7 @@ export class PartnerAgentHandler implements BaseAgent {
                 reply += `\n\nNo exact matches found right now. Our coordinator will search and get back to you.\n\nYou can also check your deal on the portal: /agent/deals`;
                 await this.deleteBuyerSession(contact.phone_number);
             }
+            reply += this.buildCoordinatorFooter(partnerProfile);
 
             return {
                 action: 'reply',
@@ -814,17 +831,15 @@ RULES:
         msg += `💰 ${priceStr}\n`;
         msg += `📍 ${property.location || 'Location TBD'}\n`;
         if (area) msg += `📐 ${area}\n`;
-        if (property.furnishing) msg += `🛋️ ${property.furnishing.replace(/_/g, ' ')}\n`;
-        if (property.floor_number) msg += `🏢 Floor ${property.floor_number}${property.total_floors ? '/' + property.total_floors : ''}\n`;
+        // Phase 4 dedup (2026-05-28): read from specs.* — the deprecated columns are gone.
+        const _specs: any = property.specs || {};
+        if (_specs.furnishing) msg += `🛋️ ${String(_specs.furnishing).replace(/_/g, ' ')}\n`;
+        const _totalFloors = _specs.floors;
+        if (property.floor_number) msg += `🏢 Floor ${property.floor_number}${_totalFloors ? '/' + _totalFloors : ''}\n`;
 
-        if (property.features && typeof property.features === 'object') {
-            const amenities = Object.entries(property.features)
-                .filter(([, v]) => v)
-                .map(([k]) => k.replace(/_/g, ' '))
-                .slice(0, 4);
-            if (amenities.length > 0) {
-                msg += `✨ ${amenities.join(', ')}\n`;
-            }
+        if (Array.isArray(_specs.amenities) && _specs.amenities.length > 0) {
+            const amenities = _specs.amenities.slice(0, 4).map((a: string) => String(a));
+            msg += `✨ ${amenities.join(', ')}\n`;
         }
 
         msg += `🏷️ Match: ${property.match_score.toFixed(0)}%\n`;
@@ -845,7 +860,7 @@ RULES:
         await this.deleteBuyerSession(contact.phone_number);
         return {
             action: 'reply',
-            reply_script: `That's all the matching properties for now, ${partnerProfile.name} ji.\n\nOur coordinator will continue searching and notify you when new matches come in.\n\nCheck deal status anytime on your portal: /agent/deals`,
+            reply_script: `That's all the matching properties for now, ${partnerProfile.name} ji.\n\nOur coordinator will continue searching and notify you when new matches come in.\n\nCheck deal status anytime on your portal: /agent/deals${this.buildCoordinatorFooter(partnerProfile)}`,
             quality_hint: 'confident',
             metadata: { mode: 'buyer_browse_complete', deal_id: session.deal_id },
         };

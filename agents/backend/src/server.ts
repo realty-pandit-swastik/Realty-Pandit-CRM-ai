@@ -1,4 +1,6 @@
-import 'dotenv/config';
+// MUST be the very first import — Sentry's OpenTelemetry auto-instrumentation needs to
+// patch http/express/prisma/etc. before they load. instrument.ts also loads dotenv.
+import { SentrySDK } from './instrument';
 
 // Validate critical env vars before importing anything else
 const requiredEnvVars = ['DATABASE_URL', 'JWT_SECRET', 'AGENT_JWT_SECRET'];
@@ -31,12 +33,15 @@ const isPrimaryInstance = !process.env.NODE_APP_INSTANCE || process.env.NODE_APP
 process.on('uncaughtException', (error) => {
     logger.error('Uncaught exception', { error: error.message, stack: error.stack });
     alertCritical('uncaught_exception', error.message, { stack: error.stack?.substring(0, 500) });
-    process.exit(1);
+    SentrySDK.captureException(error, { tags: { source: 'uncaughtException' } });
+    // Flush pending events before the process dies, then exit.
+    SentrySDK.flush(2000).catch(() => undefined).finally(() => process.exit(1));
 });
 
 process.on('unhandledRejection', (reason) => {
     logger.error('Unhandled rejection', { reason: String(reason) });
     alertCritical('unhandled_rejection', String(reason));
+    SentrySDK.captureException(reason, { tags: { source: 'unhandledRejection' } });
 });
 
 // ─── Start Server ────────────────────────────────────────────────────────────
@@ -115,9 +120,13 @@ function startLegacySchedulers(): void {
     const { initNotificationBatcher } = require('./services/notification_batcher');
     const { initNotificationRetryWorker } = require('./services/notification_retry');
     const { initNotificationCrons } = require('./services/notification_crons');
+    const { initPipelineCrons } = require('./services/pipeline_crons');
+    const { initQualificationCallWorker } = require('./services/lead_qualification_caller');
     initNotificationBatcher();
     initNotificationRetryWorker();
     initNotificationCrons();
+    initPipelineCrons();
+    initQualificationCallWorker();
 
     // Store cleanup function so graceful shutdown can stop intervals
     legacyCleanup = () => {

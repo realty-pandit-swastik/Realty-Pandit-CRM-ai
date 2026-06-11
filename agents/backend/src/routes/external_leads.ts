@@ -4,11 +4,10 @@ import prisma from '../db';
 import { apiKeyAuth } from '../middleware/apikey';
 import logger from '../utils/logger';
 import { notify } from '../services/notify';
+import { captureRouteError } from '../utils/capture';
+import { normalizePhone, resolveStoredContactPhone } from '../utils/phone';
 
 const router = Router();
-
-// All external lead routes require API key
-router.use(apiKeyAuth);
 
 /**
  * POST /external/leads - Generic lead ingestion endpoint.
@@ -16,11 +15,18 @@ router.use(apiKeyAuth);
  *
  * Body: { source, name, phone, email?, property_interest?, location?, budget?, notes? }
  */
-router.post('/leads', async (req, res) => {
-    const { source, name, phone, email, property_interest, location, budget, notes } = req.body;
+router.post('/leads', apiKeyAuth, async (req, res) => {
+    const { source, name, email, property_interest, location, budget, notes } = req.body;
 
-    if (!source || !phone) {
+    if (!source || !req.body.phone) {
         return res.status(400).json({ error: 'source and phone are required' });
+    }
+    // Normalize to E.164 so re-ingestion hits the same contact PK and is NOT
+    // round-robined to a different team member.
+    // See docs/plans/2026-05-17-duplicate-lead-reassignment.md
+    const normalizedPhone = normalizePhone(req.body.phone);
+    if (!normalizedPhone || !/^\+91[6-9]\d{9}$/.test(normalizedPhone)) {
+        return res.status(400).json({ error: 'Invalid phone number' });
     }
 
     const validSources = ['99acres', 'magicbricks', 'housing', 'website', 'manual', 'other'];
@@ -33,6 +39,10 @@ router.post('/leads', async (req, res) => {
         if (!tenant) {
             return res.status(500).json({ error: 'System not configured' });
         }
+
+        // Resolve to any existing contact PK (incl. legacy bare/dash rows) so a
+        // re-ingested lead updates the SAME contact instead of duplicating.
+        const phone = (await resolveStoredContactPhone(normalizedPhone, prisma)) ?? normalizedPhone;
 
         // Determine intent from property_interest
         let intent: string | null = null;
@@ -139,7 +149,18 @@ router.post('/leads', async (req, res) => {
             lead_status: contact.lead_status,
             message: `Lead ingested from ${source}. Panditji will initiate outreach.`
         });
+
+        // Auto-create NEW deal so AI qualification cadence kicks in.
+        const { ensureDealForLead } = await import('../services/ensure_deal');
+        ensureDealForLead({ contactPhone: phone, source })
+            .catch(err => logger.error(`[ExternalLead] ensureDealForLead failed for ${phone}: ${(err as Error).message}`));
+
+        // Send intro WhatsApp to buyer.
+        const { sendBuyerConfirmationWhatsApp } = await import('../services/lead_notifications');
+        sendBuyerConfirmationWhatsApp(phone, name || null, source)
+            .catch(err => logger.warn(`[ExternalLead] Buyer WA failed for ${phone}: ${(err as Error).message}`));
     } catch (error) {
+        captureRouteError(error, req, { route: 'external_leads#1' });
         logger.error('[ExternalLead] Error:', error);
         res.status(500).json({ error: (error as Error).message });
     }
@@ -148,7 +169,7 @@ router.post('/leads', async (req, res) => {
 /**
  * POST /external/leads/batch - Batch lead ingestion (up to 50 at once)
  */
-router.post('/leads/batch', async (req, res) => {
+router.post('/leads/batch', apiKeyAuth, async (req, res) => {
     const { leads, source } = req.body;
 
     if (!source || !Array.isArray(leads) || leads.length === 0) {
@@ -223,7 +244,7 @@ router.post('/leads/batch', async (req, res) => {
 /**
  * GET /external/leads/status/:phone - Check lead status by phone
  */
-router.get('/leads/status/:phone', async (req, res) => {
+router.get('/leads/status/:phone', apiKeyAuth, async (req, res) => {
     try {
         const contact = await prisma.contact.findUnique({
             where: { phone_number: req.params.phone },
@@ -244,6 +265,7 @@ router.get('/leads/status/:phone', async (req, res) => {
 
         res.json(contact);
     } catch (error) {
+        captureRouteError(error, req, { route: 'external_leads#2' });
         res.status(500).json({ error: (error as Error).message });
     }
 });

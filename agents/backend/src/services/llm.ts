@@ -479,12 +479,12 @@ export class LLMService {
             return cached;
         }
 
-        const specs = property.specs || {};
-        const features = property.features || {};
-        const featureList = Object.entries(features)
-            .filter(([, v]) => v)
-            .map(([k]) => k.replace(/_/g, ' '))
-            .join(', ');
+        // Phase 4 dedup (2026-05-28): specs.* is sole SoT; features column dropped.
+        const specs: any = property.specs || {};
+        const roomCount = specs.bhk ?? specs.rooms ?? specs.bedrooms ?? specs.bhk_count;
+        const featureList = Array.isArray(specs.amenities)
+            ? specs.amenities.join(', ')
+            : '';
 
         const priceStr = property.price
             ? `₹${property.price} ${property.price_unit || ''}`
@@ -511,13 +511,13 @@ Category: ${property.category || 'Residential'}
 Intent: For ${intentLabel}
 Location: ${property.location || ''}${property.city ? `, ${property.city}` : ''}${property.locality ? ` (${property.locality})` : ''}
 Price: ${priceStr}
-${specs.bedrooms ? `Bedrooms: ${specs.bedrooms} BHK` : ''}
+${roomCount ? `Bedrooms: ${roomCount} BHK` : ''}
 ${specs.bathrooms ? `Bathrooms: ${specs.bathrooms}` : ''}
-${specs.area ? `Area: ${specs.area} ${specs.unit || 'sqft'}` : ''}
-${property.furnishing ? `Furnishing: ${property.furnishing.replace(/_/g, ' ')}` : ''}
-${property.facing ? `Facing: ${property.facing}` : ''}
-${property.property_age ? `Property Age: ${property.property_age}` : ''}
-${property.floor_number ? `Floor: ${property.floor_number}${property.total_floors ? ` of ${property.total_floors}` : ''}` : ''}
+${specs.area ? `Area: ${specs.area} ${specs.area_unit || specs.unit || 'sqft'}` : ''}
+${specs.furnishing ? `Furnishing: ${String(specs.furnishing).replace(/_/g, ' ')}` : ''}
+${specs.facing ? `Facing: ${specs.facing}` : ''}
+${specs['age-of-construction'] ? `Property Age: ${specs['age-of-construction']}` : ''}
+${property.floor_number ? `Floor: ${property.floor_number}${specs.floors ? ` of ${specs.floors}` : ''}` : ''}
 ${property.apartment_name ? `Society/Project: ${property.apartment_name}` : ''}
 ${featureList ? `Amenities: ${featureList}` : ''}
 

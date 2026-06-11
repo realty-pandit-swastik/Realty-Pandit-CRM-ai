@@ -5,6 +5,7 @@
 
 import express, { Request, Response } from 'express';
 import prisma from '../db';
+import { captureRouteError } from '../utils/capture';
 
 const router = express.Router();
 
@@ -33,6 +34,7 @@ router.get('/', async (req: Request, res: Response) => {
 
     res.json({ workflows, total: workflows.length });
   } catch (error: any) {
+        captureRouteError(error, req, { route: 'workflows#1' });
     console.error('Get workflows error:', error);
     res.status(500).json({ error: 'Failed to fetch workflows' });
   }
@@ -57,6 +59,7 @@ router.get('/:id', async (req: Request, res: Response) => {
 
     res.json(workflow);
   } catch (error: any) {
+        captureRouteError(error, req, { route: 'workflows#2' });
     console.error('Get workflow error:', error);
     res.status(500).json({ error: 'Failed to fetch workflow' });
   }
@@ -103,6 +106,7 @@ router.post('/', async (req: Request, res: Response) => {
 
     res.status(201).json(workflow);
   } catch (error: any) {
+        captureRouteError(error, req, { route: 'workflows#3' });
     console.error('Create workflow error:', error);
     res.status(500).json({ error: 'Failed to create workflow' });
   }
@@ -141,6 +145,7 @@ router.patch('/:id', async (req: Request, res: Response) => {
 
     res.json(workflow);
   } catch (error: any) {
+        captureRouteError(error, req, { route: 'workflows#4' });
     console.error('Update workflow error:', error);
     if (error.code === 'P2025') {
       return res.status(404).json({ error: 'Workflow not found' });
@@ -167,6 +172,7 @@ router.post('/:id/toggle', async (req: Request, res: Response) => {
 
     res.json(updated);
   } catch (error: any) {
+        captureRouteError(error, req, { route: 'workflows#5' });
     console.error('Toggle workflow error:', error);
     res.status(500).json({ error: 'Failed to toggle workflow' });
   }
@@ -181,6 +187,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
 
     res.json({ success: true, message: 'Workflow deleted' });
   } catch (error: any) {
+        captureRouteError(error, req, { route: 'workflows#6' });
     console.error('Delete workflow error:', error);
     if (error.code === 'P2025') {
       return res.status(404).json({ error: 'Workflow not found' });
@@ -208,6 +215,7 @@ router.get('/:id/executions', async (req: Request, res: Response) => {
 
     res.json({ executions, total });
   } catch (error: any) {
+        captureRouteError(error, req, { route: 'workflows#7' });
     console.error('Get workflow executions error:', error);
     res.status(500).json({ error: 'Failed to fetch executions' });
   }
@@ -235,6 +243,7 @@ router.get('/:id/stats', async (req: Request, res: Response) => {
       avg_duration_ms: avgDuration._avg.duration_ms || 0,
     });
   } catch (error: any) {
+        captureRouteError(error, req, { route: 'workflows#8' });
     console.error('Get workflow stats error:', error);
     res.status(500).json({ error: 'Failed to fetch statistics' });
   }
@@ -267,6 +276,7 @@ router.post('/:id/test', async (req: Request, res: Response) => {
       workflow_name: workflow.name,
     });
   } catch (error: any) {
+        captureRouteError(error, req, { route: 'workflows#9' });
     console.error('Test workflow error:', error);
     res.status(500).json({ error: 'Failed to test workflow' });
   }

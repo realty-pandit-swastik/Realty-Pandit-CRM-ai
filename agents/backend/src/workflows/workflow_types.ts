@@ -10,7 +10,7 @@ export interface WorkflowStep {
     group: string;           // classification, specs, pricing, address, features, media, contact, optional, confirm
     question: string;        // English question text
     question_hi?: string;    // Hindi translation (for WhatsApp)
-    input_type: 'dropdown' | 'number' | 'text' | 'phone' | 'textarea' | 'radio' | 'multi_select' | 'media_upload' | 'video_upload' | 'document_upload' | 'confirm' | 'compound' | 'address_block' | 'owner_block' | 'uploader_block';
+    input_type: 'dropdown' | 'number' | 'text' | 'phone' | 'textarea' | 'radio' | 'multi_select' | 'media_upload' | 'video_upload' | 'document_upload' | 'confirm' | 'compound' | 'address_block' | 'owner_block' | 'uploader_block' | 'taxonomy' | 'schema_fields';
     field: string;           // Maps to answer key: "category_id", "state", etc.
     placeholder?: string;
 

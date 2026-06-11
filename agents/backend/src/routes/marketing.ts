@@ -6,6 +6,7 @@
 import express, { Request, Response } from 'express';
 import prisma from '../db';
 import { NotificationAgent, NotificationChannel } from '../agents/notification_agent';
+import { captureRouteError } from '../utils/capture';
 
 const router = express.Router();
 const notificationAgent = new NotificationAgent();
@@ -33,6 +34,7 @@ router.get('/templates', async (req: Request, res: Response) => {
 
     res.json({ templates, total: templates.length });
   } catch (error: any) {
+        captureRouteError(error, req, { route: 'marketing#1' });
     console.error('Get templates error:', error);
     res.status(500).json({ error: 'Failed to fetch templates' });
   }
@@ -66,6 +68,7 @@ router.get('/templates/:id', async (req: Request, res: Response) => {
 
     res.json(template);
   } catch (error: any) {
+        captureRouteError(error, req, { route: 'marketing#2' });
     console.error('Get template error:', error);
     res.status(500).json({ error: 'Failed to fetch template' });
   }
@@ -102,6 +105,7 @@ router.post('/templates', async (req: Request, res: Response) => {
 
     res.status(201).json(template);
   } catch (error: any) {
+        captureRouteError(error, req, { route: 'marketing#3' });
     console.error('Create template error:', error);
     res.status(500).json({ error: 'Failed to create template' });
   }
@@ -134,6 +138,7 @@ router.patch('/templates/:id', async (req: Request, res: Response) => {
 
     res.json(template);
   } catch (error: any) {
+        captureRouteError(error, req, { route: 'marketing#4' });
     console.error('Update template error:', error);
     if (error.code === 'P2025') {
       return res.status(404).json({ error: 'Template not found' });
@@ -151,6 +156,7 @@ router.delete('/templates/:id', async (req: Request, res: Response) => {
 
     res.json({ success: true, message: 'Template deleted' });
   } catch (error: any) {
+        captureRouteError(error, req, { route: 'marketing#5' });
     console.error('Delete template error:', error);
     if (error.code === 'P2025') {
       return res.status(404).json({ error: 'Template not found' });
@@ -190,6 +196,7 @@ router.get('/campaigns', async (req: Request, res: Response) => {
 
     res.json({ campaigns, total: campaigns.length });
   } catch (error: any) {
+        captureRouteError(error, req, { route: 'marketing#6' });
     console.error('Get campaigns error:', error);
     res.status(500).json({ error: 'Failed to fetch campaigns' });
   }
@@ -211,6 +218,7 @@ router.get('/campaigns/:id', async (req: Request, res: Response) => {
 
     res.json(campaign);
   } catch (error: any) {
+        captureRouteError(error, req, { route: 'marketing#7' });
     console.error('Get campaign error:', error);
     res.status(500).json({ error: 'Failed to fetch campaign' });
   }
@@ -263,6 +271,7 @@ router.post('/campaigns', async (req: Request, res: Response) => {
 
     res.status(201).json(campaign);
   } catch (error: any) {
+        captureRouteError(error, req, { route: 'marketing#8' });
     console.error('Create campaign error:', error);
     res.status(500).json({ error: 'Failed to create campaign' });
   }
@@ -308,6 +317,7 @@ router.patch('/campaigns/:id', async (req: Request, res: Response) => {
 
     res.json(campaign);
   } catch (error: any) {
+        captureRouteError(error, req, { route: 'marketing#9' });
     console.error('Update campaign error:', error);
     if (error.code === 'P2025') {
       return res.status(404).json({ error: 'Campaign not found' });
@@ -325,6 +335,7 @@ router.delete('/campaigns/:id', async (req: Request, res: Response) => {
 
     res.json({ success: true, message: 'Campaign deleted' });
   } catch (error: any) {
+        captureRouteError(error, req, { route: 'marketing#10' });
     console.error('Delete campaign error:', error);
     if (error.code === 'P2025') {
       return res.status(404).json({ error: 'Campaign not found' });
@@ -364,6 +375,7 @@ router.get('/campaigns/:id/analytics', async (req: Request, res: Response) => {
 
     res.json(analytics);
   } catch (error: any) {
+        captureRouteError(error, req, { route: 'marketing#11' });
     console.error('Get campaign analytics error:', error);
     res.status(500).json({ error: 'Failed to fetch analytics' });
   }
@@ -410,6 +422,7 @@ router.post('/campaigns/:id/test', async (req: Request, res: Response) => {
       delivery: { sent: bulkResult.sent, failed: bulkResult.failed },
     });
   } catch (error: any) {
+        captureRouteError(error, req, { route: 'marketing#12' });
     console.error('Test campaign error:', error);
     res.status(500).json({ error: 'Failed to test campaign' });
   }
@@ -497,6 +510,7 @@ router.post('/campaigns/:id/launch', async (req: Request, res: Response) => {
       estimated_recipients: audienceCount,
     });
   } catch (error: any) {
+        captureRouteError(error, req, { route: 'marketing#13' });
     console.error('Launch campaign error:', error);
     res.status(500).json({ error: 'Failed to launch campaign' });
   }
@@ -526,6 +540,7 @@ router.post('/campaigns/:id/toggle-pause', async (req: Request, res: Response) =
       campaign: updated,
     });
   } catch (error: any) {
+        captureRouteError(error, req, { route: 'marketing#14' });
     console.error('Toggle campaign error:', error);
     res.status(500).json({ error: 'Failed to toggle campaign' });
   }
@@ -582,6 +597,7 @@ router.post('/audience/preview', async (req: Request, res: Response) => {
       criteria: audience,
     });
   } catch (error: any) {
+        captureRouteError(error, req, { route: 'marketing#15' });
     console.error('Audience preview error:', error);
     res.status(500).json({ error: 'Failed to preview audience' });
   }

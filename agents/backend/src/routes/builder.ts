@@ -15,6 +15,8 @@ import { OwnerScope, ExternalOwnerType, PlanType, ProjectStatus, ProjectListingS
 import logger from '../utils/logger';
 import { NotificationAgent } from '../agents/notification_agent';
 import { cacheGet, cacheSet, cacheDel } from '../utils/redis';
+import { setAuthCookies } from '../middleware/auth';
+import { captureRouteError } from '../utils/capture';
 
 const notificationAgent = new NotificationAgent();
 
@@ -48,6 +50,7 @@ const authenticateBuilder = async (req: any, res: any, next: any) => {
         req.owner = decoded; // { ownerId, scope, externalType, planType, phone }
         next();
     } catch (err) {
+        captureRouteError(err, req, { route: 'builder#1' });
         return res.status(403).json({ error: 'Invalid or expired token' });
     }
 };
@@ -129,6 +132,7 @@ router.post('/register', async (req, res) => {
         });
 
     } catch (err: any) {
+        captureRouteError(err, req, { route: 'builder#2' });
         logger.error('[Builder] Registration failed:', err);
         res.status(500).json({ error: 'Registration failed: ' + err.message });
     }
@@ -171,6 +175,7 @@ router.post('/login-otp', async (req, res) => {
         res.json({ message: 'OTP sent successfully' });
 
     } catch (err: any) {
+        captureRouteError(err, req, { route: 'builder#3' });
         logger.error('[Builder] OTP request failed:', err);
         res.status(500).json({ error: 'Failed to send OTP' });
     }
@@ -225,6 +230,7 @@ router.post('/verify-otp', async (req, res) => {
         );
 
         logger.info(`[Builder] Login successful: ${owner.id}`);
+        setAuthCookies(res, token);
 
         res.json({
             token,
@@ -239,6 +245,7 @@ router.post('/verify-otp', async (req, res) => {
         });
 
     } catch (err: any) {
+        captureRouteError(err, req, { route: 'builder#4' });
         logger.error('[Builder] OTP verification failed:', err);
         res.status(500).json({ error: 'Verification failed' });
     }
@@ -272,6 +279,7 @@ router.get('/me', authenticateBuilder, requireBuilder, async (req: any, res) => 
         });
 
     } catch (err: any) {
+        captureRouteError(err, req, { route: 'builder#5' });
         logger.error('[Builder] Profile fetch failed:', err);
         res.status(500).json({ error: 'Failed to fetch profile' });
     }
@@ -335,6 +343,7 @@ router.post('/projects', authenticateBuilder, requireBuilder, async (req: any, r
         res.status(201).json(project);
 
     } catch (err: any) {
+        captureRouteError(err, req, { route: 'builder#6' });
         logger.error('[Builder] Project creation failed:', err);
         res.status(500).json({ error: 'Failed to create project: ' + err.message });
     }
@@ -375,6 +384,7 @@ router.get('/projects', authenticateBuilder, requireBuilder, async (req: any, re
         res.json({ projects, total, page: Number(page), limit: Number(limit) });
 
     } catch (err: any) {
+        captureRouteError(err, req, { route: 'builder#7' });
         logger.error('[Builder] Projects fetch failed:', err);
         res.status(500).json({ error: 'Failed to fetch projects' });
     }
@@ -423,6 +433,7 @@ router.get('/projects/:id', authenticateBuilder, requireBuilder, async (req: any
         res.json(project);
 
     } catch (err: any) {
+        captureRouteError(err, req, { route: 'builder#8' });
         logger.error('[Builder] Project fetch failed:', err);
         res.status(500).json({ error: 'Failed to fetch project' });
     }
@@ -477,6 +488,7 @@ router.put('/projects/:id', authenticateBuilder, requireBuilder, async (req: any
         res.json(project);
 
     } catch (err: any) {
+        captureRouteError(err, req, { route: 'builder#9' });
         logger.error('[Builder] Project update failed:', err);
         res.status(500).json({ error: 'Failed to update project: ' + err.message });
     }
@@ -528,6 +540,7 @@ router.patch('/projects/:id/activate', authenticateBuilder, requireBuilder, asyn
         res.json({ message: 'Project activated successfully', project: updated });
 
     } catch (err: any) {
+        captureRouteError(err, req, { route: 'builder#10' });
         logger.error('[Builder] Project activation failed:', err);
         res.status(500).json({ error: 'Failed to activate project: ' + err.message });
     }
@@ -558,6 +571,7 @@ router.patch('/projects/:id/pause', authenticateBuilder, requireBuilder, async (
         res.json({ message: 'Project paused successfully', project: updated });
 
     } catch (err: any) {
+        captureRouteError(err, req, { route: 'builder#11' });
         logger.error('[Builder] Project pause failed:', err);
         res.status(500).json({ error: 'Failed to pause project: ' + err.message });
     }
@@ -630,6 +644,7 @@ router.post('/projects/:projectId/units', authenticateBuilder, requireBuilder, a
         res.status(201).json(unit);
 
     } catch (err: any) {
+        captureRouteError(err, req, { route: 'builder#12' });
         logger.error('[Builder] Unit creation failed:', err);
         res.status(500).json({ error: 'Failed to add unit: ' + err.message });
     }
@@ -697,6 +712,7 @@ router.put('/units/:unitId', authenticateBuilder, requireBuilder, async (req: an
         res.json(updated);
 
     } catch (err: any) {
+        captureRouteError(err, req, { route: 'builder#13' });
         logger.error('[Builder] Unit update failed:', err);
         res.status(500).json({ error: 'Failed to update unit: ' + err.message });
     }
@@ -740,6 +756,7 @@ router.delete('/units/:unitId', authenticateBuilder, requireBuilder, async (req:
         res.json({ message: 'Unit deleted successfully' });
 
     } catch (err: any) {
+        captureRouteError(err, req, { route: 'builder#14' });
         logger.error('[Builder] Unit deletion failed:', err);
         res.status(500).json({ error: 'Failed to delete unit: ' + err.message });
     }
@@ -827,6 +844,7 @@ router.post('/projects/:projectId/media',
             });
 
         } catch (err: any) {
+        captureRouteError(err, req, { route: 'builder#15' });
             logger.error('[Builder] Media upload failed:', err);
             res.status(500).json({ error: 'Failed to upload media: ' + err.message });
         }
@@ -867,6 +885,7 @@ router.delete('/media/:mediaId', authenticateBuilder, requireBuilder, async (req
         res.json({ message: 'Media deleted successfully' });
 
     } catch (err: any) {
+        captureRouteError(err, req, { route: 'builder#16' });
         logger.error('[Builder] Media deletion failed:', err);
         res.status(500).json({ error: 'Failed to delete media: ' + err.message });
     }
@@ -925,6 +944,7 @@ router.get('/leads', authenticateBuilder, requireBuilder, async (req: any, res) 
         res.json({ leads, total, page: Number(page), limit: Number(limit) });
 
     } catch (err: any) {
+        captureRouteError(err, req, { route: 'builder#17' });
         logger.error('[Builder] Leads fetch failed:', err);
         res.status(500).json({ error: 'Failed to fetch leads' });
     }
@@ -980,6 +1000,7 @@ router.get('/leads/:id', authenticateBuilder, requireBuilder, async (req: any, r
         res.json(lead);
 
     } catch (err: any) {
+        captureRouteError(err, req, { route: 'builder#18' });
         logger.error('[Builder] Lead fetch failed:', err);
         res.status(500).json({ error: 'Failed to fetch lead' });
     }
@@ -1040,6 +1061,7 @@ router.patch('/leads/:id/status', authenticateBuilder, requireBuilder, async (re
         res.json(updated);
 
     } catch (err: any) {
+        captureRouteError(err, req, { route: 'builder#19' });
         logger.error('[Builder] Lead status update failed:', err);
         res.status(500).json({ error: 'Failed to update lead status: ' + err.message });
     }
@@ -1095,6 +1117,7 @@ router.get('/appointments', authenticateBuilder, requireBuilder, async (req: any
         res.json({ appointments, total, page: Number(page), limit: Number(limit) });
 
     } catch (err: any) {
+        captureRouteError(err, req, { route: 'builder#20' });
         logger.error('[Builder] Appointments fetch failed:', err);
         res.status(500).json({ error: 'Failed to fetch appointments' });
     }
@@ -1160,6 +1183,7 @@ router.patch('/appointments/:id/status', authenticateBuilder, requireBuilder, as
         res.json(updated);
 
     } catch (err: any) {
+        captureRouteError(err, req, { route: 'builder#21' });
         logger.error('[Builder] Appointment status update failed:', err);
         res.status(500).json({ error: 'Failed to update appointment status: ' + err.message });
     }
@@ -1237,6 +1261,7 @@ router.get('/dashboard/stats', authenticateBuilder, requireBuilder, async (req: 
         res.json(stats);
 
     } catch (err: any) {
+        captureRouteError(err, req, { route: 'builder#22' });
         logger.error('[Builder] Dashboard stats fetch failed:', err);
         res.status(500).json({ error: 'Failed to fetch dashboard stats' });
     }

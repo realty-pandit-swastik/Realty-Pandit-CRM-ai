@@ -1,4 +1,4 @@
-import jwt from 'jsonwebtoken';
+﻿import jwt from 'jsonwebtoken';
 import prisma from '../db';
 import { WhatsAppService } from './whatsapp';
 import logger from '../utils/logger';
@@ -145,6 +145,23 @@ export class AgentAuthService {
         await this.whatsapp.sendTemplate(phone, 'rp_agent_otp', { otp });
 
         logger.info(`[AgentAuth] OTP sent to ${phone}: ${otp} (dev mode)`);
+    }
+
+    /**
+     * Send OTP to partner agent's phone via WhatsApp (partner portal login)
+     */
+    public async sendPartnerOTP(phone: string): Promise<void> {
+        const otp = Math.floor(100000 + Math.random() * 900000).toString();
+
+        otpStore.set(phone, {
+            otp,
+            expiresAt: Date.now() + 5 * 60 * 1000, // 5 minutes
+            attempts: 0,
+        });
+
+        await this.whatsapp.sendTemplate(phone, 'rp_partner_login_otp_v2', { otp });
+
+        logger.info(`[AgentAuth] Partner OTP sent to ${phone}`);
     }
 
     /**

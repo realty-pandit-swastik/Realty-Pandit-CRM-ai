@@ -8,6 +8,7 @@ import { emailService } from '../services/email_service';
 import { authMiddleware } from '../middleware/auth';
 import logger from '../utils/logger';
 import prisma from '../db';
+import { captureRouteError } from '../utils/capture';
 
 const router = Router();
 
@@ -46,6 +47,7 @@ router.post('/webhook/incoming', async (req: Request, res: Response) => {
             email_id: email.id
         });
     } catch (error: any) {
+        captureRouteError(error, req, { route: 'email#1' });
         logger.error('[Email Webhook] Error processing incoming email', error);
         res.status(500).json({ error: error.message });
     }
@@ -81,7 +83,8 @@ router.post('/send', authMiddleware, async (req: Request, res: Response) => {
             bcc,
             subject,
             body,
-            html
+            html,
+            senderAgentId: agent.id, // T9b: use the agent's own mailbox if configured
         }, tenantId, generateWithAI || false);
 
         res.status(200).json({
@@ -90,6 +93,7 @@ router.post('/send', authMiddleware, async (req: Request, res: Response) => {
             email
         });
     } catch (error: any) {
+        captureRouteError(error, req, { route: 'email#2' });
         logger.error('[Email API] Error sending email', error);
         res.status(500).json({ error: error.message });
     }
@@ -108,6 +112,7 @@ router.get('/contact/:phone', authMiddleware, async (req: Request, res: Response
 
         res.status(200).json({ emails });
     } catch (error: any) {
+        captureRouteError(error, req, { route: 'email#3' });
         logger.error('[Email API] Error fetching emails', error);
         res.status(500).json({ error: error.message });
     }
@@ -132,6 +137,7 @@ router.get('/search', authMiddleware, async (req: Request, res: Response) => {
 
         res.status(200).json({ emails, count: emails.length });
     } catch (error: any) {
+        captureRouteError(error, req, { route: 'email#4' });
         logger.error('[Email API] Error searching emails', error);
         res.status(500).json({ error: error.message });
     }
@@ -206,6 +212,7 @@ router.get('/all', authMiddleware, async (req: Request, res: Response) => {
             }
         });
     } catch (error: any) {
+        captureRouteError(error, req, { route: 'email#5' });
         logger.error('[Email API] Error fetching all emails', error);
         res.status(500).json({ error: error.message });
     }
@@ -232,6 +239,7 @@ router.delete('/:id', authMiddleware, async (req: Request, res: Response) => {
 
         res.status(200).json({ success: true, message: 'Email deleted' });
     } catch (error: any) {
+        captureRouteError(error, req, { route: 'email#6' });
         logger.error('[Email API] Error deleting email', error);
         res.status(500).json({ error: error.message });
     }
@@ -288,6 +296,7 @@ router.post('/bulk-send', authMiddleware, async (req: Request, res: Response) =>
             failed: results.filter(r => !r.success).length
         });
     } catch (error: any) {
+        captureRouteError(error, req, { route: 'email#7' });
         logger.error('[Email API] Error in bulk send', error);
         res.status(500).json({ error: error.message });
     }

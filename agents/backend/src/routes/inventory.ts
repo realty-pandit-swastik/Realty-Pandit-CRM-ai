@@ -5,14 +5,20 @@ import path from 'path';
 import fs from 'fs';
 import { InventoryStateMachine } from '../workflows/inventory_machine';
 import prisma from '../db';
+import { upsertCatalogProduct, deleteCatalogProduct, syncInventoryById } from '../services/catalog_sync';
 import { sessionStore } from '../services/session/store';
 import { StorageService } from '../services/storage';
 import { ensureOwner } from '../services/ensure_owner';
+import { ensurePartnerAgent } from '../services/partner_auto_create';
 import { authMiddleware, checkPermission } from '../middleware/auth';
 import logger from '../utils/logger';
-import { normalizePhone } from '../utils/phone';
+import { normalizePhone, isPlaceholderPhone } from '../utils/phone';
+import { findInventoryIdsByAddress } from '../utils/inventory_search';
+import { expandTaxonomyNodeIds, bhkSpecsFilter } from '../utils/taxonomy_filter';
 import { WhatsAppService } from '../services/whatsapp';
 import { notify } from '../services/notify';
+import { broadcastInventoryToQualifiedDeals } from '../services/inventory_broadcast';
+import { cacheDel } from '../utils/redis';
 
 const router = Router();
 const stateMachine = new InventoryStateMachine();
@@ -56,6 +62,13 @@ router.post('/', authMiddleware, checkPermission('edit_inventory'), async (req, 
             key_holder_type, key_holder_name, key_holder_phone,
             // Renovation
             renovated,
+            // Pre-rented (pre-lease): for-sale property already tenanted + the current monthly rent.
+            pre_rented, pre_rented_monthly_rent,
+            // Source partner (middleman model, 2026-04-17). If the inventory came from
+            // a partner agent, either pass their PartnerAgent.id or their phone (+ name).
+            // If the phone is new, a PartnerAgent is auto-created and assigned to the
+            // current admin user as managing_agent.
+            source_partner_id, source_partner_phone, source_partner_name,
         } = req.body;
 
         if (!intent) {
@@ -87,6 +100,37 @@ router.post('/', authMiddleware, checkPermission('edit_inventory'), async (req, 
         if (!legacyCategory) legacyCategory = 'residential';
         if (!legacyType) legacyType = 'flat';
 
+        // Resolve source partner + owning manager (middleman model, 2026-04-17).
+        // Resolved BEFORE the contact upsert so the owner contact can inherit the same
+        // owning_manager_id as the inventory.
+        // Priority: explicit source_partner_id > source_partner_phone (auto-create if new)
+        // Owning manager: partner.managing_agent_id if partner present, else current user.
+        let resolvedSourcePartnerId: string | null = source_partner_id || null;
+        let owningManagerId: string | null = req.agent?.id ?? null;
+
+        if (!resolvedSourcePartnerId && source_partner_phone) {
+            try {
+                const result = await ensurePartnerAgent(
+                    source_partner_phone,
+                    source_partner_name || '',
+                    tenant.id,
+                    req.agent!.id,
+                );
+                resolvedSourcePartnerId = result.partnerId;
+            } catch (partnerErr) {
+                logger.warn(`[Inventory POST] Partner auto-create failed: ${(partnerErr as Error).message}`);
+            }
+        }
+        if (resolvedSourcePartnerId) {
+            const partner = await prisma.partnerAgent.findUnique({
+                where: { id: resolvedSourcePartnerId },
+                select: { managing_agent_id: true },
+            });
+            if (partner?.managing_agent_id) {
+                owningManagerId = partner.managing_agent_id;
+            }
+        }
+
         // Upsert contact as LANDLORD
         await prisma.contact.upsert({
             where: { phone_number: phone },
@@ -95,7 +139,7 @@ router.post('/', authMiddleware, checkPermission('edit_inventory'), async (req, 
                 contact_type: 'LANDLORD',
                 last_channel: 'admin',
                 last_interaction: new Date(),
-            },
+            } as any,
             create: {
                 phone_number: phone,
                 name: owner_name || null,
@@ -106,11 +150,25 @@ router.post('/', authMiddleware, checkPermission('edit_inventory'), async (req, 
                 last_channel: 'admin',
                 last_interaction: new Date(),
                 created_by: req.agent?.id || null,
-            },
+                owning_manager_id: owningManagerId,
+            } as any,
         });
 
         // Ensure Owner exists
         const ownerId = await ensureOwner(phone, tenant.id);
+
+        // Fold deprecated scalar fields into specs (single SoT — see Phase 1 plan).
+        // furnishing/facing/property_age/total_floors/features columns no longer written.
+        const mergedSpecs: Record<string, any> = (specs && typeof specs === 'object' && !Array.isArray(specs)) ? { ...specs } : {};
+        if (furnishing && mergedSpecs.furnishing == null) mergedSpecs.furnishing = furnishing;
+        if (facing && mergedSpecs.facing == null) mergedSpecs.facing = facing;
+        if (property_age && mergedSpecs['age-of-construction'] == null) mergedSpecs['age-of-construction'] = property_age;
+        if (total_floors && mergedSpecs.floors == null) mergedSpecs.floors = String(total_floors);
+        if (features && typeof features === 'object' && !Array.isArray(features) && !Array.isArray(mergedSpecs.amenities)) {
+            const AMENITY: Record<string, string> = { gym: 'Gym', club_house: 'Club House', power_backup: 'Power Backup', lift: 'Lift', intercom: 'Intercom', guest_house: 'Guest House', park: 'Park', community_hall: 'Community Hall', mini_theater: 'Mini Theater', swimming_pool: 'Swimming Pool', security: 'Security', gas_pipeline: 'Gas Pipeline', parking: 'Parking', garden: 'Garden', pool: 'Swimming Pool', water_supply: 'Water Supply' };
+            const labels = Object.entries(features as Record<string, any>).filter(([, v]) => v).map(([k]) => AMENITY[k] || k);
+            if (labels.length) mergedSpecs.amenities = labels;
+        }
 
         // Create inventory
         const inventory = await prisma.inventory.create({
@@ -135,18 +193,13 @@ router.post('/', authMiddleware, checkPermission('edit_inventory'), async (req, 
                 location,
                 price: price ? parseFloat(String(price)) : null,
                 intent,
-                specs: specs || null,
-                features: features || null,
+                specs: Object.keys(mergedSpecs).length > 0 ? mergedSpecs : null,
                 status: 'active',
                 media_urls: [],
 
-                // Property details
+                // Property details (only non-deprecated columns)
                 description: description || null,
-                furnishing: furnishing || null,
                 floor_number: floor_number ? parseInt(String(floor_number)) : null,
-                total_floors: total_floors ? parseInt(String(total_floors)) : null,
-                facing: facing || null,
-                property_age: property_age || null,
 
                 // Key holder
                 key_holder_type: key_holder_type || null,
@@ -156,10 +209,22 @@ router.post('/', authMiddleware, checkPermission('edit_inventory'), async (req, 
                 // Renovation
                 renovated: renovated === true || renovated === 'true',
 
-                // Uploader
+                // Pre-rented (pre-lease): for-sale property already tenanted + the sitting tenant's monthly rent
+                pre_rented: pre_rented === true || pre_rented === 'true',
+                pre_rented_monthly_rent: pre_rented_monthly_rent != null && pre_rented_monthly_rent !== ''
+                    ? Number(pre_rented_monthly_rent) : null,
+
+                // Uploader — also auto-assign to uploader if no explicit assignment
                 uploaded_by_agent_id: req.agent!.id,
-            },
+                assigned_agent_id: req.agent!.id,
+
+                // Source partner + owning manager (middleman model, 2026-04-17)
+                referral_partner_id: resolvedSourcePartnerId,
+                owning_manager_id: owningManagerId,
+            } as any,
         });
+
+        upsertCatalogProduct(inventory).catch(e => logger.warn('[Catalog] post-create upsert failed:', e.message));
 
         // Log interaction
         await prisma.interaction.create({
@@ -174,9 +239,15 @@ router.post('/', authMiddleware, checkPermission('edit_inventory'), async (req, 
             },
         });
 
+        // T7: a fresh listing must surface on the public homepage showcase without
+        // waiting out the 2-min cache TTL — bust the featured + properties caches now.
+        cacheDel('cache:/public/featured*').catch(() => {});
+        cacheDel('cache:/public/properties*').catch(() => {});
+
         logger.info(`[Inventory] Created ${inventory.id} by agent ${req.agent!.id}`);
         res.status(201).json(inventory);
     } catch (error) {
+        captureRouteError(error, req, { route: 'inventory#1' });
         logger.error('[Inventory POST] Error:', error);
         res.status(500).json({ error: 'Failed to create inventory' });
     }
@@ -238,9 +309,13 @@ router.get('/', authMiddleware, async (req, res) => {
             limit: limitParam, bhk, location,
             // New filter params (v2 filter redesign)
             category_id, sub_category_id,
+            // Taxonomy filter (new TaxonomyNode tree): csv of selected node ids (any level).
+            taxonomy_node_ids,
             listing_source, data_source,
             lat: latParam, lng: lngParam, radius_km: radiusKmParam,
             days_in_system, days_no_visit,
+            // Floor filter: csv of exact floor_numbers (0=Ground, 1, 2, …) + optional "5plus" bucket (>=5).
+            floors,
         } = req.query;
 
         const filterLat = latParam ? parseFloat(latParam as string) : undefined;
@@ -254,57 +329,60 @@ router.get('/', authMiddleware, async (req, res) => {
         if (category && typeof category === 'string') where.category = { contains: category, mode: 'insensitive' };
         if (agent_id && typeof agent_id === 'string') where.uploaded_by_agent_id = agent_id;
 
-        // BHK filter — maps to specs.bedrooms JSON field via OR across values
+        // BHK filter — canonical specs chain (bhk → rooms → bedrooms), number OR string. ANDed via
+        // where.AND so it composes with the visibility OR and other filters. (Was: specs.bedrooms only.)
         if (bhk && typeof bhk === 'string') {
             const bhkValues = bhk.split(',').map(v => parseInt(v.trim(), 10)).filter(n => !isNaN(n));
-            if (bhkValues.length > 0) {
-                const bhkOR = bhkValues.map(b => ({ specs: { path: ['bedrooms'], equals: b } }));
-                if (where.OR) {
-                    where.AND = [...(where.AND || []), { OR: bhkOR }];
-                } else {
-                    where.OR = bhkOR;
-                }
-            }
+            const bhkF = bhkSpecsFilter(bhkValues);
+            if (bhkF) where.AND = [...(where.AND || []), bhkF];
         }
 
-        // Location filter — partial match across locality, city, state, full_address
+        // Floor filter — the unit's floor_number. Tokens: exact ints (0=Ground, 1, 2, …) + "5plus" → >=5.
+        // ORed within the filter, ANDed via where.AND so it composes with visibility + other filters.
+        if (floors && typeof floors === 'string' && floors.trim()) {
+            const tokens = floors.split(',').map(s => s.trim()).filter(Boolean);
+            const exacts = tokens.filter(t => /^-?\d+$/.test(t)).map(t => parseInt(t, 10)).filter(n => !isNaN(n));
+            const hasPlus = tokens.some(t => t.toLowerCase() === '5plus');
+            const floorOR: any[] = [];
+            if (exacts.length) floorOR.push({ floor_number: { in: exacts } });
+            if (hasPlus) floorOR.push({ floor_number: { gte: 5 } });
+            if (floorOR.length) where.AND = [...(where.AND || []), { OR: floorOR }];
+        }
+
+        // Taxonomy filter (new tree): selected node id(s) → self + descendants → inventory.taxonomy_node_id IN.
+        if (taxonomy_node_ids && typeof taxonomy_node_ids === 'string' && taxonomy_node_ids.trim()) {
+            const ids = taxonomy_node_ids.split(',').map(s => s.trim()).filter(Boolean);
+            const expanded = await expandTaxonomyNodeIds(ids);
+            if (expanded.length) where.AND = [...(where.AND || []), { taxonomy_node_id: { in: expanded } }];
+        }
+
+        // Location filter — word-aware address match (tokenized; word-boundary on numbers so "Sector 4"
+        // doesn't match "Sector 40"/a pincode). Narrows by matched inventory ids; address-only (no phone).
         if (location && typeof location === 'string' && location.trim()) {
-            const loc = location.trim();
-            const locOR = [
-                { locality: { contains: loc, mode: 'insensitive' as const } },
-                { city: { contains: loc, mode: 'insensitive' as const } },
-                { state: { contains: loc, mode: 'insensitive' as const } },
-                { full_address: { contains: loc, mode: 'insensitive' as const } },
-                { apartment_name: { contains: loc, mode: 'insensitive' as const } },
+            const ids = await findInventoryIdsByAddress(location.trim(), { includePhone: false });
+            const visibilityOR = where.OR;
+            if (visibilityOR) delete where.OR;
+            where.AND = [
+                ...(where.AND || []),
+                ...(visibilityOR ? [{ OR: visibilityOR }] : []),
+                { id: { in: ids } },
             ];
-            if (where.OR) {
-                where.AND = [...(where.AND || []), { OR: locOR }];
-                delete where.OR;
-            } else {
-                where.OR = locOR;
-            }
         }
 
         if (search && typeof search === 'string' && search.trim()) {
-            const q = search.trim();
-            const searchOR = [
-                { location: { contains: q, mode: 'insensitive' as const } },
-                { locality: { contains: q, mode: 'insensitive' as const } },
-                { city: { contains: q, mode: 'insensitive' as const } },
-                { district: { contains: q, mode: 'insensitive' as const } },
-                { description: { contains: q, mode: 'insensitive' as const } },
-                { apartment_name: { contains: q, mode: 'insensitive' as const } },
-                { plot_no: { contains: q, mode: 'insensitive' as const } },
-                { full_address: { contains: q, mode: 'insensitive' as const } },
+            // Word-aware search (2026-06-07): classify each term by shape and match accordingly across ALL
+            // address columns (+ owner/key-holder names & phones). Numbers match on a WORD BOUNDARY, so
+            // "Vaishali sector 4" returns ONLY Sector 4 (not Sector 5/6, a pincode, an area, or a phone with
+            // a 4); a complete address incl. pincode is found; partial words ("vaish") still match.
+            const ids = await findInventoryIdsByAddress(search.trim(), { includePhone: true });
+            // Preserve role-based visibility OR by combining everything with AND, then narrow by matched ids.
+            const visibilityOR = where.OR;
+            if (visibilityOR) delete where.OR;
+            where.AND = [
+                ...(where.AND || []),
+                ...(visibilityOR ? [{ OR: visibilityOR }] : []),
+                { id: { in: ids } },
             ];
-            // Preserve role-based visibility OR by combining with AND
-            if (where.OR) {
-                const visibilityOR = where.OR;
-                delete where.OR;
-                where.AND = [{ OR: visibilityOR }, { OR: searchOR }];
-            } else {
-                where.OR = searchOR;
-            }
         }
 
         // Classification ID filters (v2)
@@ -406,6 +484,7 @@ router.get('/', authMiddleware, async (req, res) => {
                     property_sub_category: { select: { id: true, name: true, slug: true } },
                     property_type_link: { select: { id: true, name: true, slug: true } },
                     flat_property_type: { select: { id: true, name: true, slug: true, main_category: true } },
+                    taxonomy_node: { select: { id: true, name: true, slug: true } },
                 },
             }),
             prisma.inventory.count({ where }),
@@ -418,15 +497,19 @@ router.get('/', authMiddleware, async (req, res) => {
             totalPages: Math.ceil(total / take),
         });
     } catch (error) {
+        captureRouteError(error, req, { route: 'inventory#2' });
         logger.error(error);
         res.status(500).json({ error: 'Failed to fetch inventory' });
     }
 });
 
 // GET /inventory/:id - Single inventory item
-router.get('/:id', authMiddleware, async (req, res) => {
+router.get('/:id', authMiddleware, async (req, res, next) => {
     try {
         const id = req.params.id as string;
+        // Static sibling GET routes registered later (e.g. /filter-counts) collide with /:id —
+        // fall through so Express reaches the real handler instead of treating it as an inventory id.
+        if (id === 'filter-counts') return next();
         // Skip non-UUID params that belong to other routes
         if (id === 'session' || id === 'step' || id === 'commit') {
             return res.status(404).json({ error: 'Not found' });
@@ -448,6 +531,7 @@ router.get('/:id', authMiddleware, async (req, res) => {
                 usage_type: { select: { id: true, name: true, slug: true } },
                 investment_type: { select: { id: true, name: true, slug: true } },
                 flat_property_type: { select: { id: true, name: true, slug: true, main_category: true } },
+                taxonomy_node: { select: { id: true, name: true, slug: true } },
                 documents: {
                     orderBy: { created_at: 'desc' as const },
                     select: {
@@ -465,6 +549,7 @@ router.get('/:id', authMiddleware, async (req, res) => {
 
         res.json(inventory);
     } catch (error) {
+        captureRouteError(error, req, { route: 'inventory#3' });
         logger.error(error);
         res.status(500).json({ error: 'Failed to fetch inventory item' });
     }
@@ -479,10 +564,14 @@ router.patch('/:id', authMiddleware, checkPermission('edit_inventory'), async (r
             return res.status(404).json({ error: 'Inventory not found' });
         }
 
-        // Allowed fields to update
+        // Allowed fields to update.
+        // NOTE: furnishing/facing/property_age/total_floors/features REMOVED — they now
+        // live inside specs.* under canonical taxonomy keys (Phase 1 dedup, see
+        // PROJECT_STATUS 2026-05-28). If a legacy client sends them in the body, we fold
+        // them into specs below rather than dropping silently.
         const allowedFields = [
             // Legacy + core
-            'category', 'type', 'intent', 'location', 'specs', 'features',
+            'category', 'type', 'intent', 'location', 'specs',
             'price', 'price_unit', 'status', 'assigned_agent_id',
             // Classification IDs
             'category_id', 'sub_category_id', 'type_id', 'configuration_id',
@@ -491,9 +580,8 @@ router.patch('/:id', authMiddleware, checkPermission('edit_inventory'), async (r
             'flat_property_type_id',
             // Dual pricing (Redesign v2)
             'customer_price', 'display_price',
-            // Property details
-            'description', 'furnishing', 'floor_number', 'total_floors',
-            'facing', 'property_age',
+            // Property details (only non-deprecated columns remain)
+            'description', 'floor_number',
             // Structured address (city + district for backward compat)
             'flat_no', 'plot_no', 'apartment_name',
             'state', 'district', 'city', 'locality', 'sub_locality', 'pincode', 'full_address',
@@ -506,11 +594,19 @@ router.patch('/:id', authMiddleware, checkPermission('edit_inventory'), async (r
             // Owner/Uploader contact correction
             'owner_phone', 'uploader_phone',
         ];
+        const updateData: any = {};
         // Handle renovated boolean explicitly (not in allowedFields loop to avoid string coercion)
         if (req.body.renovated !== undefined) {
             updateData.renovated = req.body.renovated === true || req.body.renovated === 'true';
         }
-        const updateData: any = {};
+        // Pre-rented (pre-lease) — boolean flag + the sitting tenant's monthly rent (number or null).
+        if (req.body.pre_rented !== undefined) {
+            updateData.pre_rented = req.body.pre_rented === true || req.body.pre_rented === 'true';
+        }
+        if (req.body.pre_rented_monthly_rent !== undefined) {
+            const r = req.body.pre_rented_monthly_rent;
+            updateData.pre_rented_monthly_rent = (r === null || r === '' || isNaN(Number(r))) ? null : Number(r);
+        }
         for (const field of allowedFields) {
             if (req.body[field] !== undefined) {
                 if (['price', 'customer_price', 'display_price'].includes(field)) {
@@ -519,7 +615,7 @@ router.patch('/:id', authMiddleware, checkPermission('edit_inventory'), async (r
                 } else if (['latitude', 'longitude'].includes(field)) {
                     const parsed = req.body[field] !== null && req.body[field] !== '' ? parseFloat(req.body[field]) : NaN;
                     updateData[field] = isNaN(parsed) ? null : parsed;
-                } else if (field === 'floor_number' || field === 'total_floors') {
+                } else if (field === 'floor_number') {
                     const parsed = req.body[field] !== null ? parseInt(String(req.body[field])) : NaN;
                     updateData[field] = isNaN(parsed) ? null : parsed;
                 } else {
@@ -530,6 +626,40 @@ router.patch('/:id', authMiddleware, checkPermission('edit_inventory'), async (r
         // Write city to district too for backward compat
         if (updateData.city && !updateData.district) {
             updateData.district = updateData.city;
+        }
+
+        // ── Specs unification (Phase 1 dedup, 2026-05-28) ────────────────────────
+        // 1. If the caller sent any deprecated scalar (legacy clients), fold into specs.
+        // 2. Deep-merge incoming specs onto the existing row's specs — NEVER full-replace —
+        //    so a client that omits a key doesn't silently delete it.
+        if (updateData.specs && typeof updateData.specs === 'object' && !Array.isArray(updateData.specs)) {
+            const existingSpecs: Record<string, any> = (existing.specs && typeof existing.specs === 'object' && !Array.isArray(existing.specs))
+                ? (existing.specs as Record<string, any>)
+                : {};
+            updateData.specs = { ...existingSpecs, ...(updateData.specs as Record<string, any>) };
+        }
+        const legacyToSpec: Array<[string, string]> = [
+            ['furnishing', 'furnishing'], ['facing', 'facing'],
+            ['property_age', 'age-of-construction'], ['total_floors', 'floors'],
+        ];
+        for (const [bodyKey, specKey] of legacyToSpec) {
+            if (req.body[bodyKey] !== undefined && req.body[bodyKey] !== '' && req.body[bodyKey] !== null) {
+                if (!updateData.specs) {
+                    updateData.specs = { ...((existing.specs && typeof existing.specs === 'object' && !Array.isArray(existing.specs)) ? existing.specs : {}) };
+                }
+                updateData.specs[specKey] = bodyKey === 'total_floors' ? String(req.body[bodyKey]) : req.body[bodyKey];
+            }
+        }
+        // Legacy features object → specs.amenities array
+        if (req.body.features && typeof req.body.features === 'object' && !Array.isArray(req.body.features)) {
+            const AMENITY: Record<string, string> = { gym: 'Gym', club_house: 'Club House', power_backup: 'Power Backup', lift: 'Lift', intercom: 'Intercom', guest_house: 'Guest House', park: 'Park', community_hall: 'Community Hall', mini_theater: 'Mini Theater', swimming_pool: 'Swimming Pool', security: 'Security', gas_pipeline: 'Gas Pipeline', parking: 'Parking', garden: 'Garden', pool: 'Swimming Pool', water_supply: 'Water Supply' };
+            const labels = Object.entries(req.body.features as Record<string, any>).filter(([, v]) => v).map(([k]) => AMENITY[k] || k);
+            if (labels.length) {
+                if (!updateData.specs) {
+                    updateData.specs = { ...((existing.specs && typeof existing.specs === 'object' && !Array.isArray(existing.specs)) ? existing.specs : {}) };
+                }
+                updateData.specs.amenities = labels;
+            }
         }
 
         // Handle shared_with_ids array (not in allowedFields loop)
@@ -552,6 +682,42 @@ router.patch('/:id', authMiddleware, checkPermission('edit_inventory'), async (r
             if (updateData[f] === '') updateData[f] = null;
         }
         // Optional string fields: keep empty strings as-is (Prisma handles them fine)
+
+        // Taxonomy (Phase 2 — 2026-05-27): the Edit Classification cascade sends taxonomy_node_id.
+        // Persist it AND derive the legacy classification the rest of the app still reads
+        // (matching aligns on sub_category_id; website/share read category/type slugs). Best-effort —
+        // a derive failure must never block the save. Runs AFTER the allowedFields loop so it wins.
+        if (req.body.taxonomy_node_id !== undefined) {
+            const nodeId = req.body.taxonomy_node_id || null;
+            updateData.taxonomy_node_id = nodeId;
+            if (nodeId) {
+                try {
+                    const node = await prisma.taxonomyNode.findUnique({
+                        where: { id: nodeId },
+                        select: { legacy_sub_category_id: true, legacy_type_id: true, legacy_flat_property_type_id: true },
+                    });
+                    if (node) {
+                        updateData.flat_property_type_id = node.legacy_flat_property_type_id || null;
+                        updateData.type_id = node.legacy_type_id || null;
+                        updateData.sub_category_id = node.legacy_sub_category_id || null;
+                        if (node.legacy_sub_category_id) {
+                            const sub = await prisma.propertySubCategory.findUnique({
+                                where: { id: node.legacy_sub_category_id },
+                                select: { slug: true, category_id: true, category: { select: { slug: true } } },
+                            });
+                            if (sub) {
+                                updateData.category_id = sub.category_id;
+                                updateData.type = sub.slug;
+                                if (sub.category?.slug) updateData.category = sub.category.slug;
+                            }
+                        }
+                        updateData.needs_taxonomy_review = !(node.legacy_sub_category_id || node.legacy_flat_property_type_id);
+                    }
+                } catch (e) {
+                    captureRouteError(e as any, req, { route: 'inventory/patch/taxonomy-derive', nodeId });
+                }
+            }
+        }
 
         // Normalize and re-link owner if owner_phone changed
         if (updateData.owner_phone) {
@@ -582,6 +748,8 @@ router.patch('/:id', authMiddleware, checkPermission('edit_inventory'), async (r
 
         logger.info(`[Inventory] Updated ${id} by agent ${req.agent!.id}: ${JSON.stringify(updateData)}`);
 
+        upsertCatalogProduct(updated).catch(e => logger.warn('[Catalog] post-update upsert failed:', e.message));
+
         // Notify on status change (sold, rented, withdrawn, etc.)
         if (updateData.status && updateData.status !== existing.status) {
             const agents: string[] = [existing.uploaded_by_agent_id, existing.assigned_agent_id].filter(Boolean) as string[];
@@ -594,8 +762,16 @@ router.patch('/:id', authMiddleware, checkPermission('edit_inventory'), async (r
             }
         }
 
+        // Phase 9: broadcast newly-active inventory to all QUALIFIED deals
+        if (updateData.status === 'active' && existing.status !== 'active') {
+            broadcastInventoryToQualifiedDeals(id).catch(e =>
+                logger.warn('[InvBroadcast] PATCH broadcast failed:', e.message)
+            );
+        }
+
         res.json(updated);
     } catch (error) {
+        captureRouteError(error, req, { route: 'inventory#4' });
         logger.error('[Inventory PATCH] Error:', error);
         res.status(500).json({ error: 'Failed to update inventory' });
     }
@@ -657,8 +833,133 @@ router.post('/:id/share', authMiddleware, checkPermission('share_inventory'), as
 
         res.json({ shared_with_ids: newSharedIds });
     } catch (error) {
+        captureRouteError(error, req, { route: 'inventory#5' });
         logger.error('[Inventory Share] Error:', error);
         res.status(500).json({ error: 'Failed to share inventory' });
+    }
+});
+
+// POST /inventory/share-pdf — Generate a PDF of one or more inventories.
+// Body: { inventory_ids: string[], variant: 'branded' | 'brandless', partner_name?: string, partner_phone?: string }
+// Streams application/pdf back to the client. Partner agents are forced into
+// brandless variant server-side regardless of what they post (redaction must
+// not be a frontend choice).
+router.post('/share-pdf', authMiddleware, async (req: any, res) => {
+    try {
+        const { inventory_ids, variant, partner_name, partner_phone } = req.body || {};
+        if (!Array.isArray(inventory_ids) || inventory_ids.length === 0) {
+            return res.status(400).json({ error: 'inventory_ids[] required' });
+        }
+        if (inventory_ids.length > 20) {
+            return res.status(400).json({ error: 'Max 20 inventories per PDF' });
+        }
+
+        const agent = req.agent!;
+        // Role-gated variant. Partner agents can never get branded PDFs of OUR inventory.
+        let effectiveVariant: 'branded' | 'brandless' = variant === 'brandless' ? 'brandless' : 'branded';
+        if (agent.role === 'partner_agent') effectiveVariant = 'brandless';
+
+        const inventories = await prisma.inventory.findMany({
+            where: { id: { in: inventory_ids } },
+            select: {
+                id: true, display_id: true, type: true, category: true, intent: true,
+                specs: true, floor_number: true,
+                // features/furnishing/total_floors/facing/property_age dropped Phase 4 — read from specs.*
+                flat_no: true, plot_no: true, apartment_name: true, full_address: true,
+                location: true, locality: true, sub_locality: true, city: true,
+                district: true, state: true, price: true, display_price: true,
+                customer_price: true, price_unit: true, description: true,
+                media_urls: true, owner_phone: true,
+                uploaded_by_agent_id: true, assigned_agent_id: true, reference_agent_id: true,
+                shared_with_ids: true,
+            },
+        });
+
+        if (inventories.length === 0) return res.status(404).json({ error: 'No inventories found' });
+
+        // Authorization: agent must have access to every requested inventory.
+        // super_boss bypasses; manager allowed only for inventories owned by their team.
+        if (agent.role !== 'super_boss') {
+            let teamIds: string[] = [];
+            if (agent.role === 'manager') {
+                const team = await prisma.agent.findMany({
+                    where: { reports_to_id: agent.id },
+                    select: { id: true },
+                });
+                teamIds = team.map(t => t.id);
+            }
+            const allowed = inventories.every(inv => {
+                const direct = inv.uploaded_by_agent_id === agent.id
+                    || inv.assigned_agent_id === agent.id
+                    || inv.reference_agent_id === agent.id
+                    || (inv.shared_with_ids || []).includes(agent.id);
+                if (direct) return true;
+                if (agent.role === 'manager') {
+                    return teamIds.includes(inv.uploaded_by_agent_id || '')
+                        || teamIds.includes(inv.assigned_agent_id || '');
+                }
+                return false;
+            });
+            if (!allowed) {
+                return res.status(403).json({ error: 'Not authorized to share one or more selected properties' });
+            }
+        }
+
+        const agentRecord = effectiveVariant === 'branded'
+            ? await prisma.agent.findUnique({ where: { id: agent.id }, select: { name: true, phone: true } })
+            : null;
+
+        const { generateInventoryPdfStream } = await import('../services/pdf_generator');
+        const filename = `realtypandit-${effectiveVariant}-${Date.now()}.pdf`;
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+
+        const stream = generateInventoryPdfStream(inventories as any, {
+            variant: effectiveVariant,
+            partnerName: partner_name || (effectiveVariant === 'brandless' ? agentRecord?.name : undefined),
+            partnerPhone: partner_phone || (effectiveVariant === 'brandless' ? agentRecord?.phone : undefined),
+            agentName: effectiveVariant === 'branded' ? agentRecord?.name || undefined : undefined,
+            agentPhone: effectiveVariant === 'branded' ? agentRecord?.phone || undefined : undefined,
+        });
+
+        stream.pipe(res);
+
+        // Audit log (non-blocking)
+        prisma.interaction.create({
+            data: {
+                tenant_id: agent.tenant_id,
+                phone_number: 'system',
+                channel: 'system',
+                direction: 'outbound',
+                event_type: 'inventory_pdf_generated',
+                content: `${effectiveVariant} PDF generated for ${inventories.length} properties by ${agent.id}`,
+                metadata: { inventory_ids, variant: effectiveVariant, agent_id: agent.id },
+            },
+        }).catch(() => {});
+    } catch (err) {
+        captureRouteError(err, req, { route: 'inventory#share-pdf' });
+        logger.error('[Inventory share-pdf] error:', err);
+        if (!res.headersSent) res.status(500).json({ error: 'Failed to generate PDF' });
+    }
+});
+
+// GET /inventory/:id/share-link — return the public shareable URL only (no WhatsApp send).
+// Frontend copies this to clipboard. Same URL the WhatsApp message uses.
+router.get('/:id/share-link', authMiddleware, async (req: any, res) => {
+    try {
+        const inv = await prisma.inventory.findUnique({
+            where: { id: req.params.id },
+            select: { id: true, display_id: true, slug: true, status: true },
+        });
+        if (!inv) return res.status(404).json({ error: 'Property not found' });
+        if (inv.status !== 'active') return res.status(400).json({ error: 'Property is not active — cannot share' });
+        const link = inv.slug
+            ? `https://www.realtypandit.in/properties/${inv.slug}`
+            : `https://www.realtypandit.in/properties/${inv.display_id || inv.id}`;
+        res.json({ share_link: link, slug: inv.slug, display_id: inv.display_id });
+    } catch (err) {
+        captureRouteError(err, req, { route: 'inventory#share-link' });
+        res.status(500).json({ error: 'Failed to build share link' });
     }
 });
 
@@ -670,6 +971,13 @@ router.post('/:id/share-to-client', authMiddleware, async (req, res) => {
         if (!client_phone) return res.status(400).json({ error: 'client_phone required' });
 
         const normalized = normalizePhone(client_phone);
+        // Guard against placeholder keys (PENDING-/TEMP_) and un-normalizable junk: normalizePhone
+        // returns '' for those, and a partner-referral lead's phone_number is a PENDING- placeholder.
+        // Without this, we'd upsert a Contact with an empty phone_number and fire a WhatsApp send to a
+        // garbage recipient (the reported "83830443903016494" bug). Defense-in-depth behind the UI gate.
+        if (!normalized || isPlaceholderPhone(client_phone)) {
+            return res.status(400).json({ error: 'No valid client phone to share to' });
+        }
         const agent = req.agent!;
 
         // Fetch inventory with details for the WhatsApp message
@@ -719,66 +1027,34 @@ router.post('/:id/share-to-client', authMiddleware, async (req, res) => {
             }
         });
 
-        // Check for existing share (duplicate detection)
+        // Prior-share lookup — for an informational NOTICE only. Re-sharing is ALWAYS allowed:
+        // we never block the user/system from sending the same property to the same client again
+        // (a failed earlier send must be re-sendable). The UI shows "previously shared on <date>".
         const existingShare = await prisma.propertyShare.findFirst({
             where: { inventory_id: inventory.id, client_phone: normalized },
             orderBy: { created_at: 'desc' },
         });
-        if (existingShare) {
-            return res.json({
-                success: true,
-                already_shared: true,
-                shared_at: existingShare.created_at,
-                share_id: existingShare.id,
-                share_link: existingShare.property_link,
-                whatsapp_sent: false,
-                contact_created: false,
-            });
-        }
+        const previouslySharedAt = existingShare?.created_at ?? null;
 
         // Generate shareable property link
         const propertyLink = inventory.display_id
             ? `https://www.realtypandit.in/properties/${inventory.display_id}`
             : `https://www.realtypandit.in/properties/${inventory.id}`;
 
-        // Build WhatsApp message
-        const agentRecord = await prisma.agent.findUnique({ where: { id: agent.id }, select: { name: true, phone: true } });
-        const specs = inventory.specs as any;
-        const price = inventory.display_price || inventory.price;
+        // typeName is kept for the interaction-log content below; the actual WhatsApp message
+        // (Image + body + 3 buttons) is built + sent inside shareInventoryCard.
         const typeName = inventory.flat_property_type?.name || inventory.type?.toUpperCase() || 'Property';
 
-        const formatPrice = (p: number): string => {
-            if (p >= 10000000) return `${(p / 10000000).toFixed(1)} Cr`;
-            if (p >= 100000) return `${(p / 100000).toFixed(1)} Lakh`;
-            return p.toLocaleString('en-IN');
-        };
-
-        const caption = [
-            `*${typeName}*`,
-            `📍 ${inventory.full_address || inventory.location || 'Location available on request'}`,
-            specs?.bedrooms ? `🛏️ ${specs.bedrooms} BHK` : null,
-            specs?.area ? `📐 ${specs.area} ${specs.area_unit || 'sqft'}` : null,
-            price ? `💰 ₹${formatPrice(Number(price))}` : null,
-            '',
-            `🔗 View Details: ${propertyLink}`,
-            '',
-            `📞 ${agentRecord?.name || 'Our Team'} | Realty Pandit`,
-            agentRecord?.phone ? `Call: ${agentRecord.phone}` : null,
-        ].filter(Boolean).join('\n');
-
-        // Send via WhatsApp Business API
+        // Send the approved v4 property-card TEMPLATE — the SAME path the deal "Company WhatsApp"
+        // share uses. The UTILITY template delivers even outside the 24h customer-service window,
+        // unlike the old raw sendText/sendImage which Meta rejected with a silent 400. shareInventoryCard
+        // returns the REAL outcome (sendTemplate throws strictly), so whatsapp_sent is accurate.
         let whatsappSent = false;
         try {
-            const whatsapp = new WhatsAppService();
-            const imageUrl = inventory.media_urls?.[0] || null;
-            if (imageUrl) {
-                await whatsapp.sendImage(normalized, imageUrl, caption);
-            } else {
-                await whatsapp.sendText(normalized, caption);
-            }
-            whatsappSent = true;
+            const { shareInventoryCard } = await import('../services/property_sharing');
+            whatsappSent = await shareInventoryCard(normalized, inventory);
         } catch (err) {
-            logger.error('[ShareToClient] WhatsApp send failed:', err);
+            logger.error('[ShareToClient] WhatsApp template send failed:', err);
         }
 
         // Create PropertyShare record
@@ -812,10 +1088,14 @@ router.post('/:id/share-to-client', authMiddleware, async (req, res) => {
             success: true,
             share_link: propertyLink,
             whatsapp_sent: whatsappSent,
+            // Non-blocking re-share notice: true if this property was shared to this client before.
+            already_shared: !!existingShare,
+            previously_shared_at: previouslySharedAt,
             share_id: share.id,
             contact_created: !existingContact,
         });
     } catch (error) {
+        captureRouteError(error, req, { route: 'inventory#6' });
         logger.error('[ShareToClient] Error:', error);
         res.status(500).json({ error: 'Failed to share property' });
     }
@@ -856,14 +1136,46 @@ router.post('/:id/transfer', authMiddleware, checkPermission('transfer_inventory
         const targetAgent = await prisma.agent.findUnique({ where: { id: to_agent_id }, select: { id: true, name: true } });
         if (!targetAgent) return res.status(404).json({ error: 'Target agent not found' });
 
-        await prisma.inventory.update({
-            where: { id },
-            data: { assigned_agent_id: to_agent_id },
-        });
+        const previousAssignedId = existing.assigned_agent_id;
+        const reason: string | undefined = (req.body || {}).reason;
+        const noteText = reason || `Transferred to ${targetAgent.name}`;
 
-        logger.info(`[Inventory] Transferred ${id} from ${agent.id} to ${to_agent_id} by ${agent.id}`);
+        // 2026-05-15: Audit row written so transfer history is queryable. Lives on
+        // the inventory's interactions stream (uploader_phone or owner_phone — using
+        // owner_phone since that's the canonical "who is this property for" key).
+        const auditPhone = existing.owner_phone || existing.uploader_phone || existing.key_holder_phone;
+        await prisma.$transaction([
+            prisma.inventory.update({
+                where: { id },
+                data: { assigned_agent_id: to_agent_id, updated_at: new Date() },
+            }),
+            ...(auditPhone ? [
+                prisma.interaction.create({
+                    data: {
+                        tenant_id: existing.tenant_id,
+                        phone_number: auditPhone,
+                        channel: 'admin',
+                        direction: 'outbound',
+                        event_type: 'inventory_transferred',
+                        content: `Inventory ${existing.display_id || id.slice(0,8)} transferred from ${agent.name} to ${targetAgent.name}. Reason: ${noteText}`,
+                        metadata: {
+                            inventory_id: id,
+                            display_id: existing.display_id,
+                            from_agent_id: previousAssignedId,
+                            from_agent_name: agent.name,
+                            to_agent_id: to_agent_id,
+                            to_agent_name: targetAgent.name,
+                            reason: noteText,
+                            actor_id: agent.id,
+                        },
+                    },
+                }),
+            ] : []),
+        ]);
 
-        // Notify the receiving agent
+        logger.info(`[Inventory] Transferred ${id} from ${agent.name} to ${targetAgent.name}`);
+
+        // Notify new + previous handler
         const fullTarget = await prisma.agent.findUnique({ where: { id: to_agent_id }, select: { id: true, phone: true, email: true, name: true } });
         if (fullTarget) {
             notify('inventory_transferred', [{ id: fullTarget.id, type: 'agent', phone: fullTarget.phone, email: fullTarget.email || undefined, name: fullTarget.name }], {
@@ -871,9 +1183,27 @@ router.post('/:id/transfer', authMiddleware, checkPermission('transfer_inventory
                 property_type: existing.type, location: existing.full_address || existing.locality,
             });
         }
+        if (previousAssignedId && previousAssignedId !== agent.id && previousAssignedId !== to_agent_id) {
+            const prev = await prisma.agent.findUnique({
+                where: { id: previousAssignedId },
+                select: { id: true, name: true, phone: true, email: true },
+            });
+            if (prev) {
+                notify('inventory_transferred_away', [{
+                    id: prev.id, type: 'agent' as const,
+                    phone: prev.phone ?? undefined, email: prev.email || undefined,
+                    name: prev.name,
+                }], {
+                    inventory_id: id, display_id: existing.display_id, to_agent_name: targetAgent.name,
+                    by_agent_name: agent.name, reason: noteText,
+                    property_type: existing.type, location: existing.full_address || existing.locality,
+                });
+            }
+        }
 
         res.json({ message: 'Inventory transferred', assigned_agent_id: to_agent_id, to_agent_name: targetAgent.name });
     } catch (error) {
+        captureRouteError(error, req, { route: 'inventory#7' });
         logger.error('[Inventory Transfer] Error:', error);
         res.status(500).json({ error: 'Failed to transfer inventory' });
     }
@@ -989,6 +1319,7 @@ router.post('/:id/transfer-ownership', authMiddleware, checkPermission('manage_i
             inventory: { id: updated.id, owner_phone: updated.owner_phone },
         });
     } catch (error) {
+        captureRouteError(error, req, { route: 'inventory#8' });
         logger.error('[TransferOwnership] Error:', error);
         res.status(500).json({ error: (error as Error).message });
     }
@@ -1009,6 +1340,13 @@ router.post('/:id/approve', authMiddleware, checkPermission('edit_inventory'), a
 
         await prisma.inventory.update({ where: { id }, data: { status: 'active' } });
         logger.info(`[Inventory] Approved ${id} (→ active) by agent ${req.agent!.id}`);
+
+        syncInventoryById(id).catch(e => logger.warn('[Catalog] post-approve sync failed:', e.message));
+
+        // Phase 9: broadcast newly-approved inventory to all QUALIFIED deals
+        broadcastInventoryToQualifiedDeals(id).catch(e =>
+            logger.warn('[InvBroadcast] Approve broadcast failed:', e.message)
+        );
 
         // Notify partner agent via WhatsApp
         if (existing.uploader_phone) {
@@ -1039,6 +1377,7 @@ router.post('/:id/approve', authMiddleware, checkPermission('edit_inventory'), a
 
         res.json({ message: 'Inventory approved and is now live', id });
     } catch (error) {
+        captureRouteError(error, req, { route: 'inventory#9' });
         logger.error('[Inventory Approve] Error:', error);
         res.status(500).json({ error: 'Failed to approve inventory' });
     }
@@ -1060,6 +1399,8 @@ router.post('/:id/reject', authMiddleware, checkPermission('edit_inventory'), as
 
         await prisma.inventory.update({ where: { id }, data: { status: 'withdrawn' } });
         logger.info(`[Inventory] Rejected ${id} (→ withdrawn) by agent ${req.agent!.id}. Reason: ${reason || 'none'}`);
+
+        deleteCatalogProduct(id).catch(e => logger.warn('[Catalog] post-reject delete failed:', e.message));
 
         // Notify partner agent via WhatsApp
         if (existing.uploader_phone) {
@@ -1089,6 +1430,7 @@ router.post('/:id/reject', authMiddleware, checkPermission('edit_inventory'), as
 
         res.json({ message: 'Inventory rejected', id });
     } catch (error) {
+        captureRouteError(error, req, { route: 'inventory#10' });
         logger.error('[Inventory Reject] Error:', error);
         res.status(500).json({ error: 'Failed to reject inventory' });
     }
@@ -1109,6 +1451,7 @@ router.delete('/:id', authMiddleware, checkPermission('delete_inventory'), async
         logger.info(`[Inventory] Deleted ${id} by agent ${req.agent!.id}`);
         res.json({ message: 'Inventory deleted successfully', id });
     } catch (error) {
+        captureRouteError(error, req, { route: 'inventory#11' });
         logger.error('[Inventory DELETE] Error:', error);
         res.status(500).json({ error: 'Failed to delete inventory' });
     }
@@ -1121,6 +1464,7 @@ router.post('/session/start', async (req, res) => {
         const result = await stateMachine.startSession(sessionId, intent);
         res.json(result);
     } catch (error) {
+        captureRouteError(error, req, { route: 'inventory#12' });
         logger.error(error);
         res.status(500).json({ error: 'Failed to start session' });
     }
@@ -1133,6 +1477,7 @@ router.post('/step', async (req, res) => {
         const result = await stateMachine.handleStep(inventorySessionId, payload);
         res.json(result);
     } catch (error) {
+        captureRouteError(error, req, { route: 'inventory#13' });
         logger.error(error);
         res.status(500).json({ error: (error as Error).message });
     }
@@ -1162,6 +1507,21 @@ router.post('/commit', async (req, res) => {
         // Determine uploaded_by_agent_id from JWT, body, or session data
         const uploadedByAgentId = req.agent?.id || agentId || data.agentId || null;
 
+        // Fold deprecated scalar fields into specs (single SoT). Mirror of admin POST path above.
+        const chatSpecs: Record<string, any> = {};
+        if (data.bedrooms != null && data.bedrooms !== '') chatSpecs.bedrooms = data.bedrooms;
+        if (data.bathrooms != null && data.bathrooms !== '') chatSpecs.bathrooms = data.bathrooms;
+        if (data.area != null && data.area !== '') chatSpecs.area = data.area;
+        if (data.furnishing) chatSpecs.furnishing = data.furnishing;
+        if (data.facing) chatSpecs.facing = data.facing;
+        if (data.propertyAge) chatSpecs['age-of-construction'] = data.propertyAge;
+        if (data.totalFloors) chatSpecs.floors = String(data.totalFloors);
+        if (data.features && typeof data.features === 'object' && Object.keys(data.features).length > 0) {
+            const AMENITY: Record<string, string> = { gym: 'Gym', club_house: 'Club House', power_backup: 'Power Backup', lift: 'Lift', intercom: 'Intercom', guest_house: 'Guest House', park: 'Park', community_hall: 'Community Hall', mini_theater: 'Mini Theater', swimming_pool: 'Swimming Pool', security: 'Security', gas_pipeline: 'Gas Pipeline', parking: 'Parking', garden: 'Garden', pool: 'Swimming Pool', water_supply: 'Water Supply' };
+            const labels = Object.entries(data.features as Record<string, any>).filter(([, v]) => v).map(([k]) => AMENITY[k] || k);
+            if (labels.length) chatSpecs.amenities = labels;
+        }
+
         const inventory = await prisma.inventory.create({
             data: {
                 tenant_id: tenant.id,
@@ -1171,15 +1531,12 @@ router.post('/commit', async (req, res) => {
                 type: data.type || 'flat',
                 intent: data.intent || 'sell',
                 location: data.location || data.locationText || null,
-                specs: {
-                    bedrooms: data.bedrooms,
-                    bathrooms: data.bathrooms,
-                    area: data.area,
-                },
+                specs: Object.keys(chatSpecs).length > 0 ? chatSpecs : undefined,
                 price: data.price ? parseFloat(data.price) : null,
                 status: 'active',
                 media_urls: [],
                 uploaded_by_agent_id: uploadedByAgentId,
+                assigned_agent_id: uploadedByAgentId || undefined,
 
                 // Classification IDs (from DB-driven WhatsApp flow)
                 category_id: data.categoryId || undefined,
@@ -1187,21 +1544,14 @@ router.post('/commit', async (req, res) => {
                 type_id: data.typeId || undefined,
                 configuration_id: data.configurationId || undefined,
 
-                // Structured features (parsed from amenities text)
-                features: data.features && Object.keys(data.features).length > 0 ? data.features : undefined,
-
                 // Key holder
                 key_holder_type: data.key_holder_type || undefined,
                 key_holder_name: data.key_holder_name || undefined,
                 key_holder_phone: data.key_holder_phone || undefined,
 
-                // Property details (if collected via EXTRA_DETAILS)
+                // Property details (only non-deprecated columns)
                 description: data.description || undefined,
-                furnishing: data.furnishing || undefined,
                 floor_number: data.floorNumber ? parseInt(data.floorNumber) : undefined,
-                total_floors: data.totalFloors ? parseInt(data.totalFloors) : undefined,
-                facing: data.facing || undefined,
-                property_age: data.propertyAge || undefined,
             }
         });
 
@@ -1230,6 +1580,7 @@ router.post('/commit', async (req, res) => {
         });
 
     } catch (error) {
+        captureRouteError(error, req, { route: 'inventory#14' });
         logger.error('[Inventory Commit]', error);
         res.status(500).json({ error: 'Commit failed' });
     }
@@ -1287,6 +1638,7 @@ router.post('/:id/upload', upload.array('images', 20), async (req, res) => {
             total_videos: updatedVideoUrls.length,
         });
     } catch (error) {
+        captureRouteError(error, req, { route: 'inventory#15' });
         logger.error('[Upload] Error:', error);
         res.status(500).json({ error: (error as Error).message });
     }
@@ -1338,6 +1690,7 @@ router.delete('/:id/media/:filename', async (req, res) => {
             res.json({ message: 'Media deleted', total_media: updatedUrls.length });
         }
     } catch (error) {
+        captureRouteError(error, req, { route: 'inventory#16' });
         logger.error('[Delete Media] Error:', error);
         res.status(500).json({ error: (error as Error).message });
     }
@@ -1365,6 +1718,7 @@ router.get('/:id/media', async (req, res) => {
 
         res.json({ media, count: media.length });
     } catch (error) {
+        captureRouteError(error, req, { route: 'inventory#17' });
         logger.error('[List Media] Error:', error);
         res.status(500).json({ error: (error as Error).message });
     }
@@ -1376,6 +1730,7 @@ router.get('/:id/media', async (req, res) => {
 
 import { ENRICHMENT_STEPS, ENRICHMENT_GROUPS } from '../workflows/workflow_definition';
 import { WorkflowEngine } from '../workflows/workflow_engine';
+import { captureRouteError } from '../utils/capture';
 
 const enrichmentEngine = new WorkflowEngine(ENRICHMENT_STEPS);
 
@@ -1383,6 +1738,43 @@ const enrichmentEngine = new WorkflowEngine(ENRICHMENT_STEPS);
  * GET /inventory/:id/enrichment
  * Returns enrichment step definitions + current inventory values.
  */
+// ─── GET /api/inventory/:id/contacts — Owner, key holder, assigned agent ────
+router.get('/:id/contacts', authMiddleware, async (req, res) => {
+    try {
+        const inv = await prisma.inventory.findUnique({
+            where: { id: req.params.id },
+            select: {
+                owner_phone: true,
+                contact: { select: { name: true, phone_number: true } },
+                key_holder_name: true,
+                key_holder_phone: true,
+                key_holder_contact: { select: { name: true, phone_number: true } },
+                assigned_agent: { select: { id: true, name: true, phone: true, role: true } },
+            },
+        });
+        if (!inv) return res.status(404).json({ success: false, error: 'Inventory not found' });
+
+        res.json({
+            success: true,
+            data: {
+                owner: {
+                    name: inv.contact?.name ?? null,
+                    phone: inv.owner_phone,
+                },
+                key_holder: {
+                    name: inv.key_holder_name ?? inv.key_holder_contact?.name ?? null,
+                    phone: inv.key_holder_phone ?? inv.key_holder_contact?.phone_number ?? null,
+                },
+                assigned_agent: inv.assigned_agent ?? null,
+            },
+        });
+    } catch (error: any) {
+        captureRouteError(error, req, { route: 'inventory#18' });
+        logger.error('[InventoryAPI] Contacts error:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
 router.get('/:id/enrichment', authMiddleware, async (req, res) => {
     try {
         const inventory = await prisma.inventory.findUnique({
@@ -1432,6 +1824,7 @@ router.get('/:id/enrichment', authMiddleware, async (req, res) => {
             display_id: inventory.display_id,
         });
     } catch (error) {
+        captureRouteError(error, req, { route: 'inventory#19' });
         logger.error('[Enrichment GET] Error:', error);
         res.status(500).json({ error: (error as Error).message });
     }
@@ -1473,15 +1866,15 @@ router.patch('/:id/enrich', authMiddleware, async (req, res) => {
             updateData.display_price = parseFloat(fields.display_price) || null;
         }
 
-        // Features/amenities
+        // Features/amenities → specs.amenities (the `features` column was dropped 2026-05-28).
         if (fields.features !== undefined) {
-            const featuresObj: Record<string, boolean> = {};
-            if (typeof fields.features === 'object') {
-                for (const [k, v] of Object.entries(fields.features)) {
-                    if (v) featuresObj[k] = true;
-                }
+            let amenities: string[] = [];
+            if (Array.isArray(fields.features)) {
+                amenities = fields.features.filter(Boolean).map(String);
+            } else if (typeof fields.features === 'object' && fields.features) {
+                amenities = Object.entries(fields.features).filter(([, v]) => v).map(([k]) => k);
             }
-            updateData.features = Object.keys(featuresObj).length > 0 ? featuresObj : undefined;
+            if (amenities.length) { newSpecs.amenities = amenities; specsChanged = true; }
         }
 
         // Specs fields
@@ -1506,24 +1899,24 @@ router.patch('/:id/enrich', authMiddleware, async (req, res) => {
             specsChanged = true;
         }
 
-        if (specsChanged) {
-            updateData.specs = newSpecs;
+        // Direct detail fields — furnishing/facing/total_floors/property_age/features COLUMNS
+        // were dropped (2026-05-28); fold into specs.* instead of writing the columns (which
+        // would throw `Unknown argument`). See [[reference_inventory_specs_sot]].
+        if (fields.furnishing !== undefined) { newSpecs.furnishing = fields.furnishing; specsChanged = true; }
+        if (fields.facing !== undefined) { newSpecs.facing = fields.facing; specsChanged = true; }
+        if (fields.total_floors !== undefined) { newSpecs.floors = parseInt(fields.total_floors) || undefined; specsChanged = true; }
+        if (fields.property_age !== undefined) { newSpecs['age-of-construction'] = fields.property_age; specsChanged = true; }
+        if (fields.lift_available === 'yes') {
+            const amen = new Set<string>(Array.isArray(newSpecs.amenities) ? newSpecs.amenities : []);
+            amen.add('Lift');
+            newSpecs.amenities = Array.from(amen);
+            specsChanged = true;
         }
 
-        // Direct detail fields
-        if (fields.furnishing !== undefined) updateData.furnishing = fields.furnishing;
-        if (fields.facing !== undefined) updateData.facing = fields.facing;
-        if (fields.total_floors !== undefined) updateData.total_floors = parseInt(fields.total_floors) || null;
-        if (fields.property_age !== undefined) updateData.property_age = fields.property_age;
+        if (specsChanged) updateData.specs = newSpecs;
+
         if (fields.description !== undefined) updateData.description = fields.description;
         if (fields.lead_reference !== undefined) updateData.lead_reference = fields.lead_reference;
-        if (fields.lift_available !== undefined) {
-            const currentFeatures = (updateData.features || inventory.features || {}) as Record<string, boolean>;
-            if (fields.lift_available === 'yes') {
-                currentFeatures.lift = true;
-            }
-            updateData.features = currentFeatures;
-        }
 
         // Ownership enrichment
         if (fields.ownership_type !== undefined) {
@@ -1543,15 +1936,16 @@ router.patch('/:id/enrich', authMiddleware, async (req, res) => {
             address_block: { locality: inventory.locality, city: inventory.city },
             key_holder_type: inventory.key_holder_type,
             customer_price: updateData.customer_price ?? (inventory.customer_price ? Number(inventory.customer_price) : undefined),
-            features: updateData.features ?? inventory.features,
+            // furnishing/facing/total_floors/property_age/features live in specs.* now (cols dropped).
+            features: newSpecs.amenities ?? currentSpecs.amenities,
             bathrooms: newSpecs.bathrooms ?? currentSpecs.bathrooms,
             area: newSpecs.area ?? currentSpecs.area,
-            furnishing: updateData.furnishing ?? inventory.furnishing,
-            facing: updateData.facing ?? inventory.facing,
+            furnishing: newSpecs.furnishing ?? currentSpecs.furnishing,
+            facing: newSpecs.facing ?? currentSpecs.facing,
             description: updateData.description ?? inventory.description,
             photos: inventory.media_urls,
-            total_floors: updateData.total_floors ?? inventory.total_floors,
-            property_age: updateData.property_age ?? inventory.property_age,
+            total_floors: newSpecs.floors ?? currentSpecs.floors,
+            property_age: newSpecs['age-of-construction'] ?? currentSpecs['age-of-construction'],
         };
 
         // Simple completion calc
@@ -1579,6 +1973,7 @@ router.patch('/:id/enrich', authMiddleware, async (req, res) => {
             is_enriched: updateData.is_enriched,
         });
     } catch (error) {
+        captureRouteError(error, req, { route: 'inventory#20' });
         logger.error('[Enrichment PATCH] Error:', error);
         res.status(500).json({ error: (error as Error).message });
     }
@@ -1667,6 +2062,7 @@ router.post('/:id/documents', authMiddleware, checkPermission('edit_inventory'),
         logger.info(`[Documents] Uploaded ${doc.id} for inventory ${inventoryId}`);
         res.status(201).json(doc);
     } catch (error) {
+        captureRouteError(error, req, { route: 'inventory#21' });
         logger.error('[Documents POST] Error:', error);
         res.status(500).json({ error: (error as Error).message });
     }
@@ -1709,7 +2105,127 @@ router.delete('/:id/documents/:docId', authMiddleware, checkPermission('edit_inv
         logger.info(`[Documents] Deleted ${docId} from inventory ${inventoryId}`);
         res.json({ success: true });
     } catch (error) {
+        captureRouteError(error, req, { route: 'inventory#22' });
         logger.error('[Documents DELETE] Error:', error);
+        res.status(500).json({ error: (error as Error).message });
+    }
+});
+
+// GET /inventory/filter-counts — Returns counts per filter option for the filter panel UI
+// Respects the same visibility rules as the main inventory listing
+router.get('/filter-counts', authMiddleware, async (req, res) => {
+    try {
+        const agent = req.agent!;
+        const baseWhere: any = {};
+
+        // Same visibility filtering as main listing
+        if (agent.role === 'super_boss') {
+            // sees all
+        } else if (agent.role === 'manager') {
+            const team = await prisma.agent.findMany({
+                where: { reports_to_id: agent.id },
+                select: { id: true },
+            });
+            const teamIds = [agent.id, ...team.map((a: { id: string }) => a.id)];
+            const partnerOwnerIds = await getManagedPartnerOwnerIds(teamIds);
+            baseWhere.OR = [
+                { uploaded_by_agent_id: { in: teamIds } },
+                { reference_agent_id: { in: teamIds } },
+                { assigned_agent_id: { in: teamIds } },
+                { shared_with_ids: { hasSome: teamIds } },
+                ...(partnerOwnerIds.length > 0 ? [{ owner_id: { in: partnerOwnerIds } }] : []),
+            ];
+        } else {
+            const partnerOwnerIds = await getManagedPartnerOwnerIds([agent.id]);
+            baseWhere.OR = [
+                { uploaded_by_agent_id: agent.id },
+                { reference_agent_id: agent.id },
+                { assigned_agent_id: agent.id },
+                { shared_with_ids: { has: agent.id } },
+                ...(partnerOwnerIds.length > 0 ? [{ owner_id: { in: partnerOwnerIds } }] : []),
+            ];
+        }
+
+        // Run all counts in parallel
+        const [
+            intentCounts,
+            categoryCounts,
+            ownershipCounts,
+            bhkCounts,
+            total,
+        ] = await Promise.all([
+            // Intent (sale/rent)
+            prisma.inventory.groupBy({
+                by: ['intent'],
+                where: baseWhere,
+                _count: true,
+            }),
+            // Category (residential/commercial)
+            prisma.inventory.groupBy({
+                by: ['category'],
+                where: baseWhere,
+                _count: true,
+            }),
+            // Ownership type
+            prisma.inventory.groupBy({
+                by: ['ownership_type'],
+                where: baseWhere,
+                _count: true,
+            }),
+            // BHK — from specs JSON, need raw query
+            prisma.$queryRaw<Array<{ bhk: number; count: bigint }>>`
+                SELECT (specs->>'bedrooms')::int as bhk, COUNT(*) as count
+                FROM inventory
+                WHERE specs->>'bedrooms' IS NOT NULL
+                AND (specs->>'bedrooms')::int > 0
+                GROUP BY (specs->>'bedrooms')::int
+                ORDER BY bhk
+            `,
+            // Total visible
+            prisma.inventory.count({ where: baseWhere }),
+        ]);
+
+        // Fetch sub-category and category_id counts
+        const [subCategoryCounts, categoryIdCounts] = await Promise.all([
+            prisma.inventory.groupBy({
+                by: ['sub_category_id'],
+                where: { ...baseWhere, sub_category_id: { not: null } },
+                _count: true,
+            }),
+            prisma.inventory.groupBy({
+                by: ['category_id'],
+                where: { ...baseWhere, category_id: { not: null } },
+                _count: true,
+            }),
+        ]);
+
+        // Fetch category and sub-category names for display
+        const [categories, subCategories] = await Promise.all([
+            prisma.propertyCategory.findMany({
+                where: { is_active: true },
+                select: { id: true, name: true, slug: true, display_order: true },
+                orderBy: { display_order: 'asc' },
+            }),
+            prisma.propertySubCategory.findMany({
+                where: { is_active: true },
+                select: { id: true, name: true, slug: true, category_id: true, display_order: true },
+                orderBy: { display_order: 'asc' },
+            }),
+        ]);
+
+        res.json({
+            total,
+            intent: intentCounts.map((c: any) => ({ value: c.intent, count: c._count })),
+            category: categoryCounts.map((c: any) => ({ value: c.category, count: c._count })),
+            category_id: categoryIdCounts.map((c: any) => ({ value: c.category_id, count: c._count })),
+            sub_category_id: subCategoryCounts.map((c: any) => ({ value: c.sub_category_id, count: c._count })),
+            ownership_type: ownershipCounts.map((c: any) => ({ value: c.ownership_type, count: c._count })),
+            bhk: bhkCounts.map((c: any) => ({ value: Number(c.bhk), count: Number(c.count) })),
+            categories,
+            sub_categories: subCategories,
+        });
+    } catch (error) {
+        captureRouteError(error, req, { route: 'inventory#23' });
         res.status(500).json({ error: (error as Error).message });
     }
 });

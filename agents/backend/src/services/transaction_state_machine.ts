@@ -4,8 +4,11 @@
  * Enforces strict state transitions for property deal lifecycle.
  * No illegal status jumps allowed — every transition must be validated.
  *
- * Flow: NEW → MATCHED → VISIT_SCHEDULED → VISITED → NEGOTIATION → CLOSED_WON/CLOSED_LOST
- * Special: ON_HOLD can pause any active state, CLOSED_LOST can be reopened to NEW by admin.
+ * Flow: NEW → QUALIFIED → VISIT_SCHEDULED → VISITED → NEGOTIATION → CLOSED_WON/CLOSED_LOST
+ * Pipeline loop: VISITED can exit to NEGOTIATION, VISIT_SCHEDULED (re-visit), or QUALIFIED (re-match)
+ * Special: ON_HOLD can pause any active state — lead manager picks revival destination.
+ *          CLOSED_LOST can be reopened to NEW by admin.
+ * MATCHING_APPOINTMENT: Legacy stage — existing deals only, no new deals enter this state.
  */
 
 import { TransactionStatus, TransactionLogAction } from '@prisma/client';
@@ -15,23 +18,32 @@ import prisma from '../db';
 
 const VALID_TRANSITIONS: Record<TransactionStatus, TransactionStatus[]> = {
     NEW: [
-        TransactionStatus.MATCHED,
+        TransactionStatus.QUALIFIED,
         TransactionStatus.CLOSED_LOST,
         TransactionStatus.ON_HOLD,
     ],
-    MATCHED: [
+    QUALIFIED: [
+        TransactionStatus.VISIT_SCHEDULED,   // Direct — appointment booked in deal workspace
+        TransactionStatus.CLOSED_LOST,
+        TransactionStatus.ON_HOLD,
+    ],
+    MATCHING_APPOINTMENT: [
+        // Legacy — existing deals only. No new deals enter this state.
         TransactionStatus.VISIT_SCHEDULED,
+        TransactionStatus.QUALIFIED,
         TransactionStatus.CLOSED_LOST,
         TransactionStatus.ON_HOLD,
     ],
     VISIT_SCHEDULED: [
         TransactionStatus.VISITED,
+        TransactionStatus.QUALIFIED,         // Visit cancelled — back to matching
         TransactionStatus.CLOSED_LOST,
         TransactionStatus.ON_HOLD,
     ],
     VISITED: [
-        TransactionStatus.NEGOTIATION,
-        TransactionStatus.VISIT_SCHEDULED, // Re-visit
+        TransactionStatus.NEGOTIATION,       // Property Liked
+        TransactionStatus.VISIT_SCHEDULED,   // Want More Properties (same shortlist)
+        TransactionStatus.QUALIFIED,         // Re-match Required (full re-match)
         TransactionStatus.CLOSED_LOST,
         TransactionStatus.ON_HOLD,
     ],
@@ -39,21 +51,22 @@ const VALID_TRANSITIONS: Record<TransactionStatus, TransactionStatus[]> = {
         TransactionStatus.CLOSED_WON,
         TransactionStatus.CLOSED_LOST,
         TransactionStatus.ON_HOLD,
-        TransactionStatus.VISIT_SCHEDULED, // Re-visit
+        TransactionStatus.QUALIFIED,         // Customer backs out, wants more properties
     ],
     CLOSED_WON: [], // Terminal — no transitions
     CLOSED_LOST: [
         TransactionStatus.NEW, // Reopen (admin only)
     ],
     ON_HOLD: [
-        // Returns to previous_status (handled in transitionTransaction)
+        // Lead manager / super admin picks any destination on Revive
         TransactionStatus.NEW,
-        TransactionStatus.MATCHED,
+        TransactionStatus.QUALIFIED,
         TransactionStatus.VISIT_SCHEDULED,
         TransactionStatus.VISITED,
         TransactionStatus.NEGOTIATION,
         TransactionStatus.CLOSED_LOST,
     ],
+    MATCHED: [], // @deprecated — no new transitions allowed
 };
 
 // ─── Public Functions ──────────────────────────────────────────
@@ -96,6 +109,13 @@ export async function transitionTransaction(
     }
 
     const oldStatus = transaction.status;
+
+    // Same-stage "transition" (e.g. dropping a deal back onto the column it's already in, or a
+    // double-submit) is a harmless no-op, not an error — return the unchanged transaction without
+    // throwing or logging a fake status change.
+    if (oldStatus === newStatus) {
+        return transaction;
+    }
 
     // Validate transition
     if (!canTransition(oldStatus, newStatus)) {
@@ -178,13 +198,15 @@ export function isActive(status: TransactionStatus): boolean {
 export function getStatusLabel(status: TransactionStatus): string {
     const labels: Record<TransactionStatus, string> = {
         NEW: 'New Inquiry',
-        MATCHED: 'Property Matched',
+        QUALIFIED: 'Qualified',
+        MATCHING_APPOINTMENT: 'Booking Appointment (Legacy)',
         VISIT_SCHEDULED: 'Visit Scheduled',
         VISITED: 'Visit Completed',
         NEGOTIATION: 'In Negotiation',
         CLOSED_WON: 'Deal Closed (Won)',
         CLOSED_LOST: 'Deal Closed (Lost)',
         ON_HOLD: 'On Hold',
+        MATCHED: 'Property Matched (Legacy)',
     };
     return labels[status] || status;
 }

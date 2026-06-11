@@ -37,18 +37,22 @@ export interface CreateDealInput {
     // Deal type
     type: TransactionType;
     source?: string;
-    // Requirements
+    // Requirements. Phase 5 (2026-05-29): legacy demand_category /
+    // demand_type_slug / demand_property_type / demand_bedrooms /
+    // demand_amenities removed — those values live inside
+    // demand_schema_values now (canonical SoT keyed by FieldDefinition.key).
+    // demand_type_slug retained transiently as a write-only shim used by the
+    // Contact.property_type back-compat label at create-time.
     demand_intent?: string;
-    demand_category?: string;
     demand_type_slug?: string;
     demand_property_type?: string;
     demand_location?: string;
     demand_budget_min?: number;
     demand_budget_max?: number;
     demand_budget_type?: string;
-    demand_bedrooms?: string;
     demand_notes?: string;
-    demand_amenities?: any;
+    demand_taxonomy_node_id?: string | null;
+    demand_schema_values?: Record<string, any> | null;
 }
 
 export interface DealData {
@@ -117,6 +121,13 @@ export async function createDeal(
         input.supply_handler_type
     );
 
+    // Per DEC-003 Stage 1 KRA: Internal team-member-sourced leads skip AI
+    // qualification and enter QUALIFIED. Partner referrals + external/direct
+    // inbound enter NEW (AI Pandit Ji must qualify via Omnidim).
+    const initialStatus = input.demand_handler_type === 'TEAM_MEMBER'
+        ? TransactionStatus.QUALIFIED
+        : TransactionStatus.NEW;
+
     // 3. Create the transaction with deal fields
     const transaction = await prisma.transaction.create({
         data: {
@@ -125,7 +136,7 @@ export async function createDeal(
             supply_contact_id: input.supply_contact_id || null,
             inventory_id: input.inventory_id || null,
             type: input.type,
-            status: TransactionStatus.NEW,
+            status: initialStatus,
             source: input.source || 'system',
             // 3-Role structure
             demand_handler_type: input.demand_handler_type,
@@ -133,19 +144,18 @@ export async function createDeal(
             supply_handler_type: input.supply_handler_type || null,
             supply_handler_id: input.supply_handler_id || null,
             deal_scenario: dealScenario,
-            // Legacy requirement fields
-            demand_property_type: input.demand_property_type || null,
+            // Requirement fields. Phase 5 (2026-05-29): legacy
+            // demand_property_type / demand_bedrooms / demand_category /
+            // demand_type_slug / demand_amenities columns dropped — those
+            // values now live inside demand_schema_values (canonical SoT).
             demand_location: input.demand_location || null,
             demand_budget_min: input.demand_budget_min || null,
             demand_budget_max: input.demand_budget_max || null,
-            demand_bedrooms: input.demand_bedrooms || null,
             demand_notes: input.demand_notes || null,
-            // Phase 7 extended fields
             demand_intent: input.demand_intent || null,
-            demand_category: input.demand_category || null,
-            demand_type_slug: input.demand_type_slug || null,
             demand_budget_type: input.demand_budget_type || null,
-            demand_amenities: input.demand_amenities || undefined,
+            demand_taxonomy_node_id: input.demand_taxonomy_node_id ?? undefined,
+            demand_schema_values: (input.demand_schema_values ?? undefined) as any,
         },
     });
 
@@ -154,7 +164,7 @@ export async function createDeal(
         data: {
             transaction_id: transaction.id,
             action: TransactionLogAction.CREATED,
-            new_status: TransactionStatus.NEW,
+            new_status: initialStatus,
             performed_by: performedBy,
             channel,
             details: {
@@ -221,6 +231,28 @@ export async function createDeal(
         logger.error('[DealService] Notification failed:', err)
     );
 
+    // 8. Stage 1 NEW: fire buyer-arrival WhatsApp + schedule AI qualification call cadence.
+    //    Skip for Internal (TEAM_MEMBER) — they enter QUALIFIED directly per DEC-003 KRA.
+    if (initialStatus === TransactionStatus.NEW) {
+        try {
+            const contact = await prisma.contact.findUnique({
+                where: { phone_number: input.demand_contact_id },
+                select: { phone_number: true, name: true },
+            });
+            if (contact?.phone_number) {
+                const { sendBuyerConfirmationWhatsApp } = await import('./lead_notifications');
+                sendBuyerConfirmationWhatsApp(contact.phone_number, contact.name || null, input.source || 'system')
+                    .catch(err => logger.warn('[DealService] Arrival WhatsApp failed:', err));
+
+                const { scheduleQualificationCall } = await import('./lead_qualification_caller');
+                scheduleQualificationCall(transaction.id, 0)
+                    .catch(err => logger.warn('[DealService] Qualification call schedule failed:', err));
+            }
+        } catch (err) {
+            logger.error('[DealService] NEW-stage automation failed:', err);
+        }
+    }
+
     return { deal: toDealData(transaction), isDuplicate: false, matches };
 }
 
@@ -252,7 +284,7 @@ export async function matchPropertyToDeal(
             supply_handler_type: supplyHandlerType,
             supply_handler_id: supplyHandlerId,
             deal_scenario: newScenario,
-            status: TransactionStatus.MATCHED,
+            status: TransactionStatus.QUALIFIED,
         },
     });
 
@@ -261,7 +293,7 @@ export async function matchPropertyToDeal(
             transaction_id: dealId,
             action: TransactionLogAction.STATUS_CHANGED,
             old_status: current.status,
-            new_status: TransactionStatus.MATCHED,
+            new_status: TransactionStatus.QUALIFIED,
             performed_by: performedBy,
             channel: 'system',
             details: {
@@ -286,26 +318,54 @@ export async function matchPropertyToDeal(
  * Get deal by ID with full details including parties
  */
 export async function getDealById(dealId: string) {
-    return prisma.transaction.findUnique({
+    const deal = await prisma.transaction.findUnique({
         where: { id: dealId },
         include: {
-            demand_contact: { select: { phone_number: true, name: true, email: true, contact_type: true } },
+            demand_contact: { select: { phone_number: true, name: true, email: true, contact_type: true, demand_taxonomy_node_id: true, demand_schema_values: true, budget_min: true, budget_max: true, area_min: true, area_max: true, intent: true, preferred_location: true } },
             supply_contact: { select: { phone_number: true, name: true, email: true, contact_type: true } },
             executive_agent: { select: { id: true, name: true, email: true, phone: true, department: true } },
             coordinator: { select: { id: true, name: true, email: true, phone: true, department: true } },
-            inventory: { select: { id: true, type: true, category: true, location: true, price: true, status: true, specs: true, media_urls: true } },
+            inventory: {
+                select: {
+                    id: true, type: true, category: true, location: true, price: true,
+                    status: true, specs: true, media_urls: true,
+                    owner_phone: true,
+                    contact: { select: { name: true, phone_number: true } },
+                    key_holder_name: true, key_holder_phone: true,
+                    key_holder_contact: { select: { name: true, phone_number: true } },
+                    assigned_agent: { select: { id: true, name: true, phone: true } },
+                },
+            },
             logs: { orderBy: { created_at: 'desc' }, take: 50 },
             appointments: { orderBy: { scheduled_at: 'desc' }, take: 10 },
             queries: { orderBy: { created_at: 'desc' } },
         },
     });
+    if (!deal) return null;
+
+    // Compute ai_status based on paused flag and last team action recency
+    const twoHoursMs = 2 * 60 * 60 * 1000;
+    const ai_status: 'active' | 'waiting' | 'paused' = deal.ai_paused
+        ? 'paused'
+        : deal.last_team_action_at && (Date.now() - deal.last_team_action_at.getTime()) < twoHoursMs
+            ? 'waiting'
+            : 'active';
+
+    return { ...deal, ai_status };
 }
 
 /**
  * Get unified deal timeline (logs + queries + appointments)
  */
 export async function getDealTimeline(dealId: string) {
-    const [logs, queries, appointments] = await Promise.all([
+    const deal = await prisma.transaction.findUnique({
+        where: { id: dealId },
+        select: { demand_contact_id: true },
+    });
+
+    const contactPhone = deal?.demand_contact_id;
+
+    const [logs, queries, appointments, teamActions, waMessages, voiceCalls, interactions, contact] = await Promise.all([
         prisma.transactionLog.findMany({
             where: { transaction_id: dealId },
             orderBy: { created_at: 'desc' },
@@ -318,13 +378,121 @@ export async function getDealTimeline(dealId: string) {
             where: { transaction_id: dealId },
             orderBy: { scheduled_at: 'desc' },
         }),
+        prisma.teamAction.findMany({
+            where: { transaction_id: dealId },
+            include: { agent: { select: { name: true, role: true } } },
+            orderBy: { created_at: 'desc' },
+        }),
+        contactPhone ? prisma.whatsAppMessage.findMany({
+            where: { phone_number: contactPhone },
+            orderBy: { created_at: 'desc' },
+            take: 100,
+        }) : Promise.resolve([]),
+        contactPhone ? prisma.voiceCall.findMany({
+            where: { phone_number: contactPhone },
+            orderBy: { started_at: 'desc' },
+            take: 50,
+        }) : Promise.resolve([]),
+        prisma.interaction.findMany({
+            where: { metadata: { path: ['deal_id'], equals: dealId } },
+            orderBy: { created_at: 'desc' },
+            take: 100,
+        }),
+        contactPhone ? prisma.contact.findUnique({
+            where: { phone_number: contactPhone },
+            select: {
+                source: true, name: true, intent: true, property_type: true,
+                budget_min: true, budget_max: true, preferred_location: true,
+                notes: true, created_at: true, created_by: true,
+                meta_campaign_name: true, referral_partner_name: true,
+            },
+        }) : Promise.resolve(null),
     ]);
 
-    // Merge and sort chronologically
+    // Resolve performed_by (phone numbers, agent IDs) to display names
+    const performedByValues = [...new Set(logs.map(l => l.performed_by).filter(Boolean))] as string[];
+    const [contactsByPhone, agentsById] = performedByValues.length
+        ? await Promise.all([
+            prisma.contact.findMany({
+                where: { phone_number: { in: performedByValues } },
+                select: { phone_number: true, name: true },
+            }),
+            prisma.agent.findMany({
+                where: { id: { in: performedByValues } },
+                select: { id: true, name: true },
+            }),
+        ])
+        : [[], []];
+    const contactNameMap = new Map((contactsByPhone as any[]).map(c => [c.phone_number, c.name]));
+    const agentNameMap = new Map((agentsById as any[]).map(a => [a.id, a.name]));
+
+    function resolvePerformedBy(pb: string | null | undefined): string | null {
+        if (!pb) return null;
+        if (agentNameMap.has(pb)) return agentNameMap.get(pb)!;
+        if (contactNameMap.has(pb)) return contactNameMap.get(pb) || 'Customer';
+        if (/^\+?\d{10,13}$/.test(pb.replace(/\s/g, ''))) return 'Customer';
+        return pb;
+    }
+
     const timeline = [
-        ...logs.map(l => ({ type: 'log' as const, id: l.id, action: l.action, details: l.details, created_at: l.created_at, performed_by: l.performed_by })),
-        ...queries.map(q => ({ type: 'query' as const, id: q.id, subject: q.subject, message: q.message, status: q.status, answer: q.answer, created_at: q.created_at, raised_by_type: q.raised_by_type })),
-        ...appointments.map(a => ({ type: 'appointment' as const, id: a.id, appointment_type: a.type, status: a.status, scheduled_at: a.scheduled_at, created_at: a.created_at })),
+        ...logs.map(l => ({
+            source: 'log' as const, id: l.id,
+            action: l.action, old_status: l.old_status, new_status: l.new_status,
+            details: l.details, performed_by: resolvePerformedBy(l.performed_by), channel: l.channel,
+            created_at: l.created_at,
+        })),
+        ...queries.map(q => ({
+            source: 'query' as const, id: q.id,
+            subject: q.subject, message: q.message, status: q.status,
+            answer: q.answer, raised_by_type: q.raised_by_type,
+            created_at: q.created_at,
+        })),
+        ...appointments.map(a => ({
+            source: 'appointment' as const, id: a.id,
+            appointment_type: a.type, status: a.status, scheduled_at: a.scheduled_at,
+            created_at: a.created_at,
+        })),
+        ...teamActions.map(t => ({
+            source: 'team_action' as const, id: t.id,
+            action_type: t.action_type, outcome: t.outcome, notes: t.notes,
+            stage: t.stage, agent_name: t.agent?.name, agent_role: t.agent?.role,
+            created_at: t.created_at,
+        })),
+        ...waMessages.map(m => ({
+            source: 'whatsapp' as const, id: m.id,
+            direction: m.direction, body: m.body ? m.body.substring(0, 100) : null,
+            message_type: m.message_type, status: m.status,
+            template_name: (m as any).template_name ?? null,
+            created_at: m.created_at,
+        })),
+        ...voiceCalls.map(c => ({
+            source: 'call' as const, id: c.id,
+            direction: c.direction, call_status: c.call_status,
+            duration: c.duration, ai_call_summary: c.ai_call_summary,
+            created_at: c.started_at,
+        })),
+        ...interactions.map((i: any) => ({
+            source: 'interaction' as const, id: i.id,
+            event_type: i.event_type, direction: i.direction, channel: i.channel,
+            content: i.content, metadata: i.metadata,
+            created_at: i.created_at,
+        })),
+        // Synthetic lead-origin event — always the oldest entry in the timeline
+        ...(contact ? [{
+            source: 'lead_origin' as const,
+            id: `origin-${dealId}`,
+            lead_source: contact.source || 'manual',
+            contact_name: contact.name || null,
+            intent: contact.intent || null,
+            property_type: contact.property_type || null,
+            budget_min: contact.budget_min ? Number(contact.budget_min) : null,
+            budget_max: contact.budget_max ? Number(contact.budget_max) : null,
+            preferred_location: contact.preferred_location || null,
+            notes: contact.notes || null,
+            meta_campaign_name: contact.meta_campaign_name || null,
+            referral_partner_name: contact.referral_partner_name || null,
+            created_at: contact.created_at,
+        }] : []),
     ].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
     return timeline;
@@ -340,28 +508,95 @@ export async function listDeals(filters: {
     coordinator_agent_id?: string;
     demand_handler_id?: string;
     supply_handler_id?: string;
+    min_priority?: number;
     page?: number;
     limit?: number;
+    search?: string;
+    taxonomy_node_ids?: string;
+    bhk?: string;
+    hide_closed?: boolean;
 }) {
-    const { tenant_id, status, deal_scenario, coordinator_agent_id, demand_handler_id, supply_handler_id, page = 1, limit = 20 } = filters;
+    const { tenant_id, status, deal_scenario, coordinator_agent_id, demand_handler_id, supply_handler_id, min_priority, page = 1, limit = 20, search, taxonomy_node_ids, bhk, hide_closed } = filters;
 
     const where: any = { tenant_id };
-    if (status) where.status = status;
+    if (status) {
+        where.status = status;
+    } else if (hide_closed) {
+        // 2026-05-13: kanban columns already segment stages, but CLOSED_WON +
+        // CLOSED_LOST are clutter for daily work. Hide by default; reveal via toggle.
+        where.status = { notIn: ['CLOSED_WON', 'CLOSED_LOST'] };
+    }
     if (deal_scenario) where.deal_scenario = deal_scenario;
     if (coordinator_agent_id) where.coordinator_agent_id = coordinator_agent_id;
     if (demand_handler_id) where.demand_handler_id = demand_handler_id;
     if (supply_handler_id) where.supply_handler_id = supply_handler_id;
+    if (min_priority !== undefined && !Number.isNaN(min_priority)) where.priority = { gte: min_priority };
+
+    // 2026-05-13: search was previously a no-op (frontend sent it, backend ignored).
+    // Match against demand_contact.name + demand_contact.phone_number (3 variants)
+    // and supply_contact for completeness.
+    if (search && search.trim()) {
+        // Tokenized multi-term search (2026-06-06): each term must match the contact (name / phone /
+        // preferred area) OR the linked property's address — in any word order/punctuation. Adds
+        // address search to deals (previously name+phone only) so "Vaishali", "Ganga tower Ghaziabad"
+        // etc. find the deal whether the property is linked or only a preferred_location is set.
+        const { extractSearchDigits, phoneVariants } = await import('../utils/phone');
+        const terms = search.trim().split(/[\s,]+/).map(t => t.trim()).filter(Boolean);
+        const termGroups = terms.map(term => {
+            const ic = (field: string) => ({ [field]: { contains: term, mode: 'insensitive' as const } });
+            const phoneOr: any[] = [];
+            const digits = extractSearchDigits(term);
+            if (digits) for (const v of [...phoneVariants(digits), digits]) phoneOr.push({ phone_number: { contains: v } });
+            return {
+                OR: [
+                    { demand_contact: { OR: [ic('name'), ic('preferred_location'), ...phoneOr] } },
+                    { supply_contact: { OR: [ic('name'), ...phoneOr] } },
+                    { inventory: { OR: ['location', 'locality', 'city', 'district', 'apartment_name', 'full_address'].map(ic) } },
+                ],
+            };
+        });
+        where.AND = [...(where.AND || []), ...termGroups];
+    }
+
+    // Taxonomy filter (new tree): the deal's demand contact node IN (selected + descendants).
+    if (taxonomy_node_ids && taxonomy_node_ids.trim()) {
+        const { expandTaxonomyNodeIds } = await import('../utils/taxonomy_filter');
+        const expanded = await expandTaxonomyNodeIds(taxonomy_node_ids.split(',').map(s => s.trim()).filter(Boolean));
+        if (expanded.length) where.AND = [...(where.AND || []), { demand_contact: { demand_taxonomy_node_id: { in: expanded } } }];
+    }
+
+    // BHK filter — demand BHK lives in demand_contact.demand_schema_values.bhk (string-typed).
+    if (bhk && bhk.trim()) {
+        const bhkValues = bhk.split(',').map(v => parseInt(v.trim(), 10)).filter(n => !isNaN(n));
+        if (bhkValues.length) {
+            where.AND = [...(where.AND || []), {
+                demand_contact: { OR: bhkValues.map(v => ({ demand_schema_values: { path: ['bhk'], equals: String(v) } })) },
+            }];
+        }
+    }
 
     const skip = (page - 1) * limit;
 
-    const [deals, total] = await Promise.all([
+    const [rawDeals, total] = await Promise.all([
         prisma.transaction.findMany({
             where,
             skip,
             take: limit,
             orderBy: { updated_at: 'desc' },
             include: {
-                demand_contact: { select: { phone_number: true, name: true, contact_type: true } },
+                demand_contact: {
+                    select: {
+                        phone_number: true, name: true, contact_type: true,
+                        // Phase 5: legacy demand_main_category / demand_category /
+                        // demand_type_slug / demand_amenities / demand_bhk dropped.
+                        // Canonical SoT is taxonomy_node_id + schema_values.
+                        demand_taxonomy_node_id: true, demand_schema_values: true,
+                        area_min: true, area_max: true, area_unit: true,
+                        timeline: true, budget_min: true, budget_max: true,
+                        category_id: true, sub_category_id: true, type_id: true,
+                        intent: true, preferred_location: true,
+                    },
+                },
                 supply_contact: { select: { phone_number: true, name: true } },
                 coordinator: { select: { id: true, name: true, phone: true } },
                 inventory: { select: { id: true, type: true, location: true, price: true, media_urls: true } },
@@ -369,6 +604,16 @@ export async function listDeals(filters: {
         }),
         prisma.transaction.count({ where }),
     ]);
+
+    const twoHoursMs = 2 * 60 * 60 * 1000;
+    const deals = rawDeals.map(deal => {
+        const ai_status: 'active' | 'waiting' | 'paused' = deal.ai_paused
+            ? 'paused'
+            : deal.last_team_action_at && (Date.now() - deal.last_team_action_at.getTime()) < twoHoursMs
+                ? 'waiting'
+                : 'active';
+        return { ...deal, ai_status };
+    });
 
     return {
         deals,

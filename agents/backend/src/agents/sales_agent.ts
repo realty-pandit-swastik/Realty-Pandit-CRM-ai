@@ -10,6 +10,7 @@
 import { BaseAgent, AgentContext, AgentResponse, TransactionData } from './types';
 import { MatchingAgent } from './matching_agent';
 import { LLMService } from '../services/llm';
+import { foldLegacyDemand, mergeDemandSchemaValues } from '../utils/demand_canonical';
 import { SystemPromptService } from '../services/system_prompt';
 import { createTransaction, findExistingTransaction, CreateTransactionInput, linkSupplyToTransaction } from '../services/transaction_service';
 import { transitionTransaction } from '../services/transaction_state_machine';
@@ -231,22 +232,20 @@ export class SalesAgent implements BaseAgent {
                         await prisma.transaction.update({
                             where: { id: currentTransaction.id },
                             data: {
-                                demand_property_type: contact.property_type || currentTransaction.demand_property_type,
                                 demand_location: contact.preferred_location || currentTransaction.demand_location,
                                 demand_budget_min: contact.budget_min || currentTransaction.demand_budget_min,
                                 demand_budget_max: contact.budget_max || currentTransaction.demand_budget_max,
-                                demand_bedrooms: currentTransaction.demand_bedrooms,
                             },
                         });
 
                         await transitionTransaction(
                             currentTransaction.id,
-                            TransactionStatus.MATCHED,
+                            TransactionStatus.QUALIFIED,
                             contact.phone_number,
                             context.channel,
-                            { trigger: 'sales_agent_matching', contact_data: { property_type: contact.property_type, location: contact.preferred_location } },
+                            { trigger: 'sales_agent_qualifying', contact_data: { property_type: contact.property_type, location: contact.preferred_location } },
                         );
-                        logger.info(`[SalesAgent] Transaction ${currentTransaction.id.substring(0, 8)} → MATCHED`);
+                        logger.info(`[SalesAgent] Transaction ${currentTransaction.id.substring(0, 8)} → QUALIFIED`);
                     } catch (err) {
                         logger.error('[SalesAgent] Transaction update/transition failed (non-blocking):', err);
                     }
@@ -384,11 +383,19 @@ export class SalesAgent implements BaseAgent {
 
         // Extract property type
         if (!contact.property_type) {
+            // Order matters: multi-word keys first so "builder floor" wins
+            // before a generic single word. (2026-05-19: buyers asking for
+            // "builder floor / independent floor" were left with no type →
+            // generic mixed results. See docs/plans/2026-05-19-report-cadence-and-bot-reply.md)
             const typeMap: Record<string, string> = {
+                'builder floor': 'flat', 'independent floor': 'flat', 'builder flat': 'flat',
+                'independent house': 'house', 'farm house': 'house', 'farmhouse': 'house',
                 'flat': 'flat', 'apartment': 'flat', 'falt': 'flat', 'flats': 'flat',
+                'duplex': 'flat', 'penthouse': 'flat', 'studio': 'flat',
                 'house': 'house', 'villa': 'house', 'kothi': 'house', 'bungalow': 'house',
-                'plot': 'plot', 'land': 'plot', 'zameen': 'plot',
+                'plot': 'plot', 'land': 'plot', 'zameen': 'plot', 'plots': 'plot',
                 'office': 'office', 'shop': 'shop', 'showroom': 'shop',
+                'warehouse': 'shop', 'godown': 'shop',
             };
             for (const [keyword, type] of Object.entries(typeMap)) {
                 if (msg.includes(keyword)) {
@@ -398,10 +405,25 @@ export class SalesAgent implements BaseAgent {
             }
         }
 
-        // Extract BHK
-        const bhkMatch = msg.match(/(\d)\s*(?:bhk|bkh|bk|bed)/i);
-        if (bhkMatch && !contact.property_type) {
-            data.property_type = 'flat'; // BHK implies flat
+        // Extract BHK — capture the COUNT into demand_bhk (the matching
+        // engine filters on it). Handles "2 bhk", "3bhk", "2/3 bhk"
+        // (takes the lower = minimum desired), "2 bedroom". 2026-05-19:
+        // previously the count was parsed then discarded, so buyers stating
+        // "2/3 BHK" got configuration-agnostic results.
+        const bhkMatch = msg.match(/(\d)\s*\/?\s*(\d)?\s*(?:bhk|bkh|bk|bedroom|bed)\b/i);
+        if (bhkMatch) {
+            const n = parseInt(bhkMatch[1], 10);
+            // demand_bhk column DROPPED 2026-05-29 — fold into canonical demand_schema_values,
+            // deep-merged onto existing so other keys (amenities/furnishing/…) aren't wiped by
+            // the contact.update that spreads this object.
+            const _existingBhk = (contact.demand_schema_values as any)?.bhk;
+            if (n >= 1 && n <= 6 && !_existingBhk) {
+                const _folded = foldLegacyDemand({ demand_bhk: n });
+                data.demand_schema_values = mergeDemandSchemaValues(contact.demand_schema_values, _folded.demand_schema_values);
+            }
+            if (!contact.property_type && !data.property_type) {
+                data.property_type = 'flat'; // BHK implies flat
+            }
         }
 
         return data;
@@ -482,13 +504,17 @@ export class SalesAgent implements BaseAgent {
                 collectedData.inventory_id = inventory.id;
                 logger.info(`[SalesAgent] Created Inventory ${inventory.id.substring(0, 8)} for seller ${contact.phone_number}`);
 
-                // Find matching demand transactions waiting for supply
+                // Find matching demand transactions waiting for supply.
+                // Post-taxonomy unification: legacy demand_property_type column is gone;
+                // narrow only by location (canonical taxonomy match happens downstream
+                // via MatchingEngine, not in this fast linker). propertyType retained
+                // for log breadcrumb only.
+                void propertyType;
                 const matchingDemandTxs = await prisma.transaction.findMany({
                     where: {
                         tenant_id: contact.tenant_id,
                         status: TransactionStatus.NEW,
                         supply_contact_id: null,
-                        demand_property_type: propertyType,
                         ...(location ? { demand_location: { contains: location, mode: 'insensitive' as any } } : {}),
                     },
                     take: 5,

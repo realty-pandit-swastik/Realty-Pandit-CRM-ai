@@ -12,10 +12,10 @@ vi.mock('../db', () => ({
     default: {
         $queryRaw: vi.fn().mockResolvedValue([{ '?column?': 1 }]),
         tenant: { findFirst: vi.fn(), count: vi.fn() },
-        agent: { findUnique: vi.fn(), findFirst: vi.fn(), count: vi.fn() },
+        agent: { findUnique: vi.fn(), findFirst: vi.fn(), findMany: vi.fn(), count: vi.fn() },
         contact: { findUnique: vi.fn(), upsert: vi.fn(), count: vi.fn() },
         inventory: { findMany: vi.fn(), findUnique: vi.fn(), count: vi.fn(), create: vi.fn(), groupBy: vi.fn() },
-        interaction: { create: vi.fn() },
+        interaction: { create: vi.fn(), findMany: vi.fn() },
         websiteLead: { create: vi.fn() },
         newsletterSubscriber: { upsert: vi.fn() },
         scheduledVisit: { create: vi.fn() },
@@ -24,6 +24,10 @@ vi.mock('../db', () => ({
         propertyCategory: { findMany: vi.fn(), findUnique: vi.fn() },
         propertySubCategory: { findMany: vi.fn(), findUnique: vi.fn() },
         propertyType: { findMany: vi.fn(), findUnique: vi.fn() },
+        lead: { findMany: vi.fn(), findUnique: vi.fn(), update: vi.fn(), count: vi.fn(), groupBy: vi.fn(), aggregate: vi.fn() },
+        appointment: { findMany: vi.fn(), create: vi.fn(), count: vi.fn() },
+        taskFollowup: { findMany: vi.fn(), create: vi.fn(), findUnique: vi.fn(), update: vi.fn() },
+        transaction: { count: vi.fn(), aggregate: vi.fn(), findMany: vi.fn() },
     }
 }));
 

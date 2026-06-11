@@ -3,6 +3,7 @@ import jwt from 'jsonwebtoken';
 import prisma from '../db';
 import { WhatsAppService } from '../services/whatsapp';
 import { normalizePhone } from '../utils/phone';
+import { captureRouteError } from '../utils/capture';
 
 const router = express.Router();
 const whatsappService = new WhatsAppService();
@@ -67,7 +68,7 @@ router.post('/login-otp', async (req, res) => {
             phone: normalizedPhone,
         });
     } catch (error: any) {
-        console.error('Login OTP error:', error);
+        captureRouteError(error, req, { route: 'user_auth/login-otp' });
         return res.status(500).json({
             success: false,
             message: 'Internal server error',
@@ -138,9 +139,10 @@ router.post('/verify-otp', async (req, res) => {
                 },
             });
         } else {
-            // Update last interaction
+            // Update last interaction. Contact's PK is phone_number (no `id` column) — using
+            // `where: { id: contact.id }` made `id` undefined → PrismaClientValidationError.
             await prisma.contact.update({
-                where: { id: contact.id },
+                where: { phone_number: contact.phone_number },
                 data: {
                     last_channel: 'website',
                     last_interaction: new Date(),
@@ -187,7 +189,7 @@ router.post('/verify-otp', async (req, res) => {
             },
         });
     } catch (error: any) {
-        console.error('Verify OTP error:', error);
+        captureRouteError(error, req, { route: 'user_auth/verify-otp' });
         return res.status(500).json({
             success: false,
             message: 'Internal server error',
@@ -280,7 +282,7 @@ router.get('/me', async (req, res) => {
             })),
         });
     } catch (error: any) {
-        console.error('Get user error:', error);
+        captureRouteError(error, req, { route: 'user_auth/get-user' });
         return res.status(500).json({
             success: false,
             message: 'Internal server error',

@@ -17,7 +17,9 @@
 import prisma from '../db';
 import logger from '../utils/logger';
 import { ensureOwner } from '../services/ensure_owner';
+import { ensurePartnerAgent } from '../services/partner_auto_create';
 import { generateUniqueSlug } from '../utils/slug';
+import { promotePendingMedia } from '../utils/media_promote';
 import { INVENTORY_WORKFLOW_STEPS } from './workflow_definition';
 import { WorkflowStep, WorkflowAnswer, ConditionalRule, StepOption, StepResult, ValidationResult, WorkflowSummary } from './workflow_types';
 import { INDIAN_STATES, ACTIVE_STATES, DISTRICTS_BY_STATE } from '../data/india_geo';
@@ -38,8 +40,8 @@ async function validateAgentPhone(phone: string): Promise<{ valid: boolean; agen
             normalizedPhone = '+91' + normalizedPhone; // Assume India if no country code
         }
 
-        const agent = await prisma.agent.findUnique({
-            where: { phone_number: normalizedPhone },
+        const agent = await prisma.agent.findFirst({
+            where: { phone: { in: phoneVariants(normalizedPhone) }, status: 'active' },
             select: { id: true, name: true, status: true },
         });
 
@@ -47,7 +49,7 @@ async function validateAgentPhone(phone: string): Promise<{ valid: boolean; agen
             return { valid: false, error: 'No agent found with this phone number' };
         }
 
-        if (agent.status !== 'ACTIVE') {
+        if (agent.status !== 'active') {
             return { valid: false, error: `Agent ${agent.name} is not active (status: ${agent.status})` };
         }
 
@@ -491,6 +493,53 @@ export class WorkflowEngine {
         const tenant = await prisma.tenant.findFirst();
         if (!tenant) throw new Error('No tenant found');
 
+        // ─── 2c. Taxonomy path (admin v1 — Phase 1d) ───
+        // When a leaf TYPE node was chosen, re-use the EXISTING flat-type → legacy
+        // classification machinery (sections 3 & 3b) by injecting the node's mapped
+        // legacy_flat_property_type_id. This keeps category/sub_category/type derivation
+        // and the whole non-taxonomy create path byte-identical for WhatsApp/web/voice.
+        let taxonomyNodeId: string | null = (answers.taxonomy_node_id as string) || null;
+        let taxonomyNeedsReview = false;
+        let taxonomyNodeSlug: string | null = null;
+        if (taxonomyNodeId) {
+            const node = await prisma.taxonomyNode.findUnique({
+                where: { id: taxonomyNodeId },
+                select: { legacy_flat_property_type_id: true, slug: true },
+            });
+            taxonomyNodeSlug = node?.slug || null;
+            if (node?.legacy_flat_property_type_id) {
+                // Only inject when admin didn't already supply a flat type explicitly.
+                if (!answers.flat_property_type_id) {
+                    answers.flat_property_type_id = node.legacy_flat_property_type_id;
+                }
+            } else {
+                taxonomyNeedsReview = true; // no legacy map → matching degrades until P3
+            }
+            // Always derive main_category from the root ancestor (used by display-id + agri logic).
+            let c = await prisma.taxonomyNode.findUnique({ where: { id: taxonomyNodeId }, select: { name: true, parent_id: true } });
+            while (c && c.parent_id) {
+                c = await prisma.taxonomyNode.findUnique({ where: { id: c.parent_id }, select: { name: true, parent_id: true } });
+            }
+            if (c?.name && !answers.main_category) {
+                answers.main_category = c.name.toLowerCase().includes('commercial') ? 'commercial' : 'residential';
+            }
+        }
+
+        // ─── 2d. Auto-tag fallback (Phase 1d v2) ───
+        // Conversational surfaces (WhatsApp) capture the legacy flat_property_type but
+        // never pick a tree node. Derive the node from the flat type so every listing is
+        // taxonomy-tagged. Best-effort → flag for review. No-ops for admin/web (node set).
+        if (!taxonomyNodeId && answers.flat_property_type_id) {
+            const mapped = await prisma.taxonomyNode.findFirst({
+                where: { legacy_flat_property_type_id: answers.flat_property_type_id as string },
+                select: { id: true },
+            });
+            if (mapped) {
+                taxonomyNodeId = mapped.id;
+                taxonomyNeedsReview = true;
+            }
+        }
+
         // ─── 3. Resolve flat property type → legacy strings ───
         let legacyCategory = 'residential';
         let legacyType = 'flat';
@@ -514,6 +563,10 @@ export class WorkflowEngine {
         } else {
             // Fallback to main_category
             legacyCategory = answers.main_category || 'residential';
+            // Part 4 safety net (2026-05-30): when a taxonomy node was chosen but has no legacy
+            // flat-type map, derive legacyType from the node slug instead of the 'flat' default
+            // (which mislabelled commercial nodes as residential "flat").
+            if (taxonomyNodeSlug) legacyType = taxonomyNodeSlug;
         }
 
         // ─── 3b. Auto-resolve classification tree IDs from flat_property_type ───
@@ -554,6 +607,9 @@ export class WorkflowEngine {
             'industrial_land_plots':       '71fc7951-b75c-4d6e-a2a4-f70fd5ed52b8', // Lands / Plots
             'sco_plots':                   '71fc7951-b75c-4d6e-a2a4-f70fd5ed52b8', // Lands / Plots
             'agricultural_farm_land_commercial': '71fc7951-b75c-4d6e-a2a4-f70fd5ed52b8', // Lands / Plots
+            'education':                   'f12b4f64-976c-4e17-ad8c-e355dbbe04bd', // School / College
+            'healthcare':                  '7f70f6d1-fe46-4369-8254-03444ea54e1d', // Healthcare
+            'petrol_pump':                 '713e3337-2809-441b-899b-e125b2f2795a', // Petrol Pump (new 2026-05-30)
             'commercial_other':            'cdafa0ee-334f-4fa7-bb04-3109f4e2326f', // Retail (fallback)
             // Agricultural
             'agricultural_land':           'e3d938da-5575-4e88-ae0e-66e97b1433d4', // Farm Land
@@ -589,7 +645,8 @@ export class WorkflowEngine {
                 tenant_id: tenant.id,
                 name: ownerName || null,
                 contact_type: 'LANDLORD',
-                lead_status: 'NEW',
+                // 2026-05-12 Bug D fix: don't write lead_status='NEW' (mixes up lifecycle_stage with
+                // lead_status). Landlords aren't buyer leads — let the schema default 'cold' apply.
             },
         });
 
@@ -609,28 +666,50 @@ export class WorkflowEngine {
                     name: uploaderName || null,
                     contact_type: 'LANDLORD',
                     source: source === 'whatsapp' ? 'whatsapp' : 'website',
-                    lead_status: 'NEW',
+                    // 2026-05-12 Bug D fix: see note above.
                 },
             });
         }
 
-        // ─── 7. Build specs & features JSON (may be empty in v3 shortened flow) ───
+        // ─── 7. Build specs JSON — SINGLE SOURCE OF TRUTH for type-specific fields ───
+        // Universal area/bathrooms inputs + the dynamic taxonomy schema_values both land here.
+        // Legacy free-text fields (furnishing/facing/property_age/total_floors/features) that
+        // used to write to dedicated inventory columns now fold into specs.* under the canonical
+        // taxonomy keys, so the columns can be retired (Phase 4).
         const specs: Record<string, any> = {};
         if (answers.bathrooms) specs.bathrooms = parseInt(answers.bathrooms);
         if (answers.area) specs.area = parseFloat(answers.area);
         if (answers.area_unit) specs.area_unit = answers.area_unit;
-
-        let features: Record<string, boolean> | undefined;
-        if (answers.features && typeof answers.features === 'object') {
-            features = {};
-            for (const [k, v] of Object.entries(answers.features)) {
-                if (v) features[k] = true;
+        // Phase 1d: merge dynamic taxonomy schema field values (bhk / rooms / facing / FAR …)
+        if (answers.schema_values && typeof answers.schema_values === 'object') {
+            for (const [k, v] of Object.entries(answers.schema_values)) {
+                if (v !== undefined && v !== null && v !== '') specs[k] = v;
             }
-            if (answers.lift_available === 'yes') features.lift = true;
-            if (Object.keys(features).length === 0) features = undefined;
-        } else if (answers.lift_available === 'yes') {
-            features = { lift: true };
         }
+        // Legacy ENRICHMENT_STEPS answers → specs (single SoT). Schema_values wins on conflict.
+        if (answers.furnishing && specs.furnishing == null) specs.furnishing = answers.furnishing;
+        if (answers.facing && specs.facing == null) specs.facing = answers.facing;
+        if (answers.property_age && specs['age-of-construction'] == null) specs['age-of-construction'] = answers.property_age;
+        if (answers.total_floors && specs.floors == null) specs.floors = String(answers.total_floors);
+
+        // Legacy features step (slug-keyed object {gym:true,…}) + lift_available radio →
+        // specs.amenities array of labels (taxonomy 'amenities' field schema).
+        // Mirror of AMENITIES_LIST in frontend InventoryList.tsx.
+        const AMENITY_SLUG_TO_LABEL: Record<string, string> = {
+            gym: 'Gym', club_house: 'Club House', power_backup: 'Power Backup', lift: 'Lift',
+            intercom: 'Intercom', guest_house: 'Guest House', park: 'Park', community_hall: 'Community Hall',
+            mini_theater: 'Mini Theater', swimming_pool: 'Swimming Pool', security: 'Security', gas_pipeline: 'Gas Pipeline',
+            // Legacy slugs not in current taxonomy options — pass through humanized
+            parking: 'Parking', garden: 'Garden', pool: 'Swimming Pool', water_supply: 'Water Supply',
+        };
+        const legacyAmenities = new Set<string>(Array.isArray(specs.amenities) ? specs.amenities : []);
+        if (answers.features && typeof answers.features === 'object') {
+            for (const [k, v] of Object.entries(answers.features)) {
+                if (v) legacyAmenities.add(AMENITY_SLUG_TO_LABEL[k] || k);
+            }
+        }
+        if (answers.lift_available === 'yes') legacyAmenities.add('Lift');
+        if (legacyAmenities.size > 0) specs.amenities = Array.from(legacyAmenities);
 
         // ─── 8. Extract address ───
         const addrBlock = answers.address_block || {};
@@ -701,12 +780,43 @@ export class WorkflowEngine {
         // ─── 13b. Auto-detect agent by phone if no agentId from JWT ───
         if (!agentId && uploaderPhone) {
             const matchedAgent = await prisma.agent.findFirst({
-                where: { phone_number: { in: phoneVariants(uploaderPhone) }, status: 'active' },
+                where: { phone: { in: phoneVariants(uploaderPhone) }, status: 'active' },
                 select: { id: true, name: true },
             });
             if (matchedAgent) {
                 agentId = matchedAgent.id;
                 logger.info(`[WorkflowEngine] Auto-linked to agent ${matchedAgent.name} (${matchedAgent.id}) by phone ${uploaderPhone}`);
+            }
+        }
+
+        // ─── 13c. Resolve source partner + owning manager (middleman model, 2026-04-17) ───
+        // If the admin is submitting this inventory on behalf of a partner agent, the wizard
+        // captures it as source_partner_id (preferred) or source_partner_phone (auto-create).
+        // Priority: explicit id > phone lookup/create. Owning manager inherits from the
+        // partner's managing_agent; fallback is the submitting agent.
+        let resolvedSourcePartnerId: string | null = (answers.source_partner_id as string) || null;
+        let owningManagerId: string | null = agentId || null;
+
+        if (!resolvedSourcePartnerId && answers.source_partner_phone && source === 'admin' && agentId) {
+            try {
+                const result = await ensurePartnerAgent(
+                    answers.source_partner_phone as string,
+                    (answers.source_partner_name as string) || '',
+                    tenant.id,
+                    agentId,
+                );
+                resolvedSourcePartnerId = result.partnerId;
+            } catch (err) {
+                logger.warn(`[WorkflowEngine] Partner auto-create failed: ${(err as Error).message}`);
+            }
+        }
+        if (resolvedSourcePartnerId) {
+            const partner = await prisma.partnerAgent.findUnique({
+                where: { id: resolvedSourcePartnerId },
+                select: { managing_agent_id: true },
+            });
+            if (partner?.managing_agent_id) {
+                owningManagerId = partner.managing_agent_id;
             }
         }
 
@@ -726,6 +836,10 @@ export class WorkflowEngine {
                 // Flat property type (Redesign v2)
                 flat_property_type_id: flatPropertyTypeId || undefined,
 
+                // Canonical taxonomy (Phase 1d) — set when admin used the new tree picker.
+                taxonomy_node_id: taxonomyNodeId || undefined,
+                needs_taxonomy_review: taxonomyNeedsReview || undefined,
+
                 // Legacy classification IDs (backward compat)
                 category_id: answers.category_id || undefined,
                 sub_category_id: answers.sub_category_id || undefined,
@@ -736,17 +850,15 @@ export class WorkflowEngine {
                 category: legacyCategory,
                 type: legacyType,
 
-                // Specs & Features (may be empty in shortened flow)
+                // Specs — SoT for type-specific fields (BHK/Rooms/Furnishing/Facing/Floors/
+                // Age/Amenities/etc.). The deprecated furnishing/facing/property_age/
+                // total_floors/features columns are no longer written; their values live
+                // inside specs.* under the canonical taxonomy keys (see section 7 above).
                 specs: Object.keys(specs).length > 0 ? specs : undefined,
-                features: features || undefined,
 
-                // Property Details (enrichment — may be empty)
+                // Property Details — only the non-deprecated columns remain here.
                 description: answers.description || undefined,
-                furnishing: answers.furnishing || undefined,
                 floor_number: floorNumber || undefined,
-                total_floors: answers.total_floors ? parseInt(answers.total_floors) : undefined,
-                facing: answers.facing || undefined,
-                property_age: answers.property_age || undefined,
 
                 // Structured Address
                 flat_no: flatNo,
@@ -791,9 +903,13 @@ export class WorkflowEngine {
                 reference_agent_phone: answers.agent_reference_phone as string | undefined,
                 reference_agent_id: referenceAgentId,
 
+                // Middleman model (2026-04-17) — source partner + owning manager
+                referral_partner_id: resolvedSourcePartnerId,
+                owning_manager_id: owningManagerId,
+
                 // Partner uploads via WhatsApp go to pending_approval — coordinator must approve before going live
                 status: source === 'whatsapp' ? 'pending_approval' : 'active',
-            },
+            } as any,
         });
 
         // ─── POST-WRITE SAFEGUARD: Verify owner_phone matches intended contact ───
@@ -811,6 +927,25 @@ export class WorkflowEngine {
                     data: { owner_phone: expectedPhone, uploader_phone: expectedPhone },
                 });
             }
+        }
+
+        // ─── Promote uploaded media from transient /uploads/pending/ to the permanent
+        // /uploads/properties/<id>/ dir so the cleanup job can't delete it → 404 (2026-05-24) ───
+        try {
+            const photos = promotePendingMedia(inventory.media_urls, inventory.id);
+            const videos = promotePendingMedia(inventory.video_urls, inventory.id);
+            if (photos.moved > 0 || videos.moved > 0) {
+                await prisma.inventory.update({
+                    where: { id: inventory.id },
+                    data: { media_urls: photos.urls, video_urls: videos.urls },
+                });
+                logger.info('[WorkflowEngine] Promoted pending media', {
+                    id: inventory.id, photos_moved: photos.moved, videos_moved: videos.moved,
+                    photos_missing: photos.missing, videos_missing: videos.missing,
+                });
+            }
+        } catch (mErr) {
+            logger.warn('Failed to promote pending media', { id: inventory.id, error: (mErr as Error).message });
         }
 
         // Generate SEO slug
@@ -894,9 +1029,28 @@ export class WorkflowEngine {
                             name: answers.key_holder_name || 'External Dealer',
                             contact_type: 'PARTNER_AGENT',
                             source: 'inventory_workflow',
-                            lead_status: 'NEW',
+                            // 2026-05-12 Bug D fix: see comment above on lead_status.
                         },
                     });
+
+                    // 2026-05-14: ALSO register as a PartnerAgent so the dealer
+                    // shows up in the admin Partner Agents page. Previously this
+                    // step was missing — created 13 orphan PARTNER_AGENT contacts
+                    // that were invisible in the admin partner-list view. The
+                    // helper is idempotent (no-op if already registered).
+                    try {
+                        const { ensurePartnerAgent } = await import('../services/partner_auto_create');
+                        if (agentId) {
+                            await ensurePartnerAgent(
+                                dealerPhone,
+                                (answers.key_holder_name as string) || 'External Dealer',
+                                tenant.id,
+                                agentId,
+                            );
+                        }
+                    } catch (regErr) {
+                        logger.warn(`[WorkflowEngine] ensurePartnerAgent for ${dealerPhone} failed (non-blocking): ${(regErr as Error).message}`);
+                    }
 
                     const existingDealerOwner = await prisma.owner.findFirst({
                         where: { contact_phone: { in: phoneVariants(dealerPhone) } },
@@ -1001,7 +1155,7 @@ export class WorkflowEngine {
                     if (!inventory.uploaded_by_agent_id) {
                         // Find matching internal agent by phone
                         const matchedAgent = await prisma.agent.findFirst({
-                            where: { phone_number: { in: phoneVariants(dealerPhone) }, status: 'active' },
+                            where: { phone: { in: phoneVariants(dealerPhone) }, status: 'active' },
                             select: { id: true },
                         });
                         if (matchedAgent) {
@@ -1046,6 +1200,26 @@ export class WorkflowEngine {
             const rules = await this.getAddressRules(answers);
             return { address_config: rules };
         }
+        // Phase 1d: dynamic per-type field schema for the chosen taxonomy TYPE node.
+        if (step.input_type === 'schema_fields') {
+            const nodeId = answers.taxonomy_node_id as string | undefined;
+            if (!nodeId) return { schema_fields: [] };
+            const nf = await prisma.nodeField.findMany({
+                where: { taxonomy_node_id: nodeId },
+                orderBy: { display_order: 'asc' },
+                include: { field: true },
+            });
+            return {
+                schema_fields: nf.map((x) => ({
+                    key: x.field.key,
+                    label: x.label_override || x.field.label,
+                    input_type: x.field.input_type,
+                    required: x.required,
+                    options: (x.options_override as any) ?? (x.field.options_json as any) ?? null,
+                    unit: x.field.unit,
+                })),
+            };
+        }
         return undefined;
     }
 
@@ -1057,7 +1231,11 @@ export class WorkflowEngine {
         floor_required: boolean;
         bhk_required: boolean;
         plot_area_required: boolean;
+        main_category: string;
     }> {
+        // main_category drives the Address-step layout (commercial → "Building Name")
+        // and the society-required rule on the frontend. Set by the category step.
+        const _mainCat = (answers.main_category as string) || '';
         // New: try flat property type first (Redesign v2)
         const flatTypeId = answers.flat_property_type_id;
         if (flatTypeId) {
@@ -1085,20 +1263,37 @@ export class WorkflowEngine {
                     floor_required: cached.rules.floor_required === true,
                     bhk_required: cached.rules.bhk_required === true,
                     plot_area_required: cached.rules.plot_area_required === true,
+                    main_category: _mainCat,
                 };
+            }
+        }
+
+        // Phase 1d safety net (2026-05-28): when no flat_property_type_id was derivable
+        // but the user picked a taxonomy TYPE node, peek at the node — if its name/slug
+        // is plot/land/agriculture, return plot rules instead of the flat-like default.
+        // (Cause: 4 plot taxonomy nodes have legacy_flat_property_type_id=NULL — without
+        //  this net, the address step shows Society/Flat/Floor on a plot upload.)
+        const nodeIdForRules = answers.taxonomy_node_id;
+        if (nodeIdForRules) {
+            const node = await prisma.taxonomyNode.findUnique({
+                where: { id: nodeIdForRules as string },
+                select: { name: true, slug: true },
+            });
+            if (node && /plot|land|agricultur/i.test(`${node.name || ''} ${node.slug || ''}`)) {
+                return { sub_category_slug: node.slug || 'plot', floor_required: false, bhk_required: false, plot_area_required: true, main_category: _mainCat };
             }
         }
 
         // Fallback: Check main_category if no flat_property_type_id
         const mainCategory = answers.main_category;
         if (mainCategory === 'agricultural') {
-            return { sub_category_slug: 'agricultural', floor_required: false, bhk_required: false, plot_area_required: true };
+            return { sub_category_slug: 'agricultural', floor_required: false, bhk_required: false, plot_area_required: true, main_category: 'agricultural' };
         }
 
         // Fallback: legacy sub-category rules
         const subCatId = answers.sub_category_id;
         if (!subCatId) {
-            return { sub_category_slug: '', floor_required: true, bhk_required: false, plot_area_required: false };
+            return { sub_category_slug: '', floor_required: true, bhk_required: false, plot_area_required: false, main_category: _mainCat };
         }
 
         if (!validationRulesCache.has(subCatId)) {
@@ -1118,6 +1313,7 @@ export class WorkflowEngine {
             floor_required: cached.rules.floor_required === true,
             bhk_required: cached.rules.bhk_required === true,
             plot_area_required: cached.rules.plot_area_required === true,
+            main_category: _mainCat,
         };
     }
 

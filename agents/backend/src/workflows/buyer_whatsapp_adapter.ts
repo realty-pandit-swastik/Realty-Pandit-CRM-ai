@@ -243,8 +243,33 @@ export class BuyerWhatsAppAdapter {
             case 'no_more_properties':
                 await this.whatsapp.sendText(phone,
                     result.metadata?.message ||
-                    '🏠 No more matching properties available. We\'ll notify you when new listings arrive!\n\nType *search property* to search with different requirements.'
+                    '🏠 No exact matches found, but we\'re looking for similar properties nearby. We\'ll notify you when new listings arrive!\n\nType *search property* to search with different requirements.'
                 );
+                // Notify assigned agent about unmatched requirements
+                try {
+                    const contact = await prisma.contact.findUnique({
+                        where: { phone_number: phone },
+                        select: { name: true, assigned_agent_id: true, assigned_agent: { select: { phone: true, name: true } }, intent: true, preferred_location: true, demand_schema_values: true, budget_max: true },
+                    });
+                    if (contact?.assigned_agent?.phone) {
+                        const agentPhone = contact.assigned_agent.phone.replace(/^\+/, '');
+                        // Phase 5: legacy demand_bhk column dropped — read bhk
+                        // from canonical demand_schema_values for the alert blurb.
+                        const cSchema = ((contact as any).demand_schema_values ?? {}) as Record<string, any>;
+                        const bhkLabel = cSchema.bhk != null ? String(cSchema.bhk) : null;
+                        const requirements = [
+                            contact.intent ? `Intent: ${contact.intent}` : null,
+                            contact.preferred_location ? `Location: ${contact.preferred_location}` : null,
+                            bhkLabel ? `BHK: ${bhkLabel}` : null,
+                            contact.budget_max ? `Budget: up to ${contact.budget_max}` : null,
+                        ].filter(Boolean).join('\n');
+                        await this.whatsapp.sendText(agentPhone,
+                            `⚠️ *No Matching Properties*\n\nClient: ${contact.name || phone}\nPhone: ${phone}\n${requirements}\n\nPlease review manually or add matching inventory.`
+                        );
+                    }
+                } catch (notifyErr) {
+                    logger.warn('[BuyerWhatsApp] Failed to notify agent about no-match:', notifyErr);
+                }
                 await this.endSession(phone);
                 break;
 
@@ -304,6 +329,7 @@ export class BuyerWhatsAppAdapter {
             if (property.amenities.length > 0) captionLines.push(`✨ ${property.amenities.join(', ')}`);
             if (property.match_score) captionLines.push(`🎯 Match: ${property.match_score}%`);
             captionLines.push(`\nProperty #${matchIndex + 1} | ${property.intent === 'rent' ? 'For Rent' : 'For Sale'}`);
+            if ((property as any).maps_link) captionLines.push(`\n📌 Map: ${(property as any).maps_link}`);
             try {
                 await this.whatsapp.sendImage(phone, property.images[0], captionLines.join('\n'));
             } catch (err) {
@@ -319,6 +345,7 @@ export class BuyerWhatsAppAdapter {
             if (property.amenities.length > 0) textLines.push(`✨ ${property.amenities.join(', ')}`);
             if (property.match_score) textLines.push(`🎯 Match: ${property.match_score}%`);
             textLines.push(`\nProperty #${matchIndex + 1} | ${property.intent === 'rent' ? 'For Rent' : 'For Sale'}`);
+            if ((property as any).maps_link) textLines.push(`\n📌 Map: ${(property as any).maps_link}`);
             await this.whatsapp.sendText(phone, textLines.join('\n'));
         }
 
@@ -331,9 +358,9 @@ export class BuyerWhatsAppAdapter {
             ]);
         } else {
             await this.sendButtons(phone, buttonPrompt, [
-                { value: '__schedule_visit__', label: 'Schedule Visit' },
+                { value: '__schedule_visit__', label: 'Schedule Appointment' },
+                { value: '__request_callback__', label: 'Request Callback' },
                 { value: '__next_property__', label: 'Next Property' },
-                { value: '__change_requirements__', label: 'Change Criteria' },
             ]);
         }
     }
@@ -388,6 +415,64 @@ export class BuyerWhatsAppAdapter {
                     '🙏 Thank you for using Realty Pandit! We\'ll notify you when new matching properties become available.'
                 );
             }
+            return;
+        }
+
+        // Request callback → notify super_boss + assigned agent
+        if (action === '__request_callback__') {
+            const propertyId = session.matching_state?.current_property_id;
+            const propertyTitle = session.matching_state?.current_property
+                ? [session.matching_state.current_property.bhk, session.matching_state.current_property.type].filter(Boolean).join(' ')
+                : 'a property';
+
+            try {
+                const contact = await prisma.contact.findUnique({
+                    where: { phone_number: phone },
+                    select: { name: true, assigned_agent_id: true, assigned_agent: { select: { phone: true, name: true } } },
+                });
+
+                // Notify assigned agent
+                if (contact?.assigned_agent?.phone) {
+                    const agentPhone = contact.assigned_agent.phone.replace(/^\+/, '');
+                    await this.whatsapp.sendText(agentPhone,
+                        `📞 *Callback Request*\n\nClient: ${contact.name || phone}\nPhone: ${phone}\nProperty: ${propertyTitle}\n\nPlease call the client.`
+                    );
+                }
+
+                // Notify super_boss
+                const superBoss = await prisma.agent.findFirst({ where: { role: 'super_boss', status: 'active' }, select: { phone: true } });
+                if (superBoss?.phone) {
+                    const bossPhone = superBoss.phone.replace(/^\+/, '');
+                    await this.whatsapp.sendText(bossPhone,
+                        `📞 *Callback Registered*\n\nClient: ${contact?.name || phone}\nProperty: ${propertyTitle}\nAssigned to: ${contact?.assigned_agent?.name || 'Unassigned'}`
+                    );
+                }
+
+                // Log interaction
+                const tenant = await prisma.tenant.findFirst();
+                if (tenant) {
+                    await prisma.interaction.create({
+                        data: {
+                            tenant_id: tenant.id,
+                            phone_number: phone,
+                            channel: 'whatsapp',
+                            direction: 'inbound',
+                            event_type: 'callback_request',
+                            content: `Callback requested for ${propertyTitle}`,
+                        },
+                    });
+                }
+            } catch (err) {
+                logger.error('[BuyerWhatsApp] Callback notification error:', err);
+            }
+
+            await this.sendButtons(phone,
+                `✅ *Callback request registered!*\n\nOur team will call you shortly. Would you like to see more properties?`,
+                [
+                    { value: '__next_property__', label: 'Next Property' },
+                    { value: '__done__', label: 'Done' },
+                ],
+            );
             return;
         }
 
@@ -594,7 +679,7 @@ export class BuyerWhatsAppAdapter {
 
         try {
             const axios = (await import('axios')).default;
-            const apiUrl = `https://graph.facebook.com/v21.0/${process.env.WHATSAPP_PHONE_ID}/messages`;
+            const apiUrl = `https://graph.facebook.com/v25.0/${process.env.WHATSAPP_PHONE_ID}/messages`;
             const resp = await axios.post(apiUrl, payload, {
                 headers: {
                     'Authorization': `Bearer ${process.env.WHATSAPP_TOKEN}`,
@@ -643,7 +728,8 @@ export class BuyerWhatsAppAdapter {
     private normalizeAction(text: string): string {
         const lower = text.toLowerCase().trim();
         if (/^(next|more|aur|aur dikhao|show more|agli|next property)$/i.test(lower)) return '__next_property__';
-        if (/^(schedule|book|visit|dekhna|milna|schedule visit|book visit)$/i.test(lower)) return '__schedule_visit__';
+        if (/^(schedule|book|visit|dekhna|milna|schedule visit|book visit|appointment)$/i.test(lower)) return '__schedule_visit__';
+        if (/^(callback|call me|call back|call karo|phone karo|request callback)$/i.test(lower)) return '__request_callback__';
         if (/^(change|badlo|modify|edit|change req|change requirements|change criteria)$/i.test(lower)) return '__change_requirements__';
         if (/^(done|bas|finish|khatam|no more|enough)$/i.test(lower)) return '__done__';
         if (/^(back|wapas|peeche)$/i.test(lower)) return '__back_to_property__';
@@ -709,9 +795,12 @@ export class BuyerWhatsAppAdapter {
 
         if (!baseDate) return null;
 
-        // Parse time
-        let hour = 10; // Default 10 AM
+        // Parse time — an explicit clock time is MANDATORY (no 10 AM default).
+        // If the client didn't state a time, return null so the caller asks
+        // for it. See docs/plans/2026-05-17-website-visit-not-visible-in-crm.md
+        let hour = 0;
         let minute = 0;
+        let timeFound = false;
 
         // "10am", "3pm", "10:30am"
         const timeMatch = lower.match(/(\d{1,2})(?::(\d{2}))?\s*(am|pm)/i);
@@ -720,6 +809,7 @@ export class BuyerWhatsAppAdapter {
             minute = timeMatch[2] ? parseInt(timeMatch[2]) : 0;
             if (timeMatch[3].toLowerCase() === 'pm' && hour < 12) hour += 12;
             if (timeMatch[3].toLowerCase() === 'am' && hour === 12) hour = 0;
+            timeFound = true;
         }
 
         // "11 baje", "3 baje"
@@ -727,7 +817,10 @@ export class BuyerWhatsAppAdapter {
         if (bajeMatch) {
             hour = parseInt(bajeMatch[1]);
             if (hour < 7) hour += 12; // Assume PM for < 7
+            timeFound = true;
         }
+
+        if (!timeFound) return null; // no explicit time → caller will ask
 
         // "subah" (morning) / "dopahar" (afternoon) / "shaam" (evening)
         if (/\b(subah|morning)\b/.test(lower) && hour >= 12) hour -= 12;

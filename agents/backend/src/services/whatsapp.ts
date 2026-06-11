@@ -5,7 +5,7 @@ import { buildTemplatePayload } from '../config/whatsapp_templates';
 import { whatsappCircuit } from '../utils/circuit_breaker';
 
 export class WhatsAppService {
-    private readonly apiUrl = 'https://graph.facebook.com/v17.0';
+    private readonly apiUrl = 'https://graph.facebook.com/v25.0';
     private readonly phoneNumberId = process.env.WHATSAPP_PHONE_ID;
     private readonly token = process.env.WHATSAPP_TOKEN;
 
@@ -69,7 +69,10 @@ export class WhatsAppService {
 
                 // Don't retry on 4xx client errors (bad request, unauthorized, etc.)
                 if (status && status >= 400 && status < 500 && status !== 429) {
-                    logger.error(`[WhatsAppService] Client error ${status}, not retrying: ${lastError.message}`);
+                    // Surface Meta's error body (code/title, e.g. #131047 re-engagement / invalid URL)
+                    // — the generic axios message alone hides WHY Meta rejected the send.
+                    const metaErr = (error as any)?.response?.data?.error ?? (error as any)?.response?.data;
+                    logger.error(`[WhatsAppService] Client error ${status}, not retrying: ${lastError.message}${metaErr ? ' | meta: ' + JSON.stringify(metaErr) : ''}`);
                     throw lastError;
                 }
 
@@ -83,7 +86,8 @@ export class WhatsAppService {
         }
 
         // All retries exhausted
-        logger.error(`[WhatsAppService] All ${maxRetries} retries failed: ${lastError?.message}`);
+        const lastMetaErr = (lastError as any)?.response?.data?.error ?? (lastError as any)?.response?.data;
+        logger.error(`[WhatsAppService] All ${maxRetries} retries failed: ${lastError?.message}${lastMetaErr ? ' | meta: ' + JSON.stringify(lastMetaErr) : ''}`);
         throw lastError || new Error('WhatsApp send failed after all retries');
     }
 
@@ -190,8 +194,9 @@ export class WhatsAppService {
         to: string,
         templateName: string,
         paramValues: Record<string, string> = {},
+        imageUrl?: string,
     ): Promise<void> {
-        const payload = buildTemplatePayload(templateName, paramValues);
+        const payload = buildTemplatePayload(templateName, paramValues, imageUrl);
         logger.info(`[WhatsAppService] Sending template "${templateName}" (meta: ${payload.name}) to ${to}`);
 
         if (process.env.NODE_ENV === 'development') {
@@ -212,6 +217,36 @@ export class WhatsAppService {
     }
 
     /**
+     * Try to send a Meta template. If the template send fails (commonly: template
+     * not yet approved by Meta), fall back to a plaintext message. Plaintext only
+     * works inside the 24h customer-initiated session window — outside that window
+     * the message will be silently dropped, which is the correct behaviour for an
+     * unapproved template.
+     *
+     * Use this for templates pending Meta approval (rp_visit_confirmed_customer,
+     * rp_visit_reminder_24hr, rp_visit_reminder_2hr) so the system degrades
+     * gracefully instead of throwing.
+     */
+    public async sendTemplateOrText(
+        to: string,
+        templateName: string,
+        paramValues: Record<string, string>,
+        fallbackText: string,
+        imageUrl?: string,
+    ): Promise<void> {
+        try {
+            await this.sendTemplate(to, templateName, paramValues, imageUrl);
+        } catch (err) {
+            logger.warn(`[WhatsAppService] Template "${templateName}" failed for ${to}, attempting plaintext fallback: ${(err as Error).message}`);
+            try {
+                await this.sendText(to, fallbackText);
+            } catch (err2) {
+                logger.warn(`[WhatsAppService] Plaintext fallback also failed for ${to}: ${(err2 as Error).message}`);
+            }
+        }
+    }
+
+    /**
      * Like callWhatsAppAPI but throws on failure instead of using circuit breaker fallback.
      * Used by sendTemplate so callers can fall back to plain text on template errors.
      */
@@ -221,5 +256,88 @@ export class WhatsAppService {
         }
 
         await this.sendWithRetry(payload, 3);
+    }
+
+    public async sendMultiProductMessage(
+        to: string,
+        headerText: string,
+        bodyText: string,
+        footerText: string,
+        sections: Array<{ title: string; productRetailerIds: string[] }>,
+    ): Promise<void> {
+        await this.callWhatsAppAPIStrict({
+            messaging_product: 'whatsapp',
+            recipient_type: 'individual',
+            to,
+            type: 'interactive',
+            interactive: {
+                type: 'product_list',
+                header: { type: 'text', text: headerText },
+                body: { text: bodyText },
+                footer: { text: footerText },
+                action: {
+                    catalog_id: process.env.META_CATALOG_ID,
+                    sections: sections.map(s => ({
+                        title: s.title,
+                        product_items: s.productRetailerIds.map(id => ({ product_retailer_id: id })),
+                    })),
+                },
+            },
+        });
+    }
+
+    public async sendSingleProductMessage(
+        to: string,
+        bodyText: string,
+        footerText: string,
+        productRetailerId: string,
+    ): Promise<void> {
+        await this.callWhatsAppAPIStrict({
+            messaging_product: 'whatsapp',
+            recipient_type: 'individual',
+            to,
+            type: 'interactive',
+            interactive: {
+                type: 'product',
+                body: { text: bodyText },
+                footer: { text: footerText },
+                action: {
+                    catalog_id: process.env.META_CATALOG_ID,
+                    product_retailer_id: productRetailerId,
+                },
+            },
+        });
+    }
+
+    public async sendFlow(
+        to: string,
+        flowId: string,
+        bodyText: string,
+        initialScreenId: string = 'SEARCH_SCREEN',
+        screenData: Record<string, any> = {},
+        mode: 'draft' | 'published' = 'published',
+    ): Promise<void> {
+        await this.callWhatsAppAPIStrict({
+            messaging_product: 'whatsapp',
+            recipient_type: 'individual',
+            to,
+            type: 'interactive',
+            interactive: {
+                type: 'flow',
+                body: { text: bodyText },
+                action: {
+                    name: 'flow',
+                    parameters: {
+                        flow_message_version: '3',
+                        flow_token: 'unused',
+                        flow_id: flowId,
+                        flow_cta: 'Open',
+                        flow_action: 'navigate',
+                        flow_action_payload: { screen: initialScreenId, data: screenData },
+                        mode,
+                    },
+                },
+            },
+        });
     }
 }

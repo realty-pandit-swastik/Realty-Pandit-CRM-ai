@@ -1,4 +1,4 @@
-
+﻿
 import prisma from '../db';
 import { LLMService } from './llm';
 import { SystemPromptService } from './system_prompt';
@@ -45,18 +45,18 @@ const INTERACTION_MATRIX: Record<string, {
             },
         ],
     },
-    MATCHED: {
+    QUALIFIED: {
         expectedActions: [
-            { action: 'ask_property_details', probability: 60 },
+            { action: 'view_property_card', probability: 60 },
             { action: 'schedule_visit', probability: 25 },
             { action: 'reject_match', probability: 10 },
             { action: 'go_silent', probability: 5 },
         ],
         triggers: [
             {
-                silenceHours: 12,
-                templateKey: 'tx_followup_matched',
-                description: 'Send match summary and encourage visit',
+                silenceHours: 24,
+                templateKey: 'rp_reopen_session',
+                description: 'Re-engage after silence on property sharing',
                 maxFires: 2,
             },
         ],
@@ -239,7 +239,7 @@ export class InteractionEngine {
 
         try {
             const activeStatuses: TransactionStatus[] = [
-                'NEW', 'MATCHED', 'VISIT_SCHEDULED', 'VISITED',
+                'NEW', 'QUALIFIED', 'VISIT_SCHEDULED', 'VISITED',
                 'NEGOTIATION', 'CLOSED_WON', 'CLOSED_LOST',
             ];
 
@@ -361,6 +361,10 @@ export class InteractionEngine {
             // Map internal template keys to Meta template names + params
             const metaTemplateMap: Record<string, { name: string; params: Record<string, string> }> = {
                 tx_followup_new: {
+                    // 2026-05-14: was 'rp_tx_followup_new_v2' — but buildTemplatePayload
+                    // looks up by REGISTRY KEY, not Meta template name. The registry key
+                    // is 'rp_tx_followup_new' (which internally maps to Meta name '_v3').
+                    // Wrong key = 9× errors per TX in InteractionEngine. ~800+/day in logs.
                     name: 'rp_tx_followup_new',
                     params: { inquiry_type: tx.type === 'RENT' ? 'renting a property' : 'purchasing a property' },
                 },

@@ -160,8 +160,10 @@ export const INVENTORY_WORKFLOW_STEPS: WorkflowStep[] = [
     {
         id: 'main_category',
         group: 'property_type',
-        question: 'Type of property?',
-        question_hi: 'Property ka type?',
+        // "Category" — pairs with the "Which sub-category?" step so inventory
+        // mirrors the leads Category → Sub-Category tree. (2026-05-16)
+        question: 'Which category?',
+        question_hi: 'Category kya hai?',
         input_type: 'radio',
         field: 'main_category',
         required: true,
@@ -171,6 +173,10 @@ export const INVENTORY_WORKFLOW_STEPS: WorkflowStep[] = [
             { value: 'agricultural', label: 'Agricultural Land', label_hi: 'Agricultural Land' },
         ],
         options_source: 'static',
+        // Phase 1d/v2: admin + web use the new taxonomy tree picker instead of this legacy path.
+        skip_when: [
+            { field: '_source', operator: 'in', value: ['admin', 'web'] },
+        ],
         whatsapp_type: 'buttons',
     },
 
@@ -181,17 +187,22 @@ export const INVENTORY_WORKFLOW_STEPS: WorkflowStep[] = [
     {
         id: 'flat_property_type_id',
         group: 'config',
-        question: 'What type of property?',
-        question_hi: 'Property ka type kya hai?',
+        // Labelled "Sub-Category" so the inventory wizard visibly mirrors the
+        // leads classification tree (Category → Sub-Category). This step already
+        // persists sub_category_id; only the prompt wording changed. (2026-05-16)
+        question: 'Which sub-category? (e.g., Apartment / Gated Society)',
+        question_hi: 'Sub-category kya hai? (e.g., Apartment / Gated Society)',
         input_type: 'dropdown',
         field: 'flat_property_type_id',
         required: true,
         options_source: 'filtered',
         dynamic_endpoint: '/public/master/flat-property-types',
         filter_by: 'main_category',
-        // Skip for agricultural (only 1 type, auto-selected)
+        // Skip for agricultural (only 1 type, auto-selected);
+        // Phase 1d/v2: admin + web use the new taxonomy tree picker instead of this legacy path.
         skip_when: [
             { field: 'main_category', operator: 'equals', value: 'agricultural' },
+            { field: '_source', operator: 'in', value: ['admin', 'web'] },
         ],
         whatsapp_type: 'list',
     },
@@ -210,11 +221,44 @@ export const INVENTORY_WORKFLOW_STEPS: WorkflowStep[] = [
         show_when: [
             { field: 'flat_property_type_id', operator: 'from_flat_type_rules', validation_rule_key: 'bhk_required' },
         ],
+        // Phase 1d/v2: admin + web use the schema_fields step (BHK/Rooms come from the type's schema).
+        skip_when: [
+            { field: '_source', operator: 'in', value: ['admin', 'web'] },
+        ],
         whatsapp_type: 'list',
     },
 
     // ================================================================
+    // STAGE 5b: TAXONOMY (Phase 1d admin / v2 web). Replaces the legacy
+    // category/sub-category/configuration steps for admin + web. Picks a leaf
+    // TYPE node from the canonical 57-type tree, then renders that type's
+    // dynamic field schema (BHK residential / Rooms commercial / FAR plots, etc.).
+    // WhatsApp/voice keep the legacy steps above (gated by _source); WhatsApp is
+    // auto-tagged at commit from its legacy flat type instead.
+    // ================================================================
+
+    {
+        id: 'taxonomy',
+        group: 'property_type',
+        question: 'Select the property type',
+        question_hi: 'Property type chunein',
+        input_type: 'taxonomy',
+        field: 'taxonomy_node_id',
+        required: true,
+        show_when: [
+            { field: '_source', operator: 'in', value: ['admin', 'web'] },
+        ],
+        platform_question: {
+            admin: 'Property type (category → type)?',
+        },
+    },
+
+    // ================================================================
     // STAGE 6: ADDRESS (Google Location)
+    // Order: Property Type → Address → Configuration. Placed AFTER taxonomy and
+    // BEFORE schema_fields so admin+web capture Address between type and config.
+    // WhatsApp's visible order is unchanged — it doesn't see taxonomy/schema, so
+    // its Address still follows its own configuration step. (2026-05-24)
     // ================================================================
 
     {
@@ -226,6 +270,20 @@ export const INVENTORY_WORKFLOW_STEPS: WorkflowStep[] = [
         field: 'address_block',
         required: true,
         whatsapp_type: 'text',
+    },
+
+    {
+        id: 'schema_fields',
+        group: 'config',
+        question: 'Property details',
+        question_hi: 'Property ki details',
+        input_type: 'schema_fields',
+        field: 'schema_values',
+        required: false,
+        show_when: [
+            { field: '_source', operator: 'in', value: ['admin', 'web'] },
+            { field: 'taxonomy_node_id', operator: 'exists' },
+        ],
     },
 
     // ================================================================
@@ -357,9 +415,16 @@ export const INVENTORY_WORKFLOW_STEPS: WorkflowStep[] = [
             { value: '10+_years', label: '10+ Years', label_hi: '10+ saal' },
         ],
         options_source: 'static',
-        // Skip for agricultural land (no construction)
+        // Skip for agricultural land (no construction) — and for the admin
+        // path because admin now captures Construction Status + Age of
+        // Construction inside the schema_fields step's dynamic per-type panel
+        // via the leaf-attached `status` and `age-of-construction` NodeFields
+        // (2026-05-29 commercial taxonomy field-gap fix). WhatsApp/web paths
+        // still hit this standalone radio because they don't render
+        // schema_fields. See docs/plans/2026-05-29-commercial-taxonomy-field-gaps.md.
         skip_when: [
             { field: 'main_category', operator: 'equals', value: 'agricultural' },
+            { field: '_source', operator: 'equals', value: 'admin' },
         ],
         whatsapp_type: 'list',
     },
@@ -415,8 +480,8 @@ export const WORKFLOW_GROUPS = [
     { id: 'contact', label: 'Contact', label_hi: 'Contact', icon: '2' },
     { id: 'intent', label: 'Intent', label_hi: 'Intent', icon: '3' },
     { id: 'property_type', label: 'Property Type', label_hi: 'Property Type', icon: '4' },
-    { id: 'config', label: 'Configuration', label_hi: 'Configuration', icon: '5' },
-    { id: 'address', label: 'Address', label_hi: 'Address', icon: '6' },
+    { id: 'address', label: 'Address', label_hi: 'Address', icon: '5' },
+    { id: 'config', label: 'Configuration', label_hi: 'Configuration', icon: '6' },
     { id: 'keyholder', label: 'Key Holder', label_hi: 'Chaabi', icon: '7' },
     { id: 'pricing', label: 'Pricing', label_hi: 'Price', icon: '8' },
     { id: 'area', label: 'Area', label_hi: 'Area', icon: '9' },

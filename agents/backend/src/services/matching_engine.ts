@@ -13,22 +13,61 @@
 
 import prisma from '../db';
 import logger from '../utils/logger';
+import { sanitizationService, Viewer } from './sanitization_service';
+import { resolveTypeFilter } from '../utils/demand_taxonomy';
+import { expandTaxonomyNodeIds } from '../utils/taxonomy_filter';
+
+/**
+ * Map a lead/deal intent to the inventory `intent` column ('sell' | 'rent') — robustly.
+ * Case-insensitive + complete, so a non-canonical value (e.g. "buyer", "TENANT", "Lease")
+ * never silently yields 0 matches (the old case-sensitive map had 'BUYER' but not 'buyer').
+ * Rent-side aliases → 'rent'; everything else (buy / buyer / purchase / sell / seller and
+ * the empty default) → 'sell'.
+ */
+export function toInventoryIntent(intent?: string | null): 'sell' | 'rent' {
+    const v = String(intent ?? '').trim().toLowerCase();
+    if (['rent', 'tenant', 'lease', 'rent_lease', 'rental'].includes(v)) return 'rent';
+    return 'sell';
+}
 
 export interface MatchCriteria {
     intent?: string | null;         // buy, rent
     property_type?: string | null;  // flat, house, plot (legacy string)
-    type_id?: string | null;        // Classification ID (preferred)
-    category_id?: string | null;    // Classification ID
+    type_id?: string | null;        // [LEGACY] Classification ID (most specific)
+    sub_category_id?: string | null; // [LEGACY] Classification ID (middle tier — see B, 2026-05-16)
+    category_id?: string | null;    // [LEGACY] Classification ID (coarsest)
     budget_min?: number | null;
     budget_max?: number | null;
     preferred_location?: string | null;
     preferred_lat?: number | null;  // Latitude from Google Maps
     preferred_lng?: number | null;  // Longitude from Google Maps
-    bhk?: number | null;            // bedrooms
+    bhk?: number | null;            // [LEGACY] integer bedrooms — replaced by demand_schema_values.bhk
     area_min?: number | null;       // Min area requirement
     area_max?: number | null;       // Max area requirement
     area_unit?: string | null;      // "sqft" or "sqmtr"
-    demand_amenities?: string[] | null; // ["parking", "lift", "gym"]
+    demand_amenities?: string[] | null; // [LEGACY] — replaced by demand_schema_values.amenities
+
+    // Phase 3 demand-side unification (2026-05-29) — canonical SoT fields.
+    // demand_schema_values mirrors inventory.specs shape (bhk / rooms / furnishing /
+    // facing / age-of-construction / amenities / etc. keyed by FieldDefinition.key).
+    // The scorer does a key-by-key compare with type-aware fuzzy matching.
+    demand_taxonomy_node_id?: string | null;
+    demand_schema_values?: Record<string, any> | null;
+
+    // Deal Match & Share multi-select + hard-cap (2026-06-01). All optional/additive —
+    // other callers (website auto-match, sales agent, bot) are unaffected.
+    bhk_list?: number[] | null;            // OR set of BHK counts → hard filter (e.g. [2,3])
+    // OR set of (legacy) sub_category_ids → hard `sub_category_id IN (...)`. Sub-category is the
+    // 100%-populated classification tier on inventory (type_id is only ~26% set), so the deal
+    // "Type" multi-select resolves to sub-categories (Flat/Apartment, Builder Floor, Villa, Plot).
+    sub_category_id_list?: string[] | null;
+    // Category-aware fallback hard filter: when the demand is classified only at CATEGORY/SUBCATEGORY level
+    // (no legacy sub_category_id/category_id resolve — e.g. a "Commercial" CATEGORY node), this holds the node
+    // expanded to self + all descendant nodes → `taxonomy_node_id IN (...)`. Keeps a commercial deal from
+    // matching residential inventory. (inventory.taxonomy_node_id is 100% populated.)
+    taxonomy_node_id_list?: string[] | null;
+    radius_km?: number | null;             // pin the geo search to ONE radius instead of escalating 2→20
+    budget_hard?: boolean;                 // true → exact budget bounds (no ±30% tolerance band)
 }
 
 /**
@@ -55,11 +94,66 @@ function haversineDistance(lat1: number, lng1: number, lat2: number, lng2: numbe
     return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
+/**
+ * Extract an integer BHK/room count from an inventory.specs object, mirroring the
+ * scorer's fallback chain + parsing ("1 RK" → 1, "8+" → 8, "2" → 2, 2 → 2).
+ * Shared so the multi-BHK hard filter and the BHK score read the SAME value.
+ */
+function extractBhkInt(specs: any): number | null {
+    const raw = specs?.bhk ?? specs?.rooms ?? specs?.bedrooms ?? specs?.bhk_count;
+    if (typeof raw === 'number') return raw;
+    if (typeof raw === 'string') {
+        const cleaned = raw.toLowerCase().replace('rk', '').replace('+', '').trim();
+        const n = parseInt(cleaned, 10);
+        return Number.isNaN(n) ? null : n;
+    }
+    return null;
+}
+
+/**
+ * Build a short, human-readable "why it matched" string for a result row, used by the
+ * deal Match & Share UI. Pure display — derived from the same criteria/specs the scorer uses.
+ */
+function buildMatchReason(criteria: MatchCriteria, prop: any, distanceKm?: number): string {
+    const bits: string[] = [];
+    const specs = prop?.specs && typeof prop.specs === 'object' ? prop.specs : null;
+    // BHK
+    const wantBhk = (criteria.bhk_list?.length ? criteria.bhk_list : null)
+        ?? (criteria.demand_schema_values?.bhk != null ? [extractBhkInt({ bhk: criteria.demand_schema_values.bhk })].filter((x): x is number => x != null) : null)
+        ?? (criteria.bhk != null ? [criteria.bhk] : null);
+    const haveBhk = extractBhkInt(specs);
+    if (wantBhk?.length && haveBhk != null) bits.push(`${haveBhk}BHK ${wantBhk.includes(haveBhk) ? '✓' : '≈'}`);
+    // Budget
+    const price = prop?.price != null ? Number(prop.price) : null;
+    if (price != null && (criteria.budget_min || criteria.budget_max)) {
+        const within = (!criteria.budget_min || price >= criteria.budget_min) && (!criteria.budget_max || price <= criteria.budget_max);
+        bits.push(within ? 'within budget ✓' : 'budget ≈');
+    }
+    // Distance
+    if (distanceKm != null) bits.push(`${distanceKm.toFixed(1)} km`);
+    // Type
+    if (prop?.type) bits.push(String(prop.type).replace(/_/g, ' '));
+    return bits.join(' · ');
+}
+
 export interface MatchedProperty {
     id: string;
     type: string;
     category: string;
     location: string | null;
+    // Display + share fields (carried so the deal workspace can render location,
+    // a description, and a public listing link in manual/personal shares).
+    city: string | null;
+    sub_locality: string | null;
+    locality: string | null;
+    state: string | null;
+    pincode: string | null;
+    description: string | null;
+    slug: string | null;
+    display_id: string | null;
+    facing: string | null;
+    property_age: string | null;
+    display_price: number | null;
     price: number | null;
     price_unit: string | null;
     intent: string;
@@ -69,11 +163,17 @@ export interface MatchedProperty {
     floor_number: number | null;
     total_floors: number | null;
     media_urls: string[];
-    owner_phone: string;
+    // Owner/source fields — carried so SanitizationService can decide what to strip per
+    // viewer. For foreign managers and partners these are removed before reaching the API.
+    owner_phone?: string;
     owner_name?: string;
+    owning_manager_id?: string | null;
+    referral_partner_id?: string | null;
     match_score: number;       // 0-100 composite score
     priority_tier: string;     // INTERNAL, ADVANCE_PRO, PRO, FREE
     created_at: Date;
+    distance_km?: number;      // set when geo radius search produced this row
+    match_reason?: string;     // short "why it matched" string for the deal Match & Share UI
 }
 
 /**
@@ -99,18 +199,58 @@ export class MatchingEngine {
      *
      * If no lat/lng, falls back to the original text-matching chain.
      */
-    async findMatches(criteria: MatchCriteria, limit: number = 3): Promise<MatchedProperty[]> {
+    async findMatches(criteria: MatchCriteria, limit: number = 3, viewer?: Viewer): Promise<MatchedProperty[]> {
+        // ── Normalize the TYPE signal into the canonical hard filter (2026-05-31) ──
+        // The buyer's property type may arrive as a canonical taxonomy node id (deal/lead
+        // forms, feed capture), a loose `property_type` slug (WhatsApp bot, matching agent,
+        // website), or pre-set legacy ids. Resolve whichever is present into the legacy
+        // sub_category_id/category_id that join 1:1 to inventory — otherwise the type
+        // never constrains results (a Flat-seeker would see shops). Cached; ~no cost.
+        if (!criteria.sub_category_id && (criteria.demand_taxonomy_node_id || criteria.property_type || criteria.category_id)) {
+            try {
+                const tf = await resolveTypeFilter({
+                    demand_taxonomy_node_id: criteria.demand_taxonomy_node_id,
+                    property_type: criteria.property_type,
+                    sub_category_id: criteria.sub_category_id,
+                    category_id: criteria.category_id,
+                    type_id: criteria.type_id,
+                });
+                if (tf.sub_category_id) criteria.sub_category_id = tf.sub_category_id;
+                if (tf.category_id && !criteria.category_id) criteria.category_id = tf.category_id;
+                if (tf.demand_taxonomy_node_id && !criteria.demand_taxonomy_node_id) criteria.demand_taxonomy_node_id = tf.demand_taxonomy_node_id;
+            } catch (e) {
+                logger.warn(`[MatchingEngine] resolveTypeFilter failed, falling back to raw criteria: ${(e as Error).message}`);
+            }
+        }
+
+        // Category-aware fallback: if the legacy sub_category_id/category_id still didn't resolve (the demand
+        // is classified only at CATEGORY/SUBCATEGORY level — e.g. a "Commercial" CATEGORY node, which
+        // resolveTypeFilter can't map since it only knows TYPE nodes), expand the node to self + all
+        // descendants so the where-clause can hard-filter `taxonomy_node_id IN (...)`. Without this a
+        // commercial deal had NO classification filter and matched residential inventory. (2026-06-08)
+        if (!criteria.sub_category_id && !criteria.category_id && criteria.demand_taxonomy_node_id) {
+            try {
+                const expanded = await expandTaxonomyNodeIds([criteria.demand_taxonomy_node_id]);
+                if (expanded.length) criteria.taxonomy_node_id_list = expanded;
+            } catch (e) {
+                logger.warn(`[MatchingEngine] taxonomy node expansion failed: ${(e as Error).message}`);
+            }
+        }
         logger.info(`[MatchingEngine] Searching with criteria: ${JSON.stringify(criteria)}`);
 
         const hasGeo = criteria.preferred_lat != null && criteria.preferred_lng != null;
+        const finalize = (rows: MatchedProperty[]) =>
+            viewer ? (sanitizationService.sanitizeInventoryList(rows as any[], viewer) as MatchedProperty[]) : rows;
 
         if (hasGeo) {
-            const radii = [2, 5, 10, 20];
+            // Pin to a single radius when the caller (deal Match & Share) requested one;
+            // otherwise escalate 2→5→10→20 km until the first non-empty pass.
+            const radii = criteria.radius_km != null ? [criteria.radius_km] : [2, 5, 10, 20];
             for (const radius of radii) {
                 const results = await this.searchPropertiesByRadius(criteria, radius, limit);
                 if (results.length > 0) {
                     logger.info(`[MatchingEngine] Geo match found at ${radius}km radius — ${results.length} results`);
-                    return results;
+                    return finalize(results);
                 }
                 logger.info(`[MatchingEngine] No results within ${radius}km — expanding radius`);
             }
@@ -118,10 +258,11 @@ export class MatchingEngine {
             // Pass 5: text fallback for properties without coordinates
             logger.info(`[MatchingEngine] Geo passes exhausted — falling back to text search for non-geocoded properties`);
             const textResults = await this.searchPropertiesNoGeo(criteria, limit);
-            if (textResults.length > 0) return textResults;
+            if (textResults.length > 0) return finalize(textResults);
 
-            // Final fallback: any property matching intent/type without location
-            return this.searchProperties({ ...criteria, preferred_location: null, budget_min: null, budget_max: null }, limit);
+            // No inventory found in buyer's area — return empty rather than serving wrong-city results
+            logger.info(`[MatchingEngine] No inventory found near ${criteria.preferred_location || 'buyer location'} — returning empty`);
+            return [];
         }
 
         // No geo — use original text-based fallback chain
@@ -135,17 +276,10 @@ export class MatchingEngine {
             }
         }
 
-        if (results.length === 0 && criteria.preferred_location) {
-            logger.info(`[MatchingEngine] No nearby match — searching entire city/region`);
-            results = await this.searchProperties({ ...criteria, preferred_location: null }, limit);
-        }
+        // Do NOT fall back to removing preferred_location — a buyer who said "East Delhi"
+        // must never receive Ghaziabad results. Zero honest results > wrong-city results.
 
-        if (results.length === 0 && (criteria.budget_min || criteria.budget_max)) {
-            logger.info(`[MatchingEngine] No budget match — searching without budget filter`);
-            results = await this.searchProperties({ ...criteria, preferred_location: null, budget_min: null, budget_max: null }, limit);
-        }
-
-        return results;
+        return finalize(results);
     }
 
     /**
@@ -157,19 +291,29 @@ export class MatchingEngine {
         const where: any = { status: 'active', latitude: { not: null }, longitude: { not: null } };
 
         if (criteria.intent) {
-            const intentMap: Record<string, string> = { 'buy': 'sell', 'BUYER': 'sell', 'rent': 'rent', 'TENANT': 'rent' };
-            where.intent = intentMap[criteria.intent] || criteria.intent;
+            where.intent = toInventoryIntent(criteria.intent);
         }
-        if (criteria.type_id) where.type_id = criteria.type_id;
+        // Classification match (A1, 2026-05-16): sub_category_id is the shared,
+        // 100%-populated tier on both inventory and leads — it is the HARD filter.
+        // type_id is NOT hard-filtered: inventory never sets it (workflow maps flat
+        // types to sub-categories, not property types), so a typed lead would match
+        // zero inventory. type_id instead contributes a scoring boost (see
+        // calculateMatchScore). Fall back to category only if no sub_category.
+        // Type multi-select (deal Match & Share) takes precedence: match any of the chosen
+        // sub-categories. Falls back to the single sub_category_id, then category.
+        if (criteria.sub_category_id_list?.length) where.sub_category_id = { in: criteria.sub_category_id_list };
+        else if (criteria.sub_category_id) where.sub_category_id = criteria.sub_category_id;
         else if (criteria.category_id) where.category_id = criteria.category_id;
-        // Hard filter by BHK — never show wrong bedroom count
-        if (criteria.bhk) {
-            where.specs = { path: ['bedrooms'], equals: criteria.bhk };
-        }
+        // Category-level demand (no legacy ids) → hard-filter by the expanded taxonomy node set so a
+        // "Commercial" deal can't match residential inventory.
+        else if (criteria.taxonomy_node_id_list?.length) where.taxonomy_node_id = { in: criteria.taxonomy_node_id_list };
+        // BHK is a scoring factor by default. budget tolerance is ±30% UNLESS budget_hard.
         if (criteria.budget_min || criteria.budget_max) {
+            const loF = criteria.budget_hard ? 1 : 0.7;
+            const hiF = criteria.budget_hard ? 1 : 1.3;
             where.price = {};
-            if (criteria.budget_min) where.price.gte = criteria.budget_min * 0.7;
-            if (criteria.budget_max) where.price.lte = criteria.budget_max * 1.3;
+            if (criteria.budget_min) where.price.gte = criteria.budget_min * loF;
+            if (criteria.budget_max) where.price.lte = criteria.budget_max * hiF;
         }
 
         const properties = await prisma.inventory.findMany({
@@ -205,12 +349,26 @@ export class MatchingEngine {
                 return true;
             });
         }
-        // Amenities filter — at least 50% must match
+        // Amenities filter — at least 50% must match. Phase 4 dedup (2026-05-28):
+        // reads specs.amenities (array of labels), demand_amenities are matched
+        // case-insensitively against humanized labels (e.g. "Gym","Power Backup").
         if (criteria.demand_amenities?.length) {
             filtered = filtered.filter(({ prop }) => {
-                if (!prop.features || typeof prop.features !== 'object') return true;
-                const matched = criteria.demand_amenities!.filter(a => (prop.features as any)[a] === true);
+                const amenities = Array.isArray((prop.specs as any)?.amenities) ? (prop.specs as any).amenities as string[] : null;
+                if (!amenities || amenities.length === 0) return true;
+                const lower = new Set(amenities.map(a => String(a).toLowerCase()));
+                const matched = criteria.demand_amenities!.filter(a => lower.has(String(a).toLowerCase()));
                 return matched.length >= Math.ceil(criteria.demand_amenities!.length * 0.5);
+            });
+        }
+
+        // BHK multi-select hard filter (deal Match & Share). Applied INSIDE this radius pass so
+        // radius escalation still works (a radius that yields 0 in-BHK matches expands further).
+        // Properties with no readable BHK are kept (don't penalise sparse specs).
+        if (criteria.bhk_list?.length) {
+            filtered = filtered.filter(({ prop }) => {
+                const b = extractBhkInt(prop.specs);
+                return b == null || criteria.bhk_list!.includes(b);
             });
         }
 
@@ -225,21 +383,38 @@ export class MatchingEngine {
                 type: prop.type,
                 category: prop.category,
                 location: prop.location,
+                city: prop.city || null,
+                sub_locality: prop.sub_locality || null,
+                locality: prop.locality || null,
+                state: prop.state || null,
+                pincode: prop.pincode || null,
+                description: prop.description || null,
+                slug: prop.slug || null,
+                display_id: prop.display_id || null,
+                // specs.* is SOLE SoT (Phase 3 dedup, 2026-05-28) — column fallbacks dropped.
+                facing: ((prop.specs as any)?.facing) ?? null,
+                property_age: ((prop.specs as any)?.['age-of-construction']) ?? null,
+                display_price: prop.display_price ? Number(prop.display_price) : null,
                 price: prop.price ? Number(prop.price) : null,
                 price_unit: prop.price_unit,
                 intent: prop.intent,
                 specs: prop.specs,
-                features: prop.features || null,
-                furnishing: prop.furnishing || null,
+                // features dropped Phase 4 — amenities live in specs.amenities (array of labels)
+                features: Array.isArray((prop.specs as any)?.amenities) ? (prop.specs as any).amenities : null,
+                furnishing: ((prop.specs as any)?.furnishing) ?? null,
                 floor_number: prop.floor_number || null,
-                total_floors: prop.total_floors || null,
+                total_floors: (() => { const s = (prop.specs as any)?.floors; return s != null ? Number(s) : null; })(),
                 media_urls: prop.media_urls || [],
                 owner_phone: prop.owner_phone,
                 owner_name: prop.contact?.name || undefined,
+                // Ownership markers for SanitizationService (middleman model, 2026-04-17)
+                owning_manager_id: (prop as any).owning_manager_id ?? null,
+                referral_partner_id: (prop as any).referral_partner_id ?? null,
                 match_score: Math.min(100, baseScore + tierBonus),
                 priority_tier: tier,
                 created_at: prop.created_at,
                 distance_km: distance,
+                match_reason: buildMatchReason(criteria, prop, distance),
             } as MatchedProperty & { distance_km: number };
         });
 
@@ -273,49 +448,53 @@ export class MatchingEngine {
 
         // Intent filter (sell = buyer, rent = tenant)
         if (criteria.intent) {
-            const intentMap: Record<string, string> = {
-                'buy': 'sell', 'BUYER': 'sell',
-                'rent': 'rent', 'TENANT': 'rent',
-            };
-            const inventoryIntent = intentMap[criteria.intent] || criteria.intent;
-            where.intent = inventoryIntent;
+            where.intent = toInventoryIntent(criteria.intent);
         }
 
-        // Property type filter (hybrid: prefer ID, fallback to string)
-        if (criteria.type_id) {
-            where.type_id = criteria.type_id;
+        // Classification filter (A1, 2026-05-16): sub_category_id is the shared
+        // hard tier; type_id is a scoring boost only (inventory never sets it).
+        // Fall back to category, then legacy string.
+        if (criteria.sub_category_id_list?.length) {
+            // Type multi-select (deal Match & Share) — match any of the chosen sub-categories.
+            where.sub_category_id = { in: criteria.sub_category_id_list };
+        } else if (criteria.sub_category_id) {
+            where.sub_category_id = criteria.sub_category_id;
+        } else if (criteria.category_id) {
+            where.category_id = criteria.category_id;
+        } else if (criteria.taxonomy_node_id_list?.length) {
+            // Category-level demand (no legacy ids) → expanded taxonomy node set keeps a "Commercial" deal
+            // from matching residential inventory.
+            where.taxonomy_node_id = { in: criteria.taxonomy_node_id_list };
         } else if (criteria.property_type) {
             where.OR = [
                 ...(where.OR || []),
                 { type: { contains: criteria.property_type, mode: 'insensitive' } },
                 { property_type_link: { name: { contains: criteria.property_type, mode: 'insensitive' } } },
+                { category: { contains: criteria.property_type, mode: 'insensitive' } },
             ];
         }
 
-        // Category filter (if provided)
-        if (criteria.category_id) {
-            where.category_id = criteria.category_id;
-        }
+        // BHK is a scoring factor only — not a hard WHERE filter (most inventory lacks specs.bedrooms)
 
-        // Hard filter by BHK — never show wrong bedroom count
-        if (criteria.bhk) {
-            where.specs = { path: ['bedrooms'], equals: criteria.bhk };
-        }
-
-        // Location filter (broad match)
+        // Location filter — check all location columns (city, district, locality, location text)
         if (criteria.preferred_location) {
-            where.location = { contains: criteria.preferred_location, mode: 'insensitive' };
+            const loc = criteria.preferred_location;
+            where.OR = [
+                ...(where.OR || []),
+                { location: { contains: loc, mode: 'insensitive' } },
+                { city: { contains: loc, mode: 'insensitive' } },
+                { district: { contains: loc, mode: 'insensitive' } },
+                { locality: { contains: loc, mode: 'insensitive' } },
+            ];
         }
 
-        // Budget filter (with 30% tolerance)
+        // Budget filter — ±30% tolerance by default; exact bounds when budget_hard (Match & Share).
         if (criteria.budget_min || criteria.budget_max) {
+            const loF = criteria.budget_hard ? 1 : 0.7;
+            const hiF = criteria.budget_hard ? 1 : 1.3;
             where.price = {};
-            if (criteria.budget_min) {
-                where.price.gte = criteria.budget_min * 0.7; // 30% below min
-            }
-            if (criteria.budget_max) {
-                where.price.lte = criteria.budget_max * 1.3; // 30% above max
-            }
+            if (criteria.budget_min) where.price.gte = criteria.budget_min * loF;
+            if (criteria.budget_max) where.price.lte = criteria.budget_max * hiF;
         }
 
         // Fetch candidate properties
@@ -352,12 +531,23 @@ export class MatchingEngine {
                 return true;
             });
         }
-        // Amenities filter — at least 50% must match
+        // Amenities filter — at least 50% must match. Phase 4 dedup (2026-05-28):
+        // reads specs.amenities (array of labels).
         if (criteria.demand_amenities?.length) {
             candidates = candidates.filter(prop => {
-                if (!prop.features || typeof prop.features !== 'object') return true;
-                const matched = criteria.demand_amenities!.filter(a => (prop.features as any)[a] === true);
+                const amenities = Array.isArray((prop.specs as any)?.amenities) ? (prop.specs as any).amenities as string[] : null;
+                if (!amenities || amenities.length === 0) return true;
+                const lower = new Set(amenities.map(a => String(a).toLowerCase()));
+                const matched = criteria.demand_amenities!.filter(a => lower.has(String(a).toLowerCase()));
                 return matched.length >= Math.ceil(criteria.demand_amenities!.length * 0.5);
+            });
+        }
+
+        // BHK multi-select hard filter (deal Match & Share). Keep properties with no readable BHK.
+        if (criteria.bhk_list?.length) {
+            candidates = candidates.filter(prop => {
+                const b = extractBhkInt(prop.specs);
+                return b == null || criteria.bhk_list!.includes(b);
             });
         }
 
@@ -374,20 +564,36 @@ export class MatchingEngine {
                 type: prop.type,
                 category: prop.category,
                 location: prop.location,
+                city: prop.city || null,
+                sub_locality: prop.sub_locality || null,
+                locality: prop.locality || null,
+                state: prop.state || null,
+                pincode: prop.pincode || null,
+                description: prop.description || null,
+                slug: prop.slug || null,
+                display_id: prop.display_id || null,
+                // specs.* is SOLE SoT (Phase 4 dedup, 2026-05-28) — columns dropped from schema.
+                facing: ((prop.specs as any)?.facing) ?? null,
+                property_age: ((prop.specs as any)?.['age-of-construction']) ?? null,
+                display_price: prop.display_price ? Number(prop.display_price) : null,
                 price: prop.price ? Number(prop.price) : null,
                 price_unit: prop.price_unit,
                 intent: prop.intent,
                 specs: prop.specs,
-                features: prop.features || null,
-                furnishing: prop.furnishing || null,
+                features: Array.isArray((prop.specs as any)?.amenities) ? (prop.specs as any).amenities : null,
+                furnishing: ((prop.specs as any)?.furnishing) ?? null,
                 floor_number: prop.floor_number || null,
-                total_floors: prop.total_floors || null,
+                total_floors: (() => { const s = (prop.specs as any)?.floors; return s != null ? Number(s) : null; })(),
                 media_urls: prop.media_urls || [],
                 owner_phone: prop.owner_phone,
                 owner_name: prop.contact?.name || undefined,
-                match_score: score + (tierBonus * 0.2), // Tier adds up to 20 points
+                // Ownership markers for SanitizationService (middleman model, 2026-04-17)
+                owning_manager_id: (prop as any).owning_manager_id ?? null,
+                referral_partner_id: (prop as any).referral_partner_id ?? null,
+                match_score: Math.min(100, score + (tierBonus * 0.2)), // Cap at 100%
                 priority_tier: tier,
                 created_at: prop.created_at,
+                match_reason: buildMatchReason(criteria, prop),
             } as MatchedProperty;
         });
 
@@ -408,8 +614,10 @@ export class MatchingEngine {
      */
     private broadenLocation(location: string): string {
         return location
-            .replace(/\b(sector|phase|block|pocket|extension)\s*\d+\b/gi, '')
+            .replace(/\b(sector|phase|block|pocket|extension)\s*-?\s*\d+\b/gi, '')
+            .replace(/\b(sector|phase|block|pocket|extension)\b/gi, '')
             .replace(/\b\d+\b/g, '')
+            .replace(/[^a-zA-Z0-9\s]/g, '')
             .trim()
             .replace(/\s+/g, ' ');
     }
@@ -475,20 +683,125 @@ export class MatchingEngine {
         if (criteria.property_type) {
             maxScore += 15;
             const propType = (property.type || '').toLowerCase();
-            if (propType.includes(criteria.property_type.toLowerCase())) {
+            const propCategory = (property.category || '').toLowerCase();
+            const needle = criteria.property_type.toLowerCase();
+            if (propType.includes(needle) || propCategory.includes(needle)) {
                 score += 15;
             }
         }
 
-        // BHK match (0-10 points)
-        if (criteria.bhk && property.specs) {
-            maxScore += 10;
-            const specs = typeof property.specs === 'string' ? JSON.parse(property.specs) : property.specs;
-            if (specs.bedrooms === criteria.bhk) {
-                score += 10;
-            } else if (Math.abs((specs.bedrooms || 0) - criteria.bhk) === 1) {
-                score += 5; // Close match
+        // Taxonomy node distance (0-12 points) — Phase 3 demand-side unification
+        // (2026-05-29). Replaces the legacy type_id/sub_category_id FK match. Exact
+        // node = full points; "soft" match via shared ancestor would require a tree
+        // walker — for now, fall back to the legacy classification IDs (Phase 1 still
+        // populates them via the deal-sync block) when canonical IDs aren't equal.
+        if (criteria.demand_taxonomy_node_id && (property as any).taxonomy_node_id) {
+            maxScore += 12;
+            if (criteria.demand_taxonomy_node_id === (property as any).taxonomy_node_id) {
+                score += 12; // exact leaf match
             }
+            // Sibling / same-root partial credit will be added in a follow-up once we
+            // have a tree-distance helper. Today's data still has good legacy FK coverage
+            // (Phase 1 backfill mapped most rows), so leaning on those for partial credit.
+            else if (criteria.sub_category_id && (property as any).sub_category_id === criteria.sub_category_id) {
+                score += 8;
+            } else if (criteria.category_id && (property as any).category_id === criteria.category_id) {
+                score += 4;
+            }
+        } else if (criteria.type_id || criteria.sub_category_id) {
+            // Legacy fallback for leads/deals that haven't been edited via the new form.
+            maxScore += 12;
+            if (criteria.type_id && property.type_id && property.type_id === criteria.type_id) {
+                score += 12;
+            } else if (criteria.sub_category_id && property.sub_category_id &&
+                       property.sub_category_id === criteria.sub_category_id) {
+                score += 8;
+            }
+        }
+
+        // ── Canonical key-by-key compare of demand_schema_values vs inventory.specs ──
+        // Phase 3 (2026-05-29). Replaces the hardcoded BHK + amenities-only scoring with
+        // a generic comparator that scales as Sunny adds new taxonomy fields (FAR,
+        // road-width, ownership-tenure, etc.). Each key in the lead's demand carries
+        // a small weight; matches earn full points, close-numeric earns half.
+        const dsv = criteria.demand_schema_values;
+        const specs = property.specs && typeof property.specs === 'object'
+            ? (typeof property.specs === 'string' ? JSON.parse(property.specs) : property.specs)
+            : null;
+        if (dsv && specs) {
+            // Room count (bhk / rooms): heavier weight (8 pts) since it's the dominant filter
+            // for residential / commercial. We handle the canonical String options "1 RK", "1",
+            // "8+", etc. as integers for fuzzy match. Falls back to legacy specs.bedrooms.
+            if (dsv.bhk != null || dsv.rooms != null) {
+                maxScore += 8;
+                const demandStr = String(dsv.bhk ?? dsv.rooms);
+                const supplyRaw = specs.bhk ?? specs.rooms ?? specs.bedrooms ?? specs.bhk_count;
+                const toInt = (v: any): number | null => {
+                    if (typeof v === 'number') return v;
+                    if (typeof v === 'string') {
+                        const cleaned = v.toLowerCase().replace('rk', '').replace('+', '').trim();
+                        const n = parseInt(cleaned, 10);
+                        return Number.isNaN(n) ? null : n;
+                    }
+                    return null;
+                };
+                const d = toInt(demandStr);
+                const s = toInt(supplyRaw);
+                if (d != null && s != null) {
+                    if (d === s) score += 8;
+                    else if (Math.abs(d - s) === 1) score += 4;
+                }
+            }
+
+            // Amenities multiselect: 7 pts at ≥100% overlap, scaled down.
+            // specs.amenities is array of taxonomy labels (Phase 4 inventory unification);
+            // fall back to property.features array (set by result-builder).
+            if (Array.isArray(dsv.amenities) && dsv.amenities.length) {
+                maxScore += 7;
+                const supply = Array.isArray(specs.amenities)
+                    ? specs.amenities as string[]
+                    : (Array.isArray(property.features) ? property.features as string[] : []);
+                if (supply.length) {
+                    const supplySet = new Set(supply.map(x => String(x).toLowerCase()));
+                    const matched = (dsv.amenities as string[]).filter(a => supplySet.has(String(a).toLowerCase())).length;
+                    const ratio = matched / dsv.amenities.length;
+                    if (ratio >= 1) score += 7;
+                    else if (ratio >= 0.75) score += 5;
+                    else if (ratio >= 0.5) score += 3;
+                    else if (ratio > 0) score += 1;
+                }
+            }
+
+            // Generic scalar/enum fields (3 pts each, max ~15 total). String compare is
+            // case-insensitive; supplied options come straight from the taxonomy so a
+            // string equality is enough. Skipped if key not in demand.
+            const SCALAR_KEYS = ['furnishing', 'facing', 'age-of-construction', 'ownership-tenure', 'road-facing'] as const;
+            for (const k of SCALAR_KEYS) {
+                if (dsv[k] != null && dsv[k] !== '') {
+                    maxScore += 3;
+                    if (specs[k] != null && String(specs[k]).toLowerCase() === String(dsv[k]).toLowerCase()) {
+                        score += 3;
+                    }
+                }
+            }
+        } else if (criteria.bhk && property.specs) {
+            // Legacy BHK-only fallback for leads that don't yet have demand_schema_values.
+            // Mirrors the Phase 1 bhk scoring fix (read canonical taxonomy keys with
+            // legacy fallback chain). Kept intact for back-compat; will be removed
+            // along with criteria.bhk itself in Phase 4.
+            maxScore += 10;
+            const sLegacy = typeof property.specs === 'string' ? JSON.parse(property.specs) : property.specs;
+            const roomRaw = sLegacy.bhk ?? sLegacy.rooms ?? sLegacy.bedrooms ?? sLegacy.bhk_count;
+            let room: number | null = null;
+            if (typeof roomRaw === 'number') {
+                room = roomRaw;
+            } else if (typeof roomRaw === 'string') {
+                const cleaned = roomRaw.toLowerCase().replace('rk', '').replace('+', '').trim();
+                const n = parseInt(cleaned, 10);
+                if (!Number.isNaN(n)) room = n;
+            }
+            if (room === criteria.bhk) score += 10;
+            else if (room != null && Math.abs(room - criteria.bhk) === 1) score += 5;
         }
 
         // Area match (0-8 points)
@@ -514,11 +827,16 @@ export class MatchingEngine {
             }
         }
 
-        // Amenities match (0-7 points)
-        if (criteria.demand_amenities?.length) {
+        // Legacy amenities-only fallback for leads that don't yet have
+        // demand_schema_values.amenities populated. When dsv is present, the
+        // canonical block above already handles this (with better scoring) so
+        // we skip this to avoid double-counting.
+        if (!dsv && criteria.demand_amenities?.length) {
             maxScore += 7;
-            if (property.features && typeof property.features === 'object') {
-                const matched = criteria.demand_amenities.filter(a => (property.features as any)[a] === true);
+            const amenities = Array.isArray(property.features) ? property.features as string[] : null;
+            if (amenities && amenities.length) {
+                const lower = new Set(amenities.map(a => String(a).toLowerCase()));
+                const matched = criteria.demand_amenities.filter(a => lower.has(String(a).toLowerCase()));
                 const ratio = matched.length / criteria.demand_amenities.length;
                 if (ratio >= 1) score += 7;
                 else if (ratio >= 0.75) score += 5;
@@ -639,6 +957,8 @@ export class MatchingEngine {
 /**
  * Build MatchCriteria from a Lead record (new normalized demand table).
  * Replaces building criteria from Contact demand fields.
+ * Phase 3 (2026-05-29) — also carries demand_taxonomy_node_id + demand_schema_values
+ * so the scorer can do canonical key-by-key compares vs inventory.specs.
  */
 export function buildMatchCriteriaFromLead(lead: {
     intent?: string | null;
@@ -650,18 +970,28 @@ export function buildMatchCriteriaFromLead(lead: {
     preferred_lat?: number | null;
     preferred_lng?: number | null;
     type_id?: string | null;
+    sub_category_id?: string | null;
     category_id?: string | null;
+    // Phase 3 demand-side unification — canonical SoT fields.
+    demand_taxonomy_node_id?: string | null;
+    demand_schema_values?: Record<string, any> | null;
 }): MatchCriteria {
     return {
         intent: lead.intent || undefined,
         property_type: lead.demand_type_slug || undefined,
         type_id: lead.type_id || undefined,
+        sub_category_id: lead.sub_category_id || undefined,
         category_id: lead.category_id || undefined,
-        budget_min: lead.budget_min ? Number(lead.budget_min) : undefined,
-        budget_max: lead.budget_max ? Number(lead.budget_max) : undefined,
+        budget_min: lead.budget_min ? Math.min(Number(lead.budget_min), Number(lead.budget_max || lead.budget_min)) : undefined,
+        budget_max: lead.budget_max ? Math.max(Number(lead.budget_min || lead.budget_max), Number(lead.budget_max)) : undefined,
         preferred_location: lead.preferred_location || undefined,
         bhk: lead.demand_bhk || undefined,
         preferred_lat: lead.preferred_lat || undefined,
         preferred_lng: lead.preferred_lng || undefined,
+        // Phase 3 — pass canonical fields through. If both are set on the lead, the
+        // scorer prefers them over the legacy bhk/category cascade for type matching
+        // and amenity matching.
+        demand_taxonomy_node_id: lead.demand_taxonomy_node_id ?? null,
+        demand_schema_values: lead.demand_schema_values ?? null,
     };
 }

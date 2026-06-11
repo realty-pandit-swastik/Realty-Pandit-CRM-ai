@@ -10,11 +10,12 @@ import { TransactionStatus, TransactionLogAction, TransactionType } from '@prism
 import prisma from '../db';
 import { assignExecutive } from './executive_assigner';
 import { TransactionData } from '../agents/types';
+import { foldLegacyDemand } from '../utils/demand_canonical';
 
 // Active statuses (not closed)
 const ACTIVE_STATUSES: TransactionStatus[] = [
     TransactionStatus.NEW,
-    TransactionStatus.MATCHED,
+    TransactionStatus.QUALIFIED,
     TransactionStatus.VISIT_SCHEDULED,
     TransactionStatus.VISITED,
     TransactionStatus.NEGOTIATION,
@@ -179,12 +180,12 @@ export async function createTransaction(
             type: input.type,
             status: TransactionStatus.NEW,
             source: input.source || 'whatsapp',
-            demand_property_type: input.demand_property_type || null,
             demand_location: input.demand_location || null,
             demand_budget_min: input.demand_budget_min || null,
             demand_budget_max: input.demand_budget_max || null,
-            demand_bedrooms: input.demand_bedrooms || null,
             demand_notes: input.demand_notes || null,
+            // Phase 1 dual-write — derive canonical demand SoT from the bedrooms string.
+            ...(foldLegacyDemand({ demand_bedrooms: input.demand_bedrooms ?? null }) as any),
         },
     });
 

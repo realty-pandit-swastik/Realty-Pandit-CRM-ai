@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Scheduled Jobs Worker — BullMQ worker for cron/repeatable jobs.
  *
  * Replaces fragile setTimeout/setInterval-based scheduling with persistent
@@ -8,6 +8,7 @@
  */
 
 import { Worker, Job } from 'bullmq';
+import * as SentrySDK from '@sentry/node';
 import { scheduledJobsQueue } from '../index';
 import { redisConnection } from '../connection';
 import logger from '../../utils/logger';
@@ -63,6 +64,14 @@ export async function startScheduledWorker(): Promise<void> {
         { name: 'qa-health-report' },
     );
 
+    // 4b. Panditji Daily Briefing (9:00 AM IST = 3:30 UTC)
+    // Sends WhatsApp text snapshot (yesterday's leads, deals, top performer, stuck deals) to every active super_boss.
+    await scheduledJobsQueue.upsertJobScheduler(
+        'panditji-daily-briefing',
+        { pattern: '30 3 * * *' },
+        { name: 'panditji-daily-briefing' },
+    );
+
     // 5. QA Data Integrity Check (3:00 AM IST = 21:30 UTC prev day)
     await scheduledJobsQueue.upsertJobScheduler(
         'qa-integrity-check',
@@ -105,10 +114,12 @@ export async function startScheduledWorker(): Promise<void> {
         { name: 'security-scan' },
     );
 
-    // 11. 99acres Lead Poller (every 10 minutes)
+    // 11. 99acres Lead Poller (every 12 minutes)
+    // 12 min ≈ 5 calls/hr — leaves headroom under 99acres' hard 6-requests/hour limit so
+    // catch-up chunks / diagnostics don't trip ERROR-0007. (Was 10 min = exactly 6/hr, no slack.)
     await scheduledJobsQueue.upsertJobScheduler(
         '99acres-poll',
-        { every: 600000 },
+        { every: 720000 },
         { name: '99acres-poll' },
     );
 
@@ -117,6 +128,99 @@ export async function startScheduledWorker(): Promise<void> {
         'housing-poll',
         { every: 600000 },
         { name: 'housing-poll' },
+    );
+
+    // 13. WhatsApp 24h Session Keep-Alive (every 30 minutes)
+    // Checks contacts whose last inbound message is approaching 22h mark.
+    // Sends a contextual keep-alive message with reply button to prevent session expiry.
+    await scheduledJobsQueue.upsertJobScheduler(
+        'session-keepalive',
+        { every: 1800000 }, // 30 min
+        { name: 'session-keepalive' },
+    );
+
+    // 14. Partner upload nudge (every hour)
+    // Partners who registered 23-25h ago with zero inventory get a nudge to upload.
+    await scheduledJobsQueue.upsertJobScheduler(
+        'partner-upload-nudge',
+        { every: 3600000 },
+        { name: 'partner-upload-nudge' },
+    );
+
+    // 15. Partner upload reminder (every hour)
+    // Partners who got a nudge 71-73h ago and still have zero inventory get a reminder.
+    await scheduledJobsQueue.upsertJobScheduler(
+        'partner-upload-reminder',
+        { every: 3600000 },
+        { name: 'partner-upload-reminder' },
+    );
+
+    // 16. Meta catalog reconcile (3:30 AM IST = 22:00 UTC prev day)
+    await scheduledJobsQueue.upsertJobScheduler(
+        'catalog-reconcile',
+        { pattern: '0 22 * * *' },
+        { name: 'catalog-reconcile' },
+    );
+
+    // 17. Pending messages cleanup (4:00 AM IST = 22:30 UTC prev day)
+    // Deletes expired + sent rows so the queue doesn't grow unbounded.
+    await scheduledJobsQueue.upsertJobScheduler(
+        'pending-messages-cleanup',
+        { pattern: '30 22 * * *' },
+        { name: 'pending-messages-cleanup' },
+    );
+
+    // 18. Behavior auditor — rule-based bot behavior audit (9:30 AM IST = 4:00 UTC)
+    // Runs R1-R9 deterministic checks across last 24h, persists to audit_reports,
+    // sends digest + critical WhatsApp alerts to super_boss agents.
+    await scheduledJobsQueue.upsertJobScheduler(
+        'behavior-audit',
+        { pattern: '0 4 * * *' },
+        { name: 'behavior-audit' },
+    );
+
+    // 19. Callback/Visit SLA regression report (8:30 AM IST = 3:00 UTC).
+    // Cross-checks property_card_*_request interactions in last 24h vs tasks
+    // created. Alerts super_boss if any signals lack a matching task — that's
+    // the regression signal the 2026-05-12 task-routing fix is meant to prevent.
+    await scheduledJobsQueue.upsertJobScheduler(
+        'callback-sla-report',
+        { pattern: '0 3 * * *' },
+        { name: 'callback-sla-report' },
+    );
+
+    // Consolidated owner digest (2026-05-19) — the ONLY routine super_boss
+    // WhatsApp. 08:00 IST = 02:30 UTC, 20:00 IST = 14:30 UTC. Replaces the
+    // scattered odd-hour reports + per-finding/per-error alerts.
+    // See docs/plans/2026-05-19-report-cadence-and-bot-reply.md
+    await scheduledJobsQueue.upsertJobScheduler(
+        'owner-digest-am',
+        { pattern: '30 2 * * *' },
+        { name: 'owner-digest-am' },
+    );
+    await scheduledJobsQueue.upsertJobScheduler(
+        'owner-digest-pm',
+        { pattern: '30 14 * * *' },
+        { name: 'owner-digest-pm' },
+    );
+
+    // Self-set deal reminders (T8) — fires push + WhatsApp to the member at
+    // their reminder time with the customer name/phone/note. Was previously
+    // ONLY wired into the legacy node-cron (BullMQ-down fallback) so it never
+    // ran in prod. See docs/plans/2026-05-18-google-calendar-task-reminder-sync.md
+    await scheduledJobsQueue.upsertJobScheduler(
+        'reminder-task-alerts',
+        { every: 300000 }, // every 5 min
+        { name: 'reminder-task-alerts' },
+    );
+
+    // P3: reconcile/backfill member reminders + visit appointments into their
+    // own Google Calendar/Tasks — covers every appointment.create site and
+    // items created before the member connected Google.
+    await scheduledJobsQueue.upsertJobScheduler(
+        'google-reconcile-sync',
+        { every: 300000 }, // every 5 min
+        { name: 'google-reconcile-sync' },
     );
 
     logger.info('[ScheduledWorker] All repeatable jobs registered');
@@ -141,6 +245,12 @@ export async function startScheduledWorker(): Promise<void> {
     worker.on('failed', (job, err) => {
         logger.error(`[ScheduledWorker] Job ${job?.name} failed: ${err.message}`);
 
+        // Report to GlitchTip so we can see scheduled-job failures alongside other server errors.
+        SentrySDK.captureException(err, {
+            tags: { worker: 'scheduled', job: job?.name ?? 'unknown' },
+            extra: { jobId: job?.id, attemptsMade: job?.attemptsMade, maxAttempts: job?.opts?.attempts },
+        });
+
         if (job && job.attemptsMade >= (job.opts?.attempts || 2)) {
             alertCritical(
                 'scheduled_job_failed',
@@ -152,6 +262,7 @@ export async function startScheduledWorker(): Promise<void> {
 
     worker.on('error', (err) => {
         logger.error('[ScheduledWorker] Worker error:', err.message);
+        SentrySDK.captureException(err, { tags: { worker: 'scheduled', source: 'worker.error' } });
     });
 
     logger.info('[ScheduledWorker] Started with concurrency=3');
@@ -183,50 +294,31 @@ async function dispatchJob(job: Job): Promise<void> {
         }
 
         case 'daily-report': {
-            const prisma = (await import('../../db')).default;
-            const { WhatsAppService } = await import('../../services/whatsapp');
-            const wa = new WhatsAppService();
-            const today = new Date();
-            today.setHours(0, 0, 0, 0);
-            const newLeads = await prisma.contact.count({ where: { created_at: { gte: today } } });
-            const interactions = await prisma.interaction.count({ where: { created_at: { gte: today } } });
-            const tenant = await prisma.tenant.findFirst();
-            if (tenant) {
-                await wa.sendTemplate(tenant.primary_phone, 'rp_daily_report', {
-                    date: today.toLocaleDateString(),
-                    leads: String(newLeads),
-                    interactions: String(interactions),
-                });
-            }
+            // 2026-05-19: standalone 9 PM owner report retired — folded into
+            // the consolidated 08:00/20:00 owner_digest (no extra WhatsApp).
+            logger.info('[ScheduledWorker] daily-report retired → owner_digest (08:00/20:00 IST)');
             break;
         }
 
         case 'subscription-expiry': {
-            const prisma = (await import('../../db')).default;
-            const { WhatsAppService } = await import('../../services/whatsapp');
-            const { isQuietHours: isQuiet } = await import('../../utils/quiet_hours');
-            const wa = new WhatsAppService();
-            const now = new Date();
-            const expiredAgents = await prisma.partnerAgent.findMany({
-                where: { subscription_end: { lt: now }, status: 'ACTIVE' }
-            });
-            for (const agent of expiredAgents) {
-                await prisma.partnerAgent.update({
-                    where: { id: agent.id },
-                    data: { status: 'EXPIRED' }
-                });
-                // Only send notification outside quiet hours (9PM-8AM IST)
-                if (!isQuiet()) {
-                    await wa.sendTemplate(agent.phone_number, 'rp_subscription_expiry', {});
-                }
-            }
+            // 2026-05-15: Business model changed to commission-on-sale (no subscription tiers).
+            // This handler is intentionally a no-op now. Job registration kept so the scheduler
+            // doesn't error on missing cases; logic disabled so we don't flip partners to EXPIRED.
+            logger.info('[ScheduledWorker] subscription-expiry no-op — commission-on-sale model active');
             break;
         }
 
         case 'qa-health-report': {
-            const { QAAgent } = await import('../../agents/qa_agent');
-            const qa = new QAAgent();
-            await qa.sendDailyHealthReport();
+            // 2026-05-19: standalone 9 AM QA health WhatsApp retired — system
+            // health now surfaces in the consolidated owner_digest only.
+            logger.info('[ScheduledWorker] qa-health-report retired → owner_digest');
+            break;
+        }
+
+        case 'panditji-daily-briefing': {
+            // 2026-05-19: standalone 9:30 AM briefing retired — folded into
+            // the consolidated 08:00/20:00 owner_digest (no extra WhatsApp).
+            logger.info('[ScheduledWorker] panditji-daily-briefing retired → owner_digest');
             break;
         }
 
@@ -251,6 +343,22 @@ async function dispatchJob(job: Job): Promise<void> {
             const { FollowupScheduler } = await import('../../services/followup_scheduler');
             const scheduler = new FollowupScheduler();
             await scheduler.checkAndFollowUp();
+            break;
+        }
+
+        case 'reminder-task-alerts': {
+            // Self-set deal follow-up reminders (T8): push + WhatsApp with the
+            // customer name/phone/note at the member's chosen time.
+            const { sendReminderTaskAlerts } = await import('../../services/notification_crons');
+            await sendReminderTaskAlerts();
+            break;
+        }
+
+        case 'google-reconcile-sync': {
+            // P3: backfill/repair member reminders + visit appointments into
+            // their connected Google Calendar/Tasks.
+            const { reconcileGoogleSync } = await import('../../services/google_sync');
+            await reconcileGoogleSync();
             break;
         }
 
@@ -349,13 +457,32 @@ async function dispatchJob(job: Job): Promise<void> {
         }
 
         case 'housing-poll': {
+            const prismaDb = (await import('../../db')).default;
             const { HousingPoller } = await import('../../services/housing_poller');
             const poller = new HousingPoller();
-            if (poller.isConfigured()) {
+            if (!poller.isConfigured()) {
+                logger.debug('[ScheduledWorker] Housing.com: not configured, skipping');
+                break;
+            }
+
+            // Exponential backoff: skip if too soon after consecutive failures (mirrors 99acres).
+            const sync = await prismaDb.integrationSync.findUnique({ where: { source: 'housing' } });
+            const failures = sync?.consecutive_failures || 0;
+            if (failures > 0 && sync?.last_attempt) {
+                const backoffMs = Math.min(failures * 600000, 7200000); // 10min/failure, max 2hr
+                const elapsed = Date.now() - new Date(sync.last_attempt).getTime();
+                if (elapsed < backoffMs) {
+                    logger.debug(`[ScheduledWorker] Housing: backoff active (${failures} failures, wait ${Math.round(backoffMs / 60000)}min), skipping`);
+                    break;
+                }
+            }
+
+            try {
                 const result = await poller.poll();
                 logger.info(`[ScheduledWorker] Housing.com poll: ${result.fetched} fetched, ${result.new} new, ${result.updated} updated`);
-            } else {
-                logger.debug('[ScheduledWorker] Housing.com: not configured, skipping');
+            } catch (err) {
+                // Poller already marked IntegrationSync failed — just log, don't re-throw.
+                logger.error(`[ScheduledWorker] Housing.com poll failed: ${(err as Error).message}`);
             }
             break;
         }
@@ -511,6 +638,338 @@ async function dispatchJob(job: Job): Promise<void> {
             } catch (err) {
                 logger.warn(`[WorkflowWorker] AI follow-up failed: ${(err as Error).message}`);
             }
+            break;
+        }
+
+        case 'session-keepalive': {
+            // Find contacts whose last WhatsApp inbound is 21-23 hours ago (approaching 24h expiry)
+            const prisma = (await import('../../db')).default;
+            const { WhatsAppService } = await import('../../services/whatsapp');
+            const { isQuietHours, msUntilMorningSend } = await import('../../utils/quiet_hours');
+            const wa = new WhatsAppService();
+
+            const now = new Date();
+            const windowStart = new Date(now.getTime() - 23 * 60 * 60 * 1000); // 23h ago
+            const windowEnd = new Date(now.getTime() - 21 * 60 * 60 * 1000);   // 21h ago
+
+            const expiringContacts = await prisma.contact.findMany({
+                where: {
+                    last_wa_inbound: { gte: windowStart, lte: windowEnd },
+                    contact_type: { notIn: ['MANAGEMENT'] },
+                    lead_status: { notIn: ['closed', 'lost'] },
+                },
+                select: { phone_number: true, name: true, last_wa_inbound: true },
+            });
+
+            if (expiringContacts.length === 0) break;
+
+            // Don't send during quiet hours — reschedule for 7 AM IST
+            if (isQuietHours()) {
+                logger.info(`[SessionKeepAlive] ${expiringContacts.length} sessions expiring but quiet hours — will retry after 7 AM IST`);
+                // These contacts will be picked up on next run after quiet hours end
+                break;
+            }
+
+            for (const contact of expiringContacts) {
+                try {
+                    const displayName = contact.name || 'there';
+                    await wa.sendTemplate(contact.phone_number, 'rp_reopen_session', {
+                        name: displayName,
+                    });
+                    logger.info(`[SessionKeepAlive] Keep-alive sent to ${contact.phone_number}`);
+                } catch (err) {
+                    logger.warn(`[SessionKeepAlive] Failed for ${contact.phone_number}: ${(err as Error).message}`);
+                }
+            }
+            logger.info(`[SessionKeepAlive] Processed ${expiringContacts.length} expiring sessions`);
+            break;
+        }
+
+        case 'partner-upload-nudge': {
+            const prisma = (await import('../../db')).default;
+            const { WhatsAppService } = await import('../../services/whatsapp');
+            const { isQuietHours } = await import('../../utils/quiet_hours');
+            const wa = new WhatsAppService();
+            if (isQuietHours()) break;
+
+            const now = new Date();
+            const windowStart = new Date(now.getTime() - 25 * 60 * 60 * 1000); // 25h ago
+            const windowEnd   = new Date(now.getTime() - 23 * 60 * 60 * 1000); // 23h ago
+
+            const partners = await prisma.partnerAgent.findMany({
+                where: {
+                    created_at: { gte: windowStart, lte: windowEnd },
+                    status: 'ACTIVE',
+                    referred_inventory: { none: {} },
+                },
+                include: { managing_agent: { select: { name: true } } },
+            });
+
+            for (const partner of partners) {
+                // Skip if nudge was already sent (check interaction log)
+                const alreadySent = await prisma.interaction.findFirst({
+                    where: { phone_number: partner.phone_number, event_type: 'partner_upload_nudge' },
+                });
+                if (alreadySent) continue;
+
+                try {
+                    await wa.sendTemplate(partner.phone_number, 'rp_partner_upload_nudge', {
+                        name: partner.name,
+                    });
+                    await prisma.interaction.create({
+                        data: {
+                            tenant_id: (await prisma.tenant.findFirst())?.id || '',
+                            phone_number: partner.phone_number,
+                            channel: 'whatsapp',
+                            direction: 'outbound',
+                            event_type: 'partner_upload_nudge',
+                            content: 'Upload nudge sent',
+                        },
+                    });
+                    logger.info(`[PartnerNudge] Upload nudge sent to ${partner.phone_number}`);
+                } catch (err) {
+                    logger.warn(`[PartnerNudge] Failed for ${partner.phone_number}: ${(err as Error).message}`);
+                }
+            }
+            logger.info(`[PartnerNudge] Processed ${partners.length} eligible partner(s)`);
+            break;
+        }
+
+        case 'partner-upload-reminder': {
+            const prisma = (await import('../../db')).default;
+            const { WhatsAppService } = await import('../../services/whatsapp');
+            const { isQuietHours } = await import('../../utils/quiet_hours');
+            const wa = new WhatsAppService();
+            if (isQuietHours()) break;
+
+            const now = new Date();
+            const windowStart = new Date(now.getTime() - 73 * 60 * 60 * 1000); // 73h ago
+            const windowEnd   = new Date(now.getTime() - 71 * 60 * 60 * 1000); // 71h ago
+
+            // Partners who got a nudge in the 71-73h window and still have no inventory
+            const nudgeLogs = await prisma.interaction.findMany({
+                where: {
+                    event_type: 'partner_upload_nudge',
+                    created_at: { gte: windowStart, lte: windowEnd },
+                },
+                select: { phone_number: true },
+            });
+            const nudgedPhones = nudgeLogs.map(l => l.phone_number);
+            if (nudgedPhones.length === 0) break;
+
+            const partners = await prisma.partnerAgent.findMany({
+                where: {
+                    phone_number: { in: nudgedPhones },
+                    status: 'ACTIVE',
+                    referred_inventory: { none: {} },
+                },
+                include: { managing_agent: { select: { name: true } } },
+            });
+
+            for (const partner of partners) {
+                // Skip if reminder was already sent
+                const alreadySent = await prisma.interaction.findFirst({
+                    where: { phone_number: partner.phone_number, event_type: 'partner_upload_reminder' },
+                });
+                if (alreadySent) continue;
+
+                try {
+                    await wa.sendTemplate(partner.phone_number, 'rp_partner_upload_reminder', {
+                        name: partner.name,
+                        coordinator: partner.managing_agent?.name || 'your coordinator',
+                    });
+                    await prisma.interaction.create({
+                        data: {
+                            tenant_id: (await prisma.tenant.findFirst())?.id || '',
+                            phone_number: partner.phone_number,
+                            channel: 'whatsapp',
+                            direction: 'outbound',
+                            event_type: 'partner_upload_reminder',
+                            content: 'Upload reminder sent',
+                        },
+                    });
+                    logger.info(`[PartnerReminder] Upload reminder sent to ${partner.phone_number}`);
+                } catch (err) {
+                    logger.warn(`[PartnerReminder] Failed for ${partner.phone_number}: ${(err as Error).message}`);
+                }
+            }
+            logger.info(`[PartnerReminder] Processed ${partners.length} eligible partner(s)`);
+            break;
+        }
+
+        case 'catalog-reconcile': {
+            const { reconcileCatalog } = await import('../../services/catalog_sync');
+            const result = await reconcileCatalog();
+            logger.info(`[CatalogReconcile] Done — ${result.upserted} upserted, ${result.deleted} deleted`);
+            break;
+        }
+
+        case 'pending-messages-cleanup': {
+            // Delete expired + already-sent pending_messages rows. Keeps the queue bounded.
+            const prismaDb = (await import('../../db')).default;
+            const result = await prismaDb.$executeRaw`
+                DELETE FROM pending_messages
+                WHERE expires_at < NOW() OR status = 'sent'
+            `;
+            logger.info(`[PendingCleanup] Deleted ${result} stale rows`);
+            break;
+        }
+
+        case 'behavior-audit': {
+            const { runBehaviorAudit } = await import('../../services/behavior_auditor');
+            const result = await runBehaviorAudit();
+            logger.info(`[BehaviorAudit] ${result.findings.length} findings — critical=${result.counts_by_severity.critical}, high=${result.counts_by_severity.high}`);
+            break;
+        }
+
+        case 'owner-digest-am': {
+            const { sendOwnerDigest } = await import('../../services/owner_digest');
+            await sendOwnerDigest('morning');
+            break;
+        }
+
+        case 'owner-digest-pm': {
+            const { sendOwnerDigest } = await import('../../services/owner_digest');
+            await sendOwnerDigest('evening');
+            break;
+        }
+
+        case 'qualification_call_attempt': {
+            const { processCallAttempt } = await import('../../services/lead_qualification_caller');
+            await processCallAttempt(job);
+            break;
+        }
+
+        case 'callback-sla-report': {
+            // Daily regression check: every property_card_*_request signal
+            // in the last 24h should have a matching task. Alerts super_boss
+            // via WhatsApp if any are unmatched.
+            const prismaDb = (await import('../../db')).default;
+            const { WhatsAppService } = await import('../../services/whatsapp');
+            const wa = new WhatsAppService();
+
+            const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
+            const signals = await prismaDb.interaction.findMany({
+                where: {
+                    event_type: { in: ['property_card_callback_request', 'property_card_visit_request'] },
+                    created_at: { gte: since },
+                },
+                select: { phone_number: true, event_type: true, created_at: true },
+            });
+            const tasks = await prismaDb.task.findMany({
+                where: {
+                    task_type: { in: ['CALLBACK_REQUEST', 'VISIT_REQUEST'] },
+                    created_at: { gte: since },
+                },
+                select: { contact_phone: true, task_type: true, due_date: true, status: true },
+            });
+
+            const unmatched = signals.filter(sig => {
+                const expectedType = sig.event_type === 'property_card_callback_request' ? 'CALLBACK_REQUEST' : 'VISIT_REQUEST';
+                return !tasks.find(t =>
+                    t.contact_phone === sig.phone_number &&
+                    t.task_type === expectedType &&
+                    Math.abs(t.due_date.getTime() - sig.created_at.getTime()) < 60 * 60 * 1000
+                );
+            });
+            const breached = tasks.filter(t => t.status !== 'DONE' && t.due_date < new Date()).length;
+
+            logger.info(`[CallbackSLAReport] signals=${signals.length} tasks=${tasks.length} unmatched=${unmatched.length} breached=${breached}`);
+
+            // 2026-05-19: keep the regression DETECTION (logged for ops /
+            // GlitchTip) but no standalone super_boss WhatsApp — this rolls
+            // into the consolidated 08:00/20:00 owner_digest instead.
+            if (unmatched.length > 0) {
+                logger.warn(`[CallbackSLAReport] REGRESSION: ${unmatched.length} unmatched callback/visit signals, ${breached} SLA-breached (last 24h). Phones: ${unmatched.slice(0, 5).map(u => `${u.phone_number}(${u.event_type})`).join(', ')}`);
+            }
+            void wa; // WhatsApp send intentionally removed (digest carries it)
+            break;
+        }
+
+        case 'task-sla-check': {
+            // Fired at task.due_date for CALLBACK_REQUEST / VISIT_REQUEST tasks.
+            // If still TODO, reassign to super_boss + URGENT and notify.
+            const { task_id, contact_phone, original_assignee_id, action } = job.data as {
+                task_id: string;
+                contact_phone: string;
+                original_assignee_id: string;
+                action: string;
+            };
+            const prismaDb = (await import('../../db')).default;
+            const { notify } = await import('../../services/notify');
+
+            const task = await prismaDb.task.findUnique({
+                where: { id: task_id },
+                select: { id: true, status: true, assigned_to: true, contact_phone: true, task_type: true, stage_metadata: true },
+            });
+            if (!task || task.status === 'DONE') {
+                logger.info(`[SLACheck] Task ${task_id} resolved before SLA — no escalation`);
+                break;
+            }
+
+            const superBoss = await prismaDb.agent.findFirst({
+                where: { role: 'super_boss', status: 'active' },
+                select: { id: true, name: true, email: true, phone: true },
+            });
+            if (!superBoss) {
+                logger.error('[SLACheck] No active super_boss found — cannot escalate');
+                break;
+            }
+            if (task.assigned_to === superBoss.id) {
+                logger.info(`[SLACheck] Task ${task_id} already on super_boss — no double-escalation`);
+                break;
+            }
+
+            const originalAgent = await prismaDb.agent.findUnique({
+                where: { id: original_assignee_id },
+                select: { name: true },
+            });
+            const contact = await prismaDb.contact.findUnique({
+                where: { phone_number: contact_phone },
+                select: { name: true },
+            });
+
+            await prismaDb.task.update({
+                where: { id: task_id },
+                data: {
+                    assigned_to: superBoss.id,
+                    priority: 'URGENT',
+                    description: `⚠️ SLA breach — auto-escalated from ${originalAgent?.name || 'agent'}. Original task: ${task.task_type} for ${contact_phone}.`,
+                },
+            });
+
+            const tenant = await prismaDb.tenant.findFirst();
+            if (tenant) {
+                await prismaDb.interaction.create({
+                    data: {
+                        tenant_id: tenant.id,
+                        phone_number: contact_phone,
+                        channel: 'system',
+                        direction: 'outbound',
+                        event_type: 'task_sla_escalated',
+                        content: `Task ${task_id} (${task.task_type}) escalated from ${originalAgent?.name || 'agent'} to ${superBoss.name} after SLA breach`,
+                        metadata: { task_id, action, original_assignee_id, escalated_to: superBoss.id },
+                    },
+                });
+            }
+
+            const slaMin = (task.stage_metadata as any)?.sla_minutes || 15;
+            notify('lead_action_sla_breach', [{
+                id: superBoss.id,
+                type: 'agent' as const,
+                phone: superBoss.phone ?? undefined,
+                email: superBoss.email,
+                name: superBoss.name,
+            }], {
+                task_id,
+                action_label: action === 'CALLBACK_REQUEST' ? '📞 Callback' : '📅 Visit',
+                contact_name: contact?.name || contact_phone,
+                contact_phone,
+                original_agent_name: originalAgent?.name || 'Unknown Agent',
+                sla_minutes: slaMin,
+            });
+
+            logger.warn(`[SLACheck] Task ${task_id} (${task.task_type}) escalated to super_boss ${superBoss.name} after ${slaMin}min SLA breach`);
             break;
         }
 

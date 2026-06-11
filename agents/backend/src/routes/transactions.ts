@@ -21,6 +21,7 @@ import { reassignExecutive } from '../services/executive_assigner';
 import { TransactionStatus } from '@prisma/client';
 import prisma from '../db';
 import logger from '../utils/logger';
+import { captureRouteError } from '../utils/capture';
 
 const router = Router();
 
@@ -75,6 +76,7 @@ router.get('/', checkPermission('view_transactions'), async (req: Request, res: 
             pagination: { page: pageNum, limit: limitNum, total, pages: Math.ceil(total / limitNum) },
         });
     } catch (error: any) {
+        captureRouteError(error, req, { route: 'transactions#1' });
         logger.error('[TransactionsAPI] List error:', error);
         res.status(500).json({ success: false, error: error.message });
     }
@@ -92,6 +94,7 @@ router.get('/pipeline', checkPermission('view_transactions'), async (req: Reques
         const pipeline = await getPipelineStats(agent.tenant_id);
         res.json({ success: true, data: pipeline });
     } catch (error: any) {
+        captureRouteError(error, req, { route: 'transactions#2' });
         logger.error('[TransactionsAPI] Pipeline error:', error);
         res.status(500).json({ success: false, error: error.message });
     }
@@ -127,6 +130,7 @@ router.get('/executive/:agentId', checkPermission('view_transactions'), async (r
 
         res.json({ success: true, data: transactions });
     } catch (error: any) {
+        captureRouteError(error, req, { route: 'transactions#3' });
         logger.error('[TransactionsAPI] Executive deals error:', error);
         res.status(500).json({ success: false, error: error.message });
     }
@@ -156,6 +160,7 @@ router.get('/:id', checkPermission('view_transactions'), async (req: Request, re
 
         res.json({ success: true, data: { ...transaction, valid_next_statuses: validNext } });
     } catch (error: any) {
+        captureRouteError(error, req, { route: 'transactions#4' });
         logger.error('[TransactionsAPI] Detail error:', error);
         res.status(500).json({ success: false, error: error.message });
     }
@@ -191,6 +196,7 @@ router.patch('/:id/status', checkPermission('manage_transactions'), async (req: 
 
         res.json({ success: true, data: updated });
     } catch (error: any) {
+        captureRouteError(error, req, { route: 'transactions#5' });
         logger.error('[TransactionsAPI] Status change error:', error);
         const statusCode = error.message.includes('Invalid transition') ? 400 : 500;
         res.status(statusCode).json({ success: false, error: error.message });
@@ -215,6 +221,7 @@ router.patch('/:id/reassign', checkPermission('manage_transactions'), async (req
         await reassignExecutive(String(req.params.id), agent_id, performer.id);
         res.json({ success: true, message: 'Executive reassigned successfully' });
     } catch (error: any) {
+        captureRouteError(error, req, { route: 'transactions#6' });
         logger.error('[TransactionsAPI] Reassign error:', error);
         res.status(500).json({ success: false, error: error.message });
     }
@@ -238,6 +245,7 @@ router.post('/:id/note', checkPermission('view_transactions'), async (req: Reque
         const log = await addTransactionNote(String(req.params.id), note.trim(), agent.id, 'admin');
         res.json({ success: true, data: log });
     } catch (error: any) {
+        captureRouteError(error, req, { route: 'transactions#7' });
         logger.error('[TransactionsAPI] Add note error:', error);
         res.status(500).json({ success: false, error: error.message });
     }

@@ -10,6 +10,8 @@ import logger from '../utils/logger';
 
 const FOLLOWUP_HOURS = 48;
 const MAX_FOLLOWUPS_PER_RUN = 20;
+const SILENCE_PAUSE_DAYS = 5;  // Stop AI messages, create phone-call task for agent
+const SILENCE_COLD_DAYS = 14;  // Mark lead cold, close sessions, stop all messages
 
 /**
  * Proactive AI Follow-up Scheduler.
@@ -92,6 +94,69 @@ export class FollowupScheduler {
             let sent = 0;
             for (const contact of staleContacts) {
                 try {
+                    // NEVER-REPLIED leads (scraped from 99acres/MagicBricks/etc): skip free-form follow-ups.
+                    // These contacts have no open 24h WhatsApp window — Meta rejects free-form messages
+                    // and the queued message sits in pending_messages forever. Mark cold after 7 days.
+                    if (!contact.last_wa_inbound) {
+                        const daysSinceCreate = (Date.now() - contact.created_at.getTime()) / (1000 * 60 * 60 * 24);
+                        if (daysSinceCreate >= 7) {
+                            await prisma.contact.update({
+                                where: { phone_number: contact.phone_number },
+                                data: { lead_status: 'cold' }
+                            });
+                            logger.info(`[FollowupScheduler] ${contact.phone_number} (${contact.name}) never replied (created ${Math.round(daysSinceCreate)}d ago) — marked cold`);
+                        } else {
+                            logger.info(`[FollowupScheduler] ${contact.phone_number} (${contact.name}) never replied — skipping free-form (no open 24h window)`);
+                        }
+                        continue;
+                    }
+
+                    // Silence detection — check last time contact actually replied on WhatsApp
+                    {
+                        const daysSilent = (Date.now() - contact.last_wa_inbound.getTime()) / (1000 * 60 * 60 * 24);
+
+                        if (daysSilent >= SILENCE_COLD_DAYS) {
+                            // 14+ days no reply — mark cold, close all active sessions, stop all messages
+                            await prisma.contact.update({
+                                where: { phone_number: contact.phone_number },
+                                data: { lead_status: 'cold' }
+                            });
+                            await prisma.conversationSession.updateMany({
+                                where: { phone_number: contact.phone_number, active: true },
+                                data: { active: false }
+                            });
+                            logger.info(`[FollowupScheduler] ${contact.phone_number} (${contact.name}) silent ${Math.round(daysSilent)}d — marked cold, sessions closed`);
+                            continue;
+                        }
+
+                        if (daysSilent >= SILENCE_PAUSE_DAYS) {
+                            // 5–14 days no reply — pause AI messages, create phone-call task for agent (once)
+                            const existingCallTask = await prisma.task.findFirst({
+                                where: {
+                                    contact_phone: contact.phone_number,
+                                    status: 'TODO',
+                                    title: { contains: 'not responding on WhatsApp' }
+                                }
+                            });
+                            if (!existingCallTask) {
+                                await prisma.task.create({
+                                    data: {
+                                        title: `📞 Call ${contact.name || contact.phone_number} — not responding on WhatsApp (${Math.round(daysSilent)}d)`,
+                                        description: `Contact has not replied on WhatsApp for ${Math.round(daysSilent)} days. Last stated location: ${contact.preferred_location || 'unknown'}. Please call directly to check interest.`,
+                                        contact_phone: contact.phone_number,
+                                        assigned_to: contact.assigned_agent_id || undefined,
+                                        priority: 'HIGH',
+                                        status: 'TODO',
+                                        task_type: 'QUALIFY_LEAD',
+                                        due_date: new Date(Date.now() + 24 * 60 * 60 * 1000),
+                                    }
+                                });
+                            }
+                            logger.info(`[FollowupScheduler] ${contact.phone_number} (${contact.name}) silent ${Math.round(daysSilent)}d — skipping AI message, phone task created`);
+                            continue;
+                        }
+                    }
+
                     const followupMessage = await this.generateFollowUp(contact);
                     if (followupMessage) {
                         // Hybrid approach: check 24h session window

@@ -118,9 +118,15 @@ export class AdminAgent implements BaseAgent {
                     `3. "report" or "stats" - Daily report\n` +
                     `4. "team" - Team status\n` +
                     `5. "upload property" - Start inventory upload wizard\n` +
-                    `6. "help" - Show this menu`,
+                    `6. "show 2 BHK flats in Noida" - Search properties\n` +
+                    `7. "help" - Show this menu`,
                 quality_hint: 'confident',
             };
+        }
+
+        // Command: Property search — "show me 2 BHK flats in Vaishali", "find properties", "catalogue"
+        if (this.isPropertySearchMessage(msg)) {
+            return this.searchPropertiesForAdmin(msg, senderName);
         }
 
         // Default: AI-powered management query with date context
@@ -280,5 +286,78 @@ export class AdminAgent implements BaseAgent {
             quality_hint: 'confident',
             metadata: { command: 'team', agent_count: agents.length },
         };
+    }
+
+    private isPropertySearchMessage(msg: string): boolean {
+        const propertyWords = ['bhk', 'flat', 'flats', 'villa', 'plot', 'apartment', 'property', 'properties', 'house', 'homes', 'catalogue', 'catalog'];
+        const searchWords = ['show', 'search', 'find', 'give', 'send', 'dikh', 'batao', 'chahiye'];
+        const hasProperty = propertyWords.some(k => msg.includes(k));
+        const hasSearch = searchWords.some(k => msg.includes(k));
+        return hasProperty && (hasSearch || msg.includes(' in ') || msg.includes(' me '));
+    }
+
+    private extractPropertyFilters(msg: string): { city?: string; bhk?: number; intent?: string } {
+        const filters: { city?: string; bhk?: number; intent?: string } = {};
+        const bhkMatch = msg.match(/(\d)\s*bhk/i) || msg.match(/(\d)\s*bedroom/i);
+        if (bhkMatch) filters.bhk = parseInt(bhkMatch[1], 10);
+        if (/\b(buy|purchase|kharid)\b/i.test(msg)) filters.intent = 'buy';
+        else if (/\b(rent|lease|kiraye)\b/i.test(msg)) filters.intent = 'rent';
+        const cities = ['vaishali', 'delhi', 'noida', 'gurgaon', 'gurugram', 'greater noida', 'faridabad', 'ghaziabad', 'indirapuram', 'dwarka', 'rohini', 'janakpuri'];
+        for (const city of cities) {
+            if (msg.includes(city)) { filters.city = city; break; }
+        }
+        return filters;
+    }
+
+    private async searchPropertiesForAdmin(msg: string, senderName: string): Promise<AgentResponse> {
+        const { city, bhk, intent } = this.extractPropertyFilters(msg);
+        try {
+            const where: any = { status: 'active' };
+            if (city) where.city = { contains: city, mode: 'insensitive' };
+            if (intent === 'buy') where.intent = 'sell';
+            else if (intent === 'rent') where.intent = { in: ['rent', 'rent_lease', 'lease'] };
+
+            const properties = await prisma.inventory.findMany({
+                where,
+                take: 10,
+                orderBy: { created_at: 'desc' },
+                select: { id: true, apartment_name: true, display_price: true, specs: true, type: true, city: true, locality: true },
+            });
+
+            const filtered = bhk
+                ? properties.filter((p: any) => (p.specs as any)?.bedrooms === bhk)
+                : properties;
+
+            if (filtered.length === 0) {
+                const desc = [bhk ? `${bhk} BHK` : '', city || ''].filter(Boolean).join(' in ') || 'matching';
+                return {
+                    action: 'reply',
+                    reply_script: `${senderName}, koi ${desc} property nahi mili. Filters change karke dobara try karein.`,
+                    quality_hint: 'confident',
+                };
+            }
+
+            const lines = filtered.slice(0, 5).map((p: any, i: number) => {
+                const name = (p.apartment_name as string) || (p.type as string) || 'Property';
+                const loc = [p.locality, p.city].filter(Boolean).join(', ');
+                const price = p.display_price ? `₹${Number(p.display_price).toLocaleString('en-IN')}` : '';
+                const beds = (p.specs as any)?.bedrooms ? `${(p.specs as any).bedrooms} BHK ` : '';
+                return `${i + 1}. ${beds}${name} in ${loc} ${price}\nhttps://www.realtypandit.in/properties/${p.id}`;
+            });
+
+            return {
+                action: 'reply',
+                reply_script: `*${filtered.length} Properties Found:*\n\n${lines.join('\n\n')}`,
+                quality_hint: 'confident',
+                metadata: { command: 'search_properties', count: filtered.length },
+            };
+        } catch (error) {
+            logger.error('[AdminAgent] Property search failed:', error);
+            return {
+                action: 'reply',
+                reply_script: `${senderName}, property search mein error aa gayi. Please try again.`,
+                quality_hint: 'confident',
+            };
+        }
     }
 }

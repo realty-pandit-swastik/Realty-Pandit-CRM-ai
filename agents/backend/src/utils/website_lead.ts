@@ -1,0 +1,99 @@
+// Shared helpers for website-originated leads (Schedule Visit + Contact Agent OTP reveal).
+//
+// Routing rule (Puneet, 2026-06-11):
+//   - EXISTING customer  → keep their already-assigned agent (never reassign).
+//   - NEW customer       → assign to the "inventory manager" = the team member the
+//                          inventory is assigned to (assigned_agent_id), with a fallback
+//                          chain, and OWN the contact so it's visible in the CRM/PWA.
+//
+// Requirement capture: a new (or requirement-less) lead inherits the demand profile of the
+// inventory it was enquired on — the Contact demand model is literally a mirror of
+// inventory.taxonomy_node_id + inventory.specs (schema.prisma), so this is a direct copy.
+
+import prisma from '../db';
+import { resolveStoredContactPhone } from './phone';
+
+export interface InventoryForRouting {
+    assigned_agent_id: string | null;
+    owning_manager_id: string | null;
+    uploaded_by_agent_id: string | null;
+}
+
+export interface ResolvedHandler {
+    storedPhone: string;
+    /** The existing contact (if any) — null means a brand-new lead. */
+    existing: { phone_number: string; assigned_agent_id: string | null; owning_manager_id: string | null; demand_taxonomy_node_id: string | null } | null;
+    isNew: boolean;
+    /** The agent who should own + be notified for this lead. */
+    handlerId: string | null;
+}
+
+/**
+ * Resolve who a website lead should be routed to, and whether they're new.
+ * EXISTING → their agent; NEW → the inventory manager (assigned → owning_manager →
+ * uploader → super_boss). Never throws.
+ */
+export async function resolveWebsiteLeadHandler(phone: string, property: InventoryForRouting): Promise<ResolvedHandler> {
+    const storedPhone = (await resolveStoredContactPhone(phone, prisma)) ?? phone;
+    const existing = await prisma.contact.findUnique({
+        where: { phone_number: storedPhone },
+        select: { phone_number: true, assigned_agent_id: true, owning_manager_id: true, demand_taxonomy_node_id: true },
+    });
+
+    let handlerId: string | null =
+        existing?.assigned_agent_id
+        ?? existing?.owning_manager_id
+        ?? property.assigned_agent_id
+        ?? property.owning_manager_id
+        ?? property.uploaded_by_agent_id
+        ?? null;
+
+    if (!handlerId) {
+        const sb = await prisma.agent.findFirst({ where: { role: 'super_boss', status: 'active' }, select: { id: true } });
+        handlerId = sb?.id ?? null;
+    }
+
+    return { storedPhone, existing, isNew: !existing, handlerId };
+}
+
+function bhkFromSpecs(specs: any): string | undefined {
+    if (!specs || typeof specs !== 'object') return undefined;
+    const v = specs.bhk ?? specs.rooms ?? specs.bedrooms ?? specs.bhk_count;
+    return v != null && v !== '' ? String(v) : undefined;
+}
+
+export interface InventoryForDemand {
+    intent: string;
+    taxonomy_node_id: string | null;
+    specs: any;
+    locality: string | null;
+    city: string | null;
+    district: string | null;
+    location: string | null;
+}
+
+/**
+ * Build the demand requirement for a lead from the inventory it was enquired on.
+ * Copies the inventory's canonical attributes (intent, property-type taxonomy node, BHK,
+ * location) onto the Contact's demand fields so the lead is instantly matchable.
+ * Budget is intentionally left for the agent (price-scale ambiguity) — type/BHK/location
+ * are the "basic things" the customer is signalling by being on this page.
+ */
+export function buildDemandFromInventory(inv: InventoryForDemand): Record<string, any> {
+    const isRent = inv.intent === 'rent';
+    const bhk = bhkFromSpecs(inv.specs);
+    const loc = [inv.locality, inv.city || inv.district].filter(Boolean).join(', ') || inv.location || undefined;
+    const areaRaw = inv.specs && typeof inv.specs === 'object' ? inv.specs.area : undefined;
+    const area = areaRaw != null && areaRaw !== '' && !isNaN(Number(areaRaw)) ? Number(areaRaw) : undefined;
+
+    const demand: Record<string, any> = {
+        intent: isRent ? 'rent' : 'buy',
+        contact_type: isRent ? 'TENANT' : 'BUYER',
+        demand_budget_type: isRent ? 'per_month' : 'one_time',
+    };
+    if (inv.taxonomy_node_id) demand.demand_taxonomy_node_id = inv.taxonomy_node_id;
+    if (bhk) demand.demand_schema_values = { bhk };
+    if (loc) demand.preferred_location = loc;
+    if (area) demand.area_min = area;
+    return demand;
+}

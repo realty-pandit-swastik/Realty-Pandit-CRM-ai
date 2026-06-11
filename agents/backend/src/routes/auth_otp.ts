@@ -1,7 +1,8 @@
-import express from 'express';
+﻿import express from 'express';
 import prisma from '../db';
 import { WhatsAppService } from '../services/whatsapp';
 import { normalizePhone, phoneVariants } from '../utils/phone';
+import { captureRouteError } from '../utils/capture';
 
 const router = express.Router();
 const whatsappService = new WhatsAppService();
@@ -32,7 +33,7 @@ router.post('/send-confirmation', async (req, res) => {
         });
 
         // Send confirmation message via WhatsApp (Meta-approved utility template)
-        await whatsappService.sendTemplate(normalized, 'rp_whatsapp_link', {});
+        await whatsappService.sendTemplate(normalized, 'rp_whatsapp_link_v2', {});
 
         console.log(`✅ Confirmation request sent to ${normalized}`);
 
@@ -62,7 +63,7 @@ router.post('/send-confirmation', async (req, res) => {
             message: 'Confirmation sent to WhatsApp',
         });
     } catch (error: any) {
-        console.error('Send confirmation error:', error);
+        captureRouteError(error, req, { route: 'auth_otp/send-confirmation' });
         return res.status(500).json({
             success: false,
             message: 'Failed to send confirmation',
@@ -128,7 +129,7 @@ router.get('/check-status', async (req, res) => {
             message: 'Waiting for confirmation',
         });
     } catch (error: any) {
-        console.error('Check status error:', error);
+        captureRouteError(error, req, { route: 'auth_otp/check-status' });
         return res.status(500).json({
             success: false,
             message: 'Failed to check status',

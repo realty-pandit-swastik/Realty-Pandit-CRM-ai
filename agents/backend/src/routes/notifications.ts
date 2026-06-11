@@ -9,6 +9,7 @@ import { authMiddleware } from '../middleware/auth';
 import { NotificationAgent, NotificationChannel } from '../agents/notification_agent';
 import { getVapidPublicKey } from '../services/push_service';
 import logger from '../utils/logger';
+import { captureRouteError } from '../utils/capture';
 
 const router = express.Router();
 const notificationAgent = new NotificationAgent();
@@ -86,6 +87,7 @@ router.get('/preferences', authMiddleware, async (req: Request, res: Response) =
     // No record yet — return defaults
     res.json({ preferences: DEFAULT_PREFERENCES });
   } catch (error: any) {
+        captureRouteError(error, req, { route: 'notifications#1' });
     logger.error('Error fetching notification preferences:', error);
     res.status(500).json({ error: 'Failed to fetch preferences' });
   }
@@ -154,6 +156,7 @@ router.post('/preferences', authMiddleware, async (req: Request, res: Response) 
       preferences,
     });
   } catch (error: any) {
+        captureRouteError(error, req, { route: 'notifications#2' });
     logger.error('Error updating notification preferences:', error);
     res.status(500).json({ error: 'Failed to update preferences' });
   }
@@ -216,6 +219,7 @@ router.post('/test', authMiddleware, async (req: Request, res: Response) => {
       recipient,
     });
   } catch (error: any) {
+        captureRouteError(error, req, { route: 'notifications#3' });
     logger.error('Error sending test notification:', error);
     res.status(500).json({ error: 'Failed to send test notification' });
   }
@@ -262,6 +266,7 @@ router.post('/push/subscribe', authMiddleware, async (req: Request, res: Respons
         logger.info(`[Push] Subscription saved for agent ${agentId}`);
         res.json({ success: true });
     } catch (error: any) {
+        captureRouteError(error, req, { route: 'notifications#4' });
         logger.error('Error saving push subscription:', error);
         res.status(500).json({ error: 'Failed to save subscription' });
     }
@@ -282,6 +287,7 @@ router.delete('/push/subscribe', authMiddleware, async (req: Request, res: Respo
 
         res.json({ success: true });
     } catch (error: any) {
+        captureRouteError(error, req, { route: 'notifications#5' });
         res.status(500).json({ error: 'Failed to remove subscription' });
     }
 });
@@ -313,6 +319,7 @@ router.get('/history', authMiddleware, async (req: Request, res: Response) => {
 
         res.json({ data: notifications, total, page, totalPages: Math.ceil(total / limit) });
     } catch (error: any) {
+        captureRouteError(error, req, { route: 'notifications#6' });
         logger.error('Error fetching notification history:', error);
         res.status(500).json({ error: 'Failed to fetch notifications' });
     }
@@ -330,6 +337,7 @@ router.get('/unread-count', authMiddleware, async (req: Request, res: Response) 
 
         res.json({ count });
     } catch (error: any) {
+        captureRouteError(error, req, { route: 'notifications#7' });
         res.status(500).json({ error: 'Failed to count notifications' });
     }
 });
@@ -344,6 +352,7 @@ router.post('/:id/read', authMiddleware, async (req: Request, res: Response) => 
         });
         res.json({ success: true });
     } catch (error: any) {
+        captureRouteError(error, req, { route: 'notifications#8' });
         res.status(500).json({ error: 'Failed to mark as read' });
     }
 });
@@ -358,6 +367,7 @@ router.post('/read-all', authMiddleware, async (req: Request, res: Response) => 
         });
         res.json({ success: true });
     } catch (error: any) {
+        captureRouteError(error, req, { route: 'notifications#9' });
         res.status(500).json({ error: 'Failed to mark all as read' });
     }
 });
@@ -372,6 +382,7 @@ router.post('/:id/click', authMiddleware, async (req: Request, res: Response) =>
         });
         res.json({ success: true });
     } catch (error: any) {
+        captureRouteError(error, req, { route: 'notifications#10' });
         res.status(500).json({ error: 'Failed to mark as clicked' });
     }
 });

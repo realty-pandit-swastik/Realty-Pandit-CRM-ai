@@ -1,4 +1,4 @@
-import prisma from '../db';
+﻿import prisma from '../db';
 import { LLMService } from './llm';
 import { WhatsAppService } from './whatsapp';
 import { DateTimeParser } from './date_parser';
@@ -185,7 +185,7 @@ export class ChatHandler {
                     category: true,
                     type: true,
                     specs: true,
-                    features: true,
+                    // features dropped Phase 4 — read from specs.amenities
                     location: true,
                     price: true,
                     price_unit: true,
@@ -327,6 +327,20 @@ IMPORTANT:
             // Parse date/time from message
             const parsedDateTime = this.dateParser.parse(message);
             console.log('📅 Parsed date/time:', parsedDateTime);
+
+            // Date AND time are mandatory for every client booking — do NOT
+            // create a vague visit; ask the client for the missing piece.
+            // See docs/plans/2026-05-17-website-visit-not-visible-in-crm.md
+            if (!parsedDateTime.date || !parsedDateTime.time) {
+                const missing = !parsedDateTime.date && !parsedDateTime.time
+                    ? 'preferred date and time'
+                    : !parsedDateTime.date ? 'preferred date' : 'preferred time';
+                return {
+                    success: false,
+                    needs_datetime: true,
+                    message: `Please share your ${missing} for the visit — for example "tomorrow at 11 AM" or "18 May 4 PM" — so we can confirm it.`,
+                };
+            }
 
             // Get property details - select only fields that exist in BOTH schema and DB
             const property = await prisma.inventory.findUnique({
@@ -505,7 +519,7 @@ _Namaste_ 🙏
 
             if (assignedAgent && assignedAgent.phone) {
                 try {
-                    await this.whatsappService.sendTemplate(assignedAgent.phone, 'rp_visit_agent_notify', {
+                    await this.whatsappService.sendTemplate(assignedAgent.phone, 'rp_visit_agent_notify_v3', {
                         customer_name: customerName,
                         property: propertyTitle,
                         price: propertyPrice,
@@ -545,7 +559,7 @@ _Namaste_ 🙏
 
             if (keyHandler && keyHandler.phone_number) {
                 try {
-                    await this.whatsappService.sendTemplate(keyHandler.phone_number, 'rp_visit_keyholder', {
+                    await this.whatsappService.sendTemplate(keyHandler.phone_number, 'rp_visit_keyholder_v2', {
                         property: propertyTitle,
                         address: propertyAddress,
                         visitor_name: customerName,
@@ -568,7 +582,7 @@ _Namaste_ 🙏
 
                 if (superBoss && superBoss.phone) {
                     try {
-                        await this.whatsappService.sendTemplate(superBoss.phone, 'rp_visit_mgmt_alert', {
+                        await this.whatsappService.sendTemplate(superBoss.phone, 'rp_visit_mgmt_alert_v2', {
                             property: propertyTitle,
                             price: propertyPrice,
                             customer_name: customerName,
@@ -697,7 +711,7 @@ _Namaste_ 🙏
             }
 
             // Send WhatsApp invitation (Meta-approved utility template)
-            await this.whatsappService.sendTemplate(phone, 'rp_whatsapp_invite', {});
+            await this.whatsappService.sendTemplate(phone, 'rp_whatsapp_invite_v2', {});
             console.log(`WhatsApp continuation invite sent to ${phone}`);
 
             // Log the invitation

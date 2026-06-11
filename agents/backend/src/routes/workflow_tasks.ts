@@ -24,6 +24,7 @@ import {
 } from '../services/workflow_task_service';
 import prisma from '../db';
 import logger from '../utils/logger';
+import { captureRouteError } from '../utils/capture';
 
 const router = Router();
 
@@ -38,6 +39,7 @@ router.get('/my-queue', async (req: Request, res: Response) => {
         const tasks = await getWorkflowQueue(agent.id, agent.role);
         res.json({ tasks, total: tasks.length });
     } catch (err) {
+        captureRouteError(err, req, { route: 'workflow_tasks#1' });
         logger.error('[WorkflowTasks] GET /my-queue error:', err);
         res.status(500).json({ error: 'Failed to fetch workflow queue' });
     }
@@ -54,6 +56,7 @@ router.get('/stats/summary', async (req: Request, res: Response) => {
         const stats = await getWorkflowStats(agentId, agent.tenant_id);
         res.json(stats);
     } catch (err) {
+        captureRouteError(err, req, { route: 'workflow_tasks#2' });
         logger.error('[WorkflowTasks] GET /stats/summary error:', err);
         res.status(500).json({ error: 'Failed to fetch stats' });
     }
@@ -70,6 +73,7 @@ router.get('/stats/team', async (req: Request, res: Response) => {
         const pipeline = await getTeamWorkflowPipeline(agent.tenant_id);
         res.json({ pipeline });
     } catch (err: any) {
+        captureRouteError(err, req, { route: 'workflow_tasks#3' });
         logger.error('[WorkflowTasks] GET /stats/team error:', err?.message || err);
         res.status(500).json({ error: 'Failed to fetch team pipeline', detail: err?.message });
     }
@@ -84,6 +88,7 @@ router.get('/shortlist/:phone', async (req: Request, res: Response) => {
         const shortlist = await getLeadShortlist(phone, dealId);
         res.json({ shortlist });
     } catch (err) {
+        captureRouteError(err, req, { route: 'workflow_tasks#4' });
         logger.error('[WorkflowTasks] GET /shortlist error:', err);
         res.status(500).json({ error: 'Failed to fetch shortlist' });
     }
@@ -101,7 +106,8 @@ router.get('/:id', async (req: Request, res: Response) => {
                         phone_number: true, name: true, email: true, source: true,
                         intent: true, preferred_location: true, budget_min: true, budget_max: true,
                         lead_status: true, lifecycle_stage: true, verification_status: true,
-                        demand_bhk: true, preferred_lat: true, preferred_lng: true,
+                        demand_schema_values: true, demand_taxonomy_node_id: true,
+                        preferred_lat: true, preferred_lng: true,
                         contact_type: true,
                     },
                 },
@@ -126,6 +132,7 @@ router.get('/:id', async (req: Request, res: Response) => {
 
         res.json({ task, shortlist, deal });
     } catch (err) {
+        captureRouteError(err, req, { route: 'workflow_tasks#5' });
         logger.error('[WorkflowTasks] GET /:id error:', err);
         res.status(500).json({ error: 'Failed to fetch task' });
     }
@@ -141,6 +148,7 @@ router.get('/:id/chain', async (req: Request, res: Response) => {
         const chain = await getWorkflowChain(task.contact_phone, task.deal_id || undefined);
         res.json({ chain });
     } catch (err) {
+        captureRouteError(err, req, { route: 'workflow_tasks#6' });
         logger.error('[WorkflowTasks] GET /:id/chain error:', err);
         res.status(500).json({ error: 'Failed to fetch chain' });
     }
@@ -179,6 +187,7 @@ router.post('/:id/complete', async (req: Request, res: Response) => {
 
         res.json(result);
     } catch (err) {
+        captureRouteError(err, req, { route: 'workflow_tasks#7' });
         const msg = (err as Error).message;
         logger.error(`[WorkflowTasks] POST /:id/complete error: ${msg}`);
         res.status(400).json({ error: msg });
@@ -197,6 +206,7 @@ router.post('/:id/snooze', async (req: Request, res: Response) => {
         });
         res.json({ task });
     } catch (err) {
+        captureRouteError(err, req, { route: 'workflow_tasks#8' });
         const msg = (err as Error).message;
         logger.error(`[WorkflowTasks] POST /:id/snooze error: ${msg}`);
         res.status(400).json({ error: msg });
@@ -268,6 +278,7 @@ router.post('/:id/share', async (req: Request, res: Response) => {
 
         res.json({ results: shareResults });
     } catch (err) {
+        captureRouteError(err, req, { route: 'workflow_tasks#9' });
         logger.error(`[WorkflowTasks] POST /:id/share error:`, err);
         res.status(500).json({ error: 'Failed to share properties' });
     }
@@ -309,6 +320,7 @@ router.post('/:id/schedule-visit', async (req: Request, res: Response) => {
 
         res.json({ appointments, appointment_ids: appointments.map(a => a.id) });
     } catch (err) {
+        captureRouteError(err, req, { route: 'workflow_tasks#10' });
         logger.error(`[WorkflowTasks] POST /:id/schedule-visit error:`, err);
         res.status(500).json({ error: 'Failed to schedule visit' });
     }
@@ -325,6 +337,7 @@ router.post('/:id/feedback', async (req: Request, res: Response) => {
         });
         res.json(result);
     } catch (err) {
+        captureRouteError(err, req, { route: 'workflow_tasks#11' });
         const msg = (err as Error).message;
         logger.error(`[WorkflowTasks] POST /:id/feedback error: ${msg}`);
         res.status(400).json({ error: msg });
@@ -362,6 +375,7 @@ router.patch('/:id/reassign', async (req: Request, res: Response) => {
 
         res.json({ task });
     } catch (err) {
+        captureRouteError(err, req, { route: 'workflow_tasks#12' });
         logger.error(`[WorkflowTasks] PATCH /:id/reassign error:`, err);
         res.status(500).json({ error: 'Failed to reassign' });
     }

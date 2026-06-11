@@ -1,0 +1,7090 @@
+{
+  "fields": [
+    {
+      "key": "bhk",
+      "label": "BHK",
+      "input_type": "number",
+      "unit": null
+    },
+    {
+      "key": "rooms",
+      "label": "Rooms",
+      "input_type": "number",
+      "unit": null
+    },
+    {
+      "key": "toilets",
+      "label": "Toilets",
+      "input_type": "text",
+      "unit": null
+    },
+    {
+      "key": "balconies",
+      "label": "Balconies",
+      "input_type": "text",
+      "unit": null
+    },
+    {
+      "key": "area",
+      "label": "Area",
+      "input_type": "text",
+      "unit": null
+    },
+    {
+      "key": "plot-area",
+      "label": "Plot Area",
+      "input_type": "text",
+      "unit": null
+    },
+    {
+      "key": "additional-rooms",
+      "label": "Additional Rooms",
+      "input_type": "text",
+      "unit": null
+    },
+    {
+      "key": "furnishing",
+      "label": "Furnishing",
+      "input_type": "text",
+      "unit": null
+    },
+    {
+      "key": "parking",
+      "label": "Parking",
+      "input_type": "text",
+      "unit": null
+    },
+    {
+      "key": "floors",
+      "label": "Floors",
+      "input_type": "text",
+      "unit": null
+    },
+    {
+      "key": "staus",
+      "label": "Staus",
+      "input_type": "text",
+      "unit": null
+    },
+    {
+      "key": "age-of-construction",
+      "label": "Age Of Construction",
+      "input_type": "text",
+      "unit": null
+    },
+    {
+      "key": "free-lease-hold",
+      "label": "Free/Lease Hold",
+      "input_type": "text",
+      "unit": null
+    },
+    {
+      "key": "road-with",
+      "label": "Road With",
+      "input_type": "text",
+      "unit": null
+    },
+    {
+      "key": "facing",
+      "label": "Facing",
+      "input_type": "text",
+      "unit": null
+    },
+    {
+      "key": "amenties",
+      "label": "Amenties",
+      "input_type": "text",
+      "unit": null
+    },
+    {
+      "key": "dimension",
+      "label": "Dimension",
+      "input_type": "text",
+      "unit": null
+    },
+    {
+      "key": "boundary-wall-yes-no",
+      "label": "Boundary Wall Yes/No",
+      "input_type": "text",
+      "unit": null
+    },
+    {
+      "key": "floor-allowed-to-contruction-far",
+      "label": "Floor Allowed To Contruction FAR",
+      "input_type": "text",
+      "unit": null
+    },
+    {
+      "key": "any-contruction-yes-no",
+      "label": "Any Contruction Yes/No",
+      "input_type": "text",
+      "unit": null
+    },
+    {
+      "key": "side-opens",
+      "label": "Side Opens",
+      "input_type": "text",
+      "unit": null
+    },
+    {
+      "key": "reception",
+      "label": "Reception",
+      "input_type": "text",
+      "unit": null
+    },
+    {
+      "key": "pantry-cantine",
+      "label": "Pantry/Cantine",
+      "input_type": "text",
+      "unit": null
+    },
+    {
+      "key": "mini-max-seats",
+      "label": "Mini/Max Seats",
+      "input_type": "text",
+      "unit": null
+    },
+    {
+      "key": "confernce-meeting-cabin",
+      "label": "Confernce/Meeting/Cabin",
+      "input_type": "text",
+      "unit": null
+    },
+    {
+      "key": "lifts",
+      "label": "Lifts",
+      "input_type": "text",
+      "unit": null
+    },
+    {
+      "key": "pre-rent-leased",
+      "label": "Pre Rent/Leased",
+      "input_type": "text",
+      "unit": null
+    },
+    {
+      "key": "quailty-rating",
+      "label": "Quailty Rating",
+      "input_type": "text",
+      "unit": null
+    },
+    {
+      "key": "revenus",
+      "label": "Revenus",
+      "input_type": "text",
+      "unit": null
+    },
+    {
+      "key": "play-ground",
+      "label": "Play Ground",
+      "input_type": "text",
+      "unit": null
+    },
+    {
+      "key": "labs",
+      "label": "Labs",
+      "input_type": "text",
+      "unit": null
+    },
+    {
+      "key": "woards",
+      "label": "Woards",
+      "input_type": "text",
+      "unit": null
+    },
+    {
+      "key": "operationth",
+      "label": "OperationTh",
+      "input_type": "text",
+      "unit": null
+    },
+    {
+      "key": "brands",
+      "label": "Brands",
+      "input_type": "text",
+      "unit": null
+    },
+    {
+      "key": "nozzels",
+      "label": "Nozzels",
+      "input_type": "text",
+      "unit": null
+    }
+  ],
+  "nodes": [
+    {
+      "path": [
+        "Residential"
+      ],
+      "node_kind": "CATEGORY"
+    },
+    {
+      "path": [
+        "Residential",
+        "Flat/Apartment"
+      ],
+      "node_kind": "SUBCATEGORY"
+    },
+    {
+      "path": [
+        "Residential",
+        "Flat/Apartment",
+        "Flat"
+      ],
+      "node_kind": "TYPE"
+    },
+    {
+      "path": [
+        "Residential",
+        "Flat/Apartment",
+        "studio Apartment"
+      ],
+      "node_kind": "TYPE"
+    },
+    {
+      "path": [
+        "Residential",
+        "Flat/Apartment",
+        "Service Apartment"
+      ],
+      "node_kind": "TYPE"
+    },
+    {
+      "path": [
+        "Residential",
+        "Flat/Apartment",
+        "Duplex flat"
+      ],
+      "node_kind": "TYPE"
+    },
+    {
+      "path": [
+        "Residential",
+        "Flat/Apartment",
+        "Penthouse (Simplex)"
+      ],
+      "node_kind": "TYPE"
+    },
+    {
+      "path": [
+        "Residential",
+        "Flat/Apartment",
+        "Penthouse(Duplex)"
+      ],
+      "node_kind": "TYPE"
+    },
+    {
+      "path": [
+        "Residential",
+        "Builder Floor"
+      ],
+      "node_kind": "SUBCATEGORY"
+    },
+    {
+      "path": [
+        "Residential",
+        "Builder Floor",
+        "Independent Floor"
+      ],
+      "node_kind": "TYPE"
+    },
+    {
+      "path": [
+        "Residential",
+        "Builder Floor",
+        "Builder Flat (Front)"
+      ],
+      "node_kind": "TYPE"
+    },
+    {
+      "path": [
+        "Residential",
+        "Builder Floor",
+        "Builder Flat (Back)"
+      ],
+      "node_kind": "TYPE"
+    },
+    {
+      "path": [
+        "Residential",
+        "Independent House/Villa"
+      ],
+      "node_kind": "SUBCATEGORY"
+    },
+    {
+      "path": [
+        "Residential",
+        "Independent House/Villa",
+        "House"
+      ],
+      "node_kind": "TYPE"
+    },
+    {
+      "path": [
+        "Residential",
+        "Independent House/Villa",
+        "Villa"
+      ],
+      "node_kind": "TYPE"
+    },
+    {
+      "path": [
+        "Residential",
+        "Independent House/Villa",
+        "Kothi"
+      ],
+      "node_kind": "TYPE"
+    },
+    {
+      "path": [
+        "Residential",
+        "Independent House/Villa",
+        "Banglow"
+      ],
+      "node_kind": "TYPE"
+    },
+    {
+      "path": [
+        "Residential",
+        "Independent House/Villa",
+        "Farm House"
+      ],
+      "node_kind": "TYPE"
+    },
+    {
+      "path": [
+        "Residential",
+        "Land/Plot"
+      ],
+      "node_kind": "SUBCATEGORY"
+    },
+    {
+      "path": [
+        "Residential",
+        "Land/Plot",
+        "Authority Plot"
+      ],
+      "node_kind": "TYPE"
+    },
+    {
+      "path": [
+        "Residential",
+        "Land/Plot",
+        "Colonizer Plot"
+      ],
+      "node_kind": "TYPE"
+    },
+    {
+      "path": [
+        "Residential",
+        "Land/Plot",
+        "Cooprative Society Plot"
+      ],
+      "node_kind": "TYPE"
+    },
+    {
+      "path": [
+        "Residential",
+        "Land/Plot",
+        "Kachchi colony plot"
+      ],
+      "node_kind": "TYPE"
+    },
+    {
+      "path": [
+        "Residential",
+        "Land/Plot",
+        "Project Land"
+      ],
+      "node_kind": "TYPE"
+    },
+    {
+      "path": [
+        "Commercial"
+      ],
+      "node_kind": "CATEGORY"
+    },
+    {
+      "path": [
+        "Commercial",
+        "Retail"
+      ],
+      "node_kind": "SUBCATEGORY"
+    },
+    {
+      "path": [
+        "Commercial",
+        "Retail",
+        "shop"
+      ],
+      "node_kind": "GROUP"
+    },
+    {
+      "path": [
+        "Commercial",
+        "Retail",
+        "shop",
+        "Open Market Shop"
+      ],
+      "node_kind": "TYPE"
+    },
+    {
+      "path": [
+        "Commercial",
+        "Retail",
+        "shop",
+        "Shoping Mall Shop"
+      ],
+      "node_kind": "TYPE"
+    },
+    {
+      "path": [
+        "Commercial",
+        "Retail",
+        "shop",
+        "Society Shop"
+      ],
+      "node_kind": "TYPE"
+    },
+    {
+      "path": [
+        "Commercial",
+        "Retail",
+        "shop",
+        "Commercial Use Flat"
+      ],
+      "node_kind": "TYPE"
+    },
+    {
+      "path": [
+        "Commercial",
+        "Retail",
+        "shop",
+        "commercial use parking"
+      ],
+      "node_kind": "TYPE"
+    },
+    {
+      "path": [
+        "Commercial",
+        "Retail",
+        "kiosk"
+      ],
+      "node_kind": "GROUP"
+    },
+    {
+      "path": [
+        "Commercial",
+        "Retail",
+        "kiosk",
+        "open Market kiosk"
+      ],
+      "node_kind": "TYPE"
+    },
+    {
+      "path": [
+        "Commercial",
+        "Retail",
+        "kiosk",
+        "shopping Mall Kiosk"
+      ],
+      "node_kind": "TYPE"
+    },
+    {
+      "path": [
+        "Commercial",
+        "Retail",
+        "Showroom"
+      ],
+      "node_kind": "GROUP"
+    },
+    {
+      "path": [
+        "Commercial",
+        "Retail",
+        "Showroom",
+        "Open Market Showroom"
+      ],
+      "node_kind": "TYPE"
+    },
+    {
+      "path": [
+        "Commercial",
+        "Retail",
+        "Showroom",
+        "Shopping Mall Showroom"
+      ],
+      "node_kind": "TYPE"
+    },
+    {
+      "path": [
+        "Commercial",
+        "Retail",
+        "Showroom",
+        "hyper market"
+      ],
+      "node_kind": "TYPE"
+    },
+    {
+      "path": [
+        "Commercial",
+        "Office"
+      ],
+      "node_kind": "SUBCATEGORY"
+    },
+    {
+      "path": [
+        "Commercial",
+        "Office",
+        "Commercial Complex office"
+      ],
+      "node_kind": "TYPE"
+    },
+    {
+      "path": [
+        "Commercial",
+        "Office",
+        "Office Use Flat"
+      ],
+      "node_kind": "TYPE"
+    },
+    {
+      "path": [
+        "Commercial",
+        "Office",
+        "IT Park Office Space"
+      ],
+      "node_kind": "TYPE"
+    },
+    {
+      "path": [
+        "Commercial",
+        "Office",
+        "Co working Office"
+      ],
+      "node_kind": "TYPE"
+    },
+    {
+      "path": [
+        "Commercial",
+        "Land"
+      ],
+      "node_kind": "SUBCATEGORY"
+    },
+    {
+      "path": [
+        "Commercial",
+        "Land",
+        "Commercial Land"
+      ],
+      "node_kind": "TYPE"
+    },
+    {
+      "path": [
+        "Commercial",
+        "Land",
+        "Industrial Land"
+      ],
+      "node_kind": "TYPE"
+    },
+    {
+      "path": [
+        "Commercial",
+        "Land",
+        "Commercial Project Land"
+      ],
+      "node_kind": "TYPE"
+    },
+    {
+      "path": [
+        "Commercial",
+        "Land",
+        "Agriculture Land/Orchard"
+      ],
+      "node_kind": "TYPE"
+    },
+    {
+      "path": [
+        "Commercial",
+        "storage"
+      ],
+      "node_kind": "SUBCATEGORY"
+    },
+    {
+      "path": [
+        "Commercial",
+        "storage",
+        "ware House"
+      ],
+      "node_kind": "TYPE"
+    },
+    {
+      "path": [
+        "Commercial",
+        "storage",
+        "cold storage"
+      ],
+      "node_kind": "TYPE"
+    },
+    {
+      "path": [
+        "Commercial",
+        "storage",
+        "Godown"
+      ],
+      "node_kind": "TYPE"
+    },
+    {
+      "path": [
+        "Commercial",
+        "industry"
+      ],
+      "node_kind": "SUBCATEGORY"
+    },
+    {
+      "path": [
+        "Commercial",
+        "industry",
+        "Industrial Land/Plot"
+      ],
+      "node_kind": "TYPE"
+    },
+    {
+      "path": [
+        "Commercial",
+        "industry",
+        "Factory"
+      ],
+      "node_kind": "TYPE"
+    },
+    {
+      "path": [
+        "Commercial",
+        "industry",
+        "Industrial Floor"
+      ],
+      "node_kind": "TYPE"
+    },
+    {
+      "path": [
+        "Commercial",
+        "industry",
+        "Industrial Project Land"
+      ],
+      "node_kind": "TYPE"
+    },
+    {
+      "path": [
+        "Commercial",
+        "Hospitality"
+      ],
+      "node_kind": "SUBCATEGORY"
+    },
+    {
+      "path": [
+        "Commercial",
+        "Hospitality",
+        "Hotel"
+      ],
+      "node_kind": "TYPE"
+    },
+    {
+      "path": [
+        "Commercial",
+        "Hospitality",
+        "Guest House"
+      ],
+      "node_kind": "TYPE"
+    },
+    {
+      "path": [
+        "Commercial",
+        "Hospitality",
+        "Banquet"
+      ],
+      "node_kind": "TYPE"
+    },
+    {
+      "path": [
+        "Commercial",
+        "Hospitality",
+        "Resort"
+      ],
+      "node_kind": "TYPE"
+    },
+    {
+      "path": [
+        "Commercial",
+        "Hospitality",
+        "Café/Restaurent"
+      ],
+      "node_kind": "TYPE"
+    },
+    {
+      "path": [
+        "Commercial",
+        "Institution"
+      ],
+      "node_kind": "SUBCATEGORY"
+    },
+    {
+      "path": [
+        "Commercial",
+        "Institution",
+        "Education"
+      ],
+      "node_kind": "GROUP"
+    },
+    {
+      "path": [
+        "Commercial",
+        "Institution",
+        "Education",
+        "School"
+      ],
+      "node_kind": "TYPE"
+    },
+    {
+      "path": [
+        "Commercial",
+        "Institution",
+        "Education",
+        "Collage"
+      ],
+      "node_kind": "TYPE"
+    },
+    {
+      "path": [
+        "Commercial",
+        "Institution",
+        "Education",
+        "University"
+      ],
+      "node_kind": "TYPE"
+    },
+    {
+      "path": [
+        "Commercial",
+        "Institution",
+        "Healthcare"
+      ],
+      "node_kind": "GROUP"
+    },
+    {
+      "path": [
+        "Commercial",
+        "Institution",
+        "Healthcare",
+        "Hospital"
+      ],
+      "node_kind": "TYPE"
+    },
+    {
+      "path": [
+        "Commercial",
+        "Institution",
+        "Healthcare",
+        "Nursing Home"
+      ],
+      "node_kind": "TYPE"
+    },
+    {
+      "path": [
+        "Commercial",
+        "Petrol Pump"
+      ],
+      "node_kind": "SUBCATEGORY"
+    },
+    {
+      "path": [
+        "Commercial",
+        "Petrol Pump",
+        "Petrol Punmp"
+      ],
+      "node_kind": "TYPE"
+    },
+    {
+      "path": [
+        "Commercial",
+        "Petrol Pump",
+        "CNG pump"
+      ],
+      "node_kind": "TYPE"
+    },
+    {
+      "path": [
+        "Commercial",
+        "Petrol Pump",
+        "EV Charging Station"
+      ],
+      "node_kind": "TYPE"
+    }
+  ],
+  "attachments": [
+    {
+      "type_path": [
+        "Residential",
+        "Flat/Apartment",
+        "Flat"
+      ],
+      "fields": [
+        {
+          "field": "bhk",
+          "required": false,
+          "options": [
+            "BHk-1Rk",
+            "1",
+            "2",
+            "3",
+            "4",
+            "5"
+          ]
+        },
+        {
+          "field": "toilets",
+          "required": false,
+          "options": [
+            "Toilets 1",
+            "2",
+            "…."
+          ]
+        },
+        {
+          "field": "balconies",
+          "required": false,
+          "options": [
+            "Balcony 1",
+            "2…"
+          ]
+        },
+        {
+          "field": "area",
+          "required": false,
+          "options": [
+            "super",
+            "Builtup",
+            "Carpet"
+          ]
+        },
+        {
+          "field": "plot-area",
+          "required": false,
+          "options": [
+            "Plot Area"
+          ]
+        },
+        {
+          "field": "additional-rooms",
+          "required": false,
+          "options": [
+            "Pooja",
+            "study",
+            "servent",
+            "store"
+          ]
+        },
+        {
+          "field": "furnishing",
+          "required": false,
+          "options": [
+            "Unfurnished",
+            "Semi",
+            "fully"
+          ]
+        },
+        {
+          "field": "parking",
+          "required": false,
+          "options": [
+            "reserved",
+            "Common",
+            "open",
+            "Covered",
+            "1",
+            "2.."
+          ]
+        },
+        {
+          "field": "floors",
+          "required": false,
+          "options": [
+            "total floors",
+            "property on floor 1",
+            "2…."
+          ]
+        },
+        {
+          "field": "staus",
+          "required": false,
+          "options": [
+            "Ready To move in",
+            "under Construction"
+          ]
+        },
+        {
+          "field": "age-of-construction",
+          "required": false,
+          "options": [
+            "Age Of Construction"
+          ]
+        },
+        {
+          "field": "free-lease-hold",
+          "required": false,
+          "options": [
+            "Free hold",
+            "Lease Hold"
+          ]
+        },
+        {
+          "field": "road-with",
+          "required": false,
+          "options": [
+            "Road width"
+          ]
+        },
+        {
+          "field": "facing",
+          "required": false,
+          "options": [
+            "Facing -east",
+            "west …."
+          ]
+        },
+        {
+          "field": "amenties",
+          "required": false,
+          "options": [
+            "GYM",
+            "CLUB",
+            "POWER",
+            "LIFTS",
+            "INTERCOME",
+            "GUEST HOUSE",
+            "PARK",
+            "HALL",
+            "MINI THEATER"
+          ]
+        }
+      ]
+    },
+    {
+      "type_path": [
+        "Residential",
+        "Flat/Apartment",
+        "studio Apartment"
+      ],
+      "fields": [
+        {
+          "field": "bhk",
+          "required": false,
+          "options": [
+            "BHk-1Rk",
+            "1",
+            "2"
+          ]
+        },
+        {
+          "field": "toilets",
+          "required": false,
+          "options": [
+            "Toilets 1",
+            "2",
+            "…."
+          ]
+        },
+        {
+          "field": "balconies",
+          "required": false,
+          "options": [
+            "Balcony 1",
+            "2…"
+          ]
+        },
+        {
+          "field": "area",
+          "required": false,
+          "options": [
+            "super",
+            "Builtup",
+            "Carpet"
+          ]
+        },
+        {
+          "field": "plot-area",
+          "required": false,
+          "options": [
+            "Plot Area"
+          ]
+        },
+        {
+          "field": "additional-rooms",
+          "required": false,
+          "options": [
+            "Pooja",
+            "study",
+            "servent",
+            "store"
+          ]
+        },
+        {
+          "field": "furnishing",
+          "required": false,
+          "options": [
+            "Unfurnished",
+            "Semi",
+            "fully"
+          ]
+        },
+        {
+          "field": "parking",
+          "required": false,
+          "options": [
+            "reserved",
+            "Common",
+            "open",
+            "Covered",
+            "1",
+            "2.."
+          ]
+        },
+        {
+          "field": "floors",
+          "required": false,
+          "options": [
+            "total floors",
+            "property on floor 1",
+            "2…."
+          ]
+        },
+        {
+          "field": "staus",
+          "required": false,
+          "options": [
+            "Ready To move in",
+            "under Construction"
+          ]
+        },
+        {
+          "field": "age-of-construction",
+          "required": false,
+          "options": [
+            "Age Of Construction"
+          ]
+        },
+        {
+          "field": "free-lease-hold",
+          "required": false,
+          "options": [
+            "Free hold",
+            "Lease Hold"
+          ]
+        },
+        {
+          "field": "road-with",
+          "required": false,
+          "options": [
+            "Road width"
+          ]
+        },
+        {
+          "field": "facing",
+          "required": false,
+          "options": [
+            "Facing-Eats",
+            "West"
+          ]
+        },
+        {
+          "field": "amenties",
+          "required": false,
+          "options": [
+            "GYM",
+            "CLUB",
+            "POWER",
+            "LIFTS",
+            "INTERCOME",
+            "GUEST HOUSE",
+            "PARK",
+            "HALL",
+            "MINI THEATER"
+          ]
+        }
+      ]
+    },
+    {
+      "type_path": [
+        "Residential",
+        "Flat/Apartment",
+        "Service Apartment"
+      ],
+      "fields": [
+        {
+          "field": "bhk",
+          "required": false,
+          "options": [
+            "BHk-1Rk",
+            "1",
+            "2"
+          ]
+        },
+        {
+          "field": "toilets",
+          "required": false,
+          "options": [
+            "Toilets 1",
+            "2",
+            "…."
+          ]
+        },
+        {
+          "field": "balconies",
+          "required": false,
+          "options": [
+            "Balcony 1",
+            "2…"
+          ]
+        },
+        {
+          "field": "area",
+          "required": false,
+          "options": [
+            "super",
+            "Builtup",
+            "Carpet"
+          ]
+        },
+        {
+          "field": "plot-area",
+          "required": false,
+          "options": [
+            "Plot Area"
+          ]
+        },
+        {
+          "field": "additional-rooms",
+          "required": false,
+          "options": [
+            "Pooja",
+            "study",
+            "servent",
+            "store"
+          ]
+        },
+        {
+          "field": "furnishing",
+          "required": false,
+          "options": [
+            "Unfurnished",
+            "Semi",
+            "fully"
+          ]
+        },
+        {
+          "field": "parking",
+          "required": false,
+          "options": [
+            "reserved",
+            "Common",
+            "open",
+            "Covered",
+            "1",
+            "2.."
+          ]
+        },
+        {
+          "field": "floors",
+          "required": false,
+          "options": [
+            "total floors",
+            "property on floor 1",
+            "2…."
+          ]
+        },
+        {
+          "field": "staus",
+          "required": false,
+          "options": [
+            "Ready To move in",
+            "under Construction"
+          ]
+        },
+        {
+          "field": "age-of-construction",
+          "required": false,
+          "options": [
+            "Age Of Construction"
+          ]
+        },
+        {
+          "field": "free-lease-hold",
+          "required": false,
+          "options": [
+            "Free hold",
+            "Lease Hold"
+          ]
+        },
+        {
+          "field": "amenties",
+          "required": false,
+          "options": [
+            "GYM",
+            "CLUB",
+            "POWER",
+            "LIFTS",
+            "INTERCOME",
+            "GUEST HOUSE",
+            "PARK",
+            "HALL",
+            "MINI THEATER"
+          ]
+        },
+        {
+          "field": "road-with",
+          "required": false,
+          "options": [
+            "Road width"
+          ]
+        },
+        {
+          "field": "facing",
+          "required": false,
+          "options": [
+            "Facing -east",
+            "west …."
+          ]
+        }
+      ]
+    },
+    {
+      "type_path": [
+        "Residential",
+        "Flat/Apartment",
+        "Duplex flat"
+      ],
+      "fields": [
+        {
+          "field": "bhk",
+          "required": false,
+          "options": [
+            "BHK-1",
+            "2",
+            "3",
+            "4",
+            "5"
+          ]
+        },
+        {
+          "field": "toilets",
+          "required": false,
+          "options": [
+            "Toilets 1",
+            "2",
+            "…."
+          ]
+        },
+        {
+          "field": "balconies",
+          "required": false,
+          "options": [
+            "Balcony 1",
+            "2…"
+          ]
+        },
+        {
+          "field": "area",
+          "required": false,
+          "options": [
+            "super",
+            "Builtup",
+            "Carpet"
+          ]
+        },
+        {
+          "field": "plot-area",
+          "required": false,
+          "options": [
+            "Plot Area"
+          ]
+        },
+        {
+          "field": "additional-rooms",
+          "required": false,
+          "options": [
+            "Pooja",
+            "study",
+            "servent",
+            "store"
+          ]
+        },
+        {
+          "field": "furnishing",
+          "required": false,
+          "options": [
+            "Unfurnished",
+            "Semi",
+            "fully"
+          ]
+        },
+        {
+          "field": "parking",
+          "required": false,
+          "options": [
+            "reserved",
+            "Common",
+            "open",
+            "Covered",
+            "1",
+            "2.."
+          ]
+        },
+        {
+          "field": "floors",
+          "required": false,
+          "options": [
+            "total floors",
+            "property on floor 1",
+            "2…."
+          ]
+        },
+        {
+          "field": "staus",
+          "required": false,
+          "options": [
+            "Ready To move in",
+            "under Construction"
+          ]
+        },
+        {
+          "field": "age-of-construction",
+          "required": false,
+          "options": [
+            "Age Of Construction"
+          ]
+        },
+        {
+          "field": "free-lease-hold",
+          "required": false,
+          "options": [
+            "Free hold",
+            "Lease Hold"
+          ]
+        },
+        {
+          "field": "road-with",
+          "required": false,
+          "options": [
+            "Road width"
+          ]
+        },
+        {
+          "field": "facing",
+          "required": false,
+          "options": [
+            "Facing -east",
+            "west …."
+          ]
+        },
+        {
+          "field": "amenties",
+          "required": false,
+          "options": [
+            "GYM",
+            "CLUB",
+            "POWER",
+            "LIFTS",
+            "INTERCOME",
+            "GUEST HOUSE",
+            "PARK",
+            "HALL",
+            "MINI THEATER"
+          ]
+        }
+      ]
+    },
+    {
+      "type_path": [
+        "Residential",
+        "Flat/Apartment",
+        "Penthouse (Simplex)"
+      ],
+      "fields": [
+        {
+          "field": "bhk",
+          "required": false,
+          "options": [
+            "BHK-1",
+            "2",
+            "3",
+            "4",
+            "5"
+          ]
+        },
+        {
+          "field": "toilets",
+          "required": false,
+          "options": [
+            "Toilets 1",
+            "2",
+            "…."
+          ]
+        },
+        {
+          "field": "balconies",
+          "required": false,
+          "options": [
+            "Balcony 1",
+            "2…"
+          ]
+        },
+        {
+          "field": "area",
+          "required": false,
+          "options": [
+            "super",
+            "Builtup",
+            "Carpet"
+          ]
+        },
+        {
+          "field": "plot-area",
+          "required": false,
+          "options": [
+            "Plot Area"
+          ]
+        },
+        {
+          "field": "additional-rooms",
+          "required": false,
+          "options": [
+            "Pooja",
+            "study",
+            "servent",
+            "store"
+          ]
+        },
+        {
+          "field": "furnishing",
+          "required": false,
+          "options": [
+            "Unfurnished",
+            "Semi",
+            "fully"
+          ]
+        },
+        {
+          "field": "parking",
+          "required": false,
+          "options": [
+            "reserved",
+            "Common",
+            "open",
+            "Covered",
+            "1",
+            "2.."
+          ]
+        },
+        {
+          "field": "floors",
+          "required": false,
+          "options": [
+            "total floors",
+            "property on floor 1",
+            "2…."
+          ]
+        },
+        {
+          "field": "staus",
+          "required": false,
+          "options": [
+            "Ready To move in",
+            "under Construction"
+          ]
+        },
+        {
+          "field": "age-of-construction",
+          "required": false,
+          "options": [
+            "Age Of Construction"
+          ]
+        },
+        {
+          "field": "free-lease-hold",
+          "required": false,
+          "options": [
+            "Free hold",
+            "Lease Hold"
+          ]
+        },
+        {
+          "field": "road-with",
+          "required": false,
+          "options": [
+            "Road width"
+          ]
+        },
+        {
+          "field": "facing",
+          "required": false,
+          "options": [
+            "Facing -east",
+            "west …."
+          ]
+        },
+        {
+          "field": "amenties",
+          "required": false,
+          "options": [
+            "GYM",
+            "CLUB",
+            "POWER",
+            "LIFTS",
+            "INTERCOME",
+            "GUEST HOUSE",
+            "PARK",
+            "HALL",
+            "MINI THEATER"
+          ]
+        }
+      ]
+    },
+    {
+      "type_path": [
+        "Residential",
+        "Flat/Apartment",
+        "Penthouse(Duplex)"
+      ],
+      "fields": [
+        {
+          "field": "bhk",
+          "required": false,
+          "options": [
+            "BHK-1",
+            "2",
+            "3",
+            "4",
+            "5"
+          ]
+        },
+        {
+          "field": "toilets",
+          "required": false,
+          "options": [
+            "Toilets 1",
+            "2",
+            "…."
+          ]
+        },
+        {
+          "field": "balconies",
+          "required": false,
+          "options": [
+            "Balcony 1",
+            "2…"
+          ]
+        },
+        {
+          "field": "area",
+          "required": false,
+          "options": [
+            "super",
+            "Builtup",
+            "Carpet"
+          ]
+        },
+        {
+          "field": "plot-area",
+          "required": false,
+          "options": [
+            "Plot Area"
+          ]
+        },
+        {
+          "field": "additional-rooms",
+          "required": false,
+          "options": [
+            "Pooja",
+            "study",
+            "servent",
+            "store"
+          ]
+        },
+        {
+          "field": "furnishing",
+          "required": false,
+          "options": [
+            "Unfurnished",
+            "Semi",
+            "fully"
+          ]
+        },
+        {
+          "field": "parking",
+          "required": false,
+          "options": [
+            "reserved",
+            "Common",
+            "open",
+            "Covered",
+            "1",
+            "2.."
+          ]
+        },
+        {
+          "field": "floors",
+          "required": false,
+          "options": [
+            "total floors",
+            "property on floor 1",
+            "2…."
+          ]
+        },
+        {
+          "field": "staus",
+          "required": false,
+          "options": [
+            "Ready To move in",
+            "under Construction"
+          ]
+        },
+        {
+          "field": "age-of-construction",
+          "required": false,
+          "options": [
+            "Age Of Construction"
+          ]
+        },
+        {
+          "field": "free-lease-hold",
+          "required": false,
+          "options": [
+            "Free hold",
+            "Lease Hold"
+          ]
+        },
+        {
+          "field": "road-with",
+          "required": false,
+          "options": [
+            "Road width"
+          ]
+        },
+        {
+          "field": "facing",
+          "required": false,
+          "options": [
+            "Facing -east",
+            "west …."
+          ]
+        },
+        {
+          "field": "amenties",
+          "required": false,
+          "options": [
+            "GYM",
+            "CLUB",
+            "POWER",
+            "LIFTS",
+            "INTERCOME",
+            "GUEST HOUSE",
+            "PARK",
+            "HALL",
+            "MINI THEATER"
+          ]
+        }
+      ]
+    },
+    {
+      "type_path": [
+        "Residential",
+        "Builder Floor",
+        "Independent Floor"
+      ],
+      "fields": [
+        {
+          "field": "bhk",
+          "required": false,
+          "options": [
+            "BHK-1",
+            "2",
+            "3",
+            "4",
+            "5"
+          ]
+        },
+        {
+          "field": "toilets",
+          "required": false,
+          "options": [
+            "Toilets 1",
+            "2",
+            "…."
+          ]
+        },
+        {
+          "field": "balconies",
+          "required": false,
+          "options": [
+            "Balcony 1",
+            "2…"
+          ]
+        },
+        {
+          "field": "area",
+          "required": false,
+          "options": [
+            "super",
+            "Builtup",
+            "Carpet"
+          ]
+        },
+        {
+          "field": "plot-area",
+          "required": false,
+          "options": [
+            "Plot Area"
+          ]
+        },
+        {
+          "field": "additional-rooms",
+          "required": false,
+          "options": [
+            "Pooja",
+            "study",
+            "servent",
+            "store"
+          ]
+        },
+        {
+          "field": "furnishing",
+          "required": false,
+          "options": [
+            "Unfurnished",
+            "Semi",
+            "fully"
+          ]
+        },
+        {
+          "field": "parking",
+          "required": false,
+          "options": [
+            "reserved",
+            "Common",
+            "open",
+            "Covered",
+            "1",
+            "2.."
+          ]
+        },
+        {
+          "field": "floors",
+          "required": false,
+          "options": [
+            "total floors",
+            "property on floor 1",
+            "2…."
+          ]
+        },
+        {
+          "field": "staus",
+          "required": false,
+          "options": [
+            "Ready To move in",
+            "under Construction"
+          ]
+        },
+        {
+          "field": "age-of-construction",
+          "required": false,
+          "options": [
+            "Age Of Construction"
+          ]
+        },
+        {
+          "field": "free-lease-hold",
+          "required": false,
+          "options": [
+            "Free hold",
+            "Lease Hold"
+          ]
+        },
+        {
+          "field": "road-with",
+          "required": false,
+          "options": [
+            "Road width"
+          ]
+        },
+        {
+          "field": "facing",
+          "required": false,
+          "options": [
+            "Facing -east",
+            "west …."
+          ]
+        },
+        {
+          "field": "amenties",
+          "required": false,
+          "options": [
+            "LIFTS"
+          ]
+        }
+      ]
+    },
+    {
+      "type_path": [
+        "Residential",
+        "Builder Floor",
+        "Builder Flat (Front)"
+      ],
+      "fields": [
+        {
+          "field": "bhk",
+          "required": false,
+          "options": [
+            "BHK-1",
+            "2",
+            "3",
+            "4",
+            "5"
+          ]
+        },
+        {
+          "field": "toilets",
+          "required": false,
+          "options": [
+            "Toilets 1",
+            "2",
+            "…."
+          ]
+        },
+        {
+          "field": "balconies",
+          "required": false,
+          "options": [
+            "Balcony 1",
+            "2…"
+          ]
+        },
+        {
+          "field": "area",
+          "required": false,
+          "options": [
+            "super",
+            "Builtup",
+            "Carpet"
+          ]
+        },
+        {
+          "field": "plot-area",
+          "required": false,
+          "options": [
+            "Plot Area"
+          ]
+        },
+        {
+          "field": "additional-rooms",
+          "required": false,
+          "options": [
+            "Pooja",
+            "study",
+            "servent",
+            "store"
+          ]
+        },
+        {
+          "field": "furnishing",
+          "required": false,
+          "options": [
+            "Unfurnished",
+            "Semi",
+            "fully"
+          ]
+        },
+        {
+          "field": "parking",
+          "required": false,
+          "options": [
+            "reserved",
+            "Common",
+            "open",
+            "Covered",
+            "1",
+            "2.."
+          ]
+        },
+        {
+          "field": "floors",
+          "required": false,
+          "options": [
+            "total floors",
+            "property on floor 1",
+            "2…."
+          ]
+        },
+        {
+          "field": "staus",
+          "required": false,
+          "options": [
+            "Ready To move in",
+            "under Construction"
+          ]
+        },
+        {
+          "field": "age-of-construction",
+          "required": false,
+          "options": [
+            "Age Of Construction"
+          ]
+        },
+        {
+          "field": "free-lease-hold",
+          "required": false,
+          "options": [
+            "Free hold",
+            "Lease Hold"
+          ]
+        },
+        {
+          "field": "road-with",
+          "required": false,
+          "options": [
+            "Road width"
+          ]
+        },
+        {
+          "field": "facing",
+          "required": false,
+          "options": [
+            "Facing -east",
+            "west …."
+          ]
+        },
+        {
+          "field": "amenties",
+          "required": false,
+          "options": [
+            "LIFTS"
+          ]
+        }
+      ]
+    },
+    {
+      "type_path": [
+        "Residential",
+        "Builder Floor",
+        "Builder Flat (Back)"
+      ],
+      "fields": [
+        {
+          "field": "bhk",
+          "required": false,
+          "options": [
+            "BHK-1",
+            "2",
+            "3",
+            "4",
+            "5"
+          ]
+        },
+        {
+          "field": "toilets",
+          "required": false,
+          "options": [
+            "Toilets 1",
+            "2",
+            "…."
+          ]
+        },
+        {
+          "field": "balconies",
+          "required": false,
+          "options": [
+            "Balcony 1",
+            "2…"
+          ]
+        },
+        {
+          "field": "area",
+          "required": false,
+          "options": [
+            "super",
+            "Builtup",
+            "Carpet"
+          ]
+        },
+        {
+          "field": "plot-area",
+          "required": false,
+          "options": [
+            "Plot Area"
+          ]
+        },
+        {
+          "field": "additional-rooms",
+          "required": false,
+          "options": [
+            "Pooja",
+            "study",
+            "servent",
+            "store"
+          ]
+        },
+        {
+          "field": "furnishing",
+          "required": false,
+          "options": [
+            "Unfurnished",
+            "Semi",
+            "fully"
+          ]
+        },
+        {
+          "field": "parking",
+          "required": false,
+          "options": [
+            "reserved",
+            "Common",
+            "open",
+            "Covered",
+            "1",
+            "2.."
+          ]
+        },
+        {
+          "field": "floors",
+          "required": false,
+          "options": [
+            "total floors",
+            "property on floor 1",
+            "2…."
+          ]
+        },
+        {
+          "field": "staus",
+          "required": false,
+          "options": [
+            "Ready To move in",
+            "under Construction"
+          ]
+        },
+        {
+          "field": "age-of-construction",
+          "required": false,
+          "options": [
+            "Age Of Construction"
+          ]
+        },
+        {
+          "field": "free-lease-hold",
+          "required": false,
+          "options": [
+            "Free hold",
+            "Lease Hold"
+          ]
+        },
+        {
+          "field": "road-with",
+          "required": false,
+          "options": [
+            "Road width"
+          ]
+        },
+        {
+          "field": "facing",
+          "required": false,
+          "options": [
+            "Facing -east",
+            "west …."
+          ]
+        },
+        {
+          "field": "amenties",
+          "required": false,
+          "options": [
+            "LIFTS"
+          ]
+        }
+      ]
+    },
+    {
+      "type_path": [
+        "Residential",
+        "Independent House/Villa",
+        "House"
+      ],
+      "fields": [
+        {
+          "field": "bhk",
+          "required": false,
+          "options": [
+            "BHK-1",
+            "2",
+            "3",
+            "4",
+            "5"
+          ]
+        },
+        {
+          "field": "toilets",
+          "required": false,
+          "options": [
+            "Toilets 1",
+            "2",
+            "…."
+          ]
+        },
+        {
+          "field": "balconies",
+          "required": false,
+          "options": [
+            "Balcony 1",
+            "2…"
+          ]
+        },
+        {
+          "field": "area",
+          "required": false,
+          "options": [
+            "super",
+            "Builtup",
+            "Carpet"
+          ]
+        },
+        {
+          "field": "plot-area",
+          "required": false,
+          "options": [
+            "Plot Area"
+          ]
+        },
+        {
+          "field": "additional-rooms",
+          "required": false,
+          "options": [
+            "Pooja",
+            "study",
+            "servent",
+            "store"
+          ]
+        },
+        {
+          "field": "furnishing",
+          "required": false,
+          "options": [
+            "Unfurnished",
+            "Semi",
+            "fully"
+          ]
+        },
+        {
+          "field": "parking",
+          "required": false,
+          "options": [
+            "reserved",
+            "Common",
+            "open",
+            "Covered",
+            "1",
+            "2.."
+          ]
+        },
+        {
+          "field": "floors",
+          "required": false,
+          "options": [
+            "Total Floors 1",
+            "2",
+            "..."
+          ]
+        },
+        {
+          "field": "staus",
+          "required": false,
+          "options": [
+            "Ready To move in",
+            "under Construction"
+          ]
+        },
+        {
+          "field": "age-of-construction",
+          "required": false,
+          "options": [
+            "Age Of Construction"
+          ]
+        },
+        {
+          "field": "free-lease-hold",
+          "required": false,
+          "options": [
+            "Free hold",
+            "Lease Hold"
+          ]
+        },
+        {
+          "field": "road-with",
+          "required": false,
+          "options": [
+            "Road width"
+          ]
+        },
+        {
+          "field": "facing",
+          "required": false,
+          "options": [
+            "Facing -east",
+            "west …."
+          ]
+        }
+      ]
+    },
+    {
+      "type_path": [
+        "Residential",
+        "Independent House/Villa",
+        "Villa"
+      ],
+      "fields": [
+        {
+          "field": "bhk",
+          "required": false,
+          "options": [
+            "BHK-1",
+            "2",
+            "3",
+            "4",
+            "5"
+          ]
+        },
+        {
+          "field": "toilets",
+          "required": false,
+          "options": [
+            "Toilets 1",
+            "2",
+            "…."
+          ]
+        },
+        {
+          "field": "balconies",
+          "required": false,
+          "options": [
+            "Balcony 1",
+            "2…"
+          ]
+        },
+        {
+          "field": "area",
+          "required": false,
+          "options": [
+            "super",
+            "Builtup",
+            "Carpet"
+          ]
+        },
+        {
+          "field": "plot-area",
+          "required": false,
+          "options": [
+            "Plot Area"
+          ]
+        },
+        {
+          "field": "additional-rooms",
+          "required": false,
+          "options": [
+            "Pooja",
+            "study",
+            "servent",
+            "store"
+          ]
+        },
+        {
+          "field": "furnishing",
+          "required": false,
+          "options": [
+            "Unfurnished",
+            "Semi",
+            "fully"
+          ]
+        },
+        {
+          "field": "parking",
+          "required": false,
+          "options": [
+            "reserved",
+            "Common",
+            "open",
+            "Covered",
+            "1",
+            "2.."
+          ]
+        },
+        {
+          "field": "floors",
+          "required": false,
+          "options": [
+            "Total Floors 1",
+            "2",
+            "..."
+          ]
+        },
+        {
+          "field": "staus",
+          "required": false,
+          "options": [
+            "Ready To move in",
+            "under Construction"
+          ]
+        },
+        {
+          "field": "age-of-construction",
+          "required": false,
+          "options": [
+            "Age Of Construction"
+          ]
+        },
+        {
+          "field": "free-lease-hold",
+          "required": false,
+          "options": [
+            "Free hold",
+            "Lease Hold"
+          ]
+        },
+        {
+          "field": "road-with",
+          "required": false,
+          "options": [
+            "Road width"
+          ]
+        },
+        {
+          "field": "facing",
+          "required": false,
+          "options": [
+            "Facing -east",
+            "west …."
+          ]
+        }
+      ]
+    },
+    {
+      "type_path": [
+        "Residential",
+        "Independent House/Villa",
+        "Kothi"
+      ],
+      "fields": [
+        {
+          "field": "bhk",
+          "required": false,
+          "options": [
+            "BHK-1",
+            "2",
+            "3",
+            "4",
+            "5"
+          ]
+        },
+        {
+          "field": "toilets",
+          "required": false,
+          "options": [
+            "Toilets 1",
+            "2",
+            "…."
+          ]
+        },
+        {
+          "field": "balconies",
+          "required": false,
+          "options": [
+            "Balcony 1",
+            "2…"
+          ]
+        },
+        {
+          "field": "area",
+          "required": false,
+          "options": [
+            "super",
+            "Builtup",
+            "Carpet"
+          ]
+        },
+        {
+          "field": "plot-area",
+          "required": false,
+          "options": [
+            "Plot Area"
+          ]
+        },
+        {
+          "field": "additional-rooms",
+          "required": false,
+          "options": [
+            "Pooja",
+            "study",
+            "servent",
+            "store"
+          ]
+        },
+        {
+          "field": "furnishing",
+          "required": false,
+          "options": [
+            "Unfurnished",
+            "Semi",
+            "fully"
+          ]
+        },
+        {
+          "field": "parking",
+          "required": false,
+          "options": [
+            "reserved",
+            "Common",
+            "open",
+            "Covered",
+            "1",
+            "2.."
+          ]
+        },
+        {
+          "field": "floors",
+          "required": false,
+          "options": [
+            "Total Floors 1",
+            "2",
+            "..."
+          ]
+        },
+        {
+          "field": "staus",
+          "required": false,
+          "options": [
+            "Ready To move in",
+            "under Construction"
+          ]
+        },
+        {
+          "field": "age-of-construction",
+          "required": false,
+          "options": [
+            "Age Of Construction"
+          ]
+        },
+        {
+          "field": "free-lease-hold",
+          "required": false,
+          "options": [
+            "Free hold",
+            "Lease Hold"
+          ]
+        },
+        {
+          "field": "road-with",
+          "required": false,
+          "options": [
+            "Road width"
+          ]
+        },
+        {
+          "field": "facing",
+          "required": false,
+          "options": [
+            "Facing -east",
+            "west …."
+          ]
+        }
+      ]
+    },
+    {
+      "type_path": [
+        "Residential",
+        "Independent House/Villa",
+        "Banglow"
+      ],
+      "fields": [
+        {
+          "field": "bhk",
+          "required": false,
+          "options": [
+            "BHK-1",
+            "2",
+            "3",
+            "4",
+            "5"
+          ]
+        },
+        {
+          "field": "toilets",
+          "required": false,
+          "options": [
+            "Toilets 1",
+            "2",
+            "…."
+          ]
+        },
+        {
+          "field": "balconies",
+          "required": false,
+          "options": [
+            "Balcony 1",
+            "2…"
+          ]
+        },
+        {
+          "field": "area",
+          "required": false,
+          "options": [
+            "super",
+            "Builtup",
+            "Carpet"
+          ]
+        },
+        {
+          "field": "plot-area",
+          "required": false,
+          "options": [
+            "Plot Area"
+          ]
+        },
+        {
+          "field": "additional-rooms",
+          "required": false,
+          "options": [
+            "Pooja",
+            "study",
+            "servent",
+            "store"
+          ]
+        },
+        {
+          "field": "furnishing",
+          "required": false,
+          "options": [
+            "Unfurnished",
+            "Semi",
+            "fully"
+          ]
+        },
+        {
+          "field": "parking",
+          "required": false,
+          "options": [
+            "reserved",
+            "Common",
+            "open",
+            "Covered",
+            "1",
+            "2.."
+          ]
+        },
+        {
+          "field": "floors",
+          "required": false,
+          "options": [
+            "Total Floors 1",
+            "2",
+            "..."
+          ]
+        },
+        {
+          "field": "staus",
+          "required": false,
+          "options": [
+            "Ready To move in",
+            "under Construction"
+          ]
+        },
+        {
+          "field": "age-of-construction",
+          "required": false,
+          "options": [
+            "Age Of Construction"
+          ]
+        },
+        {
+          "field": "free-lease-hold",
+          "required": false,
+          "options": [
+            "Free hold",
+            "Lease Hold"
+          ]
+        },
+        {
+          "field": "road-with",
+          "required": false,
+          "options": [
+            "Road width"
+          ]
+        },
+        {
+          "field": "facing",
+          "required": false,
+          "options": [
+            "Facing -east",
+            "west …."
+          ]
+        }
+      ]
+    },
+    {
+      "type_path": [
+        "Residential",
+        "Independent House/Villa",
+        "Farm House"
+      ],
+      "fields": [
+        {
+          "field": "bhk",
+          "required": false,
+          "options": [
+            "BHK-1",
+            "2",
+            "3",
+            "4",
+            "5"
+          ]
+        },
+        {
+          "field": "toilets",
+          "required": false,
+          "options": [
+            "Toilets 1",
+            "2",
+            "…."
+          ]
+        },
+        {
+          "field": "balconies",
+          "required": false,
+          "options": [
+            "Balcony 1",
+            "2…"
+          ]
+        },
+        {
+          "field": "area",
+          "required": false,
+          "options": [
+            "super",
+            "Builtup",
+            "Carpet"
+          ]
+        },
+        {
+          "field": "plot-area",
+          "required": false,
+          "options": [
+            "Plot Area"
+          ]
+        },
+        {
+          "field": "additional-rooms",
+          "required": false,
+          "options": [
+            "Pooja",
+            "study",
+            "servent",
+            "store"
+          ]
+        },
+        {
+          "field": "furnishing",
+          "required": false,
+          "options": [
+            "Unfurnished",
+            "Semi",
+            "fully"
+          ]
+        },
+        {
+          "field": "parking",
+          "required": false,
+          "options": [
+            "reserved",
+            "Common",
+            "open",
+            "Covered",
+            "1",
+            "2.."
+          ]
+        },
+        {
+          "field": "floors",
+          "required": false,
+          "options": [
+            "Total Floors 1",
+            "2",
+            "..."
+          ]
+        },
+        {
+          "field": "staus",
+          "required": false,
+          "options": [
+            "Ready To move in",
+            "under Construction"
+          ]
+        },
+        {
+          "field": "age-of-construction",
+          "required": false,
+          "options": [
+            "Age Of Construction"
+          ]
+        },
+        {
+          "field": "free-lease-hold",
+          "required": false,
+          "options": [
+            "Free hold",
+            "Lease Hold"
+          ]
+        },
+        {
+          "field": "road-with",
+          "required": false,
+          "options": [
+            "Road width"
+          ]
+        },
+        {
+          "field": "facing",
+          "required": false,
+          "options": [
+            "Facing -east",
+            "west …."
+          ]
+        }
+      ]
+    },
+    {
+      "type_path": [
+        "Residential",
+        "Land/Plot",
+        "Authority Plot"
+      ],
+      "fields": [
+        {
+          "field": "plot-area",
+          "required": false,
+          "options": [
+            "Plot Area"
+          ]
+        },
+        {
+          "field": "free-lease-hold",
+          "required": false,
+          "options": [
+            "Free hold",
+            "Lease Hold"
+          ]
+        },
+        {
+          "field": "road-with",
+          "required": false,
+          "options": [
+            "Road width"
+          ]
+        },
+        {
+          "field": "facing",
+          "required": false,
+          "options": [
+            "Facing -east",
+            "west …."
+          ]
+        },
+        {
+          "field": "dimension",
+          "required": false,
+          "options": [
+            "Dimension"
+          ]
+        },
+        {
+          "field": "boundary-wall-yes-no",
+          "required": false,
+          "options": [
+            "Boundary Wall Yes",
+            "No"
+          ]
+        },
+        {
+          "field": "floor-allowed-to-contruction-far",
+          "required": false,
+          "options": null
+        },
+        {
+          "field": "any-contruction-yes-no",
+          "required": false,
+          "options": [
+            "Any Contruction Yes",
+            "No"
+          ]
+        },
+        {
+          "field": "side-opens",
+          "required": false,
+          "options": [
+            "Side Opens 1",
+            "2",
+            "3",
+            "4"
+          ]
+        }
+      ]
+    },
+    {
+      "type_path": [
+        "Residential",
+        "Land/Plot",
+        "Colonizer Plot"
+      ],
+      "fields": [
+        {
+          "field": "plot-area",
+          "required": false,
+          "options": [
+            "Plot Area"
+          ]
+        },
+        {
+          "field": "free-lease-hold",
+          "required": false,
+          "options": [
+            "Free hold",
+            "Lease Hold"
+          ]
+        },
+        {
+          "field": "road-with",
+          "required": false,
+          "options": [
+            "Road width"
+          ]
+        },
+        {
+          "field": "facing",
+          "required": false,
+          "options": [
+            "Facing -east",
+            "west …."
+          ]
+        },
+        {
+          "field": "dimension",
+          "required": false,
+          "options": [
+            "Dimension"
+          ]
+        },
+        {
+          "field": "boundary-wall-yes-no",
+          "required": false,
+          "options": [
+            "Boundary Wall Yes",
+            "No"
+          ]
+        },
+        {
+          "field": "floor-allowed-to-contruction-far",
+          "required": false,
+          "options": null
+        },
+        {
+          "field": "any-contruction-yes-no",
+          "required": false,
+          "options": [
+            "Any Contruction Yes",
+            "No"
+          ]
+        },
+        {
+          "field": "side-opens",
+          "required": false,
+          "options": [
+            "Side Opens 1",
+            "2",
+            "3",
+            "4"
+          ]
+        }
+      ]
+    },
+    {
+      "type_path": [
+        "Residential",
+        "Land/Plot",
+        "Cooprative Society Plot"
+      ],
+      "fields": [
+        {
+          "field": "plot-area",
+          "required": false,
+          "options": [
+            "Plot Area"
+          ]
+        },
+        {
+          "field": "free-lease-hold",
+          "required": false,
+          "options": [
+            "Free hold",
+            "Lease Hold"
+          ]
+        },
+        {
+          "field": "road-with",
+          "required": false,
+          "options": [
+            "Road width"
+          ]
+        },
+        {
+          "field": "facing",
+          "required": false,
+          "options": [
+            "Facing -east",
+            "west …."
+          ]
+        },
+        {
+          "field": "dimension",
+          "required": false,
+          "options": [
+            "Dimension"
+          ]
+        },
+        {
+          "field": "boundary-wall-yes-no",
+          "required": false,
+          "options": [
+            "Boundary Wall Yes",
+            "No"
+          ]
+        },
+        {
+          "field": "floor-allowed-to-contruction-far",
+          "required": false,
+          "options": null
+        },
+        {
+          "field": "any-contruction-yes-no",
+          "required": false,
+          "options": [
+            "Any Contruction Yes",
+            "No"
+          ]
+        },
+        {
+          "field": "side-opens",
+          "required": false,
+          "options": [
+            "Side Opens 1",
+            "2",
+            "3",
+            "4"
+          ]
+        }
+      ]
+    },
+    {
+      "type_path": [
+        "Residential",
+        "Land/Plot",
+        "Kachchi colony plot"
+      ],
+      "fields": [
+        {
+          "field": "plot-area",
+          "required": false,
+          "options": [
+            "Plot Area"
+          ]
+        },
+        {
+          "field": "free-lease-hold",
+          "required": false,
+          "options": [
+            "Free hold",
+            "Lease Hold"
+          ]
+        },
+        {
+          "field": "road-with",
+          "required": false,
+          "options": [
+            "Road width"
+          ]
+        },
+        {
+          "field": "facing",
+          "required": false,
+          "options": [
+            "Facing -east",
+            "west …."
+          ]
+        },
+        {
+          "field": "dimension",
+          "required": false,
+          "options": [
+            "Dimension"
+          ]
+        },
+        {
+          "field": "boundary-wall-yes-no",
+          "required": false,
+          "options": [
+            "Boundary Wall Yes",
+            "No"
+          ]
+        },
+        {
+          "field": "floor-allowed-to-contruction-far",
+          "required": false,
+          "options": null
+        },
+        {
+          "field": "any-contruction-yes-no",
+          "required": false,
+          "options": [
+            "Any Contruction Yes",
+            "No"
+          ]
+        },
+        {
+          "field": "side-opens",
+          "required": false,
+          "options": [
+            "Side Opens 1",
+            "2",
+            "3",
+            "4"
+          ]
+        }
+      ]
+    },
+    {
+      "type_path": [
+        "Residential",
+        "Land/Plot",
+        "Project Land"
+      ],
+      "fields": [
+        {
+          "field": "plot-area",
+          "required": false,
+          "options": [
+            "Plot Area"
+          ]
+        },
+        {
+          "field": "free-lease-hold",
+          "required": false,
+          "options": [
+            "Free hold",
+            "Lease Hold"
+          ]
+        },
+        {
+          "field": "road-with",
+          "required": false,
+          "options": [
+            "Road width"
+          ]
+        },
+        {
+          "field": "facing",
+          "required": false,
+          "options": [
+            "Facing -east",
+            "west …."
+          ]
+        },
+        {
+          "field": "dimension",
+          "required": false,
+          "options": [
+            "Dimension"
+          ]
+        },
+        {
+          "field": "boundary-wall-yes-no",
+          "required": false,
+          "options": [
+            "Boundary Wall Yes",
+            "No"
+          ]
+        },
+        {
+          "field": "floor-allowed-to-contruction-far",
+          "required": false,
+          "options": null
+        },
+        {
+          "field": "any-contruction-yes-no",
+          "required": false,
+          "options": [
+            "Any Contruction Yes",
+            "No"
+          ]
+        },
+        {
+          "field": "side-opens",
+          "required": false,
+          "options": [
+            "Side Opens 1",
+            "2",
+            "3",
+            "4"
+          ]
+        }
+      ]
+    },
+    {
+      "type_path": [
+        "Commercial",
+        "Retail",
+        "shop",
+        "Open Market Shop"
+      ],
+      "fields": [
+        {
+          "field": "toilets",
+          "required": false,
+          "options": [
+            "Toilets 1",
+            "2.."
+          ]
+        },
+        {
+          "field": "area",
+          "required": false,
+          "options": [
+            "Super",
+            "Builtup",
+            "Carpet"
+          ]
+        },
+        {
+          "field": "additional-rooms",
+          "required": false,
+          "options": [
+            "Store Room"
+          ]
+        },
+        {
+          "field": "furnishing",
+          "required": false,
+          "options": [
+            "Unfurnished",
+            "Semi",
+            "Fully"
+          ]
+        },
+        {
+          "field": "parking",
+          "required": false,
+          "options": [
+            "Reserved",
+            "Common Open",
+            "Covered 1",
+            "2.."
+          ]
+        },
+        {
+          "field": "floors",
+          "required": false,
+          "options": [
+            "Total Floor"
+          ]
+        },
+        {
+          "field": "staus",
+          "required": false,
+          "options": [
+            "Ready to Move",
+            "Under Construction"
+          ]
+        },
+        {
+          "field": "age-of-construction",
+          "required": false,
+          "options": [
+            "Age Of Construction"
+          ]
+        },
+        {
+          "field": "free-lease-hold",
+          "required": false,
+          "options": [
+            "Free hold",
+            "Lease Hold"
+          ]
+        },
+        {
+          "field": "road-with",
+          "required": false,
+          "options": [
+            "Road width"
+          ]
+        },
+        {
+          "field": "facing",
+          "required": false,
+          "options": [
+            "Facing -east",
+            "west …."
+          ]
+        },
+        {
+          "field": "dimension",
+          "required": false,
+          "options": [
+            "Dimension"
+          ]
+        },
+        {
+          "field": "boundary-wall-yes-no",
+          "required": false,
+          "options": [
+            "Boundary Wall Yes",
+            "No"
+          ]
+        },
+        {
+          "field": "floor-allowed-to-contruction-far",
+          "required": false,
+          "options": null
+        },
+        {
+          "field": "any-contruction-yes-no",
+          "required": false,
+          "options": [
+            "Any Contruction Yes",
+            "No"
+          ]
+        },
+        {
+          "field": "side-opens",
+          "required": false,
+          "options": [
+            "Side Opens 1",
+            "2",
+            "3",
+            "4"
+          ]
+        }
+      ]
+    },
+    {
+      "type_path": [
+        "Commercial",
+        "Retail",
+        "shop",
+        "Shoping Mall Shop"
+      ],
+      "fields": [
+        {
+          "field": "toilets",
+          "required": false,
+          "options": [
+            "Toilets 1",
+            "2.."
+          ]
+        },
+        {
+          "field": "area",
+          "required": false,
+          "options": [
+            "Super",
+            "Builtup",
+            "Carpet"
+          ]
+        },
+        {
+          "field": "furnishing",
+          "required": false,
+          "options": [
+            "Unfurnished",
+            "Semi",
+            "Fully"
+          ]
+        },
+        {
+          "field": "parking",
+          "required": false,
+          "options": [
+            "Reserved",
+            "Common Open",
+            "Covered 1",
+            "2.."
+          ]
+        },
+        {
+          "field": "floors",
+          "required": false,
+          "options": [
+            "Total Floor"
+          ]
+        },
+        {
+          "field": "staus",
+          "required": false,
+          "options": [
+            "Ready to Move",
+            "Under Construction"
+          ]
+        },
+        {
+          "field": "age-of-construction",
+          "required": false,
+          "options": [
+            "Age Of Construction"
+          ]
+        },
+        {
+          "field": "free-lease-hold",
+          "required": false,
+          "options": [
+            "Free hold",
+            "Lease Hold"
+          ]
+        },
+        {
+          "field": "road-with",
+          "required": false,
+          "options": [
+            "Road width"
+          ]
+        },
+        {
+          "field": "facing",
+          "required": false,
+          "options": [
+            "Facing -east",
+            "west …."
+          ]
+        },
+        {
+          "field": "dimension",
+          "required": false,
+          "options": [
+            "Dimension"
+          ]
+        },
+        {
+          "field": "boundary-wall-yes-no",
+          "required": false,
+          "options": [
+            "Boundary Wall Yes",
+            "No"
+          ]
+        },
+        {
+          "field": "floor-allowed-to-contruction-far",
+          "required": false,
+          "options": null
+        },
+        {
+          "field": "any-contruction-yes-no",
+          "required": false,
+          "options": [
+            "Any Contruction Yes",
+            "No"
+          ]
+        },
+        {
+          "field": "side-opens",
+          "required": false,
+          "options": [
+            "Side Opens 1",
+            "2",
+            "3",
+            "4"
+          ]
+        }
+      ]
+    },
+    {
+      "type_path": [
+        "Commercial",
+        "Retail",
+        "shop",
+        "Society Shop"
+      ],
+      "fields": [
+        {
+          "field": "toilets",
+          "required": false,
+          "options": [
+            "Toilets 1",
+            "2.."
+          ]
+        },
+        {
+          "field": "area",
+          "required": false,
+          "options": [
+            "Super",
+            "Builtup",
+            "Carpet"
+          ]
+        },
+        {
+          "field": "additional-rooms",
+          "required": false,
+          "options": [
+            "Store Room"
+          ]
+        },
+        {
+          "field": "furnishing",
+          "required": false,
+          "options": [
+            "Unfurnished",
+            "Semi",
+            "Fully"
+          ]
+        },
+        {
+          "field": "parking",
+          "required": false,
+          "options": [
+            "Reserved",
+            "Common Open",
+            "Covered 1",
+            "2.."
+          ]
+        },
+        {
+          "field": "floors",
+          "required": false,
+          "options": [
+            "Total Floor"
+          ]
+        },
+        {
+          "field": "staus",
+          "required": false,
+          "options": [
+            "Ready to Move",
+            "Under Construction"
+          ]
+        },
+        {
+          "field": "age-of-construction",
+          "required": false,
+          "options": [
+            "Age Of Construction"
+          ]
+        },
+        {
+          "field": "free-lease-hold",
+          "required": false,
+          "options": [
+            "Free hold",
+            "Lease Hold"
+          ]
+        },
+        {
+          "field": "road-with",
+          "required": false,
+          "options": [
+            "Road width"
+          ]
+        },
+        {
+          "field": "facing",
+          "required": false,
+          "options": [
+            "Facing -east",
+            "west …."
+          ]
+        },
+        {
+          "field": "dimension",
+          "required": false,
+          "options": [
+            "Dimension"
+          ]
+        },
+        {
+          "field": "boundary-wall-yes-no",
+          "required": false,
+          "options": [
+            "Boundary Wall Yes",
+            "No"
+          ]
+        },
+        {
+          "field": "floor-allowed-to-contruction-far",
+          "required": false,
+          "options": null
+        },
+        {
+          "field": "any-contruction-yes-no",
+          "required": false,
+          "options": [
+            "Any Contruction Yes",
+            "No"
+          ]
+        },
+        {
+          "field": "side-opens",
+          "required": false,
+          "options": [
+            "Side Opens 1",
+            "2",
+            "3",
+            "4"
+          ]
+        }
+      ]
+    },
+    {
+      "type_path": [
+        "Commercial",
+        "Retail",
+        "shop",
+        "Commercial Use Flat"
+      ],
+      "fields": [
+        {
+          "field": "toilets",
+          "required": false,
+          "options": [
+            "Toilets 1",
+            "2.."
+          ]
+        },
+        {
+          "field": "area",
+          "required": false,
+          "options": [
+            "Super",
+            "Builtup",
+            "Carpet"
+          ]
+        },
+        {
+          "field": "plot-area",
+          "required": false,
+          "options": [
+            "Plot Area"
+          ]
+        },
+        {
+          "field": "additional-rooms",
+          "required": false,
+          "options": [
+            "Store Room"
+          ]
+        },
+        {
+          "field": "furnishing",
+          "required": false,
+          "options": [
+            "Unfurnished",
+            "Semi",
+            "Fully"
+          ]
+        },
+        {
+          "field": "parking",
+          "required": false,
+          "options": [
+            "Reserved",
+            "Common Open",
+            "Covered 1",
+            "2.."
+          ]
+        },
+        {
+          "field": "floors",
+          "required": false,
+          "options": [
+            "Total Floor"
+          ]
+        },
+        {
+          "field": "staus",
+          "required": false,
+          "options": [
+            "Ready to Move",
+            "Under Construction"
+          ]
+        },
+        {
+          "field": "age-of-construction",
+          "required": false,
+          "options": [
+            "Age Of Construction"
+          ]
+        },
+        {
+          "field": "free-lease-hold",
+          "required": false,
+          "options": [
+            "Free hold",
+            "Lease Hold"
+          ]
+        },
+        {
+          "field": "facing",
+          "required": false,
+          "options": [
+            "Facing -east",
+            "west …."
+          ]
+        },
+        {
+          "field": "dimension",
+          "required": false,
+          "options": [
+            "Dimension"
+          ]
+        },
+        {
+          "field": "side-opens",
+          "required": false,
+          "options": [
+            "Side Opens 1",
+            "2",
+            "3",
+            "5"
+          ]
+        }
+      ]
+    },
+    {
+      "type_path": [
+        "Commercial",
+        "Retail",
+        "shop",
+        "commercial use parking"
+      ],
+      "fields": [
+        {
+          "field": "toilets",
+          "required": false,
+          "options": [
+            "Toilets 1",
+            "2.."
+          ]
+        },
+        {
+          "field": "area",
+          "required": false,
+          "options": [
+            "Super",
+            "Builtup",
+            "Carpet"
+          ]
+        },
+        {
+          "field": "additional-rooms",
+          "required": false,
+          "options": [
+            "Store Room"
+          ]
+        },
+        {
+          "field": "furnishing",
+          "required": false,
+          "options": [
+            "Unfurnished",
+            "Semi",
+            "Fully"
+          ]
+        },
+        {
+          "field": "parking",
+          "required": false,
+          "options": [
+            "Reserved",
+            "Common Open",
+            "Covered 1",
+            "2.."
+          ]
+        },
+        {
+          "field": "floors",
+          "required": false,
+          "options": [
+            "Total Floor"
+          ]
+        },
+        {
+          "field": "staus",
+          "required": false,
+          "options": [
+            "Ready to Move",
+            "Under Construction"
+          ]
+        },
+        {
+          "field": "age-of-construction",
+          "required": false,
+          "options": [
+            "Age Of Construction"
+          ]
+        },
+        {
+          "field": "free-lease-hold",
+          "required": false,
+          "options": [
+            "Free hold",
+            "Lease Hold"
+          ]
+        },
+        {
+          "field": "facing",
+          "required": false,
+          "options": [
+            "Facing -east",
+            "west …."
+          ]
+        },
+        {
+          "field": "dimension",
+          "required": false,
+          "options": [
+            "Dimension"
+          ]
+        },
+        {
+          "field": "side-opens",
+          "required": false,
+          "options": [
+            "Side Opens 1",
+            "2",
+            "3",
+            "6"
+          ]
+        }
+      ]
+    },
+    {
+      "type_path": [
+        "Commercial",
+        "Retail",
+        "kiosk",
+        "open Market kiosk"
+      ],
+      "fields": [
+        {
+          "field": "toilets",
+          "required": false,
+          "options": [
+            "Toilets 1",
+            "2.."
+          ]
+        },
+        {
+          "field": "area",
+          "required": false,
+          "options": [
+            "Super",
+            "Builtup",
+            "Carpet"
+          ]
+        },
+        {
+          "field": "furnishing",
+          "required": false,
+          "options": [
+            "Unfurnished",
+            "Semi",
+            "Fully"
+          ]
+        },
+        {
+          "field": "parking",
+          "required": false,
+          "options": [
+            "Reserved",
+            "Common Open",
+            "Covered 1",
+            "2.."
+          ]
+        },
+        {
+          "field": "staus",
+          "required": false,
+          "options": [
+            "Ready to Move",
+            "Under Construction"
+          ]
+        },
+        {
+          "field": "age-of-construction",
+          "required": false,
+          "options": [
+            "Age Of Construction"
+          ]
+        },
+        {
+          "field": "free-lease-hold",
+          "required": false,
+          "options": [
+            "Free hold",
+            "Lease Hold"
+          ]
+        },
+        {
+          "field": "facing",
+          "required": false,
+          "options": [
+            "Facing -east",
+            "west …."
+          ]
+        },
+        {
+          "field": "dimension",
+          "required": false,
+          "options": [
+            "Dimension"
+          ]
+        },
+        {
+          "field": "side-opens",
+          "required": false,
+          "options": [
+            "Side Opens 1",
+            "2",
+            "3",
+            "7"
+          ]
+        }
+      ]
+    },
+    {
+      "type_path": [
+        "Commercial",
+        "Retail",
+        "kiosk",
+        "shopping Mall Kiosk"
+      ],
+      "fields": [
+        {
+          "field": "toilets",
+          "required": false,
+          "options": [
+            "Toilets 1",
+            "2.."
+          ]
+        },
+        {
+          "field": "area",
+          "required": false,
+          "options": [
+            "Super",
+            "Builtup",
+            "Carpet"
+          ]
+        },
+        {
+          "field": "furnishing",
+          "required": false,
+          "options": [
+            "Unfurnished",
+            "Semi",
+            "Fully"
+          ]
+        },
+        {
+          "field": "parking",
+          "required": false,
+          "options": [
+            "Reserved",
+            "Common Open",
+            "Covered 1",
+            "2.."
+          ]
+        },
+        {
+          "field": "floors",
+          "required": false,
+          "options": [
+            "Total Floor"
+          ]
+        },
+        {
+          "field": "staus",
+          "required": false,
+          "options": [
+            "Ready to Move",
+            "Under Construction"
+          ]
+        },
+        {
+          "field": "age-of-construction",
+          "required": false,
+          "options": [
+            "Age Of Construction"
+          ]
+        },
+        {
+          "field": "free-lease-hold",
+          "required": false,
+          "options": [
+            "Free hold",
+            "Lease Hold"
+          ]
+        },
+        {
+          "field": "facing",
+          "required": false,
+          "options": [
+            "Facing -east",
+            "west …."
+          ]
+        },
+        {
+          "field": "dimension",
+          "required": false,
+          "options": [
+            "Dimension"
+          ]
+        },
+        {
+          "field": "side-opens",
+          "required": false,
+          "options": [
+            "Side Opens 1",
+            "2",
+            "3",
+            "8"
+          ]
+        }
+      ]
+    },
+    {
+      "type_path": [
+        "Commercial",
+        "Retail",
+        "Showroom",
+        "Open Market Showroom"
+      ],
+      "fields": [
+        {
+          "field": "toilets",
+          "required": false,
+          "options": [
+            "Toilets 1",
+            "2.."
+          ]
+        },
+        {
+          "field": "area",
+          "required": false,
+          "options": [
+            "Super",
+            "Builtup",
+            "Carpet"
+          ]
+        },
+        {
+          "field": "furnishing",
+          "required": false,
+          "options": [
+            "Unfurnished",
+            "Semi",
+            "Fully"
+          ]
+        },
+        {
+          "field": "parking",
+          "required": false,
+          "options": [
+            "Reserved",
+            "Common Open",
+            "Covered 1",
+            "2.."
+          ]
+        },
+        {
+          "field": "floors",
+          "required": false,
+          "options": [
+            "Total Floor"
+          ]
+        },
+        {
+          "field": "staus",
+          "required": false,
+          "options": [
+            "Ready to Move",
+            "Under Construction"
+          ]
+        },
+        {
+          "field": "age-of-construction",
+          "required": false,
+          "options": [
+            "Age Of Construction"
+          ]
+        },
+        {
+          "field": "free-lease-hold",
+          "required": false,
+          "options": [
+            "Free hold",
+            "Lease Hold"
+          ]
+        },
+        {
+          "field": "facing",
+          "required": false,
+          "options": [
+            "Facing -east",
+            "west …."
+          ]
+        },
+        {
+          "field": "dimension",
+          "required": false,
+          "options": [
+            "Dimension"
+          ]
+        },
+        {
+          "field": "side-opens",
+          "required": false,
+          "options": [
+            "Side Opens 1",
+            "2",
+            "3",
+            "9"
+          ]
+        }
+      ]
+    },
+    {
+      "type_path": [
+        "Commercial",
+        "Retail",
+        "Showroom",
+        "Shopping Mall Showroom"
+      ],
+      "fields": [
+        {
+          "field": "toilets",
+          "required": false,
+          "options": [
+            "Toilets 1",
+            "2.."
+          ]
+        },
+        {
+          "field": "area",
+          "required": false,
+          "options": [
+            "Super",
+            "Builtup",
+            "Carpet"
+          ]
+        },
+        {
+          "field": "furnishing",
+          "required": false,
+          "options": [
+            "Unfurnished",
+            "Semi",
+            "Fully"
+          ]
+        },
+        {
+          "field": "parking",
+          "required": false,
+          "options": [
+            "Reserved",
+            "Common Open",
+            "Covered 1",
+            "2.."
+          ]
+        },
+        {
+          "field": "floors",
+          "required": false,
+          "options": [
+            "Total Floor"
+          ]
+        },
+        {
+          "field": "staus",
+          "required": false,
+          "options": [
+            "Ready to Move",
+            "Under Construction"
+          ]
+        },
+        {
+          "field": "age-of-construction",
+          "required": false,
+          "options": [
+            "Age Of Construction"
+          ]
+        },
+        {
+          "field": "free-lease-hold",
+          "required": false,
+          "options": [
+            "Free hold",
+            "Lease Hold"
+          ]
+        },
+        {
+          "field": "facing",
+          "required": false,
+          "options": [
+            "Facing -east",
+            "west …."
+          ]
+        },
+        {
+          "field": "dimension",
+          "required": false,
+          "options": [
+            "Dimension"
+          ]
+        },
+        {
+          "field": "side-opens",
+          "required": false,
+          "options": [
+            "Side Opens 1",
+            "2",
+            "3",
+            "10"
+          ]
+        }
+      ]
+    },
+    {
+      "type_path": [
+        "Commercial",
+        "Retail",
+        "Showroom",
+        "hyper market"
+      ],
+      "fields": [
+        {
+          "field": "toilets",
+          "required": false,
+          "options": [
+            "Toilets 1",
+            "2.."
+          ]
+        },
+        {
+          "field": "area",
+          "required": false,
+          "options": [
+            "Super",
+            "Builtup",
+            "Carpet"
+          ]
+        },
+        {
+          "field": "furnishing",
+          "required": false,
+          "options": [
+            "Unfurnished",
+            "Semi",
+            "Fully"
+          ]
+        },
+        {
+          "field": "parking",
+          "required": false,
+          "options": [
+            "Reserved",
+            "Common Open",
+            "Covered 1",
+            "2.."
+          ]
+        },
+        {
+          "field": "floors",
+          "required": false,
+          "options": [
+            "Total Floor"
+          ]
+        },
+        {
+          "field": "staus",
+          "required": false,
+          "options": [
+            "Ready to Move",
+            "Under Construction"
+          ]
+        },
+        {
+          "field": "age-of-construction",
+          "required": false,
+          "options": [
+            "Age Of Construction"
+          ]
+        },
+        {
+          "field": "free-lease-hold",
+          "required": false,
+          "options": [
+            "Free hold",
+            "Lease Hold"
+          ]
+        },
+        {
+          "field": "facing",
+          "required": false,
+          "options": [
+            "Facing -east",
+            "west …."
+          ]
+        },
+        {
+          "field": "dimension",
+          "required": false,
+          "options": [
+            "Dimension"
+          ]
+        },
+        {
+          "field": "side-opens",
+          "required": false,
+          "options": [
+            "Side Opens 1",
+            "2",
+            "3",
+            "11"
+          ]
+        }
+      ]
+    },
+    {
+      "type_path": [
+        "Commercial",
+        "Office",
+        "Commercial Complex office"
+      ],
+      "fields": [
+        {
+          "field": "toilets",
+          "required": false,
+          "options": [
+            "Toilets 1",
+            "2.."
+          ]
+        },
+        {
+          "field": "area",
+          "required": false,
+          "options": [
+            "Super",
+            "Builtup",
+            "Carpet"
+          ]
+        },
+        {
+          "field": "furnishing",
+          "required": false,
+          "options": [
+            "Unfurnished",
+            "Semi",
+            "Fully"
+          ]
+        },
+        {
+          "field": "parking",
+          "required": false,
+          "options": [
+            "Reserved",
+            "Common Open",
+            "Covered 1",
+            "2.."
+          ]
+        },
+        {
+          "field": "floors",
+          "required": false,
+          "options": [
+            "Total Floor"
+          ]
+        },
+        {
+          "field": "staus",
+          "required": false,
+          "options": [
+            "Ready To Move",
+            "Under Construction"
+          ]
+        },
+        {
+          "field": "age-of-construction",
+          "required": false,
+          "options": [
+            "Age Of Construction"
+          ]
+        },
+        {
+          "field": "free-lease-hold",
+          "required": false,
+          "options": [
+            "Free Hold",
+            "Lease Hold"
+          ]
+        },
+        {
+          "field": "facing",
+          "required": false,
+          "options": [
+            "Facing -East",
+            "West"
+          ]
+        },
+        {
+          "field": "reception",
+          "required": false,
+          "options": [
+            "Reception"
+          ]
+        },
+        {
+          "field": "pantry-cantine",
+          "required": false,
+          "options": [
+            "Pantry",
+            "Cantine"
+          ]
+        },
+        {
+          "field": "mini-max-seats",
+          "required": false,
+          "options": [
+            "Max",
+            "Mini Steats"
+          ]
+        },
+        {
+          "field": "confernce-meeting-cabin",
+          "required": false,
+          "options": [
+            "Confernce",
+            "Meeting",
+            "Cabin"
+          ]
+        },
+        {
+          "field": "lifts",
+          "required": false,
+          "options": [
+            "Lifts"
+          ]
+        }
+      ]
+    },
+    {
+      "type_path": [
+        "Commercial",
+        "Office",
+        "Office Use Flat"
+      ],
+      "fields": [
+        {
+          "field": "rooms",
+          "required": false,
+          "options": null
+        },
+        {
+          "field": "toilets",
+          "required": false,
+          "options": [
+            "Toilets 1",
+            "2.."
+          ]
+        },
+        {
+          "field": "balconies",
+          "required": false,
+          "options": [
+            "Balconys 1",
+            "2.."
+          ]
+        },
+        {
+          "field": "area",
+          "required": false,
+          "options": [
+            "Super",
+            "Builtup",
+            "Carpet"
+          ]
+        },
+        {
+          "field": "furnishing",
+          "required": false,
+          "options": [
+            "Unfurnished",
+            "Semi",
+            "Fully"
+          ]
+        },
+        {
+          "field": "parking",
+          "required": false,
+          "options": [
+            "Reserved",
+            "Common Open",
+            "Covered 1",
+            "2.."
+          ]
+        },
+        {
+          "field": "floors",
+          "required": false,
+          "options": [
+            "Total Floor"
+          ]
+        },
+        {
+          "field": "staus",
+          "required": false,
+          "options": [
+            "Ready To Move",
+            "Under Construction"
+          ]
+        },
+        {
+          "field": "age-of-construction",
+          "required": false,
+          "options": [
+            "Age Of Construction"
+          ]
+        },
+        {
+          "field": "free-lease-hold",
+          "required": false,
+          "options": [
+            "Free Hold",
+            "Lease Hold"
+          ]
+        },
+        {
+          "field": "facing",
+          "required": false,
+          "options": [
+            "Facing -East",
+            "West"
+          ]
+        },
+        {
+          "field": "reception",
+          "required": false,
+          "options": [
+            "Reception"
+          ]
+        },
+        {
+          "field": "pantry-cantine",
+          "required": false,
+          "options": [
+            "Pantry",
+            "Cantine"
+          ]
+        },
+        {
+          "field": "mini-max-seats",
+          "required": false,
+          "options": [
+            "Max",
+            "Mini Steats"
+          ]
+        },
+        {
+          "field": "confernce-meeting-cabin",
+          "required": false,
+          "options": [
+            "Confernce",
+            "Meeting",
+            "Cabin"
+          ]
+        },
+        {
+          "field": "lifts",
+          "required": false,
+          "options": [
+            "Lifts"
+          ]
+        }
+      ]
+    },
+    {
+      "type_path": [
+        "Commercial",
+        "Office",
+        "IT Park Office Space"
+      ],
+      "fields": [
+        {
+          "field": "toilets",
+          "required": false,
+          "options": [
+            "Toilets 1",
+            "2.."
+          ]
+        },
+        {
+          "field": "area",
+          "required": false,
+          "options": [
+            "Super",
+            "Builtup",
+            "Carpet"
+          ]
+        },
+        {
+          "field": "furnishing",
+          "required": false,
+          "options": [
+            "Unfurnished",
+            "Semi",
+            "Fully"
+          ]
+        },
+        {
+          "field": "parking",
+          "required": false,
+          "options": [
+            "Reserved",
+            "Common Open",
+            "Covered 1",
+            "2.."
+          ]
+        },
+        {
+          "field": "floors",
+          "required": false,
+          "options": [
+            "Total Floor"
+          ]
+        },
+        {
+          "field": "staus",
+          "required": false,
+          "options": [
+            "Ready To Move",
+            "Under Construction"
+          ]
+        },
+        {
+          "field": "age-of-construction",
+          "required": false,
+          "options": [
+            "Age Of Construction"
+          ]
+        },
+        {
+          "field": "free-lease-hold",
+          "required": false,
+          "options": [
+            "Free Hold",
+            "Lease Hold"
+          ]
+        },
+        {
+          "field": "facing",
+          "required": false,
+          "options": [
+            "Facing -East",
+            "West"
+          ]
+        },
+        {
+          "field": "reception",
+          "required": false,
+          "options": [
+            "Reception"
+          ]
+        },
+        {
+          "field": "pantry-cantine",
+          "required": false,
+          "options": [
+            "Pantry",
+            "Cantine"
+          ]
+        },
+        {
+          "field": "mini-max-seats",
+          "required": false,
+          "options": [
+            "Max",
+            "Mini Steats"
+          ]
+        },
+        {
+          "field": "confernce-meeting-cabin",
+          "required": false,
+          "options": [
+            "Confernce",
+            "Meeting",
+            "Cabin"
+          ]
+        },
+        {
+          "field": "lifts",
+          "required": false,
+          "options": [
+            "Lifts"
+          ]
+        }
+      ]
+    },
+    {
+      "type_path": [
+        "Commercial",
+        "Office",
+        "Co working Office"
+      ],
+      "fields": [
+        {
+          "field": "toilets",
+          "required": false,
+          "options": [
+            "Toilets 1",
+            "2.."
+          ]
+        },
+        {
+          "field": "area",
+          "required": false,
+          "options": [
+            "Super",
+            "Builtup",
+            "Carpet"
+          ]
+        },
+        {
+          "field": "furnishing",
+          "required": false,
+          "options": [
+            "Unfurnished",
+            "Semi",
+            "Fully"
+          ]
+        },
+        {
+          "field": "parking",
+          "required": false,
+          "options": [
+            "Reserved",
+            "Common Open",
+            "Covered 1",
+            "2.."
+          ]
+        },
+        {
+          "field": "floors",
+          "required": false,
+          "options": [
+            "Total Floor"
+          ]
+        },
+        {
+          "field": "staus",
+          "required": false,
+          "options": [
+            "Ready To Move",
+            "Under Construction"
+          ]
+        },
+        {
+          "field": "age-of-construction",
+          "required": false,
+          "options": [
+            "Age Of Construction"
+          ]
+        },
+        {
+          "field": "free-lease-hold",
+          "required": false,
+          "options": [
+            "Free Hold",
+            "Lease Hold"
+          ]
+        },
+        {
+          "field": "facing",
+          "required": false,
+          "options": [
+            "Facing -East",
+            "West"
+          ]
+        },
+        {
+          "field": "reception",
+          "required": false,
+          "options": [
+            "Reception"
+          ]
+        },
+        {
+          "field": "pantry-cantine",
+          "required": false,
+          "options": [
+            "Pantry",
+            "Cantine"
+          ]
+        },
+        {
+          "field": "mini-max-seats",
+          "required": false,
+          "options": [
+            "Max",
+            "Mini Steats"
+          ]
+        },
+        {
+          "field": "confernce-meeting-cabin",
+          "required": false,
+          "options": [
+            "Confernce",
+            "Meeting",
+            "Cabin"
+          ]
+        },
+        {
+          "field": "lifts",
+          "required": false,
+          "options": [
+            "Lifts"
+          ]
+        }
+      ]
+    },
+    {
+      "type_path": [
+        "Commercial",
+        "Land",
+        "Commercial Land"
+      ],
+      "fields": [
+        {
+          "field": "area",
+          "required": false,
+          "options": [
+            "Super",
+            "Builtup",
+            "Carpet"
+          ]
+        },
+        {
+          "field": "plot-area",
+          "required": false,
+          "options": [
+            "Plot Area"
+          ]
+        },
+        {
+          "field": "free-lease-hold",
+          "required": false,
+          "options": [
+            "Free Hold",
+            "Lease"
+          ]
+        },
+        {
+          "field": "road-with",
+          "required": false,
+          "options": [
+            "Road Width"
+          ]
+        },
+        {
+          "field": "facing",
+          "required": false,
+          "options": [
+            "Facing East",
+            "West"
+          ]
+        },
+        {
+          "field": "dimension",
+          "required": false,
+          "options": [
+            "Dimensions"
+          ]
+        },
+        {
+          "field": "boundary-wall-yes-no",
+          "required": false,
+          "options": [
+            "Boundary Wall Yes",
+            "No"
+          ]
+        },
+        {
+          "field": "floor-allowed-to-contruction-far",
+          "required": false,
+          "options": null
+        },
+        {
+          "field": "side-opens",
+          "required": false,
+          "options": [
+            "Side Open 1",
+            "2",
+            "3."
+          ]
+        }
+      ]
+    },
+    {
+      "type_path": [
+        "Commercial",
+        "Land",
+        "Industrial Land"
+      ],
+      "fields": [
+        {
+          "field": "area",
+          "required": false,
+          "options": [
+            "Super",
+            "Builtup",
+            "Carpet"
+          ]
+        },
+        {
+          "field": "plot-area",
+          "required": false,
+          "options": [
+            "Plot Area"
+          ]
+        },
+        {
+          "field": "free-lease-hold",
+          "required": false,
+          "options": [
+            "Free Hold",
+            "Lease"
+          ]
+        },
+        {
+          "field": "road-with",
+          "required": false,
+          "options": [
+            "Road Width"
+          ]
+        },
+        {
+          "field": "facing",
+          "required": false,
+          "options": [
+            "Facing East",
+            "West"
+          ]
+        },
+        {
+          "field": "dimension",
+          "required": false,
+          "options": [
+            "Dimensions"
+          ]
+        },
+        {
+          "field": "boundary-wall-yes-no",
+          "required": false,
+          "options": [
+            "Boundary Wall Yes",
+            "No"
+          ]
+        },
+        {
+          "field": "floor-allowed-to-contruction-far",
+          "required": false,
+          "options": null
+        },
+        {
+          "field": "side-opens",
+          "required": false,
+          "options": [
+            "Side Open 1",
+            "2",
+            "3."
+          ]
+        }
+      ]
+    },
+    {
+      "type_path": [
+        "Commercial",
+        "Land",
+        "Commercial Project Land"
+      ],
+      "fields": [
+        {
+          "field": "area",
+          "required": false,
+          "options": [
+            "Super",
+            "Builtup",
+            "Carpet"
+          ]
+        },
+        {
+          "field": "plot-area",
+          "required": false,
+          "options": [
+            "Plot Area"
+          ]
+        },
+        {
+          "field": "free-lease-hold",
+          "required": false,
+          "options": [
+            "Free Hold",
+            "Lease"
+          ]
+        },
+        {
+          "field": "road-with",
+          "required": false,
+          "options": [
+            "Road Width"
+          ]
+        },
+        {
+          "field": "facing",
+          "required": false,
+          "options": [
+            "Facing East",
+            "West"
+          ]
+        },
+        {
+          "field": "dimension",
+          "required": false,
+          "options": [
+            "Dimensions"
+          ]
+        },
+        {
+          "field": "boundary-wall-yes-no",
+          "required": false,
+          "options": [
+            "Boundary Wall Yes",
+            "No"
+          ]
+        },
+        {
+          "field": "floor-allowed-to-contruction-far",
+          "required": false,
+          "options": null
+        },
+        {
+          "field": "side-opens",
+          "required": false,
+          "options": [
+            "Side Open 1",
+            "2",
+            "3."
+          ]
+        }
+      ]
+    },
+    {
+      "type_path": [
+        "Commercial",
+        "Land",
+        "Agriculture Land/Orchard"
+      ],
+      "fields": [
+        {
+          "field": "area",
+          "required": false,
+          "options": [
+            "Super",
+            "Builtup",
+            "Carpet"
+          ]
+        },
+        {
+          "field": "plot-area",
+          "required": false,
+          "options": [
+            "Plot Area"
+          ]
+        },
+        {
+          "field": "free-lease-hold",
+          "required": false,
+          "options": [
+            "Free Hold",
+            "Lease"
+          ]
+        },
+        {
+          "field": "road-with",
+          "required": false,
+          "options": [
+            "Road Width"
+          ]
+        },
+        {
+          "field": "facing",
+          "required": false,
+          "options": [
+            "Facing East",
+            "West"
+          ]
+        },
+        {
+          "field": "dimension",
+          "required": false,
+          "options": [
+            "Dimensions"
+          ]
+        },
+        {
+          "field": "boundary-wall-yes-no",
+          "required": false,
+          "options": [
+            "Boundary Wall Yes",
+            "No"
+          ]
+        },
+        {
+          "field": "floor-allowed-to-contruction-far",
+          "required": false,
+          "options": null
+        },
+        {
+          "field": "side-opens",
+          "required": false,
+          "options": [
+            "Side Open 1",
+            "2",
+            "3."
+          ]
+        }
+      ]
+    },
+    {
+      "type_path": [
+        "Commercial",
+        "storage",
+        "ware House"
+      ],
+      "fields": [
+        {
+          "field": "toilets",
+          "required": false,
+          "options": [
+            "Toilets 1",
+            "2.."
+          ]
+        },
+        {
+          "field": "area",
+          "required": false,
+          "options": [
+            "Super",
+            "Builtup",
+            "Carpet"
+          ]
+        },
+        {
+          "field": "plot-area",
+          "required": false,
+          "options": [
+            "Plot Area"
+          ]
+        },
+        {
+          "field": "furnishing",
+          "required": false,
+          "options": [
+            "Unfurnished",
+            "Semi",
+            "Fully"
+          ]
+        },
+        {
+          "field": "pre-rent-leased",
+          "required": false,
+          "options": [
+            "Pre Rent",
+            "Leased"
+          ]
+        },
+        {
+          "field": "parking",
+          "required": false,
+          "options": [
+            "Reserved",
+            "Common Open",
+            "Covered 1",
+            "2.."
+          ]
+        },
+        {
+          "field": "floors",
+          "required": false,
+          "options": [
+            "Total Floor"
+          ]
+        },
+        {
+          "field": "staus",
+          "required": false,
+          "options": [
+            "Ready To Move",
+            "Under Construction"
+          ]
+        },
+        {
+          "field": "age-of-construction",
+          "required": false,
+          "options": [
+            "Age Of Construction"
+          ]
+        },
+        {
+          "field": "free-lease-hold",
+          "required": false,
+          "options": [
+            "Free Hold",
+            "Lease"
+          ]
+        },
+        {
+          "field": "road-with",
+          "required": false,
+          "options": [
+            "Road Width"
+          ]
+        },
+        {
+          "field": "side-opens",
+          "required": false,
+          "options": [
+            "Side Open 1",
+            "2",
+            "3."
+          ]
+        }
+      ]
+    },
+    {
+      "type_path": [
+        "Commercial",
+        "storage",
+        "cold storage"
+      ],
+      "fields": [
+        {
+          "field": "toilets",
+          "required": false,
+          "options": [
+            "Toilets 1",
+            "2.."
+          ]
+        },
+        {
+          "field": "area",
+          "required": false,
+          "options": [
+            "Super",
+            "Builtup",
+            "Carpet"
+          ]
+        },
+        {
+          "field": "plot-area",
+          "required": false,
+          "options": [
+            "Plot Area"
+          ]
+        },
+        {
+          "field": "furnishing",
+          "required": false,
+          "options": [
+            "Unfurnished",
+            "Semi",
+            "Fully"
+          ]
+        },
+        {
+          "field": "pre-rent-leased",
+          "required": false,
+          "options": [
+            "Pre Rent",
+            "Leased"
+          ]
+        },
+        {
+          "field": "parking",
+          "required": false,
+          "options": [
+            "Reserved",
+            "Common Open",
+            "Covered 1",
+            "2.."
+          ]
+        },
+        {
+          "field": "floors",
+          "required": false,
+          "options": [
+            "Total Floor"
+          ]
+        },
+        {
+          "field": "staus",
+          "required": false,
+          "options": [
+            "Ready To Move",
+            "Under Construction"
+          ]
+        },
+        {
+          "field": "age-of-construction",
+          "required": false,
+          "options": [
+            "Age Of Construction"
+          ]
+        },
+        {
+          "field": "free-lease-hold",
+          "required": false,
+          "options": [
+            "Free Hold",
+            "Lease"
+          ]
+        },
+        {
+          "field": "road-with",
+          "required": false,
+          "options": [
+            "Road Width"
+          ]
+        },
+        {
+          "field": "side-opens",
+          "required": false,
+          "options": [
+            "Side Open 1",
+            "2",
+            "3."
+          ]
+        }
+      ]
+    },
+    {
+      "type_path": [
+        "Commercial",
+        "storage",
+        "Godown"
+      ],
+      "fields": [
+        {
+          "field": "toilets",
+          "required": false,
+          "options": [
+            "Toilets 1",
+            "2.."
+          ]
+        },
+        {
+          "field": "area",
+          "required": false,
+          "options": [
+            "Super",
+            "Builtup",
+            "Carpet"
+          ]
+        },
+        {
+          "field": "plot-area",
+          "required": false,
+          "options": [
+            "Plot Area"
+          ]
+        },
+        {
+          "field": "furnishing",
+          "required": false,
+          "options": [
+            "Unfurnished",
+            "Semi",
+            "Fully"
+          ]
+        },
+        {
+          "field": "pre-rent-leased",
+          "required": false,
+          "options": [
+            "Pre Rent",
+            "Leased"
+          ]
+        },
+        {
+          "field": "parking",
+          "required": false,
+          "options": [
+            "Reserved",
+            "Common Open",
+            "Covered 1",
+            "2.."
+          ]
+        },
+        {
+          "field": "floors",
+          "required": false,
+          "options": [
+            "Total Floor"
+          ]
+        },
+        {
+          "field": "staus",
+          "required": false,
+          "options": [
+            "Ready To Move",
+            "Under Construction"
+          ]
+        },
+        {
+          "field": "age-of-construction",
+          "required": false,
+          "options": [
+            "Age Of Construction"
+          ]
+        },
+        {
+          "field": "free-lease-hold",
+          "required": false,
+          "options": [
+            "Free Hold",
+            "Lease"
+          ]
+        },
+        {
+          "field": "road-with",
+          "required": false,
+          "options": [
+            "Road Width"
+          ]
+        },
+        {
+          "field": "side-opens",
+          "required": false,
+          "options": [
+            "Side Open 1",
+            "2",
+            "3."
+          ]
+        }
+      ]
+    },
+    {
+      "type_path": [
+        "Commercial",
+        "industry",
+        "Industrial Land/Plot"
+      ],
+      "fields": [
+        {
+          "field": "area",
+          "required": false,
+          "options": [
+            "Super",
+            "Builtup",
+            "Carpet"
+          ]
+        },
+        {
+          "field": "plot-area",
+          "required": false,
+          "options": [
+            "Plot Area"
+          ]
+        },
+        {
+          "field": "pre-rent-leased",
+          "required": false,
+          "options": [
+            "Pre Rent",
+            "Leased"
+          ]
+        },
+        {
+          "field": "staus",
+          "required": false,
+          "options": [
+            "Ready To Move",
+            "Under Construction"
+          ]
+        },
+        {
+          "field": "age-of-construction",
+          "required": false,
+          "options": [
+            "Age Of Construction"
+          ]
+        },
+        {
+          "field": "free-lease-hold",
+          "required": false,
+          "options": [
+            "Free Hold",
+            "Lease"
+          ]
+        },
+        {
+          "field": "road-with",
+          "required": false,
+          "options": [
+            "Road Width"
+          ]
+        },
+        {
+          "field": "dimension",
+          "required": false,
+          "options": [
+            "Dimensions"
+          ]
+        },
+        {
+          "field": "boundary-wall-yes-no",
+          "required": false,
+          "options": [
+            "Boundary Wall Yes",
+            "No"
+          ]
+        },
+        {
+          "field": "floor-allowed-to-contruction-far",
+          "required": false,
+          "options": null
+        },
+        {
+          "field": "side-opens",
+          "required": false,
+          "options": [
+            "Side Open 1",
+            "2",
+            "3."
+          ]
+        }
+      ]
+    },
+    {
+      "type_path": [
+        "Commercial",
+        "industry",
+        "Factory"
+      ],
+      "fields": [
+        {
+          "field": "area",
+          "required": false,
+          "options": [
+            "Super",
+            "Builtup",
+            "Carpet"
+          ]
+        },
+        {
+          "field": "plot-area",
+          "required": false,
+          "options": [
+            "Plot Area"
+          ]
+        },
+        {
+          "field": "pre-rent-leased",
+          "required": false,
+          "options": [
+            "Pre Rent",
+            "Leased"
+          ]
+        },
+        {
+          "field": "staus",
+          "required": false,
+          "options": [
+            "Ready To Move",
+            "Under Construction"
+          ]
+        },
+        {
+          "field": "age-of-construction",
+          "required": false,
+          "options": [
+            "Age Of Construction"
+          ]
+        },
+        {
+          "field": "free-lease-hold",
+          "required": false,
+          "options": [
+            "Free Hold",
+            "Lease"
+          ]
+        },
+        {
+          "field": "road-with",
+          "required": false,
+          "options": [
+            "Road Width"
+          ]
+        },
+        {
+          "field": "dimension",
+          "required": false,
+          "options": [
+            "Dimensions"
+          ]
+        },
+        {
+          "field": "boundary-wall-yes-no",
+          "required": false,
+          "options": [
+            "Boundary Wall Yes",
+            "No"
+          ]
+        },
+        {
+          "field": "floor-allowed-to-contruction-far",
+          "required": false,
+          "options": null
+        },
+        {
+          "field": "side-opens",
+          "required": false,
+          "options": [
+            "Side Open 1",
+            "2",
+            "3."
+          ]
+        }
+      ]
+    },
+    {
+      "type_path": [
+        "Commercial",
+        "industry",
+        "Industrial Floor"
+      ],
+      "fields": [
+        {
+          "field": "area",
+          "required": false,
+          "options": [
+            "Super",
+            "Builtup",
+            "Carpet"
+          ]
+        },
+        {
+          "field": "plot-area",
+          "required": false,
+          "options": [
+            "Plot Area"
+          ]
+        },
+        {
+          "field": "pre-rent-leased",
+          "required": false,
+          "options": [
+            "Pre Rent",
+            "Leased"
+          ]
+        },
+        {
+          "field": "staus",
+          "required": false,
+          "options": [
+            "Ready To Move",
+            "Under Construction"
+          ]
+        },
+        {
+          "field": "age-of-construction",
+          "required": false,
+          "options": [
+            "Age Of Construction"
+          ]
+        },
+        {
+          "field": "free-lease-hold",
+          "required": false,
+          "options": [
+            "Free Hold",
+            "Lease"
+          ]
+        },
+        {
+          "field": "road-with",
+          "required": false,
+          "options": [
+            "Road Width"
+          ]
+        },
+        {
+          "field": "dimension",
+          "required": false,
+          "options": [
+            "Dimensions"
+          ]
+        },
+        {
+          "field": "boundary-wall-yes-no",
+          "required": false,
+          "options": [
+            "Boundary Wall Yes",
+            "No"
+          ]
+        },
+        {
+          "field": "floor-allowed-to-contruction-far",
+          "required": false,
+          "options": null
+        },
+        {
+          "field": "side-opens",
+          "required": false,
+          "options": [
+            "Side Open 1",
+            "2",
+            "3."
+          ]
+        }
+      ]
+    },
+    {
+      "type_path": [
+        "Commercial",
+        "industry",
+        "Industrial Project Land"
+      ],
+      "fields": [
+        {
+          "field": "area",
+          "required": false,
+          "options": [
+            "Super",
+            "Builtup",
+            "Carpet"
+          ]
+        },
+        {
+          "field": "plot-area",
+          "required": false,
+          "options": [
+            "Plot Area"
+          ]
+        },
+        {
+          "field": "pre-rent-leased",
+          "required": false,
+          "options": [
+            "Pre Rent",
+            "Leased"
+          ]
+        },
+        {
+          "field": "staus",
+          "required": false,
+          "options": [
+            "Ready To Move",
+            "Under Construction"
+          ]
+        },
+        {
+          "field": "age-of-construction",
+          "required": false,
+          "options": [
+            "Age Of Construction"
+          ]
+        },
+        {
+          "field": "free-lease-hold",
+          "required": false,
+          "options": [
+            "Free Hold",
+            "Lease"
+          ]
+        },
+        {
+          "field": "road-with",
+          "required": false,
+          "options": [
+            "Road Width"
+          ]
+        },
+        {
+          "field": "dimension",
+          "required": false,
+          "options": [
+            "Dimensions"
+          ]
+        },
+        {
+          "field": "boundary-wall-yes-no",
+          "required": false,
+          "options": [
+            "Boundary Wall Yes",
+            "No"
+          ]
+        },
+        {
+          "field": "floor-allowed-to-contruction-far",
+          "required": false,
+          "options": null
+        },
+        {
+          "field": "side-opens",
+          "required": false,
+          "options": [
+            "Side Open 1",
+            "2",
+            "3."
+          ]
+        }
+      ]
+    },
+    {
+      "type_path": [
+        "Commercial",
+        "Hospitality",
+        "Hotel"
+      ],
+      "fields": [
+        {
+          "field": "rooms",
+          "required": false,
+          "options": null
+        },
+        {
+          "field": "area",
+          "required": false,
+          "options": [
+            "Super",
+            "Builtup",
+            "Carpet"
+          ]
+        },
+        {
+          "field": "plot-area",
+          "required": false,
+          "options": [
+            "Plot Area"
+          ]
+        },
+        {
+          "field": "furnishing",
+          "required": false,
+          "options": [
+            "Unfurnished",
+            "Semi",
+            "Fully"
+          ]
+        },
+        {
+          "field": "pre-rent-leased",
+          "required": false,
+          "options": [
+            "Pre Rent",
+            "Leased"
+          ]
+        },
+        {
+          "field": "parking",
+          "required": false,
+          "options": [
+            "Reserved",
+            "Common Open",
+            "Covered 1",
+            "2.."
+          ]
+        },
+        {
+          "field": "floors",
+          "required": false,
+          "options": [
+            "Total Floors"
+          ]
+        },
+        {
+          "field": "staus",
+          "required": false,
+          "options": [
+            "Ready To Move",
+            "Under Construction"
+          ]
+        },
+        {
+          "field": "age-of-construction",
+          "required": false,
+          "options": [
+            "Age Of Construction"
+          ]
+        },
+        {
+          "field": "free-lease-hold",
+          "required": false,
+          "options": [
+            "Free Hold",
+            "Lease"
+          ]
+        },
+        {
+          "field": "road-with",
+          "required": false,
+          "options": [
+            "Road Width"
+          ]
+        },
+        {
+          "field": "facing",
+          "required": false,
+          "options": [
+            "Facing East",
+            "West"
+          ]
+        },
+        {
+          "field": "side-opens",
+          "required": false,
+          "options": [
+            "Side Open 1",
+            "2",
+            "3."
+          ]
+        },
+        {
+          "field": "quailty-rating",
+          "required": false,
+          "options": [
+            "Quailty Rating"
+          ]
+        }
+      ]
+    },
+    {
+      "type_path": [
+        "Commercial",
+        "Hospitality",
+        "Guest House"
+      ],
+      "fields": [
+        {
+          "field": "rooms",
+          "required": false,
+          "options": null
+        },
+        {
+          "field": "area",
+          "required": false,
+          "options": [
+            "Super",
+            "Builtup",
+            "Carpet"
+          ]
+        },
+        {
+          "field": "plot-area",
+          "required": false,
+          "options": [
+            "Plot Area"
+          ]
+        },
+        {
+          "field": "furnishing",
+          "required": false,
+          "options": [
+            "Unfurnished",
+            "Semi",
+            "Fully"
+          ]
+        },
+        {
+          "field": "pre-rent-leased",
+          "required": false,
+          "options": [
+            "Pre Rent",
+            "Leased"
+          ]
+        },
+        {
+          "field": "parking",
+          "required": false,
+          "options": [
+            "Reserved",
+            "Common Open",
+            "Covered 1",
+            "2.."
+          ]
+        },
+        {
+          "field": "floors",
+          "required": false,
+          "options": [
+            "Total Floors"
+          ]
+        },
+        {
+          "field": "staus",
+          "required": false,
+          "options": [
+            "Ready To Move",
+            "Under Construction"
+          ]
+        },
+        {
+          "field": "age-of-construction",
+          "required": false,
+          "options": [
+            "Age Of Construction"
+          ]
+        },
+        {
+          "field": "free-lease-hold",
+          "required": false,
+          "options": [
+            "Free Hold",
+            "Lease"
+          ]
+        },
+        {
+          "field": "road-with",
+          "required": false,
+          "options": [
+            "Road Width"
+          ]
+        },
+        {
+          "field": "facing",
+          "required": false,
+          "options": [
+            "Facing East",
+            "West"
+          ]
+        },
+        {
+          "field": "side-opens",
+          "required": false,
+          "options": [
+            "Side Open 1",
+            "2",
+            "3."
+          ]
+        }
+      ]
+    },
+    {
+      "type_path": [
+        "Commercial",
+        "Hospitality",
+        "Banquet"
+      ],
+      "fields": [
+        {
+          "field": "rooms",
+          "required": false,
+          "options": null
+        },
+        {
+          "field": "area",
+          "required": false,
+          "options": [
+            "Super",
+            "Builtup",
+            "Carpet"
+          ]
+        },
+        {
+          "field": "plot-area",
+          "required": false,
+          "options": [
+            "Plot Area"
+          ]
+        },
+        {
+          "field": "furnishing",
+          "required": false,
+          "options": [
+            "Unfurnished",
+            "Semi",
+            "Fully"
+          ]
+        },
+        {
+          "field": "pre-rent-leased",
+          "required": false,
+          "options": [
+            "Pre Rent",
+            "Leased"
+          ]
+        },
+        {
+          "field": "parking",
+          "required": false,
+          "options": [
+            "Reserved",
+            "Common Open",
+            "Covered 1",
+            "2.."
+          ]
+        },
+        {
+          "field": "floors",
+          "required": false,
+          "options": [
+            "Total Floors"
+          ]
+        },
+        {
+          "field": "staus",
+          "required": false,
+          "options": [
+            "Ready To Move",
+            "Under Construction"
+          ]
+        },
+        {
+          "field": "age-of-construction",
+          "required": false,
+          "options": [
+            "Age Of Construction"
+          ]
+        },
+        {
+          "field": "free-lease-hold",
+          "required": false,
+          "options": [
+            "Free Hold",
+            "Lease"
+          ]
+        },
+        {
+          "field": "road-with",
+          "required": false,
+          "options": [
+            "Road Width"
+          ]
+        },
+        {
+          "field": "facing",
+          "required": false,
+          "options": [
+            "Facing East",
+            "West"
+          ]
+        },
+        {
+          "field": "side-opens",
+          "required": false,
+          "options": [
+            "Side Open 1",
+            "2",
+            "3."
+          ]
+        }
+      ]
+    },
+    {
+      "type_path": [
+        "Commercial",
+        "Hospitality",
+        "Resort"
+      ],
+      "fields": [
+        {
+          "field": "rooms",
+          "required": false,
+          "options": null
+        },
+        {
+          "field": "area",
+          "required": false,
+          "options": [
+            "Super",
+            "Builtup",
+            "Carpet"
+          ]
+        },
+        {
+          "field": "plot-area",
+          "required": false,
+          "options": [
+            "Plot Area"
+          ]
+        },
+        {
+          "field": "furnishing",
+          "required": false,
+          "options": [
+            "Unfurnished",
+            "Semi",
+            "Fully"
+          ]
+        },
+        {
+          "field": "pre-rent-leased",
+          "required": false,
+          "options": [
+            "Pre Rent",
+            "Leased"
+          ]
+        },
+        {
+          "field": "parking",
+          "required": false,
+          "options": [
+            "Reserved",
+            "Common Open",
+            "Covered 1",
+            "2.."
+          ]
+        },
+        {
+          "field": "floors",
+          "required": false,
+          "options": [
+            "Total Floors"
+          ]
+        },
+        {
+          "field": "staus",
+          "required": false,
+          "options": [
+            "Ready To Move",
+            "Under Construction"
+          ]
+        },
+        {
+          "field": "age-of-construction",
+          "required": false,
+          "options": [
+            "Age Of Construction"
+          ]
+        },
+        {
+          "field": "free-lease-hold",
+          "required": false,
+          "options": [
+            "Free Hold",
+            "Lease"
+          ]
+        },
+        {
+          "field": "road-with",
+          "required": false,
+          "options": [
+            "Road Width"
+          ]
+        },
+        {
+          "field": "facing",
+          "required": false,
+          "options": [
+            "Facing East",
+            "West"
+          ]
+        },
+        {
+          "field": "side-opens",
+          "required": false,
+          "options": [
+            "Side Open 1",
+            "2",
+            "3."
+          ]
+        }
+      ]
+    },
+    {
+      "type_path": [
+        "Commercial",
+        "Hospitality",
+        "Café/Restaurent"
+      ],
+      "fields": []
+    },
+    {
+      "type_path": [
+        "Commercial",
+        "Institution",
+        "Education",
+        "School"
+      ],
+      "fields": [
+        {
+          "field": "rooms",
+          "required": false,
+          "options": null
+        },
+        {
+          "field": "toilets",
+          "required": false,
+          "options": [
+            "How Many Bathrooms"
+          ]
+        },
+        {
+          "field": "area",
+          "required": false,
+          "options": [
+            "Super",
+            "Builtup",
+            "Carper"
+          ]
+        },
+        {
+          "field": "plot-area",
+          "required": false,
+          "options": [
+            "Plot Area"
+          ]
+        },
+        {
+          "field": "furnishing",
+          "required": false,
+          "options": [
+            "Unfurnished",
+            "Semi",
+            "Fully"
+          ]
+        },
+        {
+          "field": "pre-rent-leased",
+          "required": false,
+          "options": [
+            "Pre Rent",
+            "Leased"
+          ]
+        },
+        {
+          "field": "parking",
+          "required": false,
+          "options": [
+            "Reserved",
+            "Common Open",
+            "Covered 1",
+            "2.."
+          ]
+        },
+        {
+          "field": "floors",
+          "required": false,
+          "options": [
+            "Total Floors"
+          ]
+        },
+        {
+          "field": "staus",
+          "required": false,
+          "options": [
+            "Ready To Move",
+            "Under Construction"
+          ]
+        },
+        {
+          "field": "age-of-construction",
+          "required": false,
+          "options": [
+            "Age Of Construction"
+          ]
+        },
+        {
+          "field": "free-lease-hold",
+          "required": false,
+          "options": [
+            "Free Hold",
+            "Lease"
+          ]
+        },
+        {
+          "field": "side-opens",
+          "required": false,
+          "options": [
+            "Side Open 1",
+            "2",
+            "3"
+          ]
+        },
+        {
+          "field": "pantry-cantine",
+          "required": false,
+          "options": [
+            "Pantry",
+            "Cantine"
+          ]
+        },
+        {
+          "field": "revenus",
+          "required": false,
+          "options": [
+            "Revenus"
+          ]
+        },
+        {
+          "field": "play-ground",
+          "required": false,
+          "options": [
+            "Play Ground"
+          ]
+        },
+        {
+          "field": "labs",
+          "required": false,
+          "options": [
+            "Labs"
+          ]
+        }
+      ]
+    },
+    {
+      "type_path": [
+        "Commercial",
+        "Institution",
+        "Education",
+        "Collage"
+      ],
+      "fields": [
+        {
+          "field": "rooms",
+          "required": false,
+          "options": null
+        },
+        {
+          "field": "toilets",
+          "required": false,
+          "options": [
+            "How Many Bathrooms"
+          ]
+        },
+        {
+          "field": "area",
+          "required": false,
+          "options": [
+            "Super",
+            "Builtup",
+            "Carper"
+          ]
+        },
+        {
+          "field": "plot-area",
+          "required": false,
+          "options": [
+            "Plot Area"
+          ]
+        },
+        {
+          "field": "furnishing",
+          "required": false,
+          "options": [
+            "Unfurnished",
+            "Semi",
+            "Fully"
+          ]
+        },
+        {
+          "field": "pre-rent-leased",
+          "required": false,
+          "options": [
+            "Pre Rent",
+            "Leased"
+          ]
+        },
+        {
+          "field": "parking",
+          "required": false,
+          "options": [
+            "Reserved",
+            "Common Open",
+            "Covered 1",
+            "2.."
+          ]
+        },
+        {
+          "field": "floors",
+          "required": false,
+          "options": [
+            "Total Floors"
+          ]
+        },
+        {
+          "field": "staus",
+          "required": false,
+          "options": [
+            "Ready To Move",
+            "Under Construction"
+          ]
+        },
+        {
+          "field": "age-of-construction",
+          "required": false,
+          "options": [
+            "Age Of Construction"
+          ]
+        },
+        {
+          "field": "free-lease-hold",
+          "required": false,
+          "options": [
+            "Free Hold",
+            "Lease"
+          ]
+        },
+        {
+          "field": "side-opens",
+          "required": false,
+          "options": [
+            "Side Open 1",
+            "2",
+            "4"
+          ]
+        },
+        {
+          "field": "pantry-cantine",
+          "required": false,
+          "options": [
+            "Pantry",
+            "Cantine"
+          ]
+        },
+        {
+          "field": "revenus",
+          "required": false,
+          "options": [
+            "Revenus"
+          ]
+        },
+        {
+          "field": "play-ground",
+          "required": false,
+          "options": [
+            "Play Ground"
+          ]
+        },
+        {
+          "field": "labs",
+          "required": false,
+          "options": [
+            "Labs"
+          ]
+        }
+      ]
+    },
+    {
+      "type_path": [
+        "Commercial",
+        "Institution",
+        "Education",
+        "University"
+      ],
+      "fields": [
+        {
+          "field": "rooms",
+          "required": false,
+          "options": null
+        },
+        {
+          "field": "toilets",
+          "required": false,
+          "options": [
+            "How Many Bathrooms"
+          ]
+        },
+        {
+          "field": "area",
+          "required": false,
+          "options": [
+            "Super",
+            "Builtup",
+            "Carper"
+          ]
+        },
+        {
+          "field": "plot-area",
+          "required": false,
+          "options": [
+            "Plot Area"
+          ]
+        },
+        {
+          "field": "furnishing",
+          "required": false,
+          "options": [
+            "Unfurnished",
+            "Semi",
+            "Fully"
+          ]
+        },
+        {
+          "field": "pre-rent-leased",
+          "required": false,
+          "options": [
+            "Pre Rent",
+            "Leased"
+          ]
+        },
+        {
+          "field": "parking",
+          "required": false,
+          "options": [
+            "Reserved",
+            "Common Open",
+            "Covered 1",
+            "2.."
+          ]
+        },
+        {
+          "field": "floors",
+          "required": false,
+          "options": [
+            "Total Floors"
+          ]
+        },
+        {
+          "field": "staus",
+          "required": false,
+          "options": [
+            "Ready To Move",
+            "Under Construction"
+          ]
+        },
+        {
+          "field": "age-of-construction",
+          "required": false,
+          "options": [
+            "Age Of Construction"
+          ]
+        },
+        {
+          "field": "free-lease-hold",
+          "required": false,
+          "options": [
+            "Free Hold",
+            "Lease"
+          ]
+        },
+        {
+          "field": "side-opens",
+          "required": false,
+          "options": [
+            "Side Open 1",
+            "2",
+            "5"
+          ]
+        },
+        {
+          "field": "pantry-cantine",
+          "required": false,
+          "options": [
+            "Pantry",
+            "Cantine"
+          ]
+        },
+        {
+          "field": "revenus",
+          "required": false,
+          "options": [
+            "Revenus"
+          ]
+        },
+        {
+          "field": "play-ground",
+          "required": false,
+          "options": [
+            "Play Ground"
+          ]
+        },
+        {
+          "field": "labs",
+          "required": false,
+          "options": [
+            "Labs"
+          ]
+        }
+      ]
+    },
+    {
+      "type_path": [
+        "Commercial",
+        "Institution",
+        "Healthcare",
+        "Hospital"
+      ],
+      "fields": [
+        {
+          "field": "rooms",
+          "required": false,
+          "options": null
+        },
+        {
+          "field": "toilets",
+          "required": false,
+          "options": [
+            "How Many Opds"
+          ]
+        },
+        {
+          "field": "area",
+          "required": false,
+          "options": [
+            "Super",
+            "Builtup",
+            "Carper"
+          ]
+        },
+        {
+          "field": "plot-area",
+          "required": false,
+          "options": [
+            "Plot Area"
+          ]
+        },
+        {
+          "field": "furnishing",
+          "required": false,
+          "options": [
+            "Unfurnished",
+            "Semi",
+            "Fully"
+          ]
+        },
+        {
+          "field": "pre-rent-leased",
+          "required": false,
+          "options": [
+            "Pre Rent",
+            "Leased"
+          ]
+        },
+        {
+          "field": "parking",
+          "required": false,
+          "options": [
+            "Reserved",
+            "Common Open",
+            "Covered 1",
+            "2.."
+          ]
+        },
+        {
+          "field": "floors",
+          "required": false,
+          "options": [
+            "Total Floors"
+          ]
+        },
+        {
+          "field": "staus",
+          "required": false,
+          "options": [
+            "Ready To Move",
+            "Under Construction"
+          ]
+        },
+        {
+          "field": "age-of-construction",
+          "required": false,
+          "options": [
+            "Age Of Construction"
+          ]
+        },
+        {
+          "field": "free-lease-hold",
+          "required": false,
+          "options": [
+            "Free Hold",
+            "Lease"
+          ]
+        },
+        {
+          "field": "side-opens",
+          "required": false,
+          "options": [
+            "Side Open 1",
+            "2",
+            "6"
+          ]
+        },
+        {
+          "field": "pantry-cantine",
+          "required": false,
+          "options": [
+            "Pantry",
+            "Cantine"
+          ]
+        },
+        {
+          "field": "woards",
+          "required": false,
+          "options": [
+            "Words"
+          ]
+        },
+        {
+          "field": "operationth",
+          "required": false,
+          "options": [
+            "Operation theatre"
+          ]
+        }
+      ]
+    },
+    {
+      "type_path": [
+        "Commercial",
+        "Institution",
+        "Healthcare",
+        "Nursing Home"
+      ],
+      "fields": [
+        {
+          "field": "rooms",
+          "required": false,
+          "options": null
+        },
+        {
+          "field": "toilets",
+          "required": false,
+          "options": [
+            "How Many Opds"
+          ]
+        },
+        {
+          "field": "area",
+          "required": false,
+          "options": [
+            "Super",
+            "Builtup",
+            "Carper"
+          ]
+        },
+        {
+          "field": "plot-area",
+          "required": false,
+          "options": [
+            "Plot Area"
+          ]
+        },
+        {
+          "field": "furnishing",
+          "required": false,
+          "options": [
+            "Unfurnished",
+            "Semi",
+            "Fully"
+          ]
+        },
+        {
+          "field": "pre-rent-leased",
+          "required": false,
+          "options": [
+            "Pre Rent",
+            "Leased"
+          ]
+        },
+        {
+          "field": "parking",
+          "required": false,
+          "options": [
+            "Reserved",
+            "Common Open",
+            "Covered 1",
+            "2.."
+          ]
+        },
+        {
+          "field": "floors",
+          "required": false,
+          "options": [
+            "Total Floors"
+          ]
+        },
+        {
+          "field": "staus",
+          "required": false,
+          "options": [
+            "Ready To Move",
+            "Under Construction"
+          ]
+        },
+        {
+          "field": "age-of-construction",
+          "required": false,
+          "options": [
+            "Age Of Construction"
+          ]
+        },
+        {
+          "field": "free-lease-hold",
+          "required": false,
+          "options": [
+            "Free Hold",
+            "Lease"
+          ]
+        },
+        {
+          "field": "side-opens",
+          "required": false,
+          "options": [
+            "Side Open 1",
+            "2",
+            "7"
+          ]
+        },
+        {
+          "field": "pantry-cantine",
+          "required": false,
+          "options": [
+            "Pantry",
+            "Cantine"
+          ]
+        },
+        {
+          "field": "woards",
+          "required": false,
+          "options": [
+            "Words"
+          ]
+        },
+        {
+          "field": "operationth",
+          "required": false,
+          "options": [
+            "Operation theatre"
+          ]
+        }
+      ]
+    },
+    {
+      "type_path": [
+        "Commercial",
+        "Petrol Pump",
+        "Petrol Punmp"
+      ],
+      "fields": [
+        {
+          "field": "area",
+          "required": false,
+          "options": [
+            "Super",
+            "Builtup",
+            "Carper"
+          ]
+        },
+        {
+          "field": "plot-area",
+          "required": false,
+          "options": [
+            "Plot Area"
+          ]
+        },
+        {
+          "field": "pre-rent-leased",
+          "required": false,
+          "options": [
+            "Pre Rent",
+            "Leased"
+          ]
+        },
+        {
+          "field": "staus",
+          "required": false,
+          "options": [
+            "Ready To Move",
+            "Under Construction"
+          ]
+        },
+        {
+          "field": "age-of-construction",
+          "required": false,
+          "options": [
+            "Age Of Construction"
+          ]
+        },
+        {
+          "field": "free-lease-hold",
+          "required": false,
+          "options": [
+            "Free Hold",
+            "Lease"
+          ]
+        },
+        {
+          "field": "road-with",
+          "required": false,
+          "options": [
+            "Road Width"
+          ]
+        },
+        {
+          "field": "revenus",
+          "required": false,
+          "options": [
+            "Revenus"
+          ]
+        },
+        {
+          "field": "brands",
+          "required": false,
+          "options": [
+            "Brands"
+          ]
+        },
+        {
+          "field": "nozzels",
+          "required": false,
+          "options": [
+            "How Many Nozzels"
+          ]
+        }
+      ]
+    },
+    {
+      "type_path": [
+        "Commercial",
+        "Petrol Pump",
+        "CNG pump"
+      ],
+      "fields": [
+        {
+          "field": "area",
+          "required": false,
+          "options": [
+            "Super",
+            "Builtup",
+            "Carper"
+          ]
+        },
+        {
+          "field": "plot-area",
+          "required": false,
+          "options": [
+            "Plot Area"
+          ]
+        },
+        {
+          "field": "pre-rent-leased",
+          "required": false,
+          "options": [
+            "Pre Rent",
+            "Leased"
+          ]
+        },
+        {
+          "field": "road-with",
+          "required": false,
+          "options": [
+            "Road Width"
+          ]
+        },
+        {
+          "field": "revenus",
+          "required": false,
+          "options": [
+            "Revenus"
+          ]
+        },
+        {
+          "field": "brands",
+          "required": false,
+          "options": [
+            "Brands"
+          ]
+        },
+        {
+          "field": "nozzels",
+          "required": false,
+          "options": [
+            "How Many Nozzels"
+          ]
+        }
+      ]
+    },
+    {
+      "type_path": [
+        "Commercial",
+        "Petrol Pump",
+        "EV Charging Station"
+      ],
+      "fields": [
+        {
+          "field": "rooms",
+          "required": false,
+          "options": null
+        },
+        {
+          "field": "area",
+          "required": false,
+          "options": [
+            "Super",
+            "Builtup",
+            "Carper"
+          ]
+        },
+        {
+          "field": "plot-area",
+          "required": false,
+          "options": [
+            "Plot Area"
+          ]
+        },
+        {
+          "field": "pre-rent-leased",
+          "required": false,
+          "options": [
+            "Pre Rent",
+            "Leased"
+          ]
+        },
+        {
+          "field": "road-with",
+          "required": false,
+          "options": [
+            "Road Width"
+          ]
+        },
+        {
+          "field": "revenus",
+          "required": false,
+          "options": [
+            "Revenus"
+          ]
+        },
+        {
+          "field": "brands",
+          "required": false,
+          "options": [
+            "Brands"
+          ]
+        },
+        {
+          "field": "nozzels",
+          "required": false,
+          "options": [
+            "How Many Nozzels"
+          ]
+        }
+      ]
+    }
+  ]
+}

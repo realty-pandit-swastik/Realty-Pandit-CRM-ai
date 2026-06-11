@@ -4,6 +4,7 @@ import { authMiddleware } from '../middleware/auth';
 import { CalendarService } from '../services/calendar';
 import { WhatsAppService } from '../services/whatsapp';
 import { notify } from '../services/notify';
+import { captureRouteError } from '../utils/capture';
 
 const whatsappService = new WhatsAppService();
 
@@ -108,6 +109,7 @@ router.get('/appointments', authMiddleware, async (req, res) => {
             count: appointments.length,
         });
     } catch (error: any) {
+        captureRouteError(error, req, { route: 'calendar#1' });
         console.error('Get appointments error:', error);
         return res.status(500).json({
             success: false,
@@ -147,6 +149,7 @@ router.get('/appointments/:id', authMiddleware, async (req, res) => {
             appointment,
         });
     } catch (error: any) {
+        captureRouteError(error, req, { route: 'calendar#2' });
         console.error('Get appointment error:', error);
         return res.status(500).json({
             success: false,
@@ -277,6 +280,7 @@ router.post('/appointments', authMiddleware, async (req, res) => {
             message: 'Appointment created successfully',
         });
     } catch (error: any) {
+        captureRouteError(error, req, { route: 'calendar#3' });
         console.error('Create appointment error:', error);
         return res.status(500).json({
             success: false,
@@ -359,6 +363,7 @@ router.patch('/appointments/:id', authMiddleware, async (req, res) => {
             message: 'Appointment updated successfully',
         });
     } catch (error: any) {
+        captureRouteError(error, req, { route: 'calendar#4' });
         console.error('Update appointment error:', error);
         return res.status(500).json({
             success: false,
@@ -408,6 +413,7 @@ router.delete('/appointments/:id', authMiddleware, async (req, res) => {
             message: 'Appointment cancelled successfully',
         });
     } catch (error: any) {
+        captureRouteError(error, req, { route: 'calendar#5' });
         console.error('Cancel appointment error:', error);
         return res.status(500).json({
             success: false,
@@ -503,6 +509,7 @@ router.get('/summary', authMiddleware, async (req, res) => {
             },
         });
     } catch (error: any) {
+        captureRouteError(error, req, { route: 'calendar#6' });
         console.error('Get calendar summary error:', error);
         return res.status(500).json({
             success: false,

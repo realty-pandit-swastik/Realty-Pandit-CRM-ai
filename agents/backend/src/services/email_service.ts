@@ -27,6 +27,46 @@ interface EmailData {
     body?: string;
     html?: string;
     inReplyTo?: string;
+    /** When set, send via this agent's own mailbox if they configured one (T9b). */
+    senderAgentId?: string;
+}
+
+/**
+ * Build a per-agent SMTP transporter from their saved config (T9b), or return
+ * null to fall back to the shared Postfix relay.
+ */
+async function getSenderTransport(agentId?: string) {
+    if (!agentId) return null;
+    try {
+        const a = await prisma.agent.findUnique({
+            where: { id: agentId },
+            select: {
+                email: true, email_smtp_host: true, email_smtp_port: true,
+                email_smtp_secure: true, email_smtp_username: true, email_smtp_password: true,
+            },
+        });
+        if (!a?.email_smtp_host || !a.email_smtp_port || !a.email_smtp_password) return null;
+        const { decryptSecret } = await import('../utils/crypto');
+        let pass: string;
+        try {
+            pass = decryptSecret(a.email_smtp_password);
+        } catch (e) {
+            logger.error(`[EmailService] Could not decrypt SMTP password for agent ${agentId} — falling back to relay`);
+            return null;
+        }
+        return {
+            from: a.email,
+            transport: nodemailer.createTransport({
+                host: a.email_smtp_host,
+                port: a.email_smtp_port,
+                secure: !!a.email_smtp_secure,
+                auth: { user: a.email_smtp_username || a.email, pass },
+            }),
+        };
+    } catch (e) {
+        logger.error('[EmailService] getSenderTransport failed:', e);
+        return null;
+    }
 }
 
 export class EmailService {
@@ -44,9 +84,21 @@ export class EmailService {
                 subject = subject || aiResponse.subject;
             }
 
-            // Send via Postfix
-            const info = await transporter.sendMail({
-                from: data.from || `Panditji <info@realtypandit.in>`,
+            // Reject blank emails — body or html must have content
+            if (!body && !html) {
+                logger.warn(`[EmailService] Rejecting blank email to ${data.to} — no body or html provided`);
+                return null;
+            }
+
+            // T9b: prefer the sender's own configured mailbox; else shared Postfix relay.
+            const sender = await getSenderTransport(data.senderAgentId);
+            const activeTransport = sender?.transport || transporter;
+            const fromAddress = sender?.from
+                ? (data.from && data.from.includes(sender.from) ? data.from : `${data.from || 'Realty Pandit'}`.replace(/<[^>]+>/, `<${sender.from}>`))
+                : (data.from || `Realty Pandit <noreply@realtypandit.in>`);
+
+            const info = await activeTransport.sendMail({
+                from: fromAddress,
                 to: data.to,
                 cc: data.cc,
                 bcc: data.bcc,
@@ -65,7 +117,7 @@ export class EmailService {
                 data: {
                     tenant_id: tenantId,
                     phone_number: contact.phone_number,
-                    from_email: data.from || 'info@realtypandit.in',
+                    from_email: data.from || 'noreply@realtypandit.in',
                     to_email: data.to,
                     cc: data.cc,
                     bcc: data.bcc,

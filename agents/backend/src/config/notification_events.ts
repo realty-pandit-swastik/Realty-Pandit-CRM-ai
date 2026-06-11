@@ -56,6 +56,14 @@ export const NOTIFICATION_EVENTS: Record<string, NotificationEventConfig> = {
         defaultChannels: ['whatsapp', 'email', 'push'],
         actionUrl: (d) => `#/inventory?highlight=${d.inventory_id}`,
     },
+    inventory_transferred_away: {
+        event: 'inventory_transferred_away',
+        category: 'inventory',
+        title: (d) => 'Property Reassigned',
+        body: (d) => `${d.display_id || 'A property'} you handled was reassigned to ${d.to_agent || 'another agent'}${d.reason ? ' — ' + d.reason : ''}`,
+        defaultChannels: ['push'],
+        actionUrl: (d) => `#/inventory?highlight=${d.inventory_id}`,
+    },
     inventory_status_changed: {
         event: 'inventory_status_changed',
         category: 'inventory',
@@ -99,6 +107,23 @@ export const NOTIFICATION_EVENTS: Record<string, NotificationEventConfig> = {
         defaultChannels: ['whatsapp', 'push'],
         actionUrl: () => `#/leads`,
         prefKey: 'new_lead_notification',
+    },
+    lead_reassigned_to_me: {
+        event: 'lead_reassigned_to_me',
+        category: 'lead',
+        title: (d) => 'Lead Reassigned to You',
+        body: (d) => `${d.lead_name || 'A lead'} (${d.phone || ''}) reassigned to you by ${d.from_agent || 'a team member'}${d.reason ? ' — ' + d.reason : ''}`,
+        defaultChannels: ['whatsapp', 'push'],
+        actionUrl: (d) => `#/leads`,
+        prefKey: 'new_lead_notification',
+    },
+    lead_reassigned_away: {
+        event: 'lead_reassigned_away',
+        category: 'lead',
+        title: (d) => 'Lead Reassigned',
+        body: (d) => `${d.lead_name || 'A lead'} (${d.phone || ''}) you managed was reassigned to ${d.to_agent || 'another agent'}`,
+        defaultChannels: ['push'],
+        actionUrl: (d) => `#/leads`,
     },
     lead_status_changed: {
         event: 'lead_status_changed',
@@ -191,6 +216,22 @@ export const NOTIFICATION_EVENTS: Record<string, NotificationEventConfig> = {
         defaultChannels: ['whatsapp', 'email', 'push'],
         actionUrl: (d) => `#/deals`,
     },
+    deal_reassigned_to_me: {
+        event: 'deal_reassigned_to_me',
+        category: 'deal',
+        title: (d) => 'Deal Reassigned to You',
+        body: (d) => `Deal ${d.deal_id || ''} (${d.customer_name || 'customer'}) reassigned to you by ${d.from_agent || 'a team member'}${d.reason ? ' — ' + d.reason : ''}`,
+        defaultChannels: ['whatsapp', 'push'],
+        actionUrl: (d) => `#/deals?highlight=${d.deal_id}`,
+    },
+    deal_reassigned_away: {
+        event: 'deal_reassigned_away',
+        category: 'deal',
+        title: (d) => 'Deal Reassigned',
+        body: (d) => `Deal ${d.deal_id || ''} (${d.customer_name || 'customer'}) you managed was reassigned to ${d.to_agent || 'another agent'}`,
+        defaultChannels: ['push'],
+        actionUrl: (d) => `#/deals?highlight=${d.deal_id}`,
+    },
 
     // ─── APPOINTMENTS ─────────────────────────────────────────
     appointment_created: {
@@ -264,12 +305,46 @@ export const NOTIFICATION_EVENTS: Record<string, NotificationEventConfig> = {
         defaultChannels: ['push'],
         prefKey: 'task_due_reminder',
     },
+    // Self-set deal follow-up reminder (T8). Dedicated event so it can go via
+    // WhatsApp with the full task details the member entered (name/phone/note)
+    // WITHOUT changing behaviour of the shared generic `task_due_reminder`
+    // used by the daily digest / workflow tasks.
+    // See docs/plans/2026-05-18-google-calendar-task-reminder-sync.md
+    deal_reminder_due: {
+        event: 'deal_reminder_due',
+        category: 'task',
+        title: (d) => `⏰ Reminder: follow up with ${d.customer_name || d.customer_phone || 'client'}`,
+        body: (d) => [
+            `Hi ${d.agent_name || 'there'}, your reminder is due ${d.time_until || 'now'}.`,
+            ``,
+            `👤 ${d.customer_name || 'Client'}`,
+            ...(d.customer_phone ? [`📞 ${d.customer_phone}`] : []),
+            ...(d.note ? [`📝 ${d.note}`] : []),
+            ``,
+            `Open the deal in CRM to log your call.`,
+        ].join('\n'),
+        defaultChannels: ['push', 'whatsapp'],
+        actionUrl: (d) => `#/deals${d.deal_id ? `?id=${d.deal_id}` : ''}`,
+        prefKey: 'task_due_reminder',
+    },
     task_overdue: {
         event: 'task_overdue',
         category: 'task',
         title: (d) => 'Task Overdue',
         body: (d) => `"${(d.title || 'Task').substring(0, 60)}" is overdue!`,
         defaultChannels: ['push', 'whatsapp'],
+        prefKey: 'task_due_reminder',
+    },
+    // P4 — the member's stored Google token went dead (revoked/expired); their
+    // reminders/visits stopped syncing. Push-only (no WhatsApp template).
+    // See docs/plans/2026-05-18-google-calendar-task-reminder-sync.md
+    google_disconnected: {
+        event: 'google_disconnected',
+        category: 'task',
+        title: () => 'Google sync disconnected',
+        body: () => 'Your Google account was disconnected, so reminders & visits stopped syncing to your Calendar. Open your profile and click “Connect Google” to reconnect.',
+        defaultChannels: ['push'],
+        actionUrl: () => `#/profile`,
         prefKey: 'task_due_reminder',
     },
 
@@ -282,6 +357,44 @@ export const NOTIFICATION_EVENTS: Record<string, NotificationEventConfig> = {
         defaultChannels: ['push', 'whatsapp'],
         actionUrl: (d: any) => `#/lead-tasks`,
         prefKey: 'task_due_reminder',
+    },
+    // 2026-05-14: New lead just entered the CRM. Fires push + in-app for super_boss + assigned agent.
+    // WhatsApp text is sent separately by new_lead_alerts.ts (not via this pipeline) to keep the message
+    // format unchanged from what the team is used to.
+    new_lead_arrived: {
+        event: 'new_lead_arrived',
+        category: 'lead',
+        title: (d: any) => `🆕 New ${d.contact_type || 'Lead'} — ${d.source || 'CRM'}`,
+        body: (d: any) => {
+            const parts = [`${d.contact_name || 'Unknown'} (${d.contact_phone || '—'})`];
+            if (d.intent) parts.push(d.intent);
+            if (d.location) parts.push(`📍 ${d.location}`);
+            if (d.assigned_agent_name) parts.push(`→ ${d.assigned_agent_name}`);
+            return parts.join(' · ');
+        },
+        defaultChannels: ['push'],
+        actionUrl: () => `#/ext-leads`,
+        prefKey: 'new_lead_arrived',
+    },
+
+    // High-priority lead-action task (callback/visit request from WhatsApp/voice)
+    lead_action_task_created: {
+        event: 'lead_action_task_created',
+        category: 'task',
+        title: (d: any) => `${d.action_label || 'Lead Action'} — ACT NOW`,
+        body: (d: any) => `${d.contact_name || d.contact_phone || 'Lead'} requested action via ${d.source_channel || 'WhatsApp'}. SLA ${d.sla_minutes || 15} min — auto-escalates to super_boss if missed.`,
+        defaultChannels: ['push', 'whatsapp'],
+        actionUrl: (d: any) => `#/lead-tasks`,
+        prefKey: 'task_due_reminder',
+    },
+    // SLA breach — task auto-reassigned to super_boss
+    lead_action_sla_breach: {
+        event: 'lead_action_sla_breach',
+        category: 'task',
+        title: (d: any) => `⚠️ SLA BREACH — Escalated to You`,
+        body: (d: any) => `${d.contact_name || d.contact_phone || 'Lead'}'s ${d.action_label || 'request'} was not actioned by ${d.original_agent_name || 'the assigned agent'} within ${d.sla_minutes || 15} min. Now assigned to you — call NOW.`,
+        defaultChannels: ['push', 'whatsapp'],
+        actionUrl: (d: any) => `#/lead-tasks`,
     },
     workflow_stage_completed: {
         event: 'workflow_stage_completed',

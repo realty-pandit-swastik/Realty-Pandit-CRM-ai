@@ -61,10 +61,18 @@ export class MatchingAgent implements BaseAgent {
             preferred_location: contact.preferred_location,
         };
 
-        // Extract BHK from message if mentioned
-        const bhkMatch = msg.match(/(\d)\s*bhk/);
+        // Extract BHK — message first (handles "2/3 bhk", "bedroom"),
+        // else the persisted demand_bhk (set by SalesAgent.extractBuyerData).
+        // 2026-05-19: was /(\d)\s*bhk/ only → "2/3 BHK" / "2 bedroom" buyers
+        // got configuration-agnostic results.
+        const bhkMatch = msg.match(/(\d)\s*\/?\s*(\d)?\s*(?:bhk|bedroom|bed)\b/i);
         if (bhkMatch) {
-            criteria.bhk = parseInt(bhkMatch[1]);
+            criteria.bhk = parseInt(bhkMatch[1], 10);
+        } else if ((contact.demand_schema_values as any)?.bhk) {
+            // demand_bhk column dropped 2026-05-29 — read canonical schema_values.bhk
+            // ("2" / "1 RK" / "8+"); parseInt extracts the numeric part.
+            const _b = parseInt(String((contact.demand_schema_values as any).bhk), 10);
+            if (!Number.isNaN(_b)) criteria.bhk = _b;
         }
 
         // Extract budget from message if mentioned (e.g., "50 lakh", "1 crore")
@@ -198,7 +206,7 @@ export class MatchingAgent implements BaseAgent {
                 match_ids: matches.map(m => m.id),
                 top_score: matches[0]?.match_score,
                 criteria: criteria,
-                lifecycle_stage: 'MATCHED',
+                lifecycle_stage: 'QUALIFIED',
                 lead_status: 'warm',
             },
         };
@@ -276,7 +284,7 @@ export class MatchingAgent implements BaseAgent {
             quality_hint: 'confident',
             metadata: {
                 selected_property_id: propertyId,
-                lifecycle_stage: 'MATCHED',
+                lifecycle_stage: 'QUALIFIED',
             },
         };
     }
@@ -312,7 +320,10 @@ export class MatchingAgent implements BaseAgent {
             if (!prop) return null;
 
             const specs = prop.specs ? (typeof prop.specs === 'string' ? JSON.parse(prop.specs) : prop.specs) : {};
-            const features = prop.features ? (typeof prop.features === 'string' ? JSON.parse(prop.features) : prop.features) : {};
+            // Phase 4 dedup (2026-05-28): amenities live in specs.amenities (label array).
+            const features = Array.isArray(specs.amenities)
+                ? specs.amenities.reduce((acc: Record<string, boolean>, label: string) => { acc[label] = true; return acc; }, {})
+                : {};
 
             const price = prop.price
                 ? `₹${prop.price_unit === 'Crore' || prop.price_unit === 'Cr' ? (Number(prop.price) / 10000000).toFixed(1) + ' Cr' : (Number(prop.price) / 100000).toFixed(1) + ' Lakh'}`

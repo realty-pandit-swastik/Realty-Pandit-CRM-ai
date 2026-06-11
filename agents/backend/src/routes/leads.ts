@@ -3,25 +3,42 @@ import { Router } from 'express';
 import { LeadScoreService } from '../services/lead_score';
 import { MatchingEngine, buildMatchCriteriaFromLead } from '../services/matching_engine';
 import prisma from '../db';
-import { normalizePhone } from '../utils/phone';
-import { authMiddleware } from '../middleware/auth';
+import { normalizePhone, resolveStoredContactPhone, isPlaceholderPhone } from '../utils/phone';
+import { resolveDemandSlugs } from '../utils/classification';
+import { resolveTypeFilter } from '../utils/demand_taxonomy';
+import { foldLegacyDemand, mergeDemandSchemaValues, bhkFromString } from '../utils/demand_canonical';
+import { expandTaxonomyNodeIds } from '../utils/taxonomy_filter';
+import { authMiddleware, checkPermission } from '../middleware/auth';
 import { geocodeAddress } from '../utils/geocode';
 import { sendBuyerConfirmationWhatsApp, sendBuyerConfirmationEmail } from '../services/lead_notifications';
 import { ensurePartnerAgent } from '../services/partner_auto_create';
+import { ensureDealForLead } from '../services/ensure_deal';
 import { notify } from '../services/notify';
 import { sendPartnerWelcomeWhatsApp } from '../services/partner_notifications';
+import { syncContactName } from '../services/contact_identity';
 
 const router = Router();
 router.use(authMiddleware);
 const leadScoreService = new LeadScoreService();
 const matchingEngine = new MatchingEngine();
 
+import { buildContactVisibilityFilter, buildFullContactVisibilityFilter } from '../middleware/contact_visibility';
+import { captureRouteError } from '../utils/capture';
+
 const PRIVILEGED_ROLES = ['super_boss', 'manager'];
 
-/** Normalize phone but preserve TEMP_ placeholder phones (partner referral leads without phone) */
-function resolvePhone(raw: string): string {
-    if (raw.startsWith('TEMP_')) return raw;
-    return normalizePhone(raw);
+/**
+ * Resolve a :phone route param to the ACTUAL stored Contact PK so leads written
+ * in any historical format (bare 10-digit, 91-prefixed, 99acres `+91-` dash)
+ * still open instead of throwing "Could Not Load Lead". Falls back to the
+ * normalized form when no contact matches, so each route's own not-found 404
+ * still fires. Preserves TEMP_ placeholder phones.
+ * See docs/plans/2026-05-17-website-phone-normalization-fix.md
+ */
+async function resolvePhone(raw: string): Promise<string> {
+    if (isPlaceholderPhone(raw)) return raw;  // TEMP_ / PENDING- placeholders: exact-match, never normalize
+    const stored = await resolveStoredContactPhone(raw, prisma);
+    return stored ?? normalizePhone(raw);
 }
 
 // GET /api/leads/by-source
@@ -55,6 +72,7 @@ router.get('/by-source', async (req: any, res) => {
 
         res.json(result);
     } catch (error) {
+        captureRouteError(error, req, { route: 'leads#1' });
         res.status(500).json({ error: (error as Error).message });
     }
 });
@@ -76,34 +94,70 @@ router.get('/recent-external', async (req: any, res) => {
         const categoryId = req.query.category_id as string | undefined;
         const subCategoryId = req.query.sub_category_id as string | undefined;
         const typeId = req.query.type_id as string | undefined;
+        const taxonomyNodeIds = req.query.taxonomy_node_ids as string | undefined;
         const lat = req.query.lat ? parseFloat(req.query.lat as string) : undefined;
         const lng = req.query.lng ? parseFloat(req.query.lng as string) : undefined;
         const radiusKm = req.query.radius_km ? parseFloat(req.query.radius_km as string) : 2;
         const notContactedDays = req.query.not_contacted_days ? parseInt(req.query.not_contacted_days as string) : undefined;
         const noShowcaseDays = req.query.no_showcase_days ? parseInt(req.query.no_showcase_days as string) : undefined;
+        // 2026-05-13: search param wired (was previously unused, frontend filtered client-side)
+        const search = (req.query.search as string | undefined)?.trim();
+        // 2026-05-13: active/archived/all toggle. Default behavior excludes lost+closed so
+        // the team only sees workable leads. Pass 'archived' to see lost/closed, 'all' for everything.
+        const activeFilter = (req.query.active as string | undefined) || 'active';
 
-        const isPrivileged = PRIVILEGED_ROLES.includes(req.agent.role);
+        const visibilityFilter = buildContactVisibilityFilter(req.agent.id, req.agent.role);
 
         const where: any = {
             contact_type: { notIn: ['LANDLORD', 'MANAGEMENT', 'PARTNER_AGENT'] },
+            ...visibilityFilter,
         };
-
-        // Role-based visibility
-        if (!isPrivileged) {
-            where.assigned_agent_id = req.agent.id;
-        }
 
         // Source filter — when specified use it; when not, show all
         if (source) {
             where.source = source;
         }
 
-        if (status) where.lead_status = status;
+        // Explicit status param wins over active/archived toggle
+        if (status) {
+            where.lead_status = status;
+        } else if (activeFilter === 'active') {
+            where.lead_status = { notIn: ['lost', 'closed'] };
+        } else if (activeFilter === 'archived') {
+            where.lead_status = { in: ['lost', 'closed'] };
+        }
+        // activeFilter === 'all' → no lead_status constraint
+
+        // Search across name + phone (handles raw digits, +91 prefix, spaces, dashes)
+        if (search) {
+            const { extractSearchDigits, phoneVariants } = await import('../utils/phone');
+            const digits = extractSearchDigits(search);
+            const orClauses: any[] = [
+                { name: { contains: search, mode: 'insensitive' } },
+                { email: { contains: search, mode: 'insensitive' } },
+            ];
+            if (digits) {
+                // Try the 3 standard variants AND a contains-on-digits fallback
+                for (const variant of phoneVariants(digits)) {
+                    orClauses.push({ phone_number: { contains: variant } });
+                }
+                orClauses.push({ phone_number: { contains: digits } });
+            }
+            if (where.AND) where.AND.push({ OR: orClauses });
+            else where.AND = [{ OR: orClauses }];
+        }
 
         // Advanced filters
         if (bhk) {
+            // `demand_bhk` column dropped 2026-05-29 — BHK now lives in
+            // demand_schema_values.bhk (string-typed: "1","2","1 RK","8+"). Filtering on the
+            // dropped column 500'd the whole leads list. Match the canonical JSON path instead.
             const bhkValues = bhk.split(',').map(v => parseInt(v.trim(), 10)).filter(n => !isNaN(n));
-            if (bhkValues.length > 0) where.demand_bhk = { in: bhkValues };
+            if (bhkValues.length > 0) {
+                const bhkOr = bhkValues.map(v => ({ demand_schema_values: { path: ['bhk'], equals: String(v) } }));
+                if (where.AND) where.AND.push({ OR: bhkOr });
+                else where.AND = [{ OR: bhkOr }];
+            }
         }
         if (category) {
             where.property_type = { contains: category, mode: 'insensitive' };
@@ -120,10 +174,16 @@ router.get('/recent-external', async (req: any, res) => {
             where.contact_type = intent;
         }
 
-        // Classification ID filters
+        // Classification ID filters (legacy)
         if (categoryId) where.category_id = categoryId;
         if (subCategoryId) where.sub_category_id = subCategoryId;
         if (typeId) where.type_id = typeId;
+
+        // Taxonomy filter (new tree): demand contact's node IN (selected + descendants).
+        if (taxonomyNodeIds && taxonomyNodeIds.trim()) {
+            const expanded = await expandTaxonomyNodeIds(taxonomyNodeIds.split(',').map(s => s.trim()).filter(Boolean));
+            if (expanded.length) where.demand_taxonomy_node_id = { in: expanded };
+        }
 
         // Proximity filter — Haversine on preferred_lat/preferred_lng
         if (lat !== undefined && lng !== undefined) {
@@ -195,7 +255,8 @@ router.get('/recent-external', async (req: any, res) => {
                     assigned_agent_id: true,
                     budget_min: true,
                     budget_max: true,
-                    demand_bhk: true,
+                    // demand_bhk dropped Phase 5 — derive from demand_schema_values.bhk
+                    demand_schema_values: true,
                     category_id: true,
                     sub_category_id: true,
                     type_id: true,
@@ -204,6 +265,9 @@ router.get('/recent-external', async (req: any, res) => {
                     lead_type: true,
                     referral_partner_name: true,
                     referral_partner_phone: true,
+                    // 2026-05-13: include assigned agent name so frontend can show
+                    // "Assigned to: <name>" on tile + column without an extra lookup
+                    assigned_agent: { select: { id: true, name: true, role: true } },
                 },
             }),
             prisma.contact.count({ where }),
@@ -211,6 +275,7 @@ router.get('/recent-external', async (req: any, res) => {
 
         res.json({ leads, total, page, limit });
     } catch (error) {
+        captureRouteError(error, req, { route: 'leads#2' });
         res.status(500).json({ error: (error as Error).message });
     }
 });
@@ -219,7 +284,7 @@ router.get('/recent-external', async (req: any, res) => {
 // Update a lead's status
 router.patch('/:phone/status', async (req, res) => {
     try {
-        const phone = resolvePhone(req.params.phone);
+        const phone = await resolvePhone(req.params.phone);
         const { lead_status, lifecycle_stage, notes } = req.body;
 
         const updateData: any = {};
@@ -245,9 +310,397 @@ router.patch('/:phone/status', async (req, res) => {
 
         res.json(contact);
     } catch (error: any) {
+        captureRouteError(error, req, { route: 'leads#3' });
         if (error?.code === 'P2025') {
             return res.status(404).json({ error: 'Lead not found' });
         }
+        res.status(500).json({ error: (error as Error).message });
+    }
+});
+
+// PATCH /api/leads/:phone/reassign
+// 2026-05-15: Lead managers (employee role) can reassign leads they currently own.
+// Managers + super_boss can reassign any lead. Audit row written to interactions.
+router.patch('/:phone/reassign', async (req: any, res) => {
+    try {
+        const phone = await resolvePhone(req.params.phone);
+        const { agent_id, reason } = req.body || {};
+        const actor = req.agent;
+
+        if (!agent_id) return res.status(400).json({ error: 'agent_id is required' });
+        if (agent_id === actor.id) return res.status(400).json({ error: 'Cannot reassign to yourself' });
+
+        const targetAgent = await prisma.agent.findFirst({
+            where: { id: agent_id, tenant_id: actor.tenant_id, status: 'active' },
+            select: { id: true, name: true, role: true, phone: true, email: true },
+        });
+        if (!targetAgent) return res.status(404).json({ error: 'Target agent not found or inactive' });
+
+        const contact = await prisma.contact.findUnique({
+            where: { phone_number: phone },
+            select: { phone_number: true, name: true, assigned_agent_id: true, tenant_id: true },
+        });
+        if (!contact) return res.status(404).json({ error: 'Lead not found' });
+
+        // Self-reassign check: employees can only reassign leads they currently own.
+        if (actor.role === 'employee' && contact.assigned_agent_id !== actor.id) {
+            return res.status(403).json({ error: 'You can only reassign leads you are currently the lead manager of' });
+        }
+
+        const previousAgentId = contact.assigned_agent_id;
+        const actorRecord = await prisma.agent.findUnique({ where: { id: actor.id }, select: { name: true } });
+        const actorName = actorRecord?.name || actor.email || 'a team member';
+        const noteText = reason || `Reassigned to ${targetAgent.name}`;
+        const contactName = contact.name || phone;
+
+        await prisma.$transaction([
+            prisma.contact.update({
+                where: { phone_number: phone },
+                data: { assigned_agent_id: agent_id, updated_at: new Date() },
+            }),
+            // Lead owner == deal coordinator (single source of truth). The
+            // /assign endpoint already did this; /reassign must too, or the
+            // deal pipeline keeps the stale coordinator after a reassign.
+            // See docs/plans/2026-05-17-deal-sync-and-welcome-investigation.md
+            prisma.transaction.updateMany({
+                where: {
+                    demand_contact_id: phone,
+                    status: { notIn: ['CLOSED_WON', 'CLOSED_LOST', 'ON_HOLD'] },
+                },
+                data: {
+                    coordinator_agent_id: agent_id,
+                    executive_agent_id: agent_id,
+                    updated_at: new Date(),
+                },
+            }),
+            prisma.interaction.create({
+                data: {
+                    tenant_id: contact.tenant_id,
+                    phone_number: phone,
+                    channel: 'admin',
+                    direction: 'outbound',
+                    event_type: 'lead_reassigned',
+                    content: `Lead reassigned from ${actorName} to ${targetAgent.name} (${targetAgent.role}). Reason: ${noteText}`,
+                    metadata: {
+                        from_agent_id: previousAgentId,
+                        from_agent_name: actor.name,
+                        to_agent_id: agent_id,
+                        to_agent_name: targetAgent.name,
+                        reason: noteText,
+                        actor_id: actor.id,
+                    },
+                },
+            }),
+        ]);
+
+        // Notify new owner (always) + previous owner if different from actor
+        try {
+            notify('lead_reassigned_to_me', [{
+                id: targetAgent.id, type: 'agent' as const,
+                phone: targetAgent.phone ?? undefined, email: targetAgent.email || undefined,
+                name: targetAgent.name,
+            }], { contact_name: contactName, contact_phone: phone, from_agent_name: actor.name, reason: noteText });
+
+            if (previousAgentId && previousAgentId !== actor.id && previousAgentId !== targetAgent.id) {
+                const prev = await prisma.agent.findUnique({
+                    where: { id: previousAgentId },
+                    select: { id: true, name: true, phone: true, email: true },
+                });
+                if (prev) {
+                    notify('lead_reassigned_away', [{
+                        id: prev.id, type: 'agent' as const,
+                        phone: prev.phone ?? undefined, email: prev.email || undefined,
+                        name: prev.name,
+                    }], { contact_name: contactName, contact_phone: phone, to_agent_name: targetAgent.name, by_agent_name: actor.name, reason: noteText });
+                }
+            }
+        } catch (notifyErr) {
+            console.warn(`[Leads] notify after reassign failed: ${(notifyErr as Error).message}`);
+        }
+
+        console.info(`[Leads] ${phone} reassigned from ${actorName} to ${targetAgent.name}`);
+        res.json({ success: true, new_agent: targetAgent });
+    } catch (error: any) {
+        captureRouteError(error, req, { route: 'leads#reassign' });
+        if (error?.code === 'P2025') return res.status(404).json({ error: 'Lead not found' });
+        console.error('[Leads] Reassign error:', error);
+        res.status(500).json({ error: (error as Error).message });
+    }
+});
+
+// POST /api/leads/:phone/convert-to-partner
+// Convert an inbound lead whose contact IS a partner agent (dealer) into a registered
+// PartnerAgent, and reframe their open deals as that partner's deals. Forward-only.
+// Permission: act_on_deals (any team member who works deals). See
+// docs/plans/2026-05-23-lead-to-partner-conversion-design.md
+router.post('/:phone/convert-to-partner', checkPermission('act_on_deals'), async (req: any, res) => {
+    try {
+        const phone = await resolvePhone(req.params.phone);
+        const actor = req.agent;
+        const { name, partner_category, company_name } = req.body || {};
+        const category: 'INDIVIDUAL' | 'COMPANY' = partner_category === 'COMPANY' ? 'COMPANY' : 'INDIVIDUAL';
+
+        const contact = await prisma.contact.findUnique({
+            where: { phone_number: phone },
+            select: { phone_number: true, name: true, tenant_id: true, contact_type: true },
+        });
+        if (!contact) return res.status(404).json({ error: 'Lead not found' });
+
+        // Idempotent: already a partner → no-op.
+        if (contact.contact_type === 'PARTNER_AGENT') {
+            const existing = await prisma.partnerAgent.findUnique({
+                where: { phone_number: phone }, select: { id: true },
+            });
+            return res.json({ success: true, partner_id: existing?.id ?? null, reframed_deal_ids: [], already_partner: true });
+        }
+
+        const partnerName = (name || contact.name || '').trim();
+        if (!partnerName) return res.status(400).json({ error: 'A name is required to register a partner agent' });
+
+        // req.agent is a raw JWT with no `name` — fetch it for audit/notify text (feedback_jwt_agent_shape).
+        const actorRecord = await prisma.agent.findUnique({ where: { id: actor.id }, select: { name: true } });
+        const actorName = actorRecord?.name || actor.email || 'a team member';
+
+        // 1) Register the partner + flip contact_type=PARTNER_AGENT (reuses ensurePartnerAgent).
+        const result = await ensurePartnerAgent(phone, partnerName, contact.tenant_id, actor.id, {
+            partnerCategory: category,
+            companyName: company_name || null,
+        });
+        const partnerId = result.partnerId;
+
+        // owning_manager cascades from the partner's managing agent.
+        const partner = await prisma.partnerAgent.findUnique({
+            where: { id: partnerId }, select: { managing_agent_id: true },
+        });
+        const owningManagerId = partner?.managing_agent_id ?? actor.id;
+
+        // 2) Reframe the contact's OPEN deals as this partner's deals.
+        const openDeals = await prisma.transaction.findMany({
+            where: { demand_contact_id: phone, status: { notIn: ['CLOSED_WON', 'CLOSED_LOST'] } },
+            select: { id: true },
+        });
+        const dealIds = openDeals.map(d => d.id);
+
+        await prisma.$transaction([
+            prisma.contact.update({
+                where: { phone_number: phone },
+                data: { verification_status: 'CONVERTED_PARTNER', updated_at: new Date() },
+            }),
+            prisma.transaction.updateMany({
+                where: { id: { in: dealIds } },
+                data: {
+                    deal_scenario: 'PARTNER_INTERNAL',
+                    demand_handler_type: 'PARTNER',
+                    demand_handler_id: partnerId,
+                    owning_manager_id: owningManagerId,
+                    updated_at: new Date(),
+                },
+            }),
+            prisma.interaction.create({
+                data: {
+                    tenant_id: contact.tenant_id,
+                    phone_number: phone,
+                    channel: 'admin',
+                    direction: 'outbound',
+                    event_type: 'converted_to_partner',
+                    content: `Converted ${contact.name || phone} to Partner Agent by ${actorName}. Reframed ${dealIds.length} deal(s).`,
+                    metadata: { partner_id: partnerId, deal_ids: dealIds, actor_id: actor.id, partner_category: category },
+                },
+            }),
+        ]);
+
+        // 3) Partner welcome WhatsApp (non-blocking; same as create-on-behalf flow).
+        try {
+            await sendPartnerWelcomeWhatsApp(phone, partnerName, category, actorName);
+        } catch (waErr) {
+            console.warn(`[Leads] partner welcome WA failed for ${phone}: ${(waErr as Error).message}`);
+        }
+
+        console.info(`[Leads] ${phone} converted to partner ${partnerId} by ${actorName}; reframed ${dealIds.length} deal(s)`);
+        res.json({ success: true, partner_id: partnerId, reframed_deal_ids: dealIds });
+    } catch (error: any) {
+        captureRouteError(error, req, { route: 'leads#convert-to-partner' });
+        if (error?.code === 'P2025') return res.status(404).json({ error: 'Lead not found' });
+        console.error('[Leads] convert-to-partner error:', error);
+        res.status(500).json({ error: (error as Error).message });
+    }
+});
+
+// POST /api/leads/:phone/approve-partner-claim
+// A partner submitted (via their portal) a lead for one of OUR existing direct clients. Approving CREDITS
+// the partner — reframes the contact's open deals to that partner (same attribution as convert-to-partner)
+// and clears the pending flag. Permission: same as inventory approvals (edit_inventory).
+router.post('/:phone/approve-partner-claim', checkPermission('edit_inventory'), async (req: any, res) => {
+    try {
+        const phone = await resolvePhone(req.params.phone);
+        const actor = req.agent;
+        const contact = await prisma.contact.findUnique({
+            where: { phone_number: phone },
+            select: { phone_number: true, name: true, tenant_id: true, verification_status: true },
+        });
+        if (!contact) return res.status(404).json({ error: 'Lead not found' });
+        if (contact.verification_status !== 'PENDING_PARTNER_CLAIM') {
+            return res.status(400).json({ error: 'No pending partner claim on this lead' });
+        }
+
+        // The claiming partner is recorded on the pending-claim interaction.
+        const claim = await prisma.interaction.findFirst({
+            where: { phone_number: phone, event_type: 'partner_claim_pending' },
+            orderBy: { created_at: 'desc' },
+            select: { metadata: true },
+        });
+        const partnerId = (claim?.metadata as any)?.partner_id as string | undefined;
+        if (!partnerId) return res.status(400).json({ error: 'Claiming partner not found for this lead' });
+        const partner = await prisma.partnerAgent.findUnique({
+            where: { id: partnerId }, select: { id: true, name: true, managing_agent_id: true },
+        });
+        if (!partner) return res.status(404).json({ error: 'Partner not found' });
+        const owningManagerId = partner.managing_agent_id ?? actor.id;
+
+        const openDeals = await prisma.transaction.findMany({
+            where: { demand_contact_id: phone, status: { notIn: ['CLOSED_WON', 'CLOSED_LOST'] } },
+            select: { id: true },
+        });
+        const dealIds = openDeals.map(d => d.id);
+
+        await prisma.$transaction([
+            prisma.contact.update({
+                where: { phone_number: phone },
+                data: { referral_partner_id: partnerId, verification_status: 'CONVERTED_PARTNER', updated_at: new Date() },
+            }),
+            prisma.transaction.updateMany({
+                where: { id: { in: dealIds } },
+                data: {
+                    deal_scenario: 'PARTNER_INTERNAL',
+                    demand_handler_type: 'PARTNER',
+                    demand_handler_id: partnerId,
+                    owning_manager_id: owningManagerId,
+                    updated_at: new Date(),
+                },
+            }),
+            prisma.interaction.create({
+                data: {
+                    tenant_id: contact.tenant_id,
+                    phone_number: phone,
+                    channel: 'admin',
+                    direction: 'outbound',
+                    event_type: 'partner_claim_approved',
+                    content: `Partner claim by ${partner.name || partnerId} approved by ${actor.email || actor.id}. Credited ${dealIds.length} deal(s).`,
+                    metadata: { partner_id: partnerId, deal_ids: dealIds, actor_id: actor.id },
+                },
+            }),
+        ]);
+
+        console.info(`[Leads] partner claim on ${phone} APPROVED → partner ${partnerId}; credited ${dealIds.length} deal(s)`);
+        res.json({ success: true, partner_id: partnerId, credited_deal_ids: dealIds });
+    } catch (error: any) {
+        captureRouteError(error, req, { route: 'leads#approve-partner-claim' });
+        if (error?.code === 'P2025') return res.status(404).json({ error: 'Lead not found' });
+        console.error('[Leads] approve-partner-claim error:', error);
+        res.status(500).json({ error: (error as Error).message });
+    }
+});
+
+// POST /api/leads/:phone/reject-partner-claim
+// Reject the partner's claim: strip partner attribution from the claimed deal (it stays a DIRECT deal —
+// the client still wants a property, just not credited to the partner) and clear the pending flag.
+// Permission: edit_inventory.
+router.post('/:phone/reject-partner-claim', checkPermission('edit_inventory'), async (req: any, res) => {
+    try {
+        const phone = await resolvePhone(req.params.phone);
+        const actor = req.agent;
+        const { reason } = req.body || {};
+        const contact = await prisma.contact.findUnique({
+            where: { phone_number: phone },
+            select: { phone_number: true, name: true, tenant_id: true, verification_status: true },
+        });
+        if (!contact) return res.status(404).json({ error: 'Lead not found' });
+        if (contact.verification_status !== 'PENDING_PARTNER_CLAIM') {
+            return res.status(400).json({ error: 'No pending partner claim on this lead' });
+        }
+
+        const claim = await prisma.interaction.findFirst({
+            where: { phone_number: phone, event_type: 'partner_claim_pending' },
+            orderBy: { created_at: 'desc' },
+            select: { metadata: true },
+        });
+        const partnerId = (claim?.metadata as any)?.partner_id as string | undefined;
+        const claimedDealId = (claim?.metadata as any)?.deal_id as string | undefined;
+
+        const ops: any[] = [
+            prisma.contact.update({
+                where: { phone_number: phone },
+                data: { verification_status: 'VERIFIED', updated_at: new Date() },
+            }),
+            prisma.interaction.create({
+                data: {
+                    tenant_id: contact.tenant_id,
+                    phone_number: phone,
+                    channel: 'admin',
+                    direction: 'outbound',
+                    event_type: 'partner_claim_rejected',
+                    content: `Partner claim rejected by ${actor.email || actor.id}. Stays our direct client.${reason ? ' Reason: ' + reason : ''}`,
+                    metadata: { partner_id: partnerId ?? null, deal_id: claimedDealId ?? null, actor_id: actor.id },
+                },
+            }),
+        ];
+        if (claimedDealId) {
+            // Keep the deal but make it ours (DIRECT) — no risky cascade delete.
+            ops.unshift(prisma.transaction.updateMany({
+                where: { id: claimedDealId },
+                data: { demand_handler_type: 'DIRECT', demand_handler_id: null, deal_scenario: 'DIRECT_INTERNAL', updated_at: new Date() },
+            }));
+        }
+        await prisma.$transaction(ops);
+
+        console.info(`[Leads] partner claim on ${phone} REJECTED by ${actor.email || actor.id}`);
+        res.json({ success: true });
+    } catch (error: any) {
+        captureRouteError(error, req, { route: 'leads#reject-partner-claim' });
+        if (error?.code === 'P2025') return res.status(404).json({ error: 'Lead not found' });
+        console.error('[Leads] reject-partner-claim error:', error);
+        res.status(500).json({ error: (error as Error).message });
+    }
+});
+
+// GET /api/leads/pending-partner-claims — admin "Partner Approvals" queue: partners who submitted a lead
+// for one of our existing direct clients, awaiting approve/reject. Permission: edit_inventory.
+router.get('/pending-partner-claims', checkPermission('edit_inventory'), async (req: any, res) => {
+    try {
+        const contacts = await prisma.contact.findMany({
+            where: { verification_status: 'PENDING_PARTNER_CLAIM' },
+            select: {
+                phone_number: true, name: true, intent: true, preferred_location: true,
+                budget_min: true, budget_max: true, created_at: true, updated_at: true,
+            },
+            orderBy: { updated_at: 'desc' },
+            take: 100,
+        });
+        const out = await Promise.all(contacts.map(async (c) => {
+            const claim = await prisma.interaction.findFirst({
+                where: { phone_number: c.phone_number, event_type: 'partner_claim_pending' },
+                orderBy: { created_at: 'desc' },
+                select: { metadata: true, created_at: true },
+            });
+            const partnerId = (claim?.metadata as any)?.partner_id as string | undefined;
+            const partner = partnerId
+                ? await prisma.partnerAgent.findUnique({ where: { id: partnerId }, select: { id: true, name: true, phone_number: true } })
+                : null;
+            return {
+                phone_number: c.phone_number,
+                name: c.name,
+                intent: c.intent,
+                preferred_location: c.preferred_location,
+                budget_min: c.budget_min,
+                budget_max: c.budget_max,
+                requirement_type: (claim?.metadata as any)?.requirement_type ?? null,
+                claimed_at: claim?.created_at ?? c.updated_at,
+                partner: partner ? { id: partner.id, name: partner.name, phone_number: partner.phone_number } : null,
+            };
+        }));
+        res.json(out);
+    } catch (error: any) {
+        captureRouteError(error, req, { route: 'leads#pending-partner-claims' });
         res.status(500).json({ error: (error as Error).message });
     }
 });
@@ -259,17 +712,29 @@ router.get('/search', async (req: any, res) => {
     if (q.length < 2) return res.json([]);
 
     try {
+        const visibilityFilter = buildContactVisibilityFilter(req.agent.id, req.agent.role);
+
         const isPhone = /\d{3,}/.test(q.replace(/\D/g, ''));
         const phoneDigits = q.replace(/\D/g, '');
+
+        // Search restriction: non-super_boss can only find contacts by exact full phone number
+        const searchCondition = (req.agent.role === 'super_boss')
+            ? [
+                { name: { contains: q, mode: 'insensitive' as const } },
+                ...(isPhone ? [{ phone_number: { contains: phoneDigits } }] : []),
+            ]
+            : (phoneDigits.length >= 10)
+                ? [{ phone_number: { contains: phoneDigits } }]
+                : [
+                    { name: { contains: q, mode: 'insensitive' as const } },
+                ];
 
         const [contacts, partners] = await Promise.all([
             prisma.contact.findMany({
                 where: {
                     contact_type: { notIn: ['MANAGEMENT'] },
-                    OR: [
-                        { name: { contains: q, mode: 'insensitive' } },
-                        ...(isPhone ? [{ phone_number: { contains: phoneDigits } }] : []),
-                    ],
+                    ...visibilityFilter,
+                    OR: searchCondition,
                 },
                 select: {
                     phone_number: true, name: true, contact_type: true,
@@ -304,6 +769,7 @@ router.get('/search', async (req: any, res) => {
         const merged = [...contactResults, ...partnerResults].slice(0, 10);
         res.json(merged);
     } catch (error: any) {
+        captureRouteError(error, req, { route: 'leads#4' });
         res.status(500).json({ error: (error as Error).message });
     }
 });
@@ -320,17 +786,17 @@ router.post('/', async (req: any, res) => {
             notes, assigned_agent_id,
             lead_type, referral_partner_phone, referral_partner_name,
             budget_min, budget_max, demand_bhk, timeline,
+            area_min, area_max, area_unit,
         } = req.body;
 
-        // Partner referral leads require name; direct leads require phone
         const isPartnerReferral = lead_type === 'PARTNER_REFERRAL';
 
+        // Direct (we-contacted-them) leads MUST have a real phone. PARTNER_REFERRAL leads may
+        // arrive with NO client name AND NO client phone — the partner often won't share either
+        // (2026-05-31, owner). Those are created against a placeholder key and attributed to the
+        // partner; the real phone is filled in later.
         if (!isPartnerReferral && !phone) {
-            return res.status(400).json({ error: 'Phone number is required' });
-        }
-
-        if (isPartnerReferral && !name?.trim()) {
-            return res.status(400).json({ error: 'Client name is required for partner referral leads' });
+            return res.status(400).json({ error: 'Phone number is required for directly-contacted leads.' });
         }
 
         // Validate intent
@@ -338,31 +804,39 @@ router.post('/', async (req: any, res) => {
             return res.status(400).json({ error: 'Intent must be "buy" or "rent"' });
         }
 
-        // For partner referral without phone, generate a temporary placeholder
+        // Resolve the contact key.
         let phoneNumber: string;
         let isTemporaryPhone = false;
+        // When the client phone already belongs to a contact we ATTACH this as a NEW requirement to that
+        // person instead of rejecting (a partner brings the same client a buy + a rent; or a known client
+        // is referred). The requirement rides on its own deal (ensureDealForLead is per-(contact,type),
+        // so same-type re-submits still dedup). The frontend surfaces this as "already registered → Add as
+        // Direct Client". Replaces the old hard 409 that blocked multiple leads per partner/client.
+        let attachToExistingContact = false;
 
         if (phone) {
             const normalized = normalizePhone(phone);
             if (!normalized) {
-                return res.status(400).json({ error: 'Invalid phone number format' });
+                // normalizePhone now returns '' for junk (names/partials), so this rejects values
+                // like "ChiragWadhwa"/"1"/"+" that previously became broken "+junk" contact keys.
+                return res.status(400).json({
+                    error: isPartnerReferral
+                        ? 'Enter a valid phone number, or leave it blank to attribute this lead to the partner.'
+                        : 'Enter a valid 10-digit phone number.',
+                });
             }
             phoneNumber = normalized;
-        } else {
-            // Generate unique temp ID: TEMP_<timestamp>_<random>
-            phoneNumber = `TEMP_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-            isTemporaryPhone = true;
-        }
-
-        // Check if contact already exists (skip for temp phones)
-        if (!isTemporaryPhone) {
-            const existing = await prisma.contact.findUnique({
-                where: { phone_number: phoneNumber },
-            });
-
+            const existing = await prisma.contact.findUnique({ where: { phone_number: phoneNumber } });
             if (existing) {
-                return res.status(409).json({ error: 'Lead with this phone number already exists' });
+                attachToExistingContact = true;
             }
+        } else {
+            // Partner referral with no client phone → unique non-dialable placeholder key.
+            // The contact PK is phone_number, so we still need a unique value; it's clearly
+            // marked PENDING and the lead is worked through the partner until a real number arrives.
+            isTemporaryPhone = true;
+            const partnerKey = String(referral_partner_phone || 'partner').replace(/[^0-9a-zA-Z]/g, '').slice(-10) || 'partner';
+            phoneNumber = `PENDING-${partnerKey}-${Date.now().toString(36)}${Math.floor(Math.random() * 10000)}`;
         }
 
         // Get tenant
@@ -381,6 +855,10 @@ router.post('/', async (req: any, res) => {
         let resolvedPartnerId: string | null = null;
         let partnerWasCreated = false;
         let partnerPhone: string | null = null;
+        // Owning manager (middleman model, 2026-04-17): for partner-referred leads this
+        // inherits from the partner's managing_agent_id; for direct admin-created leads it
+        // defaults to the creating agent. null => super_boss fallback at permission layer.
+        let owningManagerId: string | null = req.agent?.id ?? null;
 
         if (lead_type === 'PARTNER_REFERRAL' && referral_partner_phone) {
             try {
@@ -393,43 +871,138 @@ router.post('/', async (req: any, res) => {
                 resolvedPartnerId = result.partnerId;
                 partnerWasCreated = result.wasCreated;
                 partnerPhone = result.partnerPhone;
+                // Inherit owning manager from the partner's managing_agent_id
+                const partner = await prisma.partnerAgent.findUnique({
+                    where: { id: resolvedPartnerId },
+                    select: { managing_agent_id: true },
+                });
+                if (partner?.managing_agent_id) {
+                    owningManagerId = partner.managing_agent_id;
+                }
             } catch (partnerErr) {
                 // Non-fatal — log and continue without partner link
                 console.warn('[Leads] Partner auto-create failed:', (partnerErr as Error).message);
             }
         }
 
-        const contact = await prisma.contact.create({
-            data: {
-                phone_number: phoneNumber,
-                tenant_id: tenant.id,
-                name: name || null,
-                email: email || null,
-                source: source || 'manual',
-                intent: intent || null,
-                contact_type: intent === 'buy' ? 'BUYER' : intent === 'rent' ? 'TENANT' : 'UNKNOWN',
-                property_type: property_type || null,
-                preferred_location: preferred_location || null,
-                preferred_lat: preferred_lat ? Number(preferred_lat) : null,
-                preferred_lng: preferred_lng ? Number(preferred_lng) : null,
-                category_id: category_id || null,
-                sub_category_id: sub_category_id || null,
-                type_id: type_id || null,
-                notes: isTemporaryPhone ? `${notes ? notes + ' | ' : ''}[Partner referral — phone not provided yet]` : (notes || null),
-                lead_status: isPartnerReferral ? 'warm' : 'cold',
-                lifecycle_stage: 'NEW',
-                assigned_agent_id: resolvedAgentId,
-                lead_type: lead_type || null,
-                referral_partner_id: resolvedPartnerId,
-                referral_partner_name: referral_partner_name || null,
-                referral_partner_phone: referral_partner_phone || null,
-                budget_min: budget_min ? Number(budget_min) : null,
-                budget_max: budget_max ? Number(budget_max) : null,
-                demand_bhk: demand_bhk ? Number(demand_bhk) : null,
-                timeline: timeline || null,
-                created_by: req.agent?.id || null,
-            },
+        // Canonical denormalized partner phone to store on the lead/contact. The raw request body value
+        // is un-normalized (bare 10-digit, spaces, no +91) which made the "Call partner" link dial a wrong
+        // number; prefer the canonical phone ensurePartnerAgent already resolved, else normalize the raw,
+        // else null (junk is not stored as a fake-dialable value). See docs/precautions phone-normalization.
+        const referralPartnerPhoneStored = partnerPhone
+            || (referral_partner_phone ? (normalizePhone(referral_partner_phone) || null) : null);
+
+        // Resolve classification UUIDs → demand_* slugs so the lead's
+        // requirements actually reach the Deal pipeline (deal/UI read the
+        // string fields, not the IDs).
+        // See docs/plans/2026-05-17-deal-sync-and-welcome-investigation.md
+        const demandSlugs = await resolveDemandSlugs(prisma, { category_id, sub_category_id, type_id });
+
+        // Demand-side unification Phase 1 (2026-05-29): also compute the canonical
+        // shape (demand_taxonomy_node_id + demand_schema_values) and dual-write.
+        // Pass through req.body.demand_* if the caller already speaks the new shape
+        // (forward-compat for Phase 2 forms).
+        const canonicalDemand = foldLegacyDemand({
+            demand_bhk: demand_bhk ? Number(demand_bhk) : null,
+            demand_amenities: (req.body as any).demand_amenities ?? null,
+            demand_taxonomy_node_id: (req.body as any).demand_taxonomy_node_id ?? null,
+            demand_schema_values: (req.body as any).demand_schema_values ?? null,
         });
+
+        // Resolve the canonical taxonomy node + derive the legacy classification ids
+        // (sub_category_id/category_id/type_id — the matching engine's hard-filter columns)
+        // from whatever the caller sent: the node id (new DemandRequirementsForm), legacy ids,
+        // or a property_type slug. Mirrors routes/public.ts + the feed pollers so the manual
+        // path captures taxonomy identically. (2026-05-31)
+        const demandTax = await resolveTypeFilter({
+            demand_taxonomy_node_id: canonicalDemand.demand_taxonomy_node_id ?? (req.body as any).demand_taxonomy_node_id ?? undefined,
+            property_type: property_type || undefined,
+            sub_category_id: sub_category_id || undefined,
+            category_id: category_id || undefined,
+            type_id: type_id || undefined,
+        });
+        const resolvedNodeId = demandTax.demand_taxonomy_node_id ?? canonicalDemand.demand_taxonomy_node_id ?? undefined;
+        const resolvedCategoryId = demandTax.category_id ?? category_id ?? null;
+        const resolvedSubCategoryId = demandTax.sub_category_id ?? sub_category_id ?? null;
+        const resolvedTypeId = demandTax.type_id ?? type_id ?? null;
+
+        // Geo: the DemandRequirementsForm sends a text location (no lat/lng). Geocode it
+        // server-side so proximity matching still works (the old modal captured lat/lng via
+        // Google Maps; we preserve that here). Explicit lat/lng from the caller still wins.
+        let geoLat: number | null = preferred_lat ? Number(preferred_lat) : null;
+        let geoLng: number | null = preferred_lng ? Number(preferred_lng) : null;
+        if ((geoLat == null || geoLng == null) && preferred_location) {
+            try {
+                const g = await geocodeAddress(String(preferred_location));
+                if (g) { geoLat = g.lat; geoLng = g.lng; }
+            } catch { /* non-fatal — text location still stored */ }
+        }
+
+        // Demand/requirement fields refreshed on BOTH create and attach (the contact holds the latest
+        // requirement; each deal keeps its own snapshot). Classification ids are DERIVED from the resolved
+        // taxonomy node (matching hard-filter columns), not raw form values. (2026-05-31)
+        const demandWrite = {
+            intent: intent || null,
+            contact_type: (intent === 'buy' ? 'BUYER' : intent === 'rent' ? 'TENANT' : 'UNKNOWN') as any,
+            property_type: property_type || null,
+            preferred_location: preferred_location || null,
+            preferred_lat: geoLat,
+            preferred_lng: geoLng,
+            category_id: resolvedCategoryId,
+            sub_category_id: resolvedSubCategoryId,
+            type_id: resolvedTypeId,
+            area_min: area_min ? Number(area_min) : null,
+            area_max: area_max ? Number(area_max) : null,
+            area_unit: area_unit || null,
+            budget_min: budget_min ? Number(budget_min) : null,
+            budget_max: budget_max ? Number(budget_max) : null,
+            // Canonical demand SoT — node + schema_values.
+            demand_taxonomy_node_id: resolvedNodeId,
+            demand_schema_values: canonicalDemand.demand_schema_values ?? undefined,
+            timeline: timeline || null,
+        };
+        const notesWrite = isTemporaryPhone
+            ? `${notes ? notes + ' | ' : ''}[Partner referral — phone not provided yet]`
+            : (notes || null);
+
+        const contact = attachToExistingContact
+            // Attach a NEW requirement to an existing client. Refresh demand; PRESERVE identity, assignment,
+            // status, and any existing partner attribution unless this request explicitly supplies it (so a
+            // direct add doesn't wipe a partner link, and a partner add can claim a direct client).
+            ? await prisma.contact.update({
+                where: { phone_number: phoneNumber },
+                data: {
+                    ...demandWrite,
+                    name: name || undefined,
+                    email: email || undefined,
+                    lead_type: lead_type || undefined,
+                    referral_partner_id: resolvedPartnerId ?? undefined,
+                    referral_partner_name: referral_partner_name || undefined,
+                    referral_partner_phone: referralPartnerPhoneStored ?? undefined,
+                    owning_manager_id: isPartnerReferral ? owningManagerId : undefined,
+                    updated_at: new Date(),
+                },
+            })
+            : await prisma.contact.create({
+                data: {
+                    phone_number: phoneNumber,
+                    tenant_id: tenant.id,
+                    name: name || null,
+                    email: email || null,
+                    source: source || 'manual',
+                    notes: notesWrite,
+                    lead_status: isPartnerReferral ? 'warm' : 'cold',
+                    lifecycle_stage: 'NEW',
+                    assigned_agent_id: resolvedAgentId,
+                    lead_type: lead_type || null,
+                    referral_partner_id: resolvedPartnerId,
+                    referral_partner_name: referral_partner_name || null,
+                    referral_partner_phone: referralPartnerPhoneStored,
+                    created_by: req.agent?.id ?? null,
+                    owning_manager_id: owningManagerId,
+                    ...demandWrite,
+                },
+            });
 
         // Notify buyer immediately (fire-and-forget) — skip if temp phone (partner referral without contact)
         if (!isTemporaryPhone) {
@@ -457,14 +1030,19 @@ router.post('/', async (req: any, res) => {
                     source: 'manual',
                     budget_min: budget_min ? parseFloat(budget_min) : null,
                     budget_max: budget_max ? parseFloat(budget_max) : null,
-                    demand_bhk: demand_bhk ? Number(demand_bhk) : null,
-                    demand_type_slug: property_type || null,
+                    // demand_bhk + demand_type_slug dropped Phase 5 (2026-05-29).
+                    // Phase 5 — canonical SoT only.
+                    demand_taxonomy_node_id: resolvedNodeId,
+                    demand_schema_values: canonicalDemand.demand_schema_values ?? undefined,
                     preferred_location: preferred_location || null,
-                    preferred_lat: preferred_lat ? Number(preferred_lat) : null,
-                    preferred_lng: preferred_lng ? Number(preferred_lng) : null,
-                    category_id: category_id || null,
-                    sub_category_id: sub_category_id || null,
-                    type_id: type_id || null,
+                    preferred_lat: geoLat,
+                    preferred_lng: geoLng,
+                    category_id: resolvedCategoryId,
+                    sub_category_id: resolvedSubCategoryId,
+                    type_id: resolvedTypeId,
+                    area_min: area_min ? Number(area_min) : null,
+                    area_max: area_max ? Number(area_max) : null,
+                    area_unit: area_unit || null,
                     lead_status: isPartnerReferral ? 'warm' : 'cold',
                     lifecycle_stage: 'NEW',
                     assigned_agent_id: resolvedAgentId,
@@ -472,7 +1050,7 @@ router.post('/', async (req: any, res) => {
                     lead_type: lead_type || null,
                     referral_partner_id: resolvedPartnerId || null,
                     referral_partner_name: referral_partner_name || null,
-                    referral_partner_phone: referral_partner_phone || null,
+                    referral_partner_phone: referralPartnerPhoneStored,
                     notes: isTemporaryPhone ? `${notes ? notes + ' | ' : ''}[Partner referral — phone not provided yet]` : (notes || null),
                     timeline: timeline || null,
                 },
@@ -493,7 +1071,28 @@ router.post('/', async (req: any, res) => {
         }
 
         res.status(201).json(contact);
+
+        // B1: auto-create QUALIFIED deal — team member touched the lead, AI skips qualification calls.
+        // Captures partner referral attribution as deal_scenario=PARTNER_INTERNAL.
+        ensureDealForLead({
+            contactPhone: phoneNumber,
+            source: 'manual',
+            createdByAgentId: req.agent?.id,
+            isPartnerReferral,
+        }).catch((err) => {
+            console.error(`[leads.ts] ensureDealForLead failed for ${phoneNumber}: ${(err as Error).message}`);
+        });
+
+        // Auto-engage: send Template C (greeting + show properties) for manually created leads
+        // This is fire-and-forget — don't block the response
+        import('../services/lead_auto_engage').then(({ autoEngageInternalLead }) => {
+            autoEngageInternalLead(phoneNumber).catch(err =>
+                console.warn('[leads.ts] Auto-engage failed:', (err as Error).message)
+            );
+        }).catch(() => {});
+
     } catch (error: any) {
+        captureRouteError(error, req, { route: 'leads#5' });
         if (error?.code === 'P2002') {
             return res.status(409).json({ error: 'Lead with this phone number already exists' });
         }
@@ -504,7 +1103,7 @@ router.post('/', async (req: any, res) => {
 // GET /api/leads/:phone/score
 router.get('/:phone/score', async (req, res) => {
     try {
-        const phone = resolvePhone(req.params.phone);
+        const phone = await resolvePhone(req.params.phone);
         const score = await prisma.leadScore.findUnique({
             where: { phone_number: phone },
             include: { contact: true }
@@ -515,6 +1114,92 @@ router.get('/:phone/score', async (req, res) => {
         }
         res.json(score);
     } catch (error) {
+        captureRouteError(error, req, { route: 'leads#6' });
+        res.status(500).json({ error: (error as Error).message });
+    }
+});
+
+// PATCH /api/leads/:phone/mark-lost
+// 2026-05-12: dedicated lead-level lost path. Sets contact.lead_status='lost' +
+// lifecycle_stage='CLOSED_LOST', clears next_action, and closes any open deals
+// for this contact via the deal-pipeline state machine.
+// Frees the team from having to spin up a fake deal just to mark a lead dead.
+router.patch('/:phone/mark-lost', async (req, res) => {
+    try {
+        const phone = await resolvePhone(req.params.phone);
+        const { reason, note } = req.body as { reason?: string; note?: string };
+
+        const contact = await prisma.contact.findUnique({
+            where: { phone_number: phone },
+            select: { phone_number: true, name: true, assigned_agent_id: true },
+        });
+        if (!contact) return res.status(404).json({ error: 'Contact not found' });
+
+        // Find active deals for this contact (demand side)
+        const activeDeals = await prisma.transaction.findMany({
+            where: {
+                demand_contact_id: phone,
+                status: { notIn: ['CLOSED_WON', 'CLOSED_LOST'] },
+            },
+            select: { id: true, status: true },
+        });
+
+        // Close each via the state machine to keep audit trail intact
+        const { transitionTransaction } = await import('../services/transaction_state_machine');
+        const closedDealIds: string[] = [];
+        for (const deal of activeDeals) {
+            try {
+                await transitionTransaction(deal.id, 'CLOSED_LOST' as any, req.agent!.id, 'admin', {
+                    reason: reason || 'lead_marked_lost',
+                    changed_by: req.agent!.email,
+                    note,
+                });
+                closedDealIds.push(deal.id);
+            } catch (transitionErr) {
+                // Skip deals where the state machine rejects the transition (e.g. already terminal)
+                captureRouteError(transitionErr, req, { route: 'leads#mark-lost-deal', deal_id: deal.id });
+            }
+        }
+
+        // Now flip the contact itself
+        const updated = await prisma.contact.update({
+            where: { phone_number: phone },
+            data: {
+                lead_status: 'lost',
+                lifecycle_stage: 'CLOSED_LOST',
+                next_action_at: null,
+                next_action_type: null,
+            },
+            select: { phone_number: true, name: true, lead_status: true, lifecycle_stage: true },
+        });
+
+        // Log an interaction so the timeline shows who closed it and why
+        await prisma.interaction.create({
+            data: {
+                phone_number: phone,
+                contact: { connect: { phone_number: phone } },
+                channel: 'admin',
+                direction: 'outbound',
+                event_type: 'lead_marked_lost',
+                content: `Lead marked lost${reason ? ` — reason: ${reason}` : ''}${note ? ` — note: ${note}` : ''}`,
+                metadata: {
+                    reason: reason ?? null,
+                    note: note ?? null,
+                    closed_deal_ids: closedDealIds,
+                    performed_by_agent_id: req.agent!.id,
+                    performed_by_name: req.agent!.email,
+                },
+            },
+        }).catch(() => undefined); // non-fatal
+
+        res.json({
+            success: true,
+            contact: updated,
+            deals_closed: closedDealIds.length,
+            closed_deal_ids: closedDealIds,
+        });
+    } catch (error) {
+        captureRouteError(error, req, { route: 'leads#mark-lost' });
         res.status(500).json({ error: (error as Error).message });
     }
 });
@@ -522,7 +1207,7 @@ router.get('/:phone/score', async (req, res) => {
 // POST /api/leads/:phone/no-show
 router.post('/:phone/no-show', async (req, res) => {
     try {
-        const phone = resolvePhone(req.params.phone);
+        const phone = await resolvePhone(req.params.phone);
 
         const contact = await prisma.contact.findUnique({ where: { phone_number: phone } });
         if (!contact) {
@@ -538,6 +1223,7 @@ router.post('/:phone/no-show', async (req, res) => {
             new_score: score
         });
     } catch (error) {
+        captureRouteError(error, req, { route: 'leads#7' });
         res.status(500).json({ error: (error as Error).message });
     }
 });
@@ -546,7 +1232,7 @@ router.post('/:phone/no-show', async (req, res) => {
 // Full lead detail: contact + score + recent interactions
 router.get('/:phone', async (req, res) => {
     try {
-        const phone = resolvePhone(req.params.phone);
+        const phone = await resolvePhone(req.params.phone);
         const [contact, interactions] = await Promise.all([
             prisma.contact.findUnique({
                 where: { phone_number: phone },
@@ -566,6 +1252,7 @@ router.get('/:phone', async (req, res) => {
 
         res.json({ ...contact, recent_interactions: interactions });
     } catch (error) {
+        captureRouteError(error, req, { route: 'leads#8' });
         res.status(500).json({ error: (error as Error).message });
     }
 });
@@ -574,7 +1261,7 @@ router.get('/:phone', async (req, res) => {
 // Run MatchingEngine for a lead — uses Haversine if lat/lng available
 router.post('/:phone/match', async (req, res) => {
     try {
-        const phone = resolvePhone(req.params.phone);
+        const phone = await resolvePhone(req.params.phone);
         const contact = await prisma.contact.findUnique({ where: { phone_number: phone } });
 
         if (!contact) {
@@ -592,9 +1279,13 @@ router.post('/:phone/match', async (req, res) => {
 
         let criteria: any;
         if (latestLead) {
-            criteria = buildMatchCriteriaFromLead(latestLead);
+            // Cast through `as any` — Lead's demand_schema_values comes back as Prisma's
+            // JsonValue type which isn't structurally assignable to Record<string, any>.
+            criteria = buildMatchCriteriaFromLead(latestLead as any);
         } else {
-            // Fallback: build from Contact fields (backward compat)
+            // Fallback: build from Contact fields (backward compat). Phase 3 (2026-05-29):
+            // also carry canonical demand_taxonomy_node_id + demand_schema_values so the
+            // matching engine uses the new SoT for contacts without a Lead row.
             criteria = {
                 intent: contact.intent,
                 property_type: contact.property_type,
@@ -605,22 +1296,34 @@ router.post('/:phone/match', async (req, res) => {
                 preferred_location: contact.preferred_location,
                 preferred_lat: contact.preferred_lat,
                 preferred_lng: contact.preferred_lng,
-                bhk: contact.demand_bhk,
+                // Phase 5: legacy demand_bhk column dropped — derive bhk from
+                // canonical demand_schema_values for the legacy `bhk` criterion
+                // (matching engine also reads the canonical block directly below).
+                bhk: (() => {
+                    const sv = (contact as any).demand_schema_values as Record<string, any> | null;
+                    const raw = sv?.bhk;
+                    if (raw == null) return null;
+                    const m = String(raw).match(/\d+/);
+                    return m ? parseInt(m[0], 10) : null;
+                })(),
+                demand_taxonomy_node_id: (contact as any).demand_taxonomy_node_id ?? null,
+                demand_schema_values: (contact as any).demand_schema_values ?? null,
             };
         }
 
         const matches = await matchingEngine.findMatches(criteria, 10);
 
-        // Advance lifecycle to MATCHED if still in early stages
-        if (['NEW', 'QUALIFIED'].includes(contact.lifecycle_stage || 'NEW')) {
+        // Advance lifecycle to QUALIFIED if still in early stages
+        if (['NEW'].includes(contact.lifecycle_stage || 'NEW')) {
             await prisma.contact.update({
                 where: { phone_number: phone },
-                data: { lifecycle_stage: 'MATCHED' },
+                data: { lifecycle_stage: 'QUALIFIED' },
             });
         }
 
         res.json({ criteria, matches });
     } catch (error) {
+        captureRouteError(error, req, { route: 'leads#9' });
         res.status(500).json({ error: (error as Error).message });
     }
 });
@@ -629,7 +1332,7 @@ router.post('/:phone/match', async (req, res) => {
 // Assign a lead to an agent
 router.patch('/:phone/assign', async (req, res) => {
     try {
-        const phone = resolvePhone(req.params.phone);
+        const phone = await resolvePhone(req.params.phone);
         const { agent_id } = req.body;
 
         const contact = await prisma.contact.update({
@@ -637,6 +1340,21 @@ router.patch('/:phone/assign', async (req, res) => {
             data: { assigned_agent_id: agent_id || null },
             select: { phone_number: true, assigned_agent_id: true, name: true },
         });
+
+        // Sync all active deals — lead and deal are the same entity, coordinator must match
+        if (agent_id) {
+            await prisma.transaction.updateMany({
+                where: {
+                    demand_contact_id: phone,
+                    status: { notIn: ['CLOSED_WON', 'CLOSED_LOST', 'ON_HOLD'] },
+                },
+                data: {
+                    coordinator_agent_id: agent_id,
+                    executive_agent_id: agent_id,
+                    updated_at: new Date(),
+                },
+            });
+        }
 
         // Notify assigned agent
         if (agent_id) {
@@ -650,6 +1368,7 @@ router.patch('/:phone/assign', async (req, res) => {
 
         res.json(contact);
     } catch (error: any) {
+        captureRouteError(error, req, { route: 'leads#10' });
         if (error?.code === 'P2025') {
             return res.status(404).json({ error: 'Lead not found' });
         }
@@ -661,7 +1380,7 @@ router.patch('/:phone/assign', async (req, res) => {
 // Return the most recent ConversationSession answers for a lead (for admin to see what buyer said)
 router.get('/:phone/session', async (req, res) => {
     try {
-        const phone = resolvePhone(req.params.phone);
+        const phone = await resolvePhone(req.params.phone);
         const session = await prisma.conversationSession.findFirst({
             where: { phone_number: phone },
             orderBy: { updated_at: 'desc' },
@@ -671,6 +1390,45 @@ router.get('/:phone/session', async (req, res) => {
         const answers = (session.context as any)?.answers || null;
         res.json({ workflow: session.workflow, state: session.state, active: session.active, updated_at: session.updated_at, answers });
     } catch (error) {
+        captureRouteError(error, req, { route: 'leads#11' });
+        res.status(500).json({ error: (error as Error).message });
+    }
+});
+
+// PATCH /api/leads/:phone — edit contact identity (name / email). Privileged.
+// Cascades the name to partner_agents + denormalized inventory snapshots so a
+// rename from the panel self-heals everywhere. See contact_identity.syncContactName.
+router.patch('/:phone', checkPermission('edit_contact'), async (req, res) => {
+    try {
+        const phone = await resolvePhone(req.params.phone as string);
+        const { name, email } = req.body || {};
+        if (name === undefined && email === undefined) {
+            return res.status(400).json({ error: 'Nothing to update' });
+        }
+        const existing = await prisma.contact.findUnique({
+            where: { phone_number: phone },
+            select: { name: true },
+        });
+        if (!existing) return res.status(404).json({ error: 'Contact not found' });
+
+        const newName = name !== undefined ? (String(name).trim() || null) : undefined;
+
+        await prisma.$transaction(async (tx) => {
+            if (email !== undefined) {
+                await tx.contact.update({ where: { phone_number: phone }, data: { email: email || null } });
+            }
+            if (newName !== undefined) {
+                await syncContactName(tx, phone, existing.name, newName);
+            }
+        });
+
+        const updated = await prisma.contact.findUnique({
+            where: { phone_number: phone },
+            select: { phone_number: true, name: true, email: true, contact_type: true },
+        });
+        res.json({ success: true, contact: updated });
+    } catch (error) {
+        captureRouteError(error, req, { route: 'leads#editIdentity' });
         res.status(500).json({ error: (error as Error).message });
     }
 });
@@ -679,19 +1437,23 @@ router.get('/:phone/session', async (req, res) => {
 // Update buyer requirements including geo location and classification IDs
 router.patch('/:phone/requirements', async (req, res) => {
     try {
-        const phone = resolvePhone(req.params.phone);
+        const phone = await resolvePhone(req.params.phone);
         const {
             budget_min, budget_max, demand_bhk,
             preferred_location, preferred_lat, preferred_lng,
             category_id, sub_category_id, type_id,
             lifecycle_stage, notes, timeline, intent,
             area_min, area_max, area_unit, demand_amenities,
+            demand_category, demand_type_slug,
         } = req.body;
 
         const updateData: any = {};
         if (budget_min !== undefined) updateData.budget_min = budget_min ? Number(budget_min) : null;
         if (budget_max !== undefined) updateData.budget_max = budget_max ? Number(budget_max) : null;
-        if (demand_bhk !== undefined) updateData.demand_bhk = demand_bhk ? Number(demand_bhk) : null;
+        // Phase 5 (2026-05-29): legacy demand_bhk / demand_amenities /
+        // demand_category / demand_type_slug columns dropped from Contact.
+        // foldLegacyDemand below maps them into demand_schema_values so the
+        // canonical SoT still captures the data when older clients send them.
         if (preferred_location !== undefined) updateData.preferred_location = preferred_location || null;
         if (preferred_lat !== undefined) updateData.preferred_lat = preferred_lat !== null ? Number(preferred_lat) : null;
         if (preferred_lng !== undefined) updateData.preferred_lng = preferred_lng !== null ? Number(preferred_lng) : null;
@@ -705,7 +1467,24 @@ router.patch('/:phone/requirements', async (req, res) => {
         if (area_min !== undefined) updateData.area_min = area_min ? Number(area_min) : null;
         if (area_max !== undefined) updateData.area_max = area_max ? Number(area_max) : null;
         if (area_unit !== undefined) updateData.area_unit = area_unit || null;
-        if (demand_amenities !== undefined) updateData.demand_amenities = demand_amenities || null;
+
+        // Phase 1 dual-write (2026-05-29) — fold legacy demand fields into canonical
+        // schema_values; deep-merge with existing so unrelated keys aren't dropped.
+        const _existingContact = await prisma.contact.findUnique({
+            where: { phone_number: phone },
+            select: { demand_schema_values: true, demand_taxonomy_node_id: true },
+        });
+        const foldedC = foldLegacyDemand({
+            demand_bhk: demand_bhk !== undefined ? (demand_bhk ? Number(demand_bhk) : null) : null,
+            demand_amenities: demand_amenities,
+            demand_taxonomy_node_id: (req.body as any).demand_taxonomy_node_id ?? undefined,
+            demand_schema_values: (req.body as any).demand_schema_values ?? undefined,
+        });
+        const mergedSV_C = mergeDemandSchemaValues(_existingContact?.demand_schema_values, foldedC.demand_schema_values);
+        if (mergedSV_C) updateData.demand_schema_values = mergedSV_C;
+        if (foldedC.demand_taxonomy_node_id !== undefined && foldedC.demand_taxonomy_node_id !== null) {
+            updateData.demand_taxonomy_node_id = foldedC.demand_taxonomy_node_id;
+        }
 
         // Auto-geocode if location updated but lat/lng not explicitly provided
         if (preferred_location && preferred_lat === undefined && preferred_lng === undefined) {
@@ -721,8 +1500,33 @@ router.patch('/:phone/requirements', async (req, res) => {
             data: updateData,
         });
 
+        // Sync requirement changes to any active deal snapshots for this contact.
+        // Phase 5 (2026-05-29): legacy demand_bedrooms / demand_amenities /
+        // demand_category / demand_type_slug columns dropped from Transaction.
+        // Sync only surviving universal columns + the canonical schema_values block.
+        const dealSync: any = {};
+        if (budget_min !== undefined) dealSync.demand_budget_min = budget_min ? Number(budget_min) : null;
+        if (budget_max !== undefined) dealSync.demand_budget_max = budget_max ? Number(budget_max) : null;
+        if (preferred_location !== undefined) dealSync.demand_location = preferred_location || null;
+        if (intent !== undefined) dealSync.demand_intent = intent || null;
+        if (area_min !== undefined) dealSync.demand_area_min = area_min ? Number(area_min) : null;
+        if (area_max !== undefined) dealSync.demand_area_max = area_max ? Number(area_max) : null;
+        if (mergedSV_C) dealSync.demand_schema_values = mergedSV_C;
+        if (foldedC.demand_taxonomy_node_id) dealSync.demand_taxonomy_node_id = foldedC.demand_taxonomy_node_id;
+
+        if (Object.keys(dealSync).length > 0) {
+            prisma.transaction.updateMany({
+                where: {
+                    demand_contact_id: phone,
+                    status: { notIn: ['CLOSED_WON', 'CLOSED_LOST'] },
+                },
+                data: dealSync,
+            }).catch((err: Error) => console.warn('[leads] deal sync failed:', err.message));
+        }
+
         res.json(contact);
     } catch (error: any) {
+        captureRouteError(error, req, { route: 'leads#12' });
         if (error?.code === 'P2025') {
             return res.status(404).json({ error: 'Lead not found' });
         }

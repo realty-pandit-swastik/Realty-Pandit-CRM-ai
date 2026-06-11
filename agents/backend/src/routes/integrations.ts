@@ -9,6 +9,7 @@ import prisma from '../db';
 import logger from '../utils/logger';
 import { NinetyNineAcresPoller } from '../services/ninety_nine_acres_poller';
 import { HousingPoller } from '../services/housing_poller';
+import { captureRouteError } from '../utils/capture';
 
 const router = Router();
 router.use(authMiddleware);
@@ -42,6 +43,7 @@ router.get('/sync-status', async (_req, res) => {
 
         res.json({ integrations });
     } catch (error) {
+        captureRouteError(error, _req, { route: 'integrations#1' });
         logger.error('[Integrations] sync-status error:', error);
         res.status(500).json({ error: (error as Error).message });
     }
@@ -79,6 +81,7 @@ router.post('/99acres/sync', async (req: any, res) => {
             ...result,
         });
     } catch (error) {
+        captureRouteError(error, req, { route: 'integrations#2' });
         logger.error('[Integrations] 99acres manual sync error:', error);
         res.status(500).json({ error: (error as Error).message });
     }
@@ -106,6 +109,7 @@ router.get('/99acres/history', async (_req, res) => {
 
         res.json({ interactions });
     } catch (error) {
+        captureRouteError(error, _req, { route: 'integrations#3' });
         logger.error('[Integrations] 99acres history error:', error);
         res.status(500).json({ error: (error as Error).message });
     }
@@ -141,6 +145,7 @@ router.post('/housing/sync', async (req: any, res) => {
             ...result,
         });
     } catch (error) {
+        captureRouteError(error, req, { route: 'integrations#4' });
         logger.error('[Integrations] Housing.com manual sync error:', error);
         res.status(500).json({ error: (error as Error).message });
     }
@@ -168,6 +173,7 @@ router.get('/housing/history', async (_req, res) => {
 
         res.json({ interactions });
     } catch (error) {
+        captureRouteError(error, _req, { route: 'integrations#5' });
         logger.error('[Integrations] Housing.com history error:', error);
         res.status(500).json({ error: (error as Error).message });
     }

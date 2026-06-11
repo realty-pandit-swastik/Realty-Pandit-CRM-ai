@@ -6,6 +6,7 @@
 import express, { Request, Response } from 'express';
 import prisma from '../db';
 import { authMiddleware } from '../middleware/auth';
+import { captureRouteError } from '../utils/capture';
 
 const router = express.Router();
 
@@ -70,6 +71,7 @@ router.get('/account/customer-outstanding', async (req: Request, res: Response) 
 
     res.json({ data: outstanding, summary });
   } catch (error) {
+        captureRouteError(error, req, { route: 'reports#1' });
     console.error('Customer outstanding report error:', error);
     res.status(500).json({ error: 'Failed to generate report' });
   }
@@ -112,6 +114,7 @@ router.get('/account/vendor-outstanding', async (req: Request, res: Response) =>
 
     res.json({ data: outstanding, summary });
   } catch (error) {
+        captureRouteError(error, req, { route: 'reports#2' });
     console.error('Vendor outstanding report error:', error);
     res.status(500).json({ error: 'Failed to generate report' });
   }
@@ -143,6 +146,7 @@ router.get('/account/monthly-sales', async (req: Request, res: Response) => {
 
     res.json({ data: serializeBigInt(sales) });
   } catch (error) {
+        captureRouteError(error, req, { route: 'reports#3' });
     console.error('Monthly sales report error:', error);
     res.status(500).json({ error: 'Failed to generate report' });
   }
@@ -174,6 +178,7 @@ router.get('/account/monthly-purchase', async (req: Request, res: Response) => {
 
     res.json({ data: serializeBigInt(commissions) });
   } catch (error) {
+        captureRouteError(error, req, { route: 'reports#4' });
     console.error('Monthly commissions report error:', error);
     res.status(500).json({ error: 'Failed to generate report' });
   }
@@ -211,6 +216,7 @@ router.get('/user/performance', async (req: Request, res: Response) => {
 
     res.json({ data: serializeBigInt(performance) });
   } catch (error) {
+        captureRouteError(error, req, { route: 'reports#5' });
     console.error('User performance report error:', error);
     res.status(500).json({ error: 'Failed to generate report' });
   }
@@ -243,6 +249,7 @@ router.get('/user/task-completion', async (req: Request, res: Response) => {
 
     res.json({ data: serializeBigInt(tasks) });
   } catch (error) {
+        captureRouteError(error, req, { route: 'reports#6' });
     console.error('Task completion report error:', error);
     res.status(500).json({ error: 'Failed to generate report' });
   }
@@ -278,6 +285,7 @@ router.get('/call/all-logs', async (req: Request, res: Response) => {
 
     res.json({ data: calls, total: calls.length });
   } catch (error) {
+        captureRouteError(error, req, { route: 'reports#7' });
     console.error('Call logs report error:', error);
     res.status(500).json({ error: 'Failed to generate report' });
   }
@@ -306,6 +314,7 @@ router.get('/call/by-date', async (req: Request, res: Response) => {
 
     res.json({ data: serializeBigInt(calls) });
   } catch (error) {
+        captureRouteError(error, req, { route: 'reports#8' });
     console.error('Date-wise call report error:', error);
     res.status(500).json({ error: 'Failed to generate report' });
   }
@@ -334,6 +343,7 @@ router.get('/call/by-month', async (req: Request, res: Response) => {
 
     res.json({ data: serializeBigInt(calls) });
   } catch (error) {
+        captureRouteError(error, req, { route: 'reports#9' });
     console.error('Monthly call report error:', error);
     res.status(500).json({ error: 'Failed to generate report' });
   }
@@ -374,6 +384,7 @@ router.get('/lead/all-leads', async (req: Request, res: Response) => {
 
     res.json({ data: leads, total: leads.length });
   } catch (error) {
+        captureRouteError(error, req, { route: 'reports#10' });
     console.error('All leads report error:', error);
     res.status(500).json({ error: 'Failed to generate report' });
   }
@@ -400,6 +411,7 @@ router.get('/lead/last-contact', async (req: Request, res: Response) => {
 
     res.json({ data: serializeBigInt(leads) });
   } catch (error) {
+        captureRouteError(error, req, { route: 'reports#11' });
     console.error('Lead last contact report error:', error);
     res.status(500).json({ error: 'Failed to generate report' });
   }
@@ -443,6 +455,7 @@ router.get('/lead/summary', async (req: Request, res: Response) => {
       by_source: bySource,
     });
   } catch (error) {
+        captureRouteError(error, req, { route: 'reports#12' });
     console.error('Lead summary report error:', error);
     res.status(500).json({ error: 'Failed to generate report' });
   }
@@ -492,6 +505,7 @@ router.get('/lead/cancelled-reasons', async (req: Request, res: Response) => {
       total_cancelled: cancelled.length,
     });
   } catch (error) {
+        captureRouteError(error, req, { route: 'reports#13' });
     console.error('Cancelled reasons report error:', error);
     res.status(500).json({ error: 'Failed to generate report' });
   }
@@ -534,6 +548,7 @@ router.get('/sold/by-property', async (req: Request, res: Response) => {
 
     res.json({ data: sold, total: sold.length });
   } catch (error) {
+        captureRouteError(error, req, { route: 'reports#14' });
     console.error('Sold by property report error:', error);
     res.status(500).json({ error: 'Failed to generate report' });
   }
@@ -562,6 +577,7 @@ router.get('/sold/by-area', async (req: Request, res: Response) => {
 
     res.json({ data: byArea });
   } catch (error) {
+        captureRouteError(error, req, { route: 'reports#15' });
     console.error('Sold by area report error:', error);
     res.status(500).json({ error: 'Failed to generate report' });
   }
@@ -590,6 +606,7 @@ router.get('/sold/by-unit-type', async (req: Request, res: Response) => {
 
     res.json({ data: byType });
   } catch (error) {
+        captureRouteError(error, req, { route: 'reports#16' });
     console.error('Sold by unit type report error:', error);
     res.status(500).json({ error: 'Failed to generate report' });
   }
@@ -628,6 +645,7 @@ router.get('/visit/all-visits', async (req: Request, res: Response) => {
 
     res.json({ data: visits, total: visits.length });
   } catch (error) {
+        captureRouteError(error, req, { route: 'reports#17' });
     console.error('All visits report error:', error);
     res.status(500).json({ error: 'Failed to generate report' });
   }
@@ -674,6 +692,7 @@ router.get('/visit/property-count', async (req: Request, res: Response) => {
 
     res.json({ data });
   } catch (error) {
+        captureRouteError(error, req, { route: 'reports#18' });
     console.error('Property visit count report error:', error);
     res.status(500).json({ error: 'Failed to generate report' });
   }
@@ -688,7 +707,7 @@ router.get('/customer/converted-not-sold', async (req: Request, res: Response) =
   try {
     const customers = await prisma.contact.findMany({
       where: {
-        lifecycle_stage: { in: ['QUALIFIED', 'MATCHED', 'VISIT_SCHEDULED', 'VISITED', 'NEGOTIATION'] },
+        lifecycle_stage: { in: ['QUALIFIED', 'VISIT_SCHEDULED', 'VISITED', 'NEGOTIATION'] },
         contact_type: { in: ['BUYER', 'TENANT'] },
       },
       include: {
@@ -700,6 +719,7 @@ router.get('/customer/converted-not-sold', async (req: Request, res: Response) =
 
     res.json({ data: customers, total: customers.length });
   } catch (error) {
+        captureRouteError(error, req, { route: 'reports#19' });
     console.error('Converted not sold report error:', error);
     res.status(500).json({ error: 'Failed to generate report' });
   }
@@ -732,6 +752,7 @@ router.get('/property/all-properties', async (req: Request, res: Response) => {
 
     res.json({ data: properties, total: properties.length });
   } catch (error) {
+        captureRouteError(error, req, { route: 'reports#20' });
     console.error('All properties report error:', error);
     res.status(500).json({ error: 'Failed to generate report' });
   }
@@ -747,6 +768,7 @@ router.get('/property/on-hold', async (req: Request, res: Response) => {
 
     res.json({ data: properties, total: properties.length });
   } catch (error) {
+        captureRouteError(error, req, { route: 'reports#21' });
     console.error('Hold properties report error:', error);
     res.status(500).json({ error: 'Failed to generate report' });
   }
@@ -782,6 +804,7 @@ router.get('/property/availability-summary', async (req: Request, res: Response)
       by_location: byLocation,
     });
   } catch (error) {
+        captureRouteError(error, req, { route: 'reports#22' });
     console.error('Property availability summary error:', error);
     res.status(500).json({ error: 'Failed to generate report' });
   }

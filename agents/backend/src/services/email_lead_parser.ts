@@ -1,6 +1,7 @@
 
 import prisma from '../db';
 import logger from '../utils/logger';
+import { normalizePhone, resolveStoredContactPhone } from '../utils/phone';
 
 /**
  * Email Lead Parser Service.
@@ -23,12 +24,22 @@ export class EmailLeadParser {
             return { success: false, error: 'Could not extract phone number from email' };
         }
 
+        // Normalize to E.164 and resolve to any existing contact PK (incl.
+        // legacy bare/dash rows) so re-ingestion never creates a duplicate
+        // contact that gets independently round-robined to another member.
+        // See docs/plans/2026-05-17-duplicate-lead-reassignment.md
+        const normalized = normalizePhone(extracted.phone);
+        if (!normalized || !/^\+91[6-9]\d{9}$/.test(normalized)) {
+            return { success: false, error: `Invalid phone extracted: ${extracted.phone}` };
+        }
+        const phone = (await resolveStoredContactPhone(normalized, prisma)) ?? normalized;
+
         try {
             const tenant = await prisma.tenant.findFirst();
             if (!tenant) return { success: false, error: 'System not configured' };
 
             await prisma.contact.upsert({
-                where: { phone_number: extracted.phone },
+                where: { phone_number: phone },
                 update: {
                     name: extracted.name || undefined,
                     email: extracted.email || undefined,
@@ -37,7 +48,7 @@ export class EmailLeadParser {
                     last_interaction: new Date(),
                 },
                 create: {
-                    phone_number: extracted.phone,
+                    phone_number: phone,
                     name: extracted.name || null,
                     email: extracted.email || null,
                     source,
@@ -52,7 +63,7 @@ export class EmailLeadParser {
             await prisma.interaction.create({
                 data: {
                     tenant_id: tenant.id,
-                    phone_number: extracted.phone,
+                    phone_number: phone,
                     channel: source,
                     direction: 'inbound',
                     event_type: 'email_lead',
@@ -66,8 +77,8 @@ export class EmailLeadParser {
                 }
             });
 
-            logger.info(`[EmailLeadParser] Parsed lead from ${source}: ${extracted.phone}`);
-            return { success: true, phone: extracted.phone, source };
+            logger.info(`[EmailLeadParser] Parsed lead from ${source}: ${phone}`);
+            return { success: true, phone, source };
         } catch (error) {
             return { success: false, error: (error as Error).message };
         }

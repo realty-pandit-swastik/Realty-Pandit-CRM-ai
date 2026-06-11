@@ -86,63 +86,17 @@ export async function sendBuyerConfirmationEmail(
         const tenant = await prisma.tenant.findFirst();
         if (!tenant) return;
 
-        const displayName = name || 'there';
-
-        // We can't get phone from email alone, so no ref token in email CTA
-        // Use plain properties URL (the website will show best matches on its own)
-        const propertiesUrl = `${WEBSITE_URL}/properties`;
-        const scheduleUrl = `${WEBSITE_URL}/schedule-visit`;
-
-        const html = `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background: #ffffff;">
-            <div style="text-align: center; padding: 20px 0; border-bottom: 2px solid #10b981;">
-                <h1 style="color: #10b981; margin: 0;">Realty Pandit</h1>
-                <p style="color: #6b7280; margin: 5px 0 0;">Your Trusted Real Estate Partner</p>
-            </div>
-
-            <div style="padding: 30px 0;">
-                <h2 style="color: #111827;">Namaste, ${displayName}!</h2>
-                <p style="color: #374151; line-height: 1.6;">
-                    Thank you for reaching out to Realty Pandit. We have received your property enquiry and our expert <strong>Panditji</strong> will contact you on WhatsApp shortly.
-                </p>
-
-                <div style="background: #f0fdf4; border-radius: 8px; padding: 20px; margin: 24px 0; text-align: center;">
-                    <p style="color: #065f46; margin: 0 0 16px; font-size: 15px;">
-                        While you wait, explore verified properties that match your requirements:
-                    </p>
-                    <a href="${propertiesUrl}"
-                       style="display: inline-block; background: #10b981; color: #ffffff; text-decoration: none;
-                              padding: 12px 28px; border-radius: 6px; font-weight: bold; font-size: 15px; margin: 0 8px 8px;">
-                        Check Properties
-                    </a>
-                    <a href="${scheduleUrl}"
-                       style="display: inline-block; background: #ffffff; color: #10b981; text-decoration: none;
-                              padding: 12px 28px; border-radius: 6px; font-weight: bold; font-size: 15px;
-                              border: 2px solid #10b981; margin: 0 8px 8px;">
-                        Schedule a Visit
-                    </a>
-                </div>
-
-                <p style="color: #374151; line-height: 1.6;">
-                    Our team of experts is ready to help you find the perfect property. Feel free to reply to this email or contact us on WhatsApp for immediate assistance.
-                </p>
-            </div>
-
-            <div style="border-top: 1px solid #e5e7eb; padding-top: 20px; text-align: center; color: #9ca3af; font-size: 12px;">
-                <p>Realty Pandit &mdash; Your Trusted Real Estate Partner</p>
-                <p>${WEBSITE_URL}</p>
-            </div>
-        </div>
-        `;
+        const { welcomeEmail } = await import('../templates/email_templates');
+        const { subject, html } = welcomeEmail(name || 'there');
 
         await emailService.sendEmail({
             to: email,
-            from: 'Realty Pandit <info@realtypandit.in>',
-            subject: 'We received your property enquiry \u2014 Realty Pandit',
+            from: 'Realty Pandit <noreply@realtypandit.in>',
+            subject,
             html,
         }, tenant.id);
 
-        logger.info(`[LeadNotify] Buyer confirmation email sent to ${email}`);
+        logger.info(`[LeadNotify] Buyer welcome email sent to ${email}`);
     } catch (err) {
         logger.warn(`[LeadNotify] Buyer email failed for ${email}: ${(err as Error).message}`);
     }

@@ -19,6 +19,8 @@ import { BUYER_WORKFLOW_STEPS } from './buyer_workflow_definition';
 import { MatchCriteria, MatchedProperty } from '../services/matching_engine';
 import { normalizePhone } from '../utils/phone';
 import { geocodeAddress } from '../utils/geocode';
+import { foldLegacyDemand } from '../utils/demand_canonical';
+import { resolveDemandTaxonomy } from '../utils/demand_taxonomy';
 
 // ─── Property Card (sanitized for end-user consumption) ─────────────────────
 
@@ -37,6 +39,8 @@ export interface PropertyCardData {
     videos: string[];
     match_score: number;
     intent: string;
+    // Google Maps link (if lat/lng available on inventory)
+    maps_link?: string;
     // Optional owner info — only included for internal admin users
     owner_name?: string;
     owner_phone?: string;
@@ -201,6 +205,17 @@ export class BuyerWorkflowEngine extends WorkflowEngine {
             ? Object.entries(answers.buyer_amenities).filter(([, v]) => v).map(([k]) => k)
             : null;
 
+        // Resolve the requirement into the canonical taxonomy (node + schema_values) so it
+        // matches inventory key-by-key. Stage 3 — demand-taxonomy capture (2026-05-31).
+        const demandTax = await resolveDemandTaxonomy({
+            main_category: answers.buyer_main_category as string || undefined,
+            property_type: answers.buyer_property_type as string || undefined,
+            sub_category_id: categoryIds.sub_category_id || undefined,
+            type_id: categoryIds.type_id || undefined,
+            bhk: answers.buyer_bhk ? parseInt(answers.buyer_bhk as string, 10) : null,
+            amenities: amenities?.length ? amenities : null,
+        });
+
         // Upsert Contact
         await prisma.contact.upsert({
             where: { phone_number: buyerPhone },
@@ -212,8 +227,6 @@ export class BuyerWorkflowEngine extends WorkflowEngine {
                 budget_min: budget ? budget.min : undefined,
                 budget_max: budget ? budget.max : undefined,
                 preferred_location: answers.buyer_location as string || undefined,
-                demand_bhk: answers.buyer_bhk ? parseInt(answers.buyer_bhk as string, 10) : undefined,
-                demand_main_category: answers.buyer_main_category as string || undefined,
                 category_id: categoryIds.category_id || undefined,
                 sub_category_id: categoryIds.sub_category_id || undefined,
                 type_id: categoryIds.type_id || undefined,
@@ -223,7 +236,13 @@ export class BuyerWorkflowEngine extends WorkflowEngine {
                 area_min: areaParsed.min ?? undefined,
                 area_max: areaParsed.max ?? undefined,
                 area_unit: areaParsed.unit,
-                demand_amenities: amenities?.length ? amenities : undefined,
+                demand_taxonomy_node_id: demandTax.demand_taxonomy_node_id ?? undefined,
+                needs_taxonomy_review: demandTax.needs_review || undefined,
+                // Phase 1 dual-write — canonical demand SoT (2026-05-29).
+                ...(foldLegacyDemand({
+                    demand_bhk: answers.buyer_bhk ? parseInt(answers.buyer_bhk as string, 10) : null,
+                    demand_amenities: amenities?.length ? amenities : null,
+                }) as any),
                 lead_status: 'warm',
                 lifecycle_stage: 'QUALIFIED',
                 source: source === 'whatsapp' ? 'whatsapp' : source === 'admin' ? 'manual' : 'website',
@@ -240,8 +259,6 @@ export class BuyerWorkflowEngine extends WorkflowEngine {
                 budget_min: budget ? budget.min : undefined,
                 budget_max: budget ? budget.max : undefined,
                 preferred_location: answers.buyer_location as string || undefined,
-                demand_bhk: answers.buyer_bhk ? parseInt(answers.buyer_bhk as string, 10) : undefined,
-                demand_main_category: answers.buyer_main_category as string || undefined,
                 category_id: categoryIds.category_id || undefined,
                 sub_category_id: categoryIds.sub_category_id || undefined,
                 type_id: categoryIds.type_id || undefined,
@@ -251,7 +268,13 @@ export class BuyerWorkflowEngine extends WorkflowEngine {
                 area_min: areaParsed.min ?? undefined,
                 area_max: areaParsed.max ?? undefined,
                 area_unit: areaParsed.unit,
-                demand_amenities: amenities?.length ? amenities : undefined,
+                demand_taxonomy_node_id: demandTax.demand_taxonomy_node_id ?? undefined,
+                needs_taxonomy_review: demandTax.needs_review || undefined,
+                // Phase 1 dual-write — canonical demand SoT (2026-05-29).
+                ...(foldLegacyDemand({
+                    demand_bhk: answers.buyer_bhk ? parseInt(answers.buyer_bhk as string, 10) : null,
+                    demand_amenities: amenities?.length ? amenities : null,
+                }) as any),
                 lead_status: 'warm',
                 lifecycle_stage: 'QUALIFIED',
                 source: source === 'whatsapp' ? 'whatsapp' : source === 'admin' ? 'manual' : 'website',
@@ -300,6 +323,11 @@ export class BuyerWorkflowEngine extends WorkflowEngine {
                     demand_budget_max: budget ? budget.max : undefined,
                     demand_budget_type: intent === 'rent' ? 'per_month' : 'one_time',
                     demand_bedrooms: answers.buyer_bhk ? `${answers.buyer_bhk}BHK` : undefined,
+                    // Phase 1 dual-write — pass canonical fields through to deal_service.
+                    ...(foldLegacyDemand({
+                        demand_bhk: answers.buyer_bhk ? parseInt(answers.buyer_bhk as string, 10) : null,
+                        demand_amenities: amenities?.length ? amenities : null,
+                    }) as any),
                     demand_notes: `Source: ${source}. Category: ${answers.buyer_main_category || 'not specified'}`,
                 },
                 'system:panditji',
@@ -419,22 +447,21 @@ export class BuyerWorkflowEngine extends WorkflowEngine {
             /\.(mp4|webm|mov|avi)$/i.test(url),
         );
 
-        // Build amenities list
-        const amenities: string[] = [];
-        if (property.features && typeof property.features === 'object') {
-            for (const [key, val] of Object.entries(property.features)) {
-                if (val) amenities.push(key.replace(/_/g, ' '));
-            }
-        }
+        // Build amenities list — Phase 4 dedup (2026-05-28): specs.amenities is SoT.
+        const amenities: string[] = Array.isArray((specs as any).amenities)
+            ? ((specs as any).amenities as string[]).map(a => String(a))
+            : [];
 
-        // BHK string
-        const bhk = specs.bedrooms ? `${specs.bedrooms} BHK` : undefined;
+        // BHK string — canonical taxonomy keys first
+        const _rooms = (specs as any).bhk ?? (specs as any).rooms ?? specs.bedrooms ?? (specs as any).bhk_count;
+        const bhk = _rooms ? `${_rooms} BHK` : undefined;
 
-        // Floor string
+        // Floor string — total_floors lives in specs.floors now
         let floor: string | undefined;
         if (property.floor_number) {
-            floor = property.total_floors
-                ? `${property.floor_number}/${property.total_floors}`
+            const _totalFloors = (specs as any).floors;
+            floor = _totalFloors
+                ? `${property.floor_number}/${_totalFloors}`
                 : `${property.floor_number}`;
         }
 
@@ -446,13 +473,16 @@ export class BuyerWorkflowEngine extends WorkflowEngine {
             display_price: price,
             display_price_formatted: formatPrice(price),
             area: specs.area ? `${specs.area} ${specs.area_unit || 'sqft'}` : undefined,
-            furnishing: property.furnishing || undefined,
+            furnishing: (specs as any).furnishing || undefined,
             floor,
             amenities: amenities.slice(0, 4),
             images,
             videos,
             match_score: property.match_score,
             intent: property.intent,
+            maps_link: (property.latitude && property.longitude)
+                ? `https://maps.google.com/?q=${property.latitude},${property.longitude}`
+                : undefined,
         };
 
         // Include owner info only for internal admin users

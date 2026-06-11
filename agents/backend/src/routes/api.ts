@@ -2,10 +2,16 @@
 import { Router } from 'express';
 import prisma from '../db';
 import { authMiddleware, requireRole, checkPermission } from '../middleware/auth';
+import { requireSuperBoss } from '../middleware/require_super_boss';
 import { sendPartnerWelcomeWhatsApp, sendPartnerWelcomeEmail } from '../services/partner_notifications';
 import { normalizePhone, phoneVariants } from '../utils/phone';
 import { identifyContact } from '../services/contact_identifier';
 import { buildFullContactVisibilityFilter } from '../middleware/contact_visibility';
+import { ownershipService } from '../services/ownership_service';
+import logger from '../utils/logger';
+import { captureRouteError } from '../utils/capture';
+import { syncContactName } from '../services/contact_identity';
+import bcrypt from 'bcryptjs';
 
 const router = Router();
 
@@ -36,6 +42,7 @@ router.get('/contacts', async (req, res) => {
         });
         res.json(contacts);
     } catch (error) {
+        captureRouteError(error, req, { route: 'api#1' });
         res.status(500).json({ error: (error as Error).message });
     }
 });
@@ -80,6 +87,7 @@ router.get('/contacts/:phone/interactions', async (req, res) => {
         });
         res.json(interactions);
     } catch (error) {
+        captureRouteError(error, req, { route: 'api#2' });
         res.status(500).json({ error: (error as Error).message });
     }
 });
@@ -101,6 +109,7 @@ router.patch('/contacts/:phone', async (req, res) => {
         });
         res.json(updated);
     } catch (error) {
+        captureRouteError(error, req, { route: 'api#3' });
         res.status(500).json({ error: (error as Error).message });
     }
 });
@@ -128,6 +137,7 @@ router.get('/contacts/search', async (req, res) => {
 
         res.json({ contact: contact || null });
     } catch (error) {
+        captureRouteError(error, req, { route: 'api#4' });
         res.status(500).json({ error: (error as Error).message });
     }
 });
@@ -160,6 +170,7 @@ router.get('/contacts/identify', async (req, res) => {
 
         res.json({ contact: contact || null, identified: identified || null });
     } catch (error) {
+        captureRouteError(error, req, { route: 'api#5' });
         res.status(500).json({ error: (error as Error).message });
     }
 });
@@ -185,6 +196,7 @@ router.get('/contacts/recent', async (req, res) => {
 
         res.json(contacts);
     } catch (error) {
+        captureRouteError(error, req, { route: 'api#6' });
         res.status(500).json({ error: (error as Error).message });
     }
 });
@@ -214,6 +226,7 @@ router.post('/contacts/ensure', async (req, res) => {
 
         res.json({ success: true, contact });
     } catch (error) {
+        captureRouteError(error, req, { route: 'api#7' });
         res.status(500).json({ error: (error as Error).message });
     }
 });
@@ -271,6 +284,7 @@ router.get('/activity/team', async (req, res) => {
 
         res.json({ success: true, shares, appointments });
     } catch (error) {
+        captureRouteError(error, req, { route: 'api#8' });
         res.status(500).json({ error: (error as Error).message });
     }
 });
@@ -289,6 +303,7 @@ router.get('/agents', requireRole('super_boss', 'manager'), async (_req, res) =>
         });
         res.json(agents);
     } catch (error) {
+        captureRouteError(error, _req, { route: 'api#9' });
         res.status(500).json({ error: (error as Error).message });
     }
 });
@@ -317,6 +332,7 @@ router.get('/dashboard/stats', requireRole('super_boss', 'manager'), async (_req
             }))
         });
     } catch (error) {
+        captureRouteError(error, _req, { route: 'api#10' });
         res.status(500).json({ error: (error as Error).message });
     }
 });
@@ -328,19 +344,19 @@ router.get('/dashboard/stats', requireRole('super_boss', 'manager'), async (_req
 router.post('/partners', checkPermission('manage_agents'), async (req, res) => {
     const {
         phone_number, name, email, partner_category,
-        business_name, business_address, registration_number,
+        business_name, business_address, business_lat, business_lng, registration_number,
         agency_name, partner_type, package_type
     } = req.body;
 
-    // Validate mandatory fields
-    if (!phone_number || !name || !email || !partner_category || !business_name || !business_address) {
+    // 2026-05-15: Business model is commission-on-sale, not subscription tiers.
+    // Only name + phone_number required. Everything else optional — admin team or
+    // the partner themselves can fill it later.
+    if (!phone_number || !name) {
         return res.status(400).json({
-            error: 'Required fields: phone_number, name, email, partner_category, business_name, business_address'
+            error: 'Required fields: phone_number, name'
         });
     }
-    if (!['INDIVIDUAL', 'COMPANY'].includes(partner_category)) {
-        return res.status(400).json({ error: 'partner_category must be INDIVIDUAL or COMPANY' });
-    }
+    const resolvedCategory = ['INDIVIDUAL', 'COMPANY'].includes(partner_category) ? partner_category : 'INDIVIDUAL';
 
     const normalizedPhone = phone_number.startsWith('+') ? phone_number : `+91${phone_number.replace(/^0+/, '')}`;
     try {
@@ -350,53 +366,62 @@ router.post('/partners', checkPermission('manage_agents'), async (req, res) => {
                 phone_number: normalizedPhone,
                 tenant_id: req.agent!.tenant_id,
                 name,
-                email,
+                email: email || null,
                 contact_type: 'PARTNER_AGENT',
                 source: 'admin_created',
                 created_by: req.agent?.id || null,
             },
-            update: { contact_type: 'PARTNER_AGENT', name, email }
+            update: { contact_type: 'PARTNER_AGENT', name, email: email || undefined }
         });
         const partner = await prisma.partnerAgent.upsert({
             where: { phone_number: normalizedPhone },
             create: {
                 phone_number: normalizedPhone,
                 name,
-                email,
-                partner_category: partner_category,
-                business_name,
-                business_address,
-                registration_number,
+                email: email || null,
+                partner_category: resolvedCategory,
+                business_name: business_name || null,
+                business_address: business_address || null,
+                business_lat: business_lat != null ? Number(business_lat) : null,
+                business_lng: business_lng != null ? Number(business_lng) : null,
+                registration_number: registration_number || null,
                 managing_agent_id: req.agent!.id,
                 onboarded_by_agent_id: req.agent!.id,
                 onboarded_at: new Date(),
                 agency_name: agency_name || null,
-                partner_type: partner_type || 'HAS_PROPERTIES',
-                package_type: package_type || 'FREE',
+                partner_type: partner_type || 'BOTH',
+                package_type: 'FREE',
+                listing_limit: 99999,
                 verified: true,
-                status: 'ACTIVE'
+                status: 'ACTIVE',
             },
             update: {
-                name, email,
-                partner_category,
-                business_name, business_address, registration_number,
-                agency_name: agency_name || null,
-                partner_type: partner_type || 'HAS_PROPERTIES'
+                name,
+                email: email || undefined,
+                partner_category: resolvedCategory,
+                business_name: business_name || undefined,
+                business_address: business_address || undefined,
+                business_lat: business_lat != null ? Number(business_lat) : undefined,
+                business_lng: business_lng != null ? Number(business_lng) : undefined,
+                registration_number: registration_number || undefined,
+                agency_name: agency_name || undefined,
+                partner_type: partner_type || undefined,
             }
         });
 
-        // Create Owner record (EXTERNAL) for inventory/commission management
+        // Create Owner record (EXTERNAL) for inventory/commission management.
+        // 2026-05-15: listing_limit set to 99999 (effectively unlimited).
         const existingOwner = await prisma.owner.findUnique({ where: { contact_phone: normalizedPhone } });
         if (!existingOwner) {
-            const externalType = partner_category === 'COMPANY' ? 'PROPERTY_AGENT' : 'INDIVIDUAL_AGENT';
+            const externalType = resolvedCategory === 'COMPANY' ? 'PROPERTY_AGENT' : 'INDIVIDUAL_AGENT';
             await prisma.owner.create({
                 data: {
                     contact_phone: normalizedPhone,
                     scope: 'EXTERNAL',
                     externalType: externalType,
                     status: 'ACTIVE',
-                    listing_limit: package_type === 'ADVANCE_PRO' ? 999 : package_type === 'PRO' ? 50 : 10,
-                    priority_score: 50
+                    listing_limit: 99999,
+                    priority_score: 50,
                 }
             });
         }
@@ -422,6 +447,7 @@ router.post('/partners', checkPermission('manage_agents'), async (req, res) => {
 
         res.status(201).json(partner);
     } catch (error) {
+        captureRouteError(error, req, { route: 'api#11' });
         res.status(500).json({ error: (error as Error).message });
     }
 });
@@ -463,6 +489,7 @@ router.get('/partners/search', async (req: any, res) => {
 
         res.json(partners);
     } catch (error) {
+        captureRouteError(error, req, { route: 'api#12' });
         res.status(500).json({ error: (error as Error).message });
     }
 });
@@ -484,6 +511,100 @@ router.get('/partners', checkPermission('manage_agents'), async (req, res) => {
         });
         res.json(partners);
     } catch (error) {
+        captureRouteError(error, req, { route: 'api#13' });
+        res.status(500).json({ error: (error as Error).message });
+    }
+});
+
+// GET /api/partners/:id - Full partner detail (profile + relations + counts) for the profile page.
+router.get('/partners/:id', checkPermission('manage_agents'), async (req, res) => {
+    const id = req.params.id as string;
+    try {
+        const partner = await prisma.partnerAgent.findUnique({
+            where: { id },
+            include: {
+                managing_agent: { select: { id: true, name: true, email: true, role: true } },
+                sub_agents: { select: { id: true, name: true, phone_number: true, status: true, package_type: true } },
+            },
+        });
+        if (!partner) return res.status(404).json({ error: 'Partner not found' });
+        if (req.agent!.role !== 'super_boss' && partner.managing_agent_id !== req.agent!.id) {
+            return res.status(403).json({ error: 'Access denied' });
+        }
+        const owner = await prisma.owner.findUnique({ where: { contact_phone: partner.phone_number }, select: { id: true } });
+        const [leads, listings, commissions] = await Promise.all([
+            prisma.contact.count({ where: { referral_partner_id: id } }),
+            owner ? prisma.inventory.count({ where: { owner_id: owner.id } }) : Promise.resolve(0),
+            prisma.dealCommissionEntry.count({ where: { partner_agent_id: id } }),
+        ]);
+        res.json({ ...partner, _counts: { leads, listings, commissions } });
+    } catch (error) {
+        captureRouteError(error, req, { route: 'api#partnerDetail' });
+        res.status(500).json({ error: (error as Error).message });
+    }
+});
+
+// PATCH /api/partners/:id - Edit partner identity + business + plan fields.
+// Cascades the name to the linked contact + denormalized inventory snapshots.
+router.patch('/partners/:id', checkPermission('manage_agents'), async (req, res) => {
+    const id = req.params.id as string;
+    const { name, email, company_name, city, agency_name,
+        business_name, business_address, business_lat, business_lng, registration_number,
+        partner_type, partner_category, listing_limit, priority_score,
+        commission_rate, subscription_start, subscription_end } = req.body || {};
+    try {
+        const current = await prisma.partnerAgent.findUnique({
+            where: { id },
+            select: { name: true, phone_number: true },
+        });
+        if (!current) return res.status(404).json({ error: 'Partner not found' });
+
+        const data: any = {};
+        if (email !== undefined) data.email = email || null;
+        if (company_name !== undefined) data.company_name = company_name || null;
+        if (agency_name !== undefined) data.agency_name = agency_name || null;
+        if (city !== undefined) data.city = city || null;
+        if (business_name !== undefined) data.business_name = business_name || null;
+        if (business_address !== undefined) data.business_address = business_address || null;
+        if (business_lat !== undefined) data.business_lat = (business_lat !== null && business_lat !== '') ? Number(business_lat) : null;
+        if (business_lng !== undefined) data.business_lng = (business_lng !== null && business_lng !== '') ? Number(business_lng) : null;
+        if (registration_number !== undefined) data.registration_number = registration_number || null;
+        if (partner_type !== undefined) data.partner_type = partner_type || null;
+        if (partner_category !== undefined) {
+            const pc = String(partner_category).toUpperCase();
+            if (!['INDIVIDUAL', 'COMPANY'].includes(pc)) return res.status(400).json({ error: 'Invalid partner_category (INDIVIDUAL|COMPANY)' });
+            data.partner_category = pc;
+        }
+        if (listing_limit !== undefined && listing_limit !== null && listing_limit !== '') {
+            const v = parseInt(String(listing_limit), 10);
+            if (!Number.isNaN(v)) data.listing_limit = v;
+        }
+        if (priority_score !== undefined && priority_score !== null && priority_score !== '') {
+            const v = parseInt(String(priority_score), 10);
+            if (!Number.isNaN(v)) data.priority_score = v;
+        }
+        if (commission_rate !== undefined) {
+            data.commission_rate = (commission_rate === null || commission_rate === '') ? null
+                : (Number.isNaN(Number(commission_rate)) ? undefined : Number(commission_rate));
+        }
+        if (subscription_start !== undefined) data.subscription_start = subscription_start ? new Date(subscription_start) : null;
+        if (subscription_end !== undefined) data.subscription_end = subscription_end ? new Date(subscription_end) : null;
+
+        const newName = name !== undefined ? (String(name).trim() || null) : undefined;
+
+        await prisma.$transaction(async (tx) => {
+            if (Object.keys(data).length > 0) {
+                await tx.partnerAgent.update({ where: { id }, data });
+            }
+            if (newName !== undefined && current.phone_number) {
+                await syncContactName(tx, current.phone_number, current.name, newName);
+            }
+        });
+
+        const partner = await prisma.partnerAgent.findUnique({ where: { id } });
+        res.json({ success: true, partner });
+    } catch (error) {
+        captureRouteError(error, req, { route: 'api#partnerEdit' });
         res.status(500).json({ error: (error as Error).message });
     }
 });
@@ -505,6 +626,7 @@ router.patch('/partners/:id/verify', checkPermission('manage_agents'), async (re
 
         res.json({ success: true, partner });
     } catch (error) {
+        captureRouteError(error, req, { route: 'api#14' });
         res.status(500).json({ error: (error as Error).message });
     }
 });
@@ -526,6 +648,7 @@ router.patch('/partners/:id/status', checkPermission('manage_agents'), async (re
         });
         res.json({ success: true, partner });
     } catch (error) {
+        captureRouteError(error, req, { route: 'api#15' });
         res.status(500).json({ error: (error as Error).message });
     }
 });
@@ -546,6 +669,7 @@ router.patch('/partners/:id/commission', checkPermission('manage_agents'), async
         });
         res.json({ success: true, partner });
     } catch (error) {
+        captureRouteError(error, req, { route: 'api#16' });
         res.status(500).json({ error: (error as Error).message });
     }
 });
@@ -585,6 +709,7 @@ router.patch('/partners/:id/package', checkPermission('manage_agents'), async (r
         } catch {}
         res.json({ success: true, partner });
     } catch (error) {
+        captureRouteError(error, req, { route: 'api#17' });
         res.status(500).json({ error: (error as Error).message });
     }
 });
@@ -610,7 +735,98 @@ router.get('/partners/:id/inventory', checkPermission('manage_agents'), async (r
         });
         res.json(inventory);
     } catch (error) {
+        captureRouteError(error, req, { route: 'api#18' });
         res.status(500).json({ error: (error as Error).message });
+    }
+});
+
+// GET /api/partners/:id/leads - Contacts/deals referred by this partner.
+router.get('/partners/:id/leads', checkPermission('manage_agents'), async (req, res) => {
+    const id = req.params.id as string;
+    try {
+        const partner = await prisma.partnerAgent.findUnique({ where: { id }, select: { managing_agent_id: true } });
+        if (!partner) return res.status(404).json({ error: 'Partner not found' });
+        if (req.agent!.role !== 'super_boss' && partner.managing_agent_id !== req.agent!.id) {
+            return res.status(403).json({ error: 'Access denied' });
+        }
+        const leads = await prisma.contact.findMany({
+            where: { referral_partner_id: id },
+            orderBy: { created_at: 'desc' },
+            select: {
+                phone_number: true, name: true, contact_type: true, lead_status: true,
+                lifecycle_stage: true, preferred_location: true, created_at: true,
+                assigned_agent: { select: { name: true } },
+            },
+        });
+        res.json(leads);
+    } catch (error) {
+        captureRouteError(error, req, { route: 'api#partnerLeads' });
+        res.status(500).json({ error: (error as Error).message });
+    }
+});
+
+// GET /api/partners/:id/commissions - Commission entries earned by this partner.
+router.get('/partners/:id/commissions', checkPermission('manage_agents'), async (req, res) => {
+    const id = req.params.id as string;
+    try {
+        const partner = await prisma.partnerAgent.findUnique({ where: { id }, select: { managing_agent_id: true } });
+        if (!partner) return res.status(404).json({ error: 'Partner not found' });
+        if (req.agent!.role !== 'super_boss' && partner.managing_agent_id !== req.agent!.id) {
+            return res.status(403).json({ error: 'Access denied' });
+        }
+        const entries = await prisma.dealCommissionEntry.findMany({
+            where: { partner_agent_id: id },
+            orderBy: { entered_at: 'desc' },
+            select: { id: true, amount: true, currency: true, notes: true, entered_at: true, transaction_id: true },
+        });
+        const total = entries.reduce((s, e) => s + Number(e.amount), 0);
+        res.json({ entries, total });
+    } catch (error) {
+        captureRouteError(error, req, { route: 'api#partnerCommissions' });
+        res.status(500).json({ error: (error as Error).message });
+    }
+});
+
+// POST /api/partners/:id/set-password - Admin sets the partner portal password.
+router.post('/partners/:id/set-password', checkPermission('manage_agents'), async (req, res) => {
+    const id = req.params.id as string;
+    const { password } = req.body || {};
+    if (!password || String(password).length < 6) {
+        return res.status(400).json({ error: 'Password must be at least 6 characters' });
+    }
+    try {
+        const partner = await prisma.partnerAgent.findUnique({ where: { id }, select: { managing_agent_id: true } });
+        if (!partner) return res.status(404).json({ error: 'Partner not found' });
+        if (req.agent!.role !== 'super_boss' && partner.managing_agent_id !== req.agent!.id) {
+            return res.status(403).json({ error: 'Access denied' });
+        }
+        const hash = await bcrypt.hash(String(password), 10);
+        await prisma.partnerAgent.update({ where: { id }, data: { password_hash: hash } });
+        res.json({ success: true });
+    } catch (error) {
+        captureRouteError(error, req, { route: 'api#partnerSetPassword' });
+        res.status(500).json({ error: (error as Error).message });
+    }
+});
+
+// POST /api/partners/:id/reassign — Transfer a partner agent (and their owned inventory/contacts/
+// transactions) to a different internal manager. Super_boss only.
+// Body: { to_agent_id: string, reason?: string }
+router.post('/partners/:id/reassign', requireSuperBoss, async (req, res) => {
+    const { id } = req.params;
+    const { to_agent_id, reason } = req.body as { to_agent_id?: string; reason?: string };
+    if (!to_agent_id || typeof to_agent_id !== 'string') {
+        return res.status(400).json({ error: 'to_agent_id is required' });
+    }
+    try {
+        const result = await ownershipService.reassignPartner(id, to_agent_id, req.agent!.id, reason);
+        logger.info(`[API] Partner ${id} reassigned by super_boss=${req.agent!.id} -> ${to_agent_id}`);
+        res.json(result);
+    } catch (err) {
+        captureRouteError(err, req, { route: 'api#19' });
+        const msg = (err as Error).message;
+        const status = /not found/i.test(msg) ? 404 : 400;
+        res.status(status).json({ error: msg });
     }
 });
 
@@ -627,6 +843,7 @@ router.get('/commissions', checkPermission('view_reports'), async (_req, res) =>
         });
         res.json(commissions);
     } catch (error) {
+        captureRouteError(error, _req, { route: 'api#20' });
         res.status(500).json({ error: (error as Error).message });
     }
 });

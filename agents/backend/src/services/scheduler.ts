@@ -1,4 +1,4 @@
-
+﻿
 import cron from 'node-cron';
 import prisma from '../db';
 import { DecisionEngine } from './decision_engine';
@@ -59,7 +59,7 @@ export const initScheduler = () => {
             // Send daily report via Meta-approved template
             const tenant = await prisma.tenant.findFirst();
             if (tenant) {
-                await whatsappService.sendTemplate(tenant.primary_phone, 'rp_daily_report', {
+                await whatsappService.sendTemplate(tenant.primary_phone, 'rp_daily_report_v3', {
                     date: today.toLocaleDateString(),
                     leads: String(newLeads),
                     interactions: String(interactions),
@@ -93,7 +93,7 @@ export const initScheduler = () => {
 
                 // Only send notification outside quiet hours (9PM-8AM IST)
                 if (!isQuietHours()) {
-                    await whatsappService.sendTemplate(agent.phone_number, 'rp_subscription_expiry', {});
+                    await whatsappService.sendTemplate(agent.phone_number, 'rp_subscription_expiry_v2', {});
                 }
             }
         } catch (error) {

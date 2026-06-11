@@ -249,7 +249,8 @@ export class CalendarService {
     }
 
     /**
-     * Create appointment from AI chat conversation
+     * @deprecated use createPropertyVisitAppointment — kept as a thin alias so
+     * existing chat/WhatsApp callers keep working unchanged.
      */
     async createFromChat(data: {
         contact_id: string;
@@ -257,6 +258,24 @@ export class CalendarService {
         scheduled_at: Date;
         source: string;
         sessionId?: string;
+    }): Promise<any> {
+        return this.createPropertyVisitAppointment(data);
+    }
+
+    /**
+     * Create a property-visit Appointment (the canonical CRM model the
+     * lead-detail Visits tab + employee calendar read). Used by the website
+     * form, website chat, WhatsApp and buyer adapters.
+     * See docs/plans/2026-05-17-website-visit-not-visible-in-crm.md
+     */
+    async createPropertyVisitAppointment(data: {
+        contact_id: string;
+        property_id: string;
+        scheduled_at: Date;
+        source: string;
+        sessionId?: string;
+        /** Override the coordinating agent (website lead routing). Defaults to the property's agent. */
+        assigned_to_agent_id?: string;
     }): Promise<any> {
         try {
             const { contact_id, property_id, scheduled_at, source, sessionId } = data;
@@ -276,8 +295,9 @@ export class CalendarService {
             // Calculate end_time (default 30 minutes)
             const endTime = new Date(scheduled_at.getTime() + 30 * 60000);
 
-            // Determine assigned agent
-            let assigned_to_agent_id = property.assigned_agent_id;
+            // Determine assigned agent — caller override (website lead routing) wins,
+            // else fall back to the property's assigned agent.
+            let assigned_to_agent_id = data.assigned_to_agent_id ?? property.assigned_agent_id;
 
             // Get tenant
             const tenant = await prisma.tenant.findFirst();
@@ -299,7 +319,7 @@ export class CalendarService {
                     property_id,
                     location: property.location || undefined,
                     source,
-                    channel: source === 'website_chat' ? 'website' : 'whatsapp',
+                    channel: source.startsWith('website') ? 'website' : 'whatsapp',
                     status: 'scheduled',
                     tenant_id: tenant.id,
                     metadata: sessionId ? { sessionId } : undefined,
@@ -319,6 +339,45 @@ export class CalendarService {
                 appointment_id: appointment.id,
                 action: 'notify_seller',
             }).catch(err => logger.error('[Calendar] Coordination notify_seller failed:', err));
+
+            // Notify super_boss about the appointment (fire-and-forget)
+            this.notifySuperBoss(appointment).catch(err =>
+                logger.error('[Calendar] Super boss notification failed:', err)
+            );
+
+            // P3: mirror to the assigned member's own Google Calendar if they
+            // connected Google (opt-in, idempotent). The 5-min reconcile sweep
+            // also covers this + every other appointment.create site.
+            import('./google_sync')
+                .then(m => m.pushAppointmentToGoogle(appointment.id))
+                .catch(err => logger.error('[Calendar] google_sync appt hook error:', err));
+
+            // Notify assigned lead agent if different from property agent (fire-and-forget)
+            this.notifyLeadAgent(appointment).catch(err =>
+                logger.error('[Calendar] Lead agent notification failed:', err)
+            );
+
+            // Send Meta Conversions API event (fire-and-forget)
+            import('../services/meta_conversions').then(({ trackVisitScheduled }) => {
+                const propertyInfo = property ? `${property.type} in ${property.location || 'TBD'}` : 'property';
+                trackVisitScheduled(contact_id, propertyInfo).catch(() => {});
+            }).catch(() => {});
+
+            // Send appointment confirmation email (fire-and-forget)
+            if (appointment.contact?.email) {
+                import('../templates/email_templates').then(({ appointmentEmail }) => {
+                    const dateStr = new Date(scheduled_at).toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+                    const timeStr = new Date(scheduled_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+                    const propInfo = property ? `${property.type} in ${property.location || 'TBD'}` : 'Property';
+                    const agentName = appointment.assigned_to_agent?.name;
+                    const { subject, html } = appointmentEmail(appointment.contact.name || 'there', dateStr, timeStr, propInfo, agentName);
+                    import('./email_service').then(({ emailService: es }) => {
+                        const tenant_id = appointment.tenant_id;
+                        es.sendEmail({ to: appointment.contact.email, from: 'Realty Pandit <noreply@realtypandit.in>', subject, html }, tenant_id)
+                            .catch(err => logger.warn('[Calendar] Appointment email failed:', (err as Error).message));
+                    }).catch(() => {});
+                }).catch(() => {});
+            }
 
             return appointment;
         } catch (error) {
@@ -390,5 +449,76 @@ export class CalendarService {
             logger.error(`[Calendar] Failed to get upcoming appointments:`, error);
             return [];
         }
+    }
+
+    /**
+     * Notify super_boss about a new appointment (summary, no client phone).
+     */
+    private async notifySuperBoss(appointment: any): Promise<void> {
+        const superBoss = await prisma.agent.findFirst({
+            where: { role: 'super_boss', status: 'active' },
+            select: { id: true, phone: true, email: true, name: true },
+        });
+        if (!superBoss?.phone) return;
+
+        const date = new Date(appointment.scheduled_at).toLocaleDateString('en-IN', {
+            weekday: 'short', day: 'numeric', month: 'short',
+        });
+        const time = new Date(appointment.scheduled_at).toLocaleTimeString('en-IN', {
+            hour: '2-digit', minute: '2-digit',
+        });
+        const propertyInfo = appointment.property
+            ? `${appointment.property.type} in ${appointment.property.location || 'TBD'}`
+            : 'a property';
+        const agentName = appointment.assigned_to_agent?.name || 'Unassigned';
+
+        const { notify } = await import('./notify');
+        await notify('appointment_created', [
+            { id: superBoss.id, type: 'agent', phone: superBoss.phone, email: superBoss.email || undefined, name: superBoss.name },
+        ], {
+            property_info: propertyInfo,
+            date,
+            time,
+            agent_name: agentName,
+            client_name: appointment.contact?.name || 'Client',
+        });
+    }
+
+    /**
+     * Notify the assigned lead agent (if different from property's assigned agent).
+     */
+    private async notifyLeadAgent(appointment: any): Promise<void> {
+        const contact = appointment.contact;
+        if (!contact?.assigned_agent_id) return;
+
+        // Skip if lead agent is the same as property agent
+        if (contact.assigned_agent_id === appointment.assigned_to_agent_id) return;
+
+        const leadAgent = await prisma.agent.findUnique({
+            where: { id: contact.assigned_agent_id },
+            select: { id: true, phone: true, email: true, name: true },
+        });
+        if (!leadAgent?.phone) return;
+
+        const date = new Date(appointment.scheduled_at).toLocaleDateString('en-IN', {
+            weekday: 'short', day: 'numeric', month: 'short',
+        });
+        const time = new Date(appointment.scheduled_at).toLocaleTimeString('en-IN', {
+            hour: '2-digit', minute: '2-digit',
+        });
+        const propertyInfo = appointment.property
+            ? `${appointment.property.type} in ${appointment.property.location || 'TBD'}`
+            : 'a property';
+
+        const { notify } = await import('./notify');
+        await notify('appointment_created', [
+            { id: leadAgent.id, type: 'agent', phone: leadAgent.phone, email: leadAgent.email || undefined, name: leadAgent.name },
+        ], {
+            property_info: propertyInfo,
+            date,
+            time,
+            client_name: contact.name || contact.phone_number,
+            client_phone: contact.phone_number,
+        });
     }
 }

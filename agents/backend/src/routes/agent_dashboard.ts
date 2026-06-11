@@ -19,6 +19,7 @@ import { QAAgent } from '../agents/qa_agent';
 import { authMiddleware } from '../middleware/auth';
 import prisma from '../db';
 import logger from '../utils/logger';
+import { captureRouteError } from '../utils/capture';
 
 const router = Router();
 const monitor = new PerformanceMonitor();
@@ -39,6 +40,7 @@ router.get('/health', async (req: Request, res: Response) => {
         const health = await monitor.getSystemHealth();
         res.json({ success: true, data: health });
     } catch (error: any) {
+        captureRouteError(error, req, { route: 'agent_dashboard#1' });
         logger.error('[AgentDashboard] Health check failed:', error);
         res.status(500).json({ success: false, error: error.message });
     }
@@ -55,6 +57,7 @@ router.get('/metrics', async (req: Request, res: Response) => {
         const metrics = await monitor.getAgentMetrics();
         res.json({ success: true, data: metrics });
     } catch (error: any) {
+        captureRouteError(error, req, { route: 'agent_dashboard#2' });
         logger.error('[AgentDashboard] Metrics failed:', error);
         res.status(500).json({ success: false, error: error.message });
     }
@@ -71,6 +74,7 @@ router.get('/funnel', async (req: Request, res: Response) => {
         const funnel = await monitor.getConversionFunnel();
         res.json({ success: true, data: funnel });
     } catch (error: any) {
+        captureRouteError(error, req, { route: 'agent_dashboard#3' });
         logger.error('[AgentDashboard] Funnel failed:', error);
         res.status(500).json({ success: false, error: error.message });
     }
@@ -94,6 +98,7 @@ router.get('/logs', async (req: Request, res: Response) => {
         });
         res.json({ success: true, data: result.logs, total: result.total });
     } catch (error: any) {
+        captureRouteError(error, req, { route: 'agent_dashboard#4' });
         logger.error('[AgentDashboard] Logs failed:', error);
         res.status(500).json({ success: false, error: error.message });
     }
@@ -116,6 +121,7 @@ router.get('/qa-logs', async (req: Request, res: Response) => {
         });
         res.json({ success: true, data: result.logs, total: result.total });
     } catch (error: any) {
+        captureRouteError(error, req, { route: 'agent_dashboard#5' });
         logger.error('[AgentDashboard] QA logs failed:', error);
         res.status(500).json({ success: false, error: error.message });
     }
@@ -136,6 +142,7 @@ router.get('/campaigns', async (req: Request, res: Response) => {
         );
         res.json({ success: true, data: campaigns });
     } catch (error: any) {
+        captureRouteError(error, req, { route: 'agent_dashboard#6' });
         logger.error('[AgentDashboard] Campaigns list failed:', error);
         res.status(500).json({ success: false, error: error.message });
     }
@@ -166,6 +173,7 @@ router.post('/campaigns', async (req: Request, res: Response) => {
 
         res.json({ success: true, data: { campaign_id: campaignId } });
     } catch (error: any) {
+        captureRouteError(error, req, { route: 'agent_dashboard#7' });
         logger.error('[AgentDashboard] Campaign creation failed:', error);
         res.status(500).json({ success: false, error: error.message });
     }
@@ -180,6 +188,7 @@ router.post('/campaigns/:id/execute', async (req: Request, res: Response) => {
         const result = await marketingAgent.executeCampaign(req.params.id as string);
         res.json({ success: true, data: result });
     } catch (error: any) {
+        captureRouteError(error, req, { route: 'agent_dashboard#8' });
         logger.error('[AgentDashboard] Campaign execution failed:', error);
         res.status(500).json({ success: false, error: error.message });
     }
@@ -194,6 +203,7 @@ router.post('/campaigns/:id/cancel', async (req: Request, res: Response) => {
         await marketingAgent.cancelCampaign(req.params.id as string);
         res.json({ success: true, message: 'Campaign cancelled' });
     } catch (error: any) {
+        captureRouteError(error, req, { route: 'agent_dashboard#9' });
         logger.error('[AgentDashboard] Campaign cancel failed:', error);
         res.status(500).json({ success: false, error: error.message });
     }
@@ -208,6 +218,7 @@ router.get('/campaigns/analytics', async (req: Request, res: Response) => {
         const analytics = await marketingAgent.getAnalytics();
         res.json({ success: true, data: analytics });
     } catch (error: any) {
+        captureRouteError(error, req, { route: 'agent_dashboard#10' });
         logger.error('[AgentDashboard] Campaign analytics failed:', error);
         res.status(500).json({ success: false, error: error.message });
     }
@@ -231,6 +242,7 @@ router.patch('/qa-logs/:id/review', async (req: Request, res: Response) => {
         });
         res.json({ success: true, data: updated });
     } catch (error: any) {
+        captureRouteError(error, req, { route: 'agent_dashboard#11' });
         logger.error('[AgentDashboard] QA review failed:', error);
         res.status(500).json({ success: false, error: error.message });
     }
@@ -249,6 +261,7 @@ router.patch('/qa-logs/:id/flag', async (req: Request, res: Response) => {
         });
         res.json({ success: true, data: updated });
     } catch (error: any) {
+        captureRouteError(error, req, { route: 'agent_dashboard#12' });
         logger.error('[AgentDashboard] QA flag toggle failed:', error);
         res.status(500).json({ success: false, error: error.message });
     }
@@ -266,6 +279,7 @@ router.get('/winning-templates', async (req: Request, res: Response) => {
         const templates = await qaAgent.getWinningTemplates(agentName, limit);
         res.json({ success: true, data: templates });
     } catch (error: any) {
+        captureRouteError(error, req, { route: 'agent_dashboard#13' });
         logger.error('[AgentDashboard] Winning templates failed:', error);
         res.status(500).json({ success: false, error: error.message });
     }

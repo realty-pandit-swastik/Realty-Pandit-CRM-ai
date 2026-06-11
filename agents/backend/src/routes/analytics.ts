@@ -12,6 +12,7 @@
 import { Router } from 'express';
 import prisma from '../db';
 import { authMiddleware } from '../middleware/auth';
+import { captureRouteError } from '../utils/capture';
 
 const router = Router();
 
@@ -80,6 +81,7 @@ router.get('/market-trends', authMiddleware, async (req, res) => {
       sales: formatData(sales),
     });
   } catch (error: any) {
+        captureRouteError(error, req, { route: 'analytics#1' });
     console.error('Error fetching market trends:', error);
     res.status(500).json({ error: 'Failed to fetch market trends' });
   }
@@ -168,6 +170,7 @@ router.get('/user-performance', authMiddleware, async (req, res) => {
 
     res.json({ performance });
   } catch (error: any) {
+        captureRouteError(error, req, { route: 'analytics#2' });
     console.error('Error fetching user performance:', error);
     res.status(500).json({ error: 'Failed to fetch user performance' });
   }
@@ -230,6 +233,7 @@ router.get('/lead-sources', authMiddleware, async (req, res) => {
 
     res.json({ sources: enrichedBreakdown });
   } catch (error: any) {
+        captureRouteError(error, req, { route: 'analytics#3' });
     console.error('Error fetching lead sources:', error);
     res.status(500).json({ error: 'Failed to fetch lead sources' });
   }
@@ -304,6 +308,7 @@ router.get('/property-trends', authMiddleware, async (req, res) => {
       recent_additions: recentAdditions,
     });
   } catch (error: any) {
+        captureRouteError(error, req, { route: 'analytics#4' });
     console.error('Error fetching property trends:', error);
     res.status(500).json({ error: 'Failed to fetch property trends' });
   }
@@ -359,6 +364,7 @@ router.get('/financial-summary', authMiddleware, async (req, res) => {
       avg_deal_size: avgDealSize,
     });
   } catch (error: any) {
+        captureRouteError(error, req, { route: 'analytics#5' });
     console.error('Error fetching financial summary:', error);
     res.status(500).json({ error: 'Failed to fetch financial summary' });
   }
@@ -514,6 +520,7 @@ router.get('/advanced', authMiddleware, async (req, res) => {
       }
     });
   } catch (error: any) {
+        captureRouteError(error, req, { route: 'analytics#6' });
     console.error('Error fetching advanced analytics:', error);
     res.status(500).json({ error: 'Failed to fetch analytics' });
   }

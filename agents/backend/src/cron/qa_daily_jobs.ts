@@ -17,23 +17,28 @@ let integrityCheckInterval: NodeJS.Timeout | null = null;
 
 /**
  * Calculate milliseconds until next occurrence of a given hour (IST).
+ *
+ * Works entirely in UTC epoch ms to avoid setHours() using the server's
+ * local timezone (UTC on Linux VPS) instead of IST.
+ * e.g. hour=9 → next 09:00 IST = next 03:30 UTC.
  */
 function msUntilNextIST(hour: number): number {
-    const now = new Date();
-    // IST = UTC + 5:30
-    const istOffset = 5.5 * 60 * 60 * 1000;
-    const istNow = new Date(now.getTime() + istOffset);
+    const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
+    const now = Date.now();
 
-    const target = new Date(istNow);
-    target.setHours(hour, 0, 0, 0);
+    // Compute the target's offset from UTC midnight:
+    //   IST hour X = (X * 3600000 - IST_OFFSET_MS) ms past UTC midnight
+    const offsetFromUTCMidnight = hour * 60 * 60 * 1000 - IST_OFFSET_MS;
 
-    // If the target hour has already passed today, schedule for tomorrow
-    if (target.getTime() <= istNow.getTime()) {
-        target.setDate(target.getDate() + 1);
+    const todayUTCMidnight = new Date();
+    todayUTCMidnight.setUTCHours(0, 0, 0, 0);
+
+    let nextFire = todayUTCMidnight.getTime() + offsetFromUTCMidnight;
+    if (nextFire <= now) {
+        nextFire += 24 * 60 * 60 * 1000;
     }
 
-    // Convert back to UTC offset
-    return target.getTime() - istNow.getTime();
+    return nextFire - now;
 }
 
 /**

@@ -20,6 +20,8 @@ import { transitionTransaction } from '../services/transaction_state_machine';
 import { TransactionStatus } from '@prisma/client';
 import prisma from '../db';
 import logger from '../utils/logger';
+import { parseMenuChoice } from '../utils/menu_choice';
+import { lastOutboundWasSameMenu, escalateStuckMenu } from '../utils/menu_loop_guard';
 
 interface CoordinationRequest {
     appointment_id: string;
@@ -64,13 +66,25 @@ export class CoordinationAgent implements BaseAgent {
             };
         }
 
-        // Transaction not yet MATCHED → can't schedule visit
+        // Transaction not yet QUALIFIED → can't schedule visit
         if (currentTransaction.status === 'NEW') {
             return {
                 action: 'reply',
                 reply_script: "We're still finding the right property for you. Once we match you with a property, we'll help schedule a visit. Is there anything specific about your requirements you'd like to update?",
                 quality_hint: 'confident',
             };
+        }
+
+        // 2026-05-19 CRITICAL loop fix: the VISIT_SCHEDULED prompt instructs
+        // "reply 1 / 2 / 3" but no handler parsed the numbers, so every
+        // numeric reply fell through to the default and re-sent the SAME
+        // menu forever. Map the menu numbers to intent for the relevant
+        // statuses BEFORE the keyword checks.
+        const choice = parseMenuChoice(message);
+        if (choice && currentTransaction.status === 'VISIT_SCHEDULED') {
+            if (choice === 1) return this.handleConfirmMessage(context);
+            if (choice === 2) return this.handleRescheduleMessage(context);
+            if (choice === 3) return this.handleCancelMessage(context);
         }
 
         // Handle CONFIRM/RESCHEDULE/CANCEL keywords
@@ -88,14 +102,14 @@ export class CoordinationAgent implements BaseAgent {
 
         // Default: show options based on transaction status
         if (currentTransaction.status === 'VISIT_SCHEDULED') {
-            return {
-                action: 'reply',
-                reply_script: 'You have a property visit scheduled. Would you like to:\n\n1. *Confirm* your attendance\n2. *Reschedule* to a different time\n3. *Cancel* the visit\n\nJust reply with your choice!',
-                quality_hint: 'confident',
-            };
+            const menu = 'You have a property visit scheduled. Would you like to:\n\n1. *Confirm* your attendance\n2. *Reschedule* to a different time\n3. *Cancel* the visit\n\nJust reply with your choice!';
+            if (await lastOutboundWasSameMenu(contact.phone_number, menu)) {
+                return escalateStuckMenu(context, menu);
+            }
+            return { action: 'reply', reply_script: menu, quality_hint: 'confident' };
         }
 
-        if (currentTransaction.status === 'MATCHED') {
+        if (currentTransaction.status === 'QUALIFIED') {
             // Guard: can't schedule without a supply party linked
             if (!currentTransaction.supply_contact_id) {
                 return {
@@ -113,11 +127,35 @@ export class CoordinationAgent implements BaseAgent {
         }
 
         if (currentTransaction.status === 'VISITED') {
-            return {
-                action: 'reply',
-                reply_script: "How was the property visit? Would you like to:\n\n1. *Make an offer* on this property\n2. *Schedule another visit* to see it again\n3. *See more properties* that match your criteria\n\nYour feedback helps us find the perfect match!",
-                quality_hint: 'confident',
-            };
+            const visitedMenu = "How was the property visit? Would you like to:\n\n1. *Make an offer* on this property\n2. *Schedule another visit* to see it again\n3. *See more properties* that match your criteria\n\nYour feedback helps us find the perfect match!";
+            const vChoice = parseMenuChoice(message);
+            const lower = msg;
+            // Numeric OR word intent → acknowledge + hand to a human (no
+            // automated offer/again/see-more flow exists; never loop).
+            if (vChoice === 1 || lower.includes('offer')) {
+                return escalateStuckMenu(context, visitedMenu).then(r => ({
+                    ...r,
+                    reply_script: "Great — you'd like to make an offer. 🙌 A team member will call you shortly to take it forward.",
+                }));
+            }
+            if (vChoice === 2 || lower.includes('another visit') || lower.includes('again') || lower.includes('schedule')) {
+                return escalateStuckMenu(context, visitedMenu).then(r => ({
+                    ...r,
+                    reply_script: "Sure — we'll arrange another visit. 🗓️ A team member will coordinate the new time with you shortly.",
+                }));
+            }
+            if (vChoice === 3 || lower.includes('more propert') || lower.includes('see more') || lower.includes('other option')) {
+                return {
+                    action: 'reply',
+                    reply_script: "On it — I'll pull up more properties that match your requirements.",
+                    quality_hint: 'confident',
+                    metadata: { redirect_to: 'sales', reason: 'visited_see_more' },
+                };
+            }
+            if (await lastOutboundWasSameMenu(contact.phone_number, visitedMenu)) {
+                return escalateStuckMenu(context, visitedMenu);
+            }
+            return { action: 'reply', reply_script: visitedMenu, quality_hint: 'confident' };
         }
 
         // Fallback

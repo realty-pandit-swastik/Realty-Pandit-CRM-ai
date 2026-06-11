@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import prisma from '../db';
 import logger from '../utils/logger';
 import { cache } from '../middleware/cache';
+import { captureRouteError } from '../utils/capture';
 
 const router = Router();
 
@@ -48,6 +49,7 @@ router.get(
                 }))
             });
         } catch (error) {
+        captureRouteError(error, req, { route: 'classification#1' });
             logger.error('Error fetching categories', { error });
             res.status(500).json({ error: 'Failed to fetch categories' });
         }
@@ -102,6 +104,7 @@ router.get(
                 }))
             });
         } catch (error) {
+        captureRouteError(error, req, { route: 'classification#2' });
             logger.error('Error fetching subcategories', { error, categoryId: req.params.id });
             res.status(500).json({ error: 'Failed to fetch subcategories' });
         }
@@ -152,6 +155,7 @@ router.get(
                 }))
             });
         } catch (error) {
+        captureRouteError(error, req, { route: 'classification#3' });
             logger.error('Error fetching property types', { error, subcategoryId: req.params.id });
             res.status(500).json({ error: 'Failed to fetch property types' });
         }
@@ -197,6 +201,7 @@ router.get(
                 }))
             });
         } catch (error) {
+        captureRouteError(error, req, { route: 'classification#4' });
             logger.error('Error fetching configurations', { error });
             res.status(500).json({ error: 'Failed to fetch configurations' });
         }
@@ -236,6 +241,7 @@ router.get(
                 }))
             });
         } catch (error) {
+        captureRouteError(error, req, { route: 'classification#5' });
             logger.error('Error fetching usage types', { error });
             res.status(500).json({ error: 'Failed to fetch usage types' });
         }
@@ -275,6 +281,7 @@ router.get(
                 }))
             });
         } catch (error) {
+        captureRouteError(error, req, { route: 'classification#6' });
             logger.error('Error fetching investment types', { error });
             res.status(500).json({ error: 'Failed to fetch investment types' });
         }
@@ -407,6 +414,7 @@ router.get(
                 }))
             });
         } catch (error) {
+        captureRouteError(error, req, { route: 'classification#7' });
             logger.error('Error fetching classification tree', { error });
             res.status(500).json({ error: 'Failed to fetch classification tree' });
         }

@@ -26,7 +26,8 @@ export async function ensurePartnerAgent(
     phone: string,
     name: string,
     tenantId: string,
-    managingAgentId: string
+    managingAgentId: string,
+    options?: { partnerCategory?: 'INDIVIDUAL' | 'COMPANY'; companyName?: string | null }
 ): Promise<PartnerAutoCreateResult> {
     const normalizedPhone = normalizePhone(phone);
     if (!normalizedPhone) {
@@ -61,18 +62,22 @@ export async function ensurePartnerAgent(
         },
     });
 
-    // Create minimal PartnerAgent record — status PENDING_PAYMENT (not verified, not onboarded)
+    // 2026-05-15: Business model is commission-on-sale (no subscription). Partners
+    // are immediately ACTIVE — no payment gate. listing_limit is effectively unlimited.
+    // Optional fields (business_name, business_address) left null; admin or the partner
+    // can fill them later via the Partner Agents page.
     const partner = await prisma.partnerAgent.create({
         data: {
             phone_number: normalizedPhone,
             name: name || 'Partner Agent',
-            partner_category: 'INDIVIDUAL',
-            business_name: name || 'Pending Registration',
-            business_address: 'Pending',
-            status: 'PENDING_PAYMENT',
+            partner_category: options?.partnerCategory ?? 'INDIVIDUAL',
+            business_name: options?.companyName ?? null,
+            business_address: null,
+            status: 'ACTIVE',
             verified: false,
             package_type: 'FREE',
-            partner_type: 'HAS_BUYERS',
+            listing_limit: 99999,
+            partner_type: 'BOTH',
             managing_agent_id: managingAgentId,
             onboarded_by_agent_id: managingAgentId,
             onboarded_at: new Date(),

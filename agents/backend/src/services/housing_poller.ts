@@ -20,9 +20,12 @@ import prisma from '../db';
 import logger from '../utils/logger';
 import { normalizePhone } from '../utils/phone';
 import { isRealEmail } from '../utils/email';
+import { sanitizeName } from '../utils/name_sanitizer';
 import { sendBuyerConfirmationWhatsApp, sendBuyerConfirmationEmail } from './lead_notifications';
-import { assignViaRoundRobin } from './lead_assignment';
+import { assignViaRoundRobin, resolveAgentByEmail, assignViaManagerRoundRobin } from './lead_assignment';
+import { ensureDealForLead } from './ensure_deal';
 import { notify } from './notify';
+import { alertCritical } from '../utils/alerter';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -90,11 +93,27 @@ export class HousingPoller {
         const tenant = await prisma.tenant.findFirst();
         if (!tenant) throw new Error('No tenant configured');
 
-        // ── Build request params ─────────────────────────────────────────────
+        // Mark running + stamp the attempt; read the watermark in the same call.
+        // Uses the canonical IntegrationSync fields (last_success/last_error/consecutive_failures)
+        // — the old code wrote started_at/completed_at/error which DON'T EXIST on the model.
+        const sync = await prisma.integrationSync.upsert({
+            where:  { source: 'housing' },
+            update: { status: 'running', last_attempt: new Date() },
+            create: { source: 'housing', status: 'running', last_attempt: new Date() },
+        });
+
+        // ── Window: resume from the watermark (last_success) so a missed/delayed tick can't
+        // leave a permanent gap; first run / long outage falls back to the last 10 min, capped
+        // to a 24h catch-up. (Old code used a fixed now-600s window with NO watermark.)
         const currentTime = Math.floor(Date.now() / 1000);
         const endTime     = currentTime;
-        const startTime   = currentTime - 600; // last 10 minutes
-        const hash        = this.buildHash(currentTime);
+        const MAX_LOOKBACK = 24 * 3600;
+        let startTime = currentTime - 600;
+        if (sync.last_success) {
+            const wm = Math.floor(new Date(sync.last_success).getTime() / 1000);
+            startTime = Math.max(wm, currentTime - MAX_LOOKBACK);
+        }
+        const hash = this.buildHash(currentTime);
 
         const params = new URLSearchParams({
             start_date:   String(startTime),
@@ -104,18 +123,10 @@ export class HousingPoller {
             id:           this.accountId!,
             per_page:     '1000',
         });
-
         const url = `${this.baseUrl}?${params.toString()}`;
         logger.info(`[HousingPoller] Polling: start=${startTime} end=${endTime}`);
 
-        // Mark sync as running
-        await prisma.integrationSync.upsert({
-            where:  { source: 'housing' },
-            update: { status: 'running', started_at: new Date(), error: null },
-            create: { source: 'housing', status: 'running', started_at: new Date() },
-        });
-
-        let leads: HousingLead[] = [];
+        const result: PollResult = { fetched: 0, new: 0, updated: 0 };
 
         try {
             const response = await axios.get(url, {
@@ -129,45 +140,67 @@ export class HousingPoller {
                 throw new Error(`Housing.com API error: ${JSON.stringify(body.apiErrors)}`);
             }
 
-            leads = Array.isArray(body?.data) ? body.data : [];
+            const leads: HousingLead[] = Array.isArray(body?.data) ? body.data : [];
+            result.fetched = leads.length;
             logger.info(`[HousingPoller] Fetched ${leads.length} leads`);
+
+            // Ingest — count failures. If ANY lead fails we do NOT advance the watermark and
+            // we throw, so the sync is marked `failed` (alerts + backoff) and the window is
+            // retried next cycle. Never silently drop a lead while reporting success.
+            let leadFailures = 0;
+            for (const lead of leads) {
+                try {
+                    await this.processLead(lead, tenant.id, result);
+                } catch (err) {
+                    leadFailures++;
+                    logger.error(`[HousingPoller] Failed to ingest lead ${lead.lead_phone}:`, (err as Error).message);
+                }
+            }
+            if (leadFailures > 0) {
+                throw new Error(`Housing: ${leadFailures}/${leads.length} leads failed to ingest in window ${startTime}..${endTime}; watermark held for retry`);
+            }
+
+            // Full success → advance the watermark to the window end.
+            await prisma.integrationSync.update({
+                where: { source: 'housing' },
+                data: {
+                    status: 'success',
+                    last_success: new Date(endTime * 1000),
+                    last_error: null,
+                    consecutive_failures: 0,
+                    leads_fetched: result.fetched,
+                    leads_new: result.new,
+                    leads_updated: result.updated,
+                    total_syncs: { increment: 1 },
+                },
+            });
+            logger.info(`[HousingPoller] Done: ${result.fetched} fetched, ${result.new} new, ${result.updated} updated`);
+            return result;
 
         } catch (err) {
             const message = (err as Error).message;
-            logger.error('[HousingPoller] Fetch error:', message);
-            await prisma.integrationSync.update({
-                where:  { source: 'housing' },
-                update: { status: 'error', error: message, completed_at: new Date() },
-            } as any);
+            logger.error('[HousingPoller] Poll failed:', message);
+            const updated = await prisma.integrationSync.update({
+                where: { source: 'housing' },
+                data: {
+                    status: 'failed',
+                    last_error: message,
+                    consecutive_failures: { increment: 1 },
+                    leads_fetched: result.fetched,
+                    leads_new: result.new,
+                    leads_updated: result.updated,
+                    total_syncs: { increment: 1 },
+                },
+            });
+            if (updated.consecutive_failures >= 3) {
+                alertCritical(
+                    'housing_consecutive_failures',
+                    `Housing poller has failed ${updated.consecutive_failures} times in a row. Last error: ${message.substring(0, 100)}`,
+                    { consecutive_failures: updated.consecutive_failures, error: message },
+                );
+            }
             throw err;
         }
-
-        // ── Process leads ────────────────────────────────────────────────────
-        const result: PollResult = { fetched: leads.length, new: 0, updated: 0 };
-
-        for (const lead of leads) {
-            try {
-                await this.processLead(lead, tenant.id, result);
-            } catch (err) {
-                logger.error(`[HousingPoller] Error processing lead ${lead.lead_phone}:`, (err as Error).message);
-            }
-        }
-
-        // Mark sync as completed
-        await prisma.integrationSync.update({
-            where:  { source: 'housing' },
-            update: {
-                status:       'success',
-                completed_at: new Date(),
-                leads_fetched: result.fetched,
-                leads_new:    result.new,
-                leads_updated: result.updated,
-                error:        null,
-            },
-        } as any);
-
-        logger.info(`[HousingPoller] Done: ${result.fetched} fetched, ${result.new} new, ${result.updated} updated`);
-        return result;
     }
 
     private async processLead(lead: HousingLead, tenantId: string, result: PollResult) {
@@ -177,7 +210,7 @@ export class HousingPoller {
             return;
         }
 
-        const leadName = (lead.lead_name || '').trim() || null;
+        const leadName = sanitizeName(lead.lead_name);
         const incomingEmail = isRealEmail(lead.lead_email) ? lead.lead_email! : null;
         const intent = this.mapIntent(lead.service_type);
         const location = lead.locality || null;
@@ -195,8 +228,8 @@ export class HousingPoller {
             ? incomingEmail
             : (existing?.email ?? undefined);
 
-        // Smart merge name: keep the longer value
-        const existingNameTrimmed = (existing?.name || '').trim();
+        // Smart merge name: keep the longer value (after stripping placeholders)
+        const existingNameTrimmed = sanitizeName(existing?.name) || '';
         let mergedName: string | undefined;
         if (!leadName) {
             mergedName = undefined;
@@ -258,13 +291,31 @@ export class HousingPoller {
         // ── Assign agent ────────────────────────────────────────────────────
         let finalAgentId = contact.assigned_agent_id;
         if (!finalAgentId) {
-            finalAgentId = await assignViaRoundRobin();
+            // Try portal-email match first (parity with 99acres SubUserName routing).
+            const housingBrokerEmail = (lead as any).broker_email || (lead as any).agent_email || null;
+            if (housingBrokerEmail) {
+                finalAgentId = await resolveAgentByEmail(housingBrokerEmail);
+            }
+            if (!finalAgentId) {
+                finalAgentId = await assignViaManagerRoundRobin();
+            }
             if (finalAgentId) {
                 await prisma.contact.update({
                     where: { phone_number: phoneNumber },
                     data:  { assigned_agent_id: finalAgentId },
                 });
             }
+        }
+
+        // Auto-create NEW deal (B1) — only on new contacts.
+        if (isNew) {
+            ensureDealForLead({
+                contactPhone: phoneNumber,
+                source: 'housing',
+                assignedAgentId: finalAgentId,
+            }).catch((err) => {
+                logger.error(`[Housing] ensureDealForLead failed for ${phoneNumber}: ${(err as Error).message}`);
+            });
         }
 
         // ── Notify team (new leads only) ────────────────────────────────────

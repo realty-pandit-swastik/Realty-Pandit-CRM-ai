@@ -5,15 +5,18 @@ import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import multer from 'multer';
 import { CommissionService } from '../services/commission';
-import { permissionEngine, maskPhone, maskName } from '../services/permission_engine';
+import { permissionEngine, maskPhone, maskName, viewerFromPartner, applyRoleMaskList } from '../services/permission_engine';
+import { sanitizationService } from '../services/sanitization_service';
 import { validate } from '../validators';
 import { agentLoginOtpSchema, agentVerifyOtpSchema, agentRegisterSchema, closeDealSchema } from '../validators/calls.validator';
 import logger from '../utils/logger';
 import { cacheGet, cacheSet, cacheDel } from '../utils/redis';
 import { normalizePhone } from '../utils/phone';
+import { foldLegacyDemand, mergeDemandSchemaValues } from '../utils/demand_canonical';
 import { sendOtp } from '../services/otp_sender';
 import { ensureOwner } from '../services/ensure_owner';
 import { StorageService } from '../services/storage';
+import { setAuthCookies } from '../middleware/auth';
 
 const storageService = new StorageService();
 const upload = multer({
@@ -59,8 +62,14 @@ const router = Router();
 const JWT_SECRET = process.env.AGENT_JWT_SECRET!;
 
 // Middleware for Agent Auth
+// Accepts the JWT from EITHER the Authorization: Bearer <token> header OR the
+// rp_access_token HttpOnly cookie set by setAuthCookies on verify-otp / login-password.
+// The cookie path makes the web partner portal work without having to expose the
+// token to JS; Bearer remains available for non-browser clients.
 const authenticateAgent = async (req: any, res: any, next: any) => {
-    const token = req.headers.authorization?.split(' ')[1];
+    const headerToken = req.headers.authorization?.split(' ')[1];
+    const cookieToken = req.cookies?.rp_access_token;
+    const token = headerToken || cookieToken;
     if (!token) return res.status(401).json({ error: 'Unauthorized' });
 
     try {
@@ -68,6 +77,7 @@ const authenticateAgent = async (req: any, res: any, next: any) => {
         req.agentId = decoded.id;
         next();
     } catch (err) {
+        captureRouteError(err, req, { route: 'agent#1' });
         return res.status(403).json({ error: 'Invalid token' });
     }
 };
@@ -112,6 +122,7 @@ router.post('/login-otp', validate(agentLoginOtpSchema), async (req, res) => {
         logger.info(`[AgentAuth] OTP sent to ${phone} (wa: ${result.whatsappSent}, email: ${result.emailSent})`);
         res.json({ message: result.message, remaining: rateCheck.remaining });
     } catch (error) {
+        captureRouteError(error, req, { route: 'agent#2' });
         logger.error('[AgentAuth] OTP send error:', error);
         res.status(500).json({ error: 'Failed to send OTP. Please try again.' });
     }
@@ -156,6 +167,8 @@ router.post('/verify-otp', validate(agentVerifyOtpSchema), async (req, res) => {
             parent_partner_id: agent.parent_partner_id
         }, JWT_SECRET, { expiresIn: '7d' });
 
+        setAuthCookies(res, token);
+
         res.json({
             token,
             agent: {
@@ -174,6 +187,7 @@ router.post('/verify-otp', validate(agentVerifyOtpSchema), async (req, res) => {
             }
         });
     } catch (error) {
+        captureRouteError(error, req, { route: 'agent#3' });
         logger.error('[AgentAuth] Verify OTP error:', error);
         res.status(500).json({ error: 'Verification failed. Please try again.' });
     }
@@ -208,6 +222,14 @@ router.post('/register', validate(agentRegisterSchema), async (req, res) => {
             });
         }
 
+        // Self-signup ownership rule (2026-04-17 middleman model, Stage-2 lock):
+        // When a partner registers via /join/agent (no internal team member involved),
+        // they are assigned to the super_boss by default. Super_boss can reassign later.
+        const superBoss = await prisma.agent.findFirst({
+            where: { role: 'super_boss', status: 'active' },
+            select: { id: true },
+        });
+
         const agent = await prisma.partnerAgent.create({
             data: {
                 phone_number: phone,
@@ -215,12 +237,17 @@ router.post('/register', validate(agentRegisterSchema), async (req, res) => {
                 email,
                 company_name: companyName,
                 package_type: 'FREE',
-                status: 'ACTIVE'
+                status: 'ACTIVE',
+                managing_agent_id: superBoss?.id ?? null,
+                onboarded_by_agent_id: superBoss?.id ?? null,
+                onboarded_at: new Date(),
+                partner_type: 'BOTH',
             }
         });
 
         res.json({ message: 'Registration successful', agentId: agent.id });
     } catch (err: any) {
+        captureRouteError(err, req, { route: 'agent#4' });
         logger.error(err);
         res.status(500).json({ error: 'Registration failed ' + err.message });
     }
@@ -262,6 +289,8 @@ router.post('/login-password', async (req, res) => {
             parent_partner_id: agent.parent_partner_id
         }, JWT_SECRET, { expiresIn: '7d' });
 
+        setAuthCookies(res, token);
+
         res.json({
             token,
             agent: {
@@ -280,6 +309,7 @@ router.post('/login-password', async (req, res) => {
             }
         });
     } catch (error) {
+        captureRouteError(error, req, { route: 'agent#5' });
         logger.error('[AgentAuth] Password login error:', error);
         res.status(500).json({ error: 'Login failed. Please try again.' });
     }
@@ -315,6 +345,7 @@ router.post('/set-password', authenticateAgent, async (req: any, res) => {
 
         res.json({ message: 'Password set successfully. You can now login with your password.' });
     } catch (error) {
+        captureRouteError(error, req, { route: 'agent#6' });
         logger.error('[AgentAuth] Set password error:', error);
         res.status(500).json({ error: 'Failed to set password' });
     }
@@ -339,6 +370,7 @@ router.get('/coordinator', authenticateAgent, async (req: any, res) => {
             } : null
         });
     } catch (error) {
+        captureRouteError(error, req, { route: 'agent#7' });
         res.status(500).json({ error: (error as Error).message });
     }
 });
@@ -358,6 +390,49 @@ async function getAgentOwnerIds(agentId: string, phoneNumber: string): Promise<s
     return owners.map((o: { id: string }) => o.id);
 }
 
+/**
+ * 2026-05-15: Build the full where-OR a partner agent should see in their portal.
+ * A piece of inventory belongs to a partner when ANY of these are true:
+ *   1. owner_id points to an owner whose contact_phone matches them (or sub-agent)
+ *   2. key_holder_phone matches them (or sub-agent) — they have the keys
+ *   3. referral_partner_id matches them (or sub-agent) — they referred it
+ *
+ * Previously the portal only checked (1), so inventory uploaded by admin
+ * on-behalf-of a partner where the partner was only the key-holder was
+ * invisible. Audit on 2026-05-15 found 12 such inventories across 5 partners.
+ */
+async function getAgentInventoryWhere(agentId: string, phoneNumber: string): Promise<any> {
+    const subAgents = await prisma.partnerAgent.findMany({
+        where: { parent_partner_id: agentId },
+        select: { id: true, phone_number: true },
+    });
+    const allPhones = [phoneNumber, ...subAgents.map((sa: { phone_number: string }) => sa.phone_number)];
+    const allAgentIds = [agentId, ...subAgents.map((sa: { id: string }) => sa.id)];
+
+    // key_holder_phone in DB is stored bare 10-digit (e.g., "8700493013"), but agent.phone_number
+    // is full E.164 (e.g., "+918700493013"). Generate both variants.
+    const phoneVariants: string[] = [];
+    for (const p of allPhones) {
+        if (!p) continue;
+        phoneVariants.push(p);
+        if (p.startsWith('+91')) phoneVariants.push(p.slice(3));
+        else if (p.startsWith('91') && p.length === 12) phoneVariants.push(p.slice(2));
+    }
+
+    const owners = await prisma.owner.findMany({
+        where: { contact_phone: { in: allPhones } },
+        select: { id: true },
+    });
+    const ownerIds = owners.map((o: { id: string }) => o.id);
+
+    const orClauses: any[] = [];
+    if (ownerIds.length > 0) orClauses.push({ owner_id: { in: ownerIds } });
+    if (phoneVariants.length > 0) orClauses.push({ key_holder_phone: { in: phoneVariants } });
+    if (allAgentIds.length > 0) orClauses.push({ referral_partner_id: { in: allAgentIds } });
+
+    return orClauses.length > 0 ? { OR: orClauses } : { id: '__never_match__' };
+}
+
 // 4. Dashboard Stats
 router.get('/dashboard', authenticateAgent, async (req: any, res) => {
     const agentId = req.agentId;
@@ -365,16 +440,16 @@ router.get('/dashboard', authenticateAgent, async (req: any, res) => {
     const agent = await prisma.partnerAgent.findUnique({ where: { id: agentId } });
     if (!agent) return res.status(404).json({ error: 'Agent not found' });
 
-    // Include own + all sub-agents' inventory in stats
-    const ownerIds = await getAgentOwnerIds(agentId, agent.phone_number);
+    // 2026-05-15: now includes key-holder + referral inventory, not just owner-linked
+    const baseWhere = await getAgentInventoryWhere(agentId, agent.phone_number);
 
-    const activeListings = ownerIds.length > 0 ? await prisma.inventory.count({
-        where: { owner_id: { in: ownerIds }, status: 'active' }
-    }) : 0;
+    const activeListings = await prisma.inventory.count({
+        where: { ...baseWhere, status: 'active' }
+    });
 
-    const totalListings = ownerIds.length > 0 ? await prisma.inventory.count({
-        where: { owner_id: { in: ownerIds } }
-    }) : 0;
+    const totalListings = await prisma.inventory.count({
+        where: baseWhere
+    });
 
     const visits = await prisma.scheduledVisit.count({
         where: { agent_id: agentId }
@@ -395,12 +470,11 @@ router.get('/inventory', authenticateAgent, async (req: any, res) => {
     const agent = await prisma.partnerAgent.findUnique({ where: { id: agentId } });
     if (!agent) return res.status(404).json({ error: 'Agent not found' });
 
-    // Include own + all sub-agents' (team members') inventory
-    const ownerIds = await getAgentOwnerIds(agentId, agent.phone_number);
-    if (ownerIds.length === 0) return res.json([]);
+    // 2026-05-15: include inventory linked by ANY of: owner, key_holder, or referral
+    const baseWhere = await getAgentInventoryWhere(agentId, agent.phone_number);
 
     const items = await prisma.inventory.findMany({
-        where: { owner_id: { in: ownerIds } },
+        where: baseWhere,
         orderBy: { created_at: 'desc' },
         select: {
             id: true,
@@ -415,11 +489,9 @@ router.get('/inventory', authenticateAgent, async (req: any, res) => {
             status: true,
             media_urls: true,
             description: true,
-            furnishing: true,
             floor_number: true,
-            total_floors: true,
-            facing: true,
-            property_age: true,
+            // furnishing/total_floors/facing/property_age dropped Phase 4 (2026-05-28) —
+            // read from specs.furnishing/floors/facing/['age-of-construction'] instead.
             uploader_phone: true,
             uploader_name: true,
             owner_phone: true,
@@ -427,6 +499,56 @@ router.get('/inventory', authenticateAgent, async (req: any, res) => {
         }
     });
     res.json(items);
+});
+
+// 5a. Inventory (Browse all) — masked cross-partner search (middleman model, 2026-04-17)
+// Partners can self-search inventory platform-wide; owner/source/exact-address stripped.
+// Filters: city, locality, property type, BHK, budget range.
+router.get('/inventory/browse', authenticateAgent, async (req: any, res) => {
+    const partnerId: string = req.agentId;
+    const viewer = viewerFromPartner(partnerId);
+
+    const {
+        city, locality, type, bhk,
+        budget_min, budget_max,
+        intent,
+        page = '1', limit = '20',
+    } = req.query as Record<string, string>;
+
+    const where: any = { status: 'active' };
+    if (city) where.city = city;
+    if (locality) where.locality = { contains: locality, mode: 'insensitive' };
+    if (type) where.type = type;
+    if (intent) where.intent = intent;
+    if (bhk) {
+        const bhkNum = parseInt(bhk, 10);
+        if (!isNaN(bhkNum)) {
+            where.specs = { path: ['bedrooms'], equals: bhkNum };
+        }
+    }
+    if (budget_min || budget_max) {
+        where.price = {};
+        if (budget_min) where.price.gte = parseFloat(budget_min);
+        if (budget_max) where.price.lte = parseFloat(budget_max);
+    }
+
+    const pageNum = Math.max(1, parseInt(page, 10) || 1);
+    const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10) || 20));
+
+    // Fetch full rows. The SanitizationService strips owner/source/exact-address fields
+    // based on the viewer — this is the single source of truth for what the partner sees.
+    const [rows, total] = await Promise.all([
+        prisma.inventory.findMany({
+            where,
+            orderBy: [{ media_score: 'desc' }, { created_at: 'desc' }],
+            skip: (pageNum - 1) * limitNum,
+            take: limitNum,
+        }),
+        prisma.inventory.count({ where }),
+    ]);
+
+    const sanitized = applyRoleMaskList(rows as any[], viewer);
+    res.json({ rows: sanitized, total, page: pageNum, limit: limitNum });
 });
 
 // 5b. Inventory (Create) — Partner adds property from their dashboard
@@ -437,14 +559,10 @@ router.post('/inventory', authenticateAgent, async (req: any, res) => {
         const agent = await prisma.partnerAgent.findUnique({ where: { id: agentId } });
         if (!agent) return res.status(404).json({ error: 'Agent not found' });
 
-        // Check listing limit
-        const owner = await prisma.owner.findUnique({ where: { contact_phone: agent.phone_number } });
-        if (owner) {
-            const currentCount = await prisma.inventory.count({ where: { owner_id: owner.id, status: { in: ['active', 'pending_approval'] } } });
-            if (currentCount >= agent.listing_limit) {
-                return res.status(403).json({ error: `Listing limit reached (${agent.listing_limit}). Upgrade your package for more listings.` });
-            }
-        }
+        // 2026-05-15: Listing limit removed — business model changed to commission-on-sale,
+        // not subscription-tier. Partners can upload unlimited inventory free of cost. The
+        // listing_limit column is retained on the schema (set to 99999) for backward compat
+        // but no longer enforced anywhere. Subscription-expiry cron is also disabled.
 
         const {
             intent, location, price, price_unit, description,
@@ -470,6 +588,17 @@ router.post('/inventory', authenticateAgent, async (req: any, res) => {
         // Ensure Owner exists for this partner
         const ownerId = await ensureOwner(agent.phone_number, tenant.id);
 
+        // specs.* is the SoT for type-specific fields (2026-05-28). The furnishing/facing/
+        // property_age/total_floors/features COLUMNS were dropped — fold incoming values into
+        // specs under canonical keys instead of writing the (now non-existent) columns, which
+        // would throw `Unknown argument`. Mirrors workflows/workflow_engine.ts §14.
+        const mergedSpecs: Record<string, any> = { ...(specs && typeof specs === 'object' ? specs : {}) };
+        if (furnishing) mergedSpecs.furnishing = furnishing;
+        if (facing) mergedSpecs.facing = facing;
+        if (property_age) mergedSpecs['age-of-construction'] = property_age;
+        if (total_floors) mergedSpecs.floors = parseInt(String(total_floors)) || undefined;
+        if (Array.isArray(features) && features.length) mergedSpecs.amenities = features;
+
         const inventory = await prisma.inventory.create({
             data: {
                 tenant_id: tenant.id,
@@ -481,18 +610,14 @@ router.post('/inventory', authenticateAgent, async (req: any, res) => {
                 location: sub_locality || locality || district || location || full_address || '',
                 price: price ? parseFloat(String(price)) : null,
                 price_unit: price_unit || 'Lakh',
-                specs: specs || null,
-                features: features || null,
+                // specs holds furnishing/facing/age-of-construction/floors/amenities (folded above).
+                specs: (Object.keys(mergedSpecs).length ? mergedSpecs : null) as any,
                 // Partner dashboard uploads require coordinator approval before going live
                 status: 'pending_approval',
                 media_urls: [],
                 video_urls: Array.isArray(video_urls) ? video_urls : [],
                 description: description || null,
-                furnishing: furnishing || null,
                 floor_number: floor_number ? parseInt(String(floor_number)) : null,
-                total_floors: total_floors ? parseInt(String(total_floors)) : null,
-                facing: facing || null,
-                property_age: property_age || null,
                 // Address
                 state: state || null,
                 district: district || null,
@@ -517,6 +642,7 @@ router.post('/inventory', authenticateAgent, async (req: any, res) => {
         logger.info(`[AgentInventory] Partner ${agentId} created inventory ${inventory.id}`);
         res.status(201).json(inventory);
     } catch (error) {
+        captureRouteError(error, req, { route: 'agent#8' });
         logger.error('[AgentInventory] Create error:', error);
         res.status(500).json({ error: 'Failed to create property listing' });
     }
@@ -580,6 +706,7 @@ router.post('/inventory/:id/upload', authenticateAgent, upload.array('files', 20
         logger.info(`[AgentMedia] Partner ${agentId} uploaded ${files.length} files to ${id}`);
         res.json({ message: `${files.length} file(s) uploaded`, media_urls: updatedMedia, video_urls: updatedVideos });
     } catch (error) {
+        captureRouteError(error, req, { route: 'agent#9' });
         logger.error('[AgentMedia] Upload error:', error);
         res.status(500).json({ error: 'Upload failed' });
     }
@@ -609,12 +736,13 @@ router.get('/inventory', authenticateAgent, async (req: any, res) => {
                 full_address: true, locality: true, district: true, state: true,
                 price: true, price_unit: true, display_price: true,
                 specs: true, media_urls: true, video_urls: true,
-                furnishing: true, description: true, created_at: true,
+                description: true, created_at: true,
                 flat_no: true, floor_number: true, apartment_name: true,
             },
         });
         res.json(items);
     } catch (error) {
+        captureRouteError(error, req, { route: 'agent#10' });
         logger.error('[AgentInventory] List error:', error);
         res.status(500).json({ error: 'Failed to fetch listings' });
     }
@@ -638,19 +766,32 @@ router.patch('/inventory/:id', authenticateAgent, async (req: any, res) => {
         const isOwner = variants.some(v => v === existing.owner_phone || v === existing.uploader_phone);
         if (!isOwner) return res.status(403).json({ error: 'Not authorized to edit this listing' });
 
-        const allowed = ['price', 'price_unit', 'description', 'specs', 'features', 'furnishing',
-            'facing', 'property_age', 'total_floors', 'floor_number', 'flat_no', 'plot_no',
+        // furnishing/facing/property_age/total_floors/features columns were dropped (2026-05-28)
+        // — they live in specs.* now and are folded in below, NOT written as columns.
+        const allowed = ['price', 'price_unit', 'description', 'specs', 'floor_number', 'flat_no', 'plot_no',
             'apartment_name', 'sub_locality', 'locality', 'district', 'state', 'pincode', 'full_address',
             'latitude', 'longitude'];
         const updateData: any = {};
         for (const field of allowed) {
             if (req.body[field] !== undefined) {
                 if (field === 'price') updateData[field] = req.body[field] !== null && req.body[field] !== '' ? parseFloat(req.body[field]) : null;
-                else if (['floor_number', 'total_floors'].includes(field)) updateData[field] = req.body[field] !== null && req.body[field] !== '' ? parseInt(String(req.body[field])) : null;
+                else if (field === 'floor_number') updateData[field] = req.body[field] !== null && req.body[field] !== '' ? parseInt(String(req.body[field])) : null;
                 else if (['latitude', 'longitude'].includes(field)) updateData[field] = req.body[field] !== null && req.body[field] !== '' ? parseFloat(req.body[field]) : null;
                 else updateData[field] = req.body[field];
             }
         }
+
+        // Fold dropped-column fields into specs.* (deep-merge over existing so we don't clobber).
+        const specBase: Record<string, any> = (updateData.specs && typeof updateData.specs === 'object')
+            ? updateData.specs
+            : ((existing.specs && typeof existing.specs === 'object') ? { ...(existing.specs as any) } : {});
+        let specTouched = updateData.specs !== undefined;
+        if (req.body.furnishing !== undefined) { specBase.furnishing = req.body.furnishing; specTouched = true; }
+        if (req.body.facing !== undefined) { specBase.facing = req.body.facing; specTouched = true; }
+        if (req.body.property_age !== undefined) { specBase['age-of-construction'] = req.body.property_age; specTouched = true; }
+        if (req.body.total_floors !== undefined) { specBase.floors = (req.body.total_floors !== null && req.body.total_floors !== '') ? parseInt(String(req.body.total_floors)) : undefined; specTouched = true; }
+        if (Array.isArray(req.body.features)) { specBase.amenities = req.body.features; specTouched = true; }
+        if (specTouched) updateData.specs = specBase;
 
         if (Object.keys(updateData).length === 0) {
             return res.status(400).json({ error: 'No valid fields to update' });
@@ -665,6 +806,7 @@ router.patch('/inventory/:id', authenticateAgent, async (req: any, res) => {
         logger.info(`[AgentInventory] Partner ${agentId} updated listing ${id}`);
         res.json(updated);
     } catch (error) {
+        captureRouteError(error, req, { route: 'agent#11' });
         logger.error('[AgentInventory] Update error:', error);
         res.status(500).json({ error: 'Failed to update listing' });
     }
@@ -700,6 +842,7 @@ router.delete('/inventory/:id', authenticateAgent, async (req: any, res) => {
             res.json({ message: 'Listing deleted successfully', id });
         }
     } catch (error) {
+        captureRouteError(error, req, { route: 'agent#12' });
         logger.error('[AgentInventory] Delete error:', error);
         res.status(500).json({ error: 'Failed to delete listing' });
     }
@@ -737,6 +880,7 @@ router.delete('/inventory/:id/media/:filename', authenticateAgent, async (req: a
         logger.info(`[AgentMedia] Partner ${agentId} deleted media ${filename} from ${id}`);
         res.json({ success: true });
     } catch (error) {
+        captureRouteError(error, req, { route: 'agent#13' });
         logger.error('[AgentMedia] Delete media error:', error);
         res.status(500).json({ error: 'Failed to delete media' });
     }
@@ -802,7 +946,7 @@ router.get('/referred-leads', authenticateAgent, async (req: any, res) => {
                 phone_number: true, name: true, email: true,
                 lead_status: true, lifecycle_stage: true, lead_type: true,
                 source: true, intent: true,
-                budget_min: true, budget_max: true, demand_bhk: true,
+                budget_min: true, budget_max: true, demand_schema_values: true,
                 preferred_location: true, timeline: true, notes: true,
                 created_at: true, updated_at: true,
                 assigned_agent: { select: { name: true } },
@@ -811,6 +955,7 @@ router.get('/referred-leads', authenticateAgent, async (req: any, res) => {
         });
         res.json(leads);
     } catch (err: any) {
+        captureRouteError(err, req, { route: 'agent#14' });
         res.status(500).json({ error: err.message });
     }
 });
@@ -837,7 +982,14 @@ router.patch('/referred-leads/:phone', authenticateAgent, async (req: any, res) 
         if (intent !== undefined) updateData.intent = intent || null;
         if (budget_min !== undefined) updateData.budget_min = budget_min || null;
         if (budget_max !== undefined) updateData.budget_max = budget_max || null;
-        if (demand_bhk !== undefined) updateData.demand_bhk = demand_bhk ? parseInt(demand_bhk) : null;
+        // demand_bhk column was DROPPED in the 2026-05-29 demand unification — fold it into the
+        // canonical demand_schema_values (deep-merged onto existing) instead of writing the
+        // non-existent column (which threw "Unknown argument `demand_bhk`" → route 500).
+        if (demand_bhk !== undefined) {
+            const folded = foldLegacyDemand({ demand_bhk: demand_bhk ? Number(demand_bhk) : null });
+            const merged = mergeDemandSchemaValues((contact as any).demand_schema_values, folded.demand_schema_values);
+            if (merged) updateData.demand_schema_values = merged;
+        }
         if (preferred_location !== undefined) updateData.preferred_location = preferred_location || null;
         if (timeline !== undefined) updateData.timeline = timeline || null;
         if (notes !== undefined) updateData.notes = notes || null;
@@ -863,6 +1015,7 @@ router.patch('/referred-leads/:phone', authenticateAgent, async (req: any, res) 
         });
         res.json(updated);
     } catch (err: any) {
+        captureRouteError(err, req, { route: 'agent#15' });
         res.status(500).json({ error: err.message });
     }
 });
@@ -931,6 +1084,7 @@ router.post('/referred-leads/:phone/done', authenticateAgent, async (req: any, r
 
         res.json({ success: true, message: 'Lead marked as done' });
     } catch (err: any) {
+        captureRouteError(err, req, { route: 'agent#16' });
         res.status(500).json({ error: err.message });
     }
 });
@@ -994,6 +1148,7 @@ router.post('/visits/:id/close', authenticateAgent, validate(closeDealSchema), a
         const result = await commissionService.processDealClosure(visitId, Number(dealValue));
         res.json({ success: true, commission: result });
     } catch (err: any) {
+        captureRouteError(err, req, { route: 'agent#17' });
         res.status(500).json({ error: err.message });
     }
 });
@@ -1020,6 +1175,7 @@ router.get('/team', authenticateAgent, async (req: any, res) => {
         });
         res.json(subAgents);
     } catch (err: any) {
+        captureRouteError(err, req, { route: 'agent#18' });
         res.status(500).json({ error: err.message });
     }
 });
@@ -1076,6 +1232,7 @@ router.post('/team', authenticateAgent, async (req: any, res) => {
 
         res.status(201).json(subAgent);
     } catch (err: any) {
+        captureRouteError(err, req, { route: 'agent#19' });
         if (err.code === 'P2002') {
             return res.status(409).json({ error: 'This phone number is already registered' });
         }
@@ -1089,6 +1246,7 @@ router.post('/team', authenticateAgent, async (req: any, res) => {
 
 import { createDeal, listDeals, getDealById, getDealTimeline } from '../services/deal_service';
 import { partnerCreateDealSchema, createDealQuerySchema } from '../validators/deals.validator';
+import { captureRouteError } from '../utils/capture';
 
 // POST /agent/deals — Partner submits a buyer lead as a deal
 router.post('/deals', authenticateAgent, validate(partnerCreateDealSchema), async (req: any, res) => {
@@ -1106,28 +1264,45 @@ router.post('/deals', authenticateAgent, validate(partnerCreateDealSchema), asyn
 
         // Upsert contact for the customer if phone provided
         let contactId: string;
+        // Conflict: the partner submitted a phone that ALREADY belongs to one of OUR direct clients
+        // (a non-partner contact not already attributed to any partner). The partner is "claiming" a
+        // client we already hold → the lead is parked PENDING_PARTNER_CLAIM for a RealtyPandit team
+        // member to approve (credit the partner) or reject (stays our direct client).
+        let pendingPartnerClaim = false;
         if (customer_phone) {
             const phone = customer_phone.startsWith('+') ? customer_phone : `+91${customer_phone.replace(/^0+/, '')}`;
+            const existing = await prisma.contact.findUnique({
+                where: { phone_number: phone },
+                select: { phone_number: true, referral_partner_id: true, contact_type: true },
+            });
+            if (existing && existing.contact_type !== 'PARTNER_AGENT' && !existing.referral_partner_id) {
+                pendingPartnerClaim = true;
+            }
             const contact = await prisma.contact.upsert({
                 where: { phone_number: phone },
                 create: {
                     phone_number: phone,
                     tenant_id: tenant.id,
-                    name: customer_name,
+                    name: customer_name || null,
                     contact_type: type === 'RENT' ? 'TENANT' : 'BUYER',
                     source: 'partner_deal',
                     created_by: req.agent?.id || null,
                 },
-                update: { name: customer_name },
+                // Existing direct client: do NOT overwrite their name on a pending claim.
+                update: pendingPartnerClaim ? {} : { name: customer_name || undefined },
             });
             contactId = contact.phone_number;
         } else {
-            // Create contact with partner's phone as reference (name-only lead)
+            // No client phone → unique, non-dialable PENDING- placeholder key (recognized by
+            // isPlaceholderPhone / toDialablePhone so it never leaks into tel:/wa.me links). Mirrors
+            // the admin create path; replaces the legacy `partner_lead_<ts>` format the guards missed.
+            const partnerKey = String(agent.phone_number || 'partner').replace(/[^0-9a-zA-Z]/g, '').slice(-10) || 'partner';
+            const placeholder = `PENDING-${partnerKey}-${Date.now().toString(36)}${Math.floor(Math.random() * 10000)}`;
             const contact = await prisma.contact.create({
                 data: {
-                    phone_number: `partner_lead_${Date.now()}`,
+                    phone_number: placeholder,
                     tenant_id: tenant.id,
-                    name: customer_name,
+                    name: customer_name || null,
                     contact_type: type === 'RENT' ? 'TENANT' : 'BUYER',
                     source: 'partner_deal',
                     created_by: req.agent?.id || null,
@@ -1154,15 +1329,39 @@ router.post('/deals', authenticateAgent, validate(partnerCreateDealSchema), asyn
             return res.status(409).json({ error: 'Duplicate deal detected', existing_deal_id: result.deal.id });
         }
 
-        logger.info(`[AgentDeals] Partner ${agentId} created deal ${result.deal.id}`);
+        // Park a claim on one of our existing direct clients: flag the contact + audit trail. The admin
+        // "Partner Approvals" queue (verification_status='PENDING_PARTNER_CLAIM') surfaces it for approve/reject.
+        if (pendingPartnerClaim) {
+            await prisma.contact.update({
+                where: { phone_number: contactId },
+                data: { verification_status: 'PENDING_PARTNER_CLAIM', updated_at: new Date() },
+            });
+            await prisma.interaction.create({
+                data: {
+                    tenant_id: tenant.id,
+                    phone_number: contactId,
+                    channel: 'partner_portal',
+                    direction: 'inbound',
+                    event_type: 'partner_claim_pending',
+                    content: `Partner ${agent.name || agentId} submitted a lead for an existing direct client — awaiting approval.`,
+                    metadata: { partner_id: agentId, deal_id: result.deal.id, requirement_type: type },
+                },
+            });
+        }
+
+        logger.info(`[AgentDeals] Partner ${agentId} created deal ${result.deal.id}${pendingPartnerClaim ? ' (PENDING approval — direct-client claim)' : ''}`);
         res.status(201).json({
             deal: result.deal,
-            matches: result.matches,
-            message: result.matches.length > 0
-                ? `Deal created! ${result.matches.length} matching properties found.`
-                : 'Deal created! Your coordinator will be in touch.',
+            matches: pendingPartnerClaim ? [] : result.matches,
+            pending_approval: pendingPartnerClaim,
+            message: pendingPartnerClaim
+                ? 'Submitted. This client is already with RealtyPandit — your lead is pending team approval.'
+                : result.matches.length > 0
+                    ? `Deal created! ${result.matches.length} matching properties found.`
+                    : 'Deal created! Your coordinator will be in touch.',
         });
     } catch (error: any) {
+        captureRouteError(error, req, { route: 'agent#20' });
         logger.error('[AgentDeals] Create deal error:', error);
         res.status(500).json({ error: 'Failed to create deal' });
     }
@@ -1233,6 +1432,7 @@ router.get('/deals', authenticateAgent, async (req: any, res) => {
             pagination: { page: parseInt(page) || 1, limit: take, total, totalPages: Math.ceil(total / take) },
         });
     } catch (error: any) {
+        captureRouteError(error, req, { route: 'agent#21' });
         logger.error('[AgentDeals] List deals error:', error);
         res.status(500).json({ error: 'Failed to fetch deals' });
     }
@@ -1274,7 +1474,10 @@ router.get('/deals/:id', authenticateAgent, async (req: any, res) => {
             demand_location: deal.demand_location,
             demand_budget_min: deal.demand_budget_min,
             demand_budget_max: deal.demand_budget_max,
-            demand_property_type: deal.demand_property_type,
+            // Phase 5 (demand canonicalization): legacy demand_property_type was dropped.
+            // Surface the canonical taxonomy node + schema values instead.
+            demand_taxonomy_node_id: (deal as any).demand_taxonomy_node_id ?? null,
+            demand_schema_values: (deal as any).demand_schema_values ?? null,
             logs: deal.logs?.map(l => ({
                 action: l.action,
                 details: l.details,
@@ -1285,6 +1488,7 @@ router.get('/deals/:id', authenticateAgent, async (req: any, res) => {
             updated_at: deal.updated_at,
         });
     } catch (error: any) {
+        captureRouteError(error, req, { route: 'agent#22' });
         logger.error('[AgentDeals] Get deal error:', error);
         res.status(500).json({ error: 'Failed to fetch deal' });
     }
@@ -1306,32 +1510,23 @@ router.get('/deals/:id/matches', authenticateAgent, async (req: any, res) => {
 
         const matches = await engine.findMatches({
             intent: deal.demand_intent === 'rent_lease' ? 'rent' : 'buy',
-            property_type: deal.demand_type_slug || deal.demand_property_type || undefined,
+            // Canonical-first (Phase 5): legacy demand_type_slug / demand_property_type
+            // columns dropped. MatchingEngine handles taxonomy_node + schema_values now.
+            demand_taxonomy_node_id: (deal as any).demand_taxonomy_node_id ?? null,
+            demand_schema_values: (deal as any).demand_schema_values ?? null,
             budget_min: deal.demand_budget_min ? Number(deal.demand_budget_min) : undefined,
             budget_max: deal.demand_budget_max ? Number(deal.demand_budget_max) : undefined,
             preferred_location: deal.demand_location || undefined,
         }, 20);
 
-        // Sanitize: remove owner details
-        const sanitized = matches.map(m => ({
-            id: m.id,
-            type: m.type,
-            category: m.category,
-            location: m.location,
-            price: m.price,
-            price_unit: m.price_unit,
-            intent: m.intent,
-            specs: m.specs,
-            features: m.features,
-            furnishing: m.furnishing,
-            floor_number: m.floor_number,
-            total_floors: m.total_floors,
-            media_urls: m.media_urls,
-            match_score: m.match_score,
-        }));
+        // Route through SanitizationService — owner/source/exact-address are stripped for
+        // partner viewers (single source of truth for cross-team/partner visibility rules).
+        const viewer = viewerFromPartner(agentId);
+        const sanitized = applyRoleMaskList(matches as any[], viewer);
 
         res.json({ deal_id: deal.id, matches: sanitized, total: sanitized.length });
     } catch (error: any) {
+        captureRouteError(error, req, { route: 'agent#23' });
         logger.error('[AgentDeals] Get matches error:', error);
         res.status(500).json({ error: 'Failed to fetch matches' });
     }
@@ -1372,6 +1567,7 @@ router.post('/deals/:id/schedule-visit', authenticateAgent, async (req: any, res
         logger.info(`[AgentDeals] Partner ${agentId} scheduled visit ${visit.id} for deal ${req.params.id}`);
         res.status(201).json({ visit_id: visit.id, message: 'Visit scheduled! Your coordinator will confirm.' });
     } catch (error: any) {
+        captureRouteError(error, req, { route: 'agent#24' });
         logger.error('[AgentDeals] Schedule visit error:', error);
         res.status(500).json({ error: 'Failed to schedule visit' });
     }
@@ -1405,6 +1601,7 @@ router.post('/deals/:id/query', authenticateAgent, validate(createDealQuerySchem
         logger.info(`[AgentDeals] Partner ${agentId} raised query ${query.id} on deal ${req.params.id}`);
         res.status(201).json(query);
     } catch (error: any) {
+        captureRouteError(error, req, { route: 'agent#25' });
         logger.error('[AgentDeals] Create query error:', error);
         res.status(500).json({ error: 'Failed to create query' });
     }

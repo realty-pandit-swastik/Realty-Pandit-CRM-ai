@@ -715,7 +715,7 @@ export class WhatsAppWorkflowAdapter {
 
         try {
             const axios = (await import('axios')).default;
-            const apiUrl = `https://graph.facebook.com/v21.0/${process.env.WHATSAPP_PHONE_ID}/messages`;
+            const apiUrl = `https://graph.facebook.com/v25.0/${process.env.WHATSAPP_PHONE_ID}/messages`;
             logger.info(`[WhatsAppWorkflow] Sending interactive ${payload.interactive?.type} to ${phone}`);
             const resp = await axios.post(apiUrl, payload, {
                 headers: {

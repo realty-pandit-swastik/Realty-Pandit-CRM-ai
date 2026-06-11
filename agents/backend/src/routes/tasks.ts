@@ -6,6 +6,7 @@
 import express, { Request, Response } from 'express';
 import prisma from '../db';
 import { notify } from '../services/notify';
+import { captureRouteError } from '../utils/capture';
 
 const router = express.Router();
 
@@ -37,6 +38,7 @@ router.get('/projects', async (req: Request, res: Response) => {
 
     res.json({ projects, total: projects.length });
   } catch (error: any) {
+        captureRouteError(error, req, { route: 'tasks#1' });
     console.error('Get projects error:', error);
     res.status(500).json({ error: 'Failed to fetch projects' });
   }
@@ -64,6 +66,7 @@ router.get('/projects/:id', async (req: Request, res: Response) => {
 
     res.json(project);
   } catch (error: any) {
+        captureRouteError(error, req, { route: 'tasks#2' });
     console.error('Get project error:', error);
     res.status(500).json({ error: 'Failed to fetch project' });
   }
@@ -101,6 +104,7 @@ router.post('/projects', async (req: Request, res: Response) => {
 
     res.status(201).json(project);
   } catch (error: any) {
+        captureRouteError(error, req, { route: 'tasks#3' });
     console.error('Create project error:', error);
     res.status(500).json({ error: 'Failed to create project' });
   }
@@ -135,6 +139,7 @@ router.patch('/projects/:id', async (req: Request, res: Response) => {
 
     res.json(project);
   } catch (error: any) {
+        captureRouteError(error, req, { route: 'tasks#4' });
     console.error('Update project error:', error);
     if (error.code === 'P2025') {
       return res.status(404).json({ error: 'Project not found' });
@@ -152,6 +157,7 @@ router.delete('/projects/:id', async (req: Request, res: Response) => {
 
     res.json({ success: true, message: 'Project deleted' });
   } catch (error: any) {
+        captureRouteError(error, req, { route: 'tasks#5' });
     console.error('Delete project error:', error);
     if (error.code === 'P2025') {
       return res.status(404).json({ error: 'Project not found' });
@@ -215,6 +221,7 @@ router.get('/tasks', async (req: Request, res: Response) => {
 
     res.json({ tasks, total: tasks.length });
   } catch (error: any) {
+        captureRouteError(error, req, { route: 'tasks#6' });
     console.error('Get tasks error:', error);
     res.status(500).json({ error: 'Failed to fetch tasks' });
   }
@@ -236,6 +243,7 @@ router.get('/tasks/:id', async (req: Request, res: Response) => {
 
     res.json(task);
   } catch (error: any) {
+        captureRouteError(error, req, { route: 'tasks#7' });
     console.error('Get task error:', error);
     res.status(500).json({ error: 'Failed to fetch task' });
   }
@@ -341,6 +349,7 @@ router.post('/tasks', async (req: Request, res: Response) => {
 
     res.status(201).json(task);
   } catch (error: any) {
+        captureRouteError(error, req, { route: 'tasks#8' });
     console.error('Create task error:', error);
     res.status(500).json({ error: 'Failed to create task' });
   }
@@ -489,6 +498,7 @@ router.patch('/tasks/:id', async (req: Request, res: Response) => {
 
     res.json(task);
   } catch (error: any) {
+        captureRouteError(error, req, { route: 'tasks#9' });
     console.error('Update task error:', error);
     if (error.code === 'P2025') {
       return res.status(404).json({ error: 'Task not found' });
@@ -537,6 +547,7 @@ router.delete('/tasks/:id', async (req: Request, res: Response) => {
 
     res.json({ success: true, message: 'Task deleted' });
   } catch (error: any) {
+        captureRouteError(error, req, { route: 'tasks#10' });
     console.error('Delete task error:', error);
     if (error.code === 'P2025') {
       return res.status(404).json({ error: 'Task not found' });
@@ -648,6 +659,7 @@ router.post('/tasks/bulk-import', async (req: Request, res: Response) => {
       errors,
     });
   } catch (error: any) {
+        captureRouteError(error, req, { route: 'tasks#11' });
     console.error('Bulk import error:', error);
     res.status(500).json({ error: 'Failed to import tasks' });
   }
@@ -704,6 +716,7 @@ router.get('/tasks/stats/summary', async (req: Request, res: Response) => {
       completion_rate: total > 0 ? ((done / total) * 100).toFixed(1) : 0,
     });
   } catch (error: any) {
+        captureRouteError(error, req, { route: 'tasks#12' });
     console.error('Get task stats error:', error);
     res.status(500).json({ error: 'Failed to fetch statistics' });
   }

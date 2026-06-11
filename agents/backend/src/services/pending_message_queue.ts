@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Pending Message Queue - For LLM-generated messages awaiting session re-open.
  *
  * When the AI wants to send a personalized follow-up message but the 24h session

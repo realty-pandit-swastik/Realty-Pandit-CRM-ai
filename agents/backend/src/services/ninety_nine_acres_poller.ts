@@ -17,10 +17,14 @@ import prisma from '../db';
 import logger from '../utils/logger';
 import { normalizePhone } from '../utils/phone';
 import { isRealEmail } from '../utils/email';
+import { sanitizeName } from '../utils/name_sanitizer';
 import { sendBuyerConfirmationWhatsApp, sendBuyerConfirmationEmail } from './lead_notifications';
 import { assignViaRoundRobin, resolveAgentByEmail } from './lead_assignment';
+import { ensureDealForLead } from './ensure_deal';
 import { notify } from './notify';
 import { alertCritical } from '../utils/alerter';
+import { foldLegacyDemand } from '../utils/demand_canonical';
+import { resolveDemandTaxonomy } from '../utils/demand_taxonomy';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -163,7 +167,10 @@ export class NinetyNineAcresPoller {
                     receivedOn:    String(qryDtl.RcvdOn || qryDtl.rcvdOn || ''),
 
                     // Newly captured
-                    queryId:       this.xmlStr(qryDtl.QryId || qryDtl.qryId || resp['@_QueryId'] || resp['@_queryId']),
+                    // QueryId is an ATTRIBUTE of <QryDtl> (<QryDtl QueryId="..."/>), parsed as
+                    // qryDtl['@_QueryId']. The old paths (qryDtl.QryId / resp['@_QueryId']) never
+                    // matched, so queryId silently parsed as null on every lead. Read the attribute first.
+                    queryId:       this.xmlStr(qryDtl['@_QueryId'] || qryDtl['@_queryId'] || qryDtl.QryId || qryDtl.qryId || resp['@_QueryId'] || resp['@_queryId']),
                     projId:        this.xmlStr(qryDtl.ProjId || qryDtl.projId),
                     projName:      this.xmlStr(qryDtl.ProjName || qryDtl.projName),
                     cityName:      this.xmlStr(qryDtl.CityName || qryDtl.cityName),
@@ -183,9 +190,30 @@ export class NinetyNineAcresPoller {
     /** Extract intent from the property label / query text */
     private extractIntent(label: string, query: string): string | null {
         const combined = `${label} ${query}`.toLowerCase();
-        if (combined.includes('sale') || combined.includes('buy') || combined.includes('purchase')) return 'buy';
+        if (combined.includes('sale') || combined.includes('buy') || combined.includes('purchase') || combined.includes('sell')) return 'buy';
         if (combined.includes('rent') || combined.includes('lease')) return 'rent';
-        if (combined.includes('sell')) return 'sell';
+        return null;
+    }
+
+    /** Extract BHK count from property label (e.g. "2 BHK Flat in Delhi" → 2, "3 Bed" → 3) */
+    private extractBhk(label: string): number | null {
+        const match = label.match(/(\d+)\s*(?:BHK|Bed(?:room)?s?)/i);
+        if (match) return parseInt(match[1], 10);
+        return null;
+    }
+
+    /** Extract property type string from label + resCom field */
+    private extractPropertyType(label: string, resCom: string | null): string | null {
+        const lower = label.toLowerCase();
+        if (lower.includes('apartment') || lower.includes('flat')) return 'flat';
+        if (lower.includes('villa') || lower.includes('bungalow') || lower.includes('house') || lower.includes('kothi')) return 'house';
+        if (lower.includes('plot') || lower.includes('land')) return 'plot';
+        if (lower.includes('floor') && !lower.includes('flat')) return 'builder floor';
+        if (lower.includes('penthouse')) return 'penthouse';
+        if (lower.includes('studio')) return 'studio';
+        if (lower.includes('office') || lower.includes('commercial') || lower.includes('shop')) return 'commercial';
+        if (resCom === 'R') return 'residential';
+        if (resCom === 'C') return 'commercial';
         return null;
     }
 
@@ -217,17 +245,21 @@ export class NinetyNineAcresPoller {
         const maxWindowMs = 2 * 24 * 60 * 60 * 1000; // 2 days
         const maxChunksPerCycle = 5; // Stay within rate limits
 
-        // Determine start date
-        let startDate: Date;
-        if (sync.last_success) {
-            startDate = new Date(sync.last_success);
-        } else {
-            startDate = new Date(now.getTime() - maxWindowMs);
-        }
+        // Determine start date — ROLLING LOOKBACK, not a forward-only watermark.
+        // The 99acres response API is RE-QUERYABLE by date (proven: it re-returns leads we already
+        // ingested) — it is NOT deliver-once. A forward watermark that catches up to "now" then only
+        // ever queries the last few minutes and NEVER re-scans the past, so any lead the API surfaces
+        // with an earlier RcvdOn — delivered late, OR skipped while the 2026-05 silent-loss bug
+        // advanced the watermark past it — is lost forever. Instead, re-scan a fixed recent window
+        // every cycle. maxWindowMs (2 days) is the API's max single-window → exactly ONE request per
+        // cycle, safely within the 6 req/hr limit at the 12-min cron. The queryId/received_on dedup in
+        // ingestLead makes the re-scan idempotent (already-ingested enquiries are skipped — no dupes).
+        let startDate = new Date(now.getTime() - maxWindowMs);
 
-        // Cap to 30 days ago
+        // Cap to 30 days ago (a no-op floor for the 2-day lookback; kept as a guard).
         const minDate = new Date(now.getTime() - maxAgeMs);
         if (startDate < minDate) startDate = minDate;
+        void sync; // retained for the status='running' upsert side-effect above
 
         const totalResult: PollResult = { fetched: 0, new: 0, updated: 0 };
         let chunksProcessed = 0;
@@ -259,7 +291,12 @@ export class NinetyNineAcresPoller {
                 const leads = this.parseResponse(response.data);
                 logger.info(`[99acresPoller] Got ${leads.length} leads in chunk`);
 
-                // Ingest each lead
+                // Ingest each lead. Track failures so we NEVER advance the watermark past a
+                // window that lost leads. (2026-05 silent-loss bug: per-lead errors were
+                // swallowed AND the watermark advanced anyway → leads were fetched-then-dropped
+                // with the poll still reporting `success` and no alert. That cost ~3 days of
+                // 99acres leads when the legacy demand columns were dropped.)
+                let chunkFailures = 0;
                 for (const lead of leads) {
                     try {
                         const result = await this.ingestLead(lead, tenant.id);
@@ -267,11 +304,20 @@ export class NinetyNineAcresPoller {
                         if (result === 'new') totalResult.new++;
                         else totalResult.updated++;
                     } catch (err) {
+                        chunkFailures++;
                         logger.error(`[99acresPoller] Failed to ingest lead ${lead.phone}:`, err);
                     }
                 }
 
-                // Update watermark after each successful chunk
+                if (chunkFailures > 0) {
+                    // Do NOT advance the watermark — leave this window unconsumed so it is
+                    // retried on the next cycle (after backoff). Throw so poll() marks the sync
+                    // `failed` + increments consecutive_failures (alertCritical fires at >=3).
+                    // A loud, retrying failure beats silent lead loss for a revenue pipeline.
+                    throw new Error(`99acres: ${chunkFailures}/${leads.length} leads failed to ingest in window ${startStr}..${endStr}; watermark held at ${this.formatDate(currentStart)} for retry`);
+                }
+
+                // Advance watermark ONLY after a fully successful chunk.
                 await prisma.integrationSync.update({
                     where: { source: '99acres' },
                     data: { last_success: currentEnd },
@@ -360,9 +406,33 @@ export class NinetyNineAcresPoller {
             throw new Error(`Invalid phone: ${lead.phone}`);
         }
 
+        // ── Idempotent re-scan guard ──────────────────────────────────────────
+        // poll() re-scans a rolling 2-day window every cycle, so the same enquiry is fetched
+        // repeatedly. Skip if we've already logged its lead_capture interaction — matched by the
+        // unique 99acres queryId, OR (for older rows whose queryId predates the parse fix) by
+        // phone + received_on. Without this, the re-scan would create a duplicate interaction each
+        // cycle. (Contact upsert + isNew side-effects are already idempotent; the interaction is not.)
+        const dedupOr: any[] = [];
+        if (lead.queryId) dedupOr.push({ metadata: { path: ['query_id'], equals: lead.queryId } });
+        if (lead.receivedOn) dedupOr.push({ AND: [{ phone_number: phoneNumber }, { metadata: { path: ['received_on'], equals: lead.receivedOn } }] });
+        if (dedupOr.length) {
+            const already = await prisma.interaction.findFirst({
+                where: { channel: '99acres', event_type: 'lead_capture', OR: dedupOr },
+                select: { id: true },
+            });
+            if (already) return 'updated';
+        }
+
         const intent = this.extractIntent(lead.propertyLabel, lead.queryInfo);
-        // Use the direct cityName field first; fall back to regex extraction
-        const location = lead.cityName || this.extractLocation(lead.propertyLabel);
+        // Prefer "society, city" when 99acres gives a project/society (more granular than the bare city);
+        // else the regex-extracted label location; else the bare city. (99acres does NOT send the
+        // sector/locality of the customer's requirement, so city-only leads stay city-only.)
+        const location = [lead.projName, lead.cityName].filter(Boolean).join(', ')
+            || this.extractLocation(lead.propertyLabel)
+            || lead.cityName
+            || null;
+        const bhk = this.extractBhk(lead.propertyLabel);
+        const propertyType = this.extractPropertyType(lead.propertyLabel, lead.resCom);
 
         // ── Fetch existing contact for smart merge ────────────────────────────
         const existing = await prisma.contact.findUnique({
@@ -380,12 +450,14 @@ export class NinetyNineAcresPoller {
             : (existing?.email ?? undefined);
 
         // ── Smart merge: name ─────────────────────────────────────────────────
+        // Strip placeholder names (USER/Name/temp/etc) before merging — these
+        // come from 99acres when the actual lead name is missing.
         // Never replace a longer (richer) name with a shorter truncation.
-        const incomingName = lead.name?.trim() || null;
-        const existingName = existing?.name?.trim() || null;
+        const incomingName = sanitizeName(lead.name);
+        const existingName = sanitizeName(existing?.name);
         let mergedName: string | undefined;
         if (!incomingName) {
-            mergedName = undefined; // nothing incoming — don't touch
+            mergedName = undefined; // nothing useful incoming — don't touch
         } else if (!existingName) {
             mergedName = incomingName;
         } else {
@@ -397,7 +469,27 @@ export class NinetyNineAcresPoller {
             ? parseFloat(lead.price.replace(/[^0-9.]/g, '')) || null
             : null;
 
+        // ── Derive classification slugs from extracted property type ───────────
+        const SLUG_MAP: Record<string, { mainCat: string; subCat: string; typeSlug: string }> = {
+            flat:           { mainCat: 'residential', subCat: 'apartment',          typeSlug: 'flat' },
+            apartment:      { mainCat: 'residential', subCat: 'apartment',          typeSlug: 'flat' },
+            villa:          { mainCat: 'residential', subCat: 'individual_housing',  typeSlug: 'villa' },
+            house:          { mainCat: 'residential', subCat: 'individual_housing',  typeSlug: 'independent_house' },
+            plot:           { mainCat: 'residential', subCat: 'plot_land',           typeSlug: 'residential_plot' },
+            'builder floor':{ mainCat: 'residential', subCat: 'apartment',          typeSlug: 'builder_floor' },
+            penthouse:      { mainCat: 'residential', subCat: 'apartment',          typeSlug: 'penthouse' },
+            studio:         { mainCat: 'residential', subCat: 'apartment',          typeSlug: 'studio_apartment' },
+        };
+        const slugEntry = propertyType ? SLUG_MAP[propertyType] : null;
+        const demandMainCat: string | null = slugEntry?.mainCat
+            ?? (lead.resCom === 'R' ? 'residential' : lead.resCom === 'C' ? 'commercial' : null);
+        const demandSubCat: string | null = slugEntry?.subCat ?? null;
+        const demandTypeSlug: string | null = slugEntry?.typeSlug ?? null;
+
         // ── Upsert contact ────────────────────────────────────────────────────
+        // Stage 3 (2026-05-31): resolve the requirement into the canonical taxonomy node.
+        const demandTax = await resolveDemandTaxonomy({ main_category: demandMainCat || undefined, property_type: propertyType || undefined, bhk: bhk ?? null });
+
         const contact = await prisma.contact.upsert({
             where: { phone_number: phoneNumber },
             update: {
@@ -406,6 +498,19 @@ export class NinetyNineAcresPoller {
                 source: '99acres',
                 intent: intent || undefined,
                 preferred_location: location || undefined,
+                // Only fill if extracted (don't overwrite manually-entered values with null)
+                property_type: propertyType || undefined,
+                demand_taxonomy_node_id: demandTax.demand_taxonomy_node_id ?? undefined,
+                needs_taxonomy_review: demandTax.needs_review || undefined,
+                // Persist legacy classification from the resolved node so column-reading
+                // paths (matching hard filter, filters) stay correct (2026-05-31). Fill-only.
+                sub_category_id: demandTax.sub_category_id ?? undefined,
+                category_id: demandTax.category_id ?? undefined,
+                type_id: demandTax.type_id ?? undefined,
+                // Phase 1 dual-write — only update demand_schema_values if we extracted a BHK; merge
+                // is handled DB-side via upsert (Postgres jsonb replaces wholesale, but for 99acres
+                // we always want bhk to be the latest extraction so wholesale replace of {bhk:"…"} is fine).
+                ...(bhk ? (foldLegacyDemand({ demand_bhk: bhk }) as any) : {}),
                 last_channel: '99acres',
                 last_interaction: new Date(),
                 // budget_max is NOT updated — respect manually-entered values
@@ -419,6 +524,14 @@ export class NinetyNineAcresPoller {
                 intent,
                 preferred_location: location,
                 budget_max: budgetMax,
+                property_type: propertyType,
+                demand_taxonomy_node_id: demandTax.demand_taxonomy_node_id ?? undefined,
+                needs_taxonomy_review: demandTax.needs_review || undefined,
+                sub_category_id: demandTax.sub_category_id ?? undefined,
+                category_id: demandTax.category_id ?? undefined,
+                type_id: demandTax.type_id ?? undefined,
+                // Phase 1 dual-write — canonical demand SoT.
+                ...(foldLegacyDemand({ demand_bhk: bhk ?? null }) as any),
                 tenant_id: tenantId,
                 last_channel: '99acres',
                 last_interaction: new Date(),
@@ -479,13 +592,25 @@ export class NinetyNineAcresPoller {
 
         // ── New contact: routing, notifications, escalation ───────────────────
         if (isNew) {
-            // Step 1: Resolve listing agent via SubUserName; fall back to round-robin
+            // Step 1: Resolve listing agent via SubUserName (the 99acres account that uploaded the property)
+            // This ensures the lead goes to the team member who owns the listing — not round-robin.
+            // If sub_user_name is missing or unrecognised, assign to manager for manual review.
             let finalAgentId: string | null = null;
             if (lead.subUserName) {
                 finalAgentId = await resolveAgentByEmail(lead.subUserName);
             }
             if (!finalAgentId) {
-                finalAgentId = await assignViaRoundRobin();
+                // No sub_user_name match — assign to manager (not round-robin)
+                // so the correct owner can be identified and reassigned manually
+                const manager = await prisma.agent.findFirst({
+                    where: { role: { in: ['manager', 'super_boss'] }, status: 'active' },
+                    orderBy: { created_at: 'asc' },
+                    select: { id: true },
+                });
+                finalAgentId = manager?.id ?? null;
+                if (finalAgentId) {
+                    logger.warn(`[99acres] No sub_user_name match for property ${lead.propertyCode} — assigned to manager for review`);
+                }
             }
 
             if (finalAgentId) {
@@ -568,6 +693,17 @@ export class NinetyNineAcresPoller {
                     source: '99acres',
                 }).catch(err => logger.warn('[99acresPoller] Workflow task creation failed:', (err as Error).message));
             }
+
+            // Auto-create NEW deal so AI qualification cadence kicks in (B1).
+            // Placed outside if (finalAgentId) so deal is always created even when
+            // agent resolution fails — ensureDealForLead has its own assignment fallback.
+            ensureDealForLead({
+                contactPhone: phoneNumber,
+                source: '99acres',
+                assignedAgentId: finalAgentId ?? undefined,
+            }).catch((err) => {
+                logger.error(`[99acres] ensureDealForLead failed for ${phoneNumber}: ${(err as Error).message}`);
+            });
 
             // Step 6: Buyer confirmations (fire-and-forget)
             sendBuyerConfirmationWhatsApp(phoneNumber, contact.name || null, '99acres')
