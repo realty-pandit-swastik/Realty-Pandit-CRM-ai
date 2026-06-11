@@ -17,6 +17,7 @@ import {
     getWorkflowStats,
     getTeamWorkflowPipeline,
 } from '../api/client';
+import { toDialablePhone } from '../lib/phone';
 
 // ── Types ───────────────────────────────────────────────────────
 
@@ -334,9 +335,11 @@ export default function LeadWorkflowPage() {
         return (
             <div>
                 <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '12px' }}>
-                    <a href={`tel:${task.contact_phone}`} style={{ ...btnStyle('#22c55e'), textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                        📞 Call Now
-                    </a>
+                    {toDialablePhone(task.contact_phone) && (
+                        <a href={`tel:${toDialablePhone(task.contact_phone)}`} style={{ ...btnStyle('#22c55e'), textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                            📞 Call Now
+                        </a>
+                    )}
                     <button onClick={() => handleSnooze(task.id)} style={btnStyle('#6b7280')} disabled={actionLoading === task.id}>
                         ⏰ Snooze ({task.snooze_count}/3)
                     </button>

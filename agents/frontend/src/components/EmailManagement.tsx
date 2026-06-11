@@ -6,6 +6,8 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import client from '../api/client';
+import { useToast } from '../contexts/ToastContext';
+import { useConfirm } from '../contexts/ConfirmContext';
 
 interface Email {
     id: string;
@@ -27,6 +29,8 @@ interface Email {
 
 export function EmailManagement() {
     const { hasPermission } = useAuth();
+    const { showToast } = useToast();
+    const confirm = useConfirm();
     const [emails, setEmails] = useState<Email[]>([]);
     const [loading, setLoading] = useState(true);
     const [page, setPage] = useState(1);
@@ -64,11 +68,13 @@ export function EmailManagement() {
             if (activeTab === 'inbox') url += '&direction=inbound';
             else if (activeTab === 'sent') url += '&direction=outbound';
             const response = await client.get(url);
-            setEmails(response.data.emails);
-            setTotal(response.data.pagination.total);
+            // Guard: a missing/renamed pagination object used to throw here and
+            // blank the whole tab even when emails came back fine (T9a, 2026-05-16).
+            setEmails(Array.isArray(response.data?.emails) ? response.data.emails : []);
+            setTotal(response.data?.pagination?.total ?? response.data?.emails?.length ?? 0);
         } catch (error) {
             console.error('Error loading emails:', error);
-            alert('Failed to load emails');
+            showToast('Failed to load emails', 'error');
         } finally {
             setLoading(false);
         }
@@ -87,7 +93,7 @@ export function EmailManagement() {
             setTotal(response.data.count);
         } catch (error) {
             console.error('Error searching emails:', error);
-            alert('Failed to search emails');
+            showToast('Failed to search emails', 'error');
         } finally {
             setLoading(false);
         }
@@ -96,25 +102,25 @@ export function EmailManagement() {
     const sendEmail = async () => {
         try {
             if (!composeForm.to || !composeForm.subject) {
-                alert('Please fill in recipient and subject');
+                showToast('Please fill in recipient and subject', 'info');
                 return;
             }
 
             await client.post('/api/email/send', composeForm);
-            alert('Email sent successfully!');
+            showToast('Email sent successfully!', 'success');
             setShowComposeModal(false);
             setComposeForm({ to: '', subject: '', body: '', generateWithAI: false });
             loadEmails();
         } catch (error: any) {
             console.error('Error sending email:', error);
-            alert('Failed to send email: ' + (error.response?.data?.error || error.message));
+            showToast('Failed to send email: ' + (error.response?.data?.error || error.message), 'error');
         }
     };
 
     const sendBulkEmail = async () => {
         try {
             if (!bulkForm.recipients || !bulkForm.subject) {
-                alert('Please fill in recipients and subject');
+                showToast('Please fill in recipients and subject', 'info');
                 return;
             }
 
@@ -130,26 +136,27 @@ export function EmailManagement() {
                 generateWithAI: bulkForm.generateWithAI
             });
 
-            alert(`Bulk email sent! Success: ${response.data.success}, Failed: ${response.data.failed}`);
+            showToast(`Bulk email sent! Success: ${response.data.success}, Failed: ${response.data.failed}`, 'success');
             setShowBulkModal(false);
             setBulkForm({ recipients: '', subject: '', body: '', generateWithAI: false });
             loadEmails();
         } catch (error: any) {
             console.error('Error sending bulk email:', error);
-            alert('Failed to send bulk email: ' + (error.response?.data?.error || error.message));
+            showToast('Failed to send bulk email: ' + (error.response?.data?.error || error.message), 'error');
         }
     };
 
     const deleteEmail = async (id: string) => {
-        if (!confirm('Are you sure you want to delete this email?')) return;
+        const ok = await confirm('Are you sure you want to delete this email?');
+        if (!ok) return;
 
         try {
             await client.delete(`/api/email/${id}`);
-            alert('Email deleted');
+            showToast('Email deleted', 'success');
             loadEmails();
         } catch (error: any) {
             console.error('Error deleting email:', error);
-            alert('Failed to delete email: ' + (error.response?.data?.error || error.message));
+            showToast('Failed to delete email: ' + (error.response?.data?.error || error.message), 'error');
         }
     };
 

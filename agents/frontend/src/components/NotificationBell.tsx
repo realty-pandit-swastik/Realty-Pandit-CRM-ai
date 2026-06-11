@@ -253,6 +253,8 @@ export function NotificationBell({ onNavigate }: { onNavigate?: (url: string) =>
                                     <button
                                         onClick={handleLoadMore}
                                         disabled={loading}
+                                        aria-busy={loading ? 'true' : 'false'}
+                                        aria-label={loading ? 'Loading notifications' : 'Load more notifications'}
                                         style={{
                                             background: 'none', border: '1px solid var(--border-secondary)',
                                             color: 'var(--text-link)', cursor: 'pointer',

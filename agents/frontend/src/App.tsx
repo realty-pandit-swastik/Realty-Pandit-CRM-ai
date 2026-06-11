@@ -1,10 +1,11 @@
 
-import { useEffect, useState, useCallback } from 'react';
-import { getContacts, getInteractions, updateContactType, reportNoShow } from './api/client';
+import { useEffect, useState, useCallback, useRef } from 'react';
+import { getContacts, getInteractions, updateContactType, reportNoShow, markLeadLost } from './api/client';
 import { useAuth } from './contexts/AuthContext';
 import { useIsMobile } from './hooks/useIsMobile';
-import { ToastProvider } from './contexts/ToastContext';
+import { ToastProvider, useToast } from './contexts/ToastContext';
 import { ToastContainer } from './components/ui/Toast';
+import { ConfirmProvider, ConfirmDialogRoot, useConfirm } from './contexts/ConfirmContext';
 import { LoginPage } from './components/LoginPage';
 import { SetupPasswordPage } from './components/SetupPasswordPage';
 import { DashboardLayout } from './components/DashboardLayout';
@@ -15,7 +16,9 @@ import { PropertyMapView } from './components/PropertyMapView';
 import { PropertyLiveStatus } from './components/PropertyLiveStatus';
 import { DashboardTabs } from './components/DashboardTabs';
 import { TeamManagement } from './components/TeamManagement';
+import { MyProfile } from './components/MyProfile';
 import { PartnerManagement } from './components/PartnerManagement';
+import { PropertyTaxonomy } from './components/PropertyTaxonomy';
 import { ReportsView } from './components/ReportsView';
 import { ExternalLeads } from './components/ExternalLeads';
 import { BuyerChatWorkflowPanel } from './components/BuyerChatWorkflow';
@@ -27,7 +30,6 @@ import { AgentOverride } from './components/AgentOverride';
 import WorkflowBuilder from './components/WorkflowBuilder';
 import MarketingCampaign from './components/MarketingCampaign';
 import TaskBoard from './components/TaskBoard';
-import LeadWorkflowPage from './components/LeadWorkflowPage';
 import DealPipeline from './components/DealPipeline';
 import CallLog from './components/CallLog';
 import AdvancedAnalytics from './components/AdvancedAnalytics';
@@ -188,9 +190,16 @@ function WelcomePanel({ contacts, agentName, onSelect }: WelcomePanelProps) {
 
 // ─── Main App ──────────────────────────────────────────────────────────────────
 function App() {
-  const { agent, loading } = useAuth();
+  const { agent, loading, sessionExpired, dismissSessionExpired } = useAuth();
   const isMobile = useIsMobile();
+  const { showToast } = useToast();
+  const confirm = useConfirm();
   const [view, setView] = useState('dashboard');
+  // Deep link: ?deal=<id> opens the Deal Pipeline straight to that deal (from Google
+  // Calendar/Task new-lead notifications). Consumed by DealPipeline via initialDealId.
+  const [deepLinkDealId, setDeepLinkDealId] = useState<string | null>(null);
+  const viewRef = useRef(view);
+  useEffect(() => { viewRef.current = view; }, [view]);
   const [contacts, setContacts] = useState<any[]>([]);
   const [contactsLoading, setContactsLoading] = useState(true);
   const [selectedPhone, setSelectedPhone] = useState<string | null>(null);
@@ -198,6 +207,51 @@ function App() {
   // Mobile-specific state
   const [mobileEditItem, setMobileEditItem] = useState<any>(null);
   const [mobileShowAdd, setMobileShowAdd] = useState(false);
+
+  // Show update-available toast when a new SW takes control
+  useEffect(() => {
+    const handleSwUpdate = () => {
+      showToast('A new version is available — refresh to update.', 'info');
+    };
+    window.addEventListener('sw-update-ready', handleSwUpdate);
+    return () => window.removeEventListener('sw-update-ready', handleSwUpdate);
+  }, [showToast]);
+
+  // Google OAuth callback result (2026-05-18). The backend bounces the member
+  // back to /profile?google=<status>; the SPA has no router so we surface the
+  // result globally here and drop them on the Team view (one click from their
+  // own profile card, which then shows the connected state).
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const g = params.get('google');
+    if (!g) return;
+    const msgs: Record<string, [string, 'success' | 'error' | 'info']> = {
+      connected: ['Google account connected — your reminders & visits will sync to your Calendar', 'success'],
+      denied: ['Google connection cancelled', 'info'],
+      expired: ['That Google link expired — please try connecting again', 'error'],
+      error: ['Could not connect Google — please try again', 'error'],
+    };
+    const m = msgs[g];
+    if (m) showToast(m[0], m[1]);
+    if (g === 'connected') setView('team');
+    // Strip the param so a refresh / re-render doesn't re-toast
+    params.delete('google');
+    const qs = params.toString();
+    window.history.replaceState({}, '', window.location.pathname + (qs ? `?${qs}` : ''));
+  }, [showToast]);
+
+  // Deep link from Google Calendar/Task new-lead notifications: ?deal=<id> → open
+  // the Deal Pipeline straight to that deal (DealPipeline reads initialDealId).
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const dealId = params.get('deal');
+    if (!dealId) return;
+    setDeepLinkDealId(dealId);
+    setView('deals');
+    params.delete('deal');
+    const qs = params.toString();
+    window.history.replaceState({}, '', window.location.pathname + (qs ? `?${qs}` : ''));
+  }, []);
 
   useEffect(() => {
     if (agent) loadContacts();
@@ -239,14 +293,46 @@ function App() {
 
   const handleReportNoShow = async () => {
     if (!selectedPhone) return;
-    if (!confirm(`Report No-Show for ${selectedPhone}? This will penalize their reliability score.`)) return;
+    const ok = await confirm(`Report No-Show for ${selectedPhone}? This will penalize their reliability score.`);
+    if (!ok) return;
     try {
       await reportNoShow(selectedPhone);
       await loadContacts();
-      alert('No-Show reported. Score updated.');
+      showToast('No-Show reported. Score updated.', 'success');
     } catch (err) {
       console.error('Failed to report no-show', err);
-      alert('Failed to report no-show');
+      showToast('Failed to report no-show', 'error');
+    }
+  };
+
+  // 2026-05-12: Mark Lead Lost — sets contact.lead_status=lost + lifecycle=CLOSED_LOST
+  // and auto-closes any active deals tied to this contact.
+  const handleMarkLeadLost = async () => {
+    if (!selectedPhone) return;
+    // Two-step confirm with reason capture
+    const reasonOptions = [
+      'just_browsing', 'wrong_number', 'spam', 'budget_mismatch',
+      'already_bought', 'duplicate', 'partner_agent', 'other',
+    ];
+    const reasonRaw = window.prompt(
+      `Reason for marking ${selectedPhone} as LOST?\n\nOne of: ${reasonOptions.join(', ')}\n(Press Cancel to abort.)`,
+      'just_browsing',
+    );
+    if (!reasonRaw) return;
+    const reason = reasonRaw.trim().toLowerCase();
+    const note = window.prompt('Optional note (or leave blank):', '') || undefined;
+    const ok = await confirm(
+      `Mark ${selectedPhone} as LOST?\n\nThis will close the lead AND auto-close any active deals for them. This action is reversible by reopening individual deals.`,
+    );
+    if (!ok) return;
+    try {
+      const result = await markLeadLost(selectedPhone, reason, note);
+      await loadContacts();
+      const dealMsg = result.deals_closed > 0 ? ` and ${result.deals_closed} deal${result.deals_closed === 1 ? '' : 's'}` : '';
+      showToast(`Lead marked LOST${dealMsg}.`, 'success');
+    } catch (err: any) {
+      console.error('Failed to mark lead lost', err);
+      showToast(err?.response?.data?.error || 'Failed to mark lead lost', 'error');
     }
   };
 
@@ -286,10 +372,10 @@ function App() {
         }
       }
     };
-    history.replaceState({ view }, '');
+    history.replaceState({ view: viewRef.current }, '');
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
-  }, [isMobile]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [isMobile]);
 
   // Public route: setup-password (no auth required)
   if (window.location.pathname === '/setup-password') {
@@ -305,7 +391,22 @@ function App() {
   }
 
   if (!agent) {
-    return <LoginPage />;
+    return (
+      <>
+        {sessionExpired && (
+          <div role="alert" className="session-expired-banner">
+            Your session has expired. Please log in again.
+            <button
+              type="button"
+              onClick={dismissSessionExpired}
+              aria-label="Dismiss session expired message"
+              className="session-expired-banner__close"
+            >×</button>
+          </div>
+        )}
+        <LoginPage />
+      </>
+    );
   }
 
   const selectedContact = contacts.find(c => c.phone_number === selectedPhone);
@@ -340,6 +441,7 @@ function App() {
                   contact={selectedContact}
                   interactions={interactions}
                   onReportNoShow={handleReportNoShow}
+                  onMarkLeadLost={handleMarkLeadLost}
                   onUpdateContactType={handleUpdateContactType}
                 />
               </>
@@ -392,6 +494,8 @@ function App() {
 
         case 'calendar':
           return <MobileCalendar />;
+        case 'my-profile':
+          return <MobileScrollWrapper><MyProfile isMobile /></MobileScrollWrapper>;
         case 'team':
           return <MobileTeamView />;
         case 'property-map':
@@ -408,6 +512,8 @@ function App() {
           return <MobileScrollWrapper><BuyerChatWorkflowPanel onBack={() => setView('dashboard')} /></MobileScrollWrapper>;
         case 'partners':
           return <MobileScrollWrapper><PartnerManagement /></MobileScrollWrapper>;
+        case 'taxonomy':
+          return <MobileScrollWrapper><PropertyTaxonomy /></MobileScrollWrapper>;
         case 'reports':
           return <MobileScrollWrapper><ReportsView /></MobileScrollWrapper>;
         case 'ai-dashboard':
@@ -421,13 +527,13 @@ function App() {
         case 'marketing':
           return <MobileScrollWrapper><MarketingCampaign /></MobileScrollWrapper>;
         case 'lead-tasks':
-          return <MobileScrollWrapper><LeadWorkflowPage /></MobileScrollWrapper>;
+          return <DealPipeline initialDealId={deepLinkDealId} />;
         case 'tasks':
           return <MobileScrollWrapper><TaskBoard /></MobileScrollWrapper>;
         case 'analytics':
           return <MobileScrollWrapper><AdvancedAnalytics /></MobileScrollWrapper>;
         case 'deals':
-          return <DealPipeline />;
+          return <DealPipeline initialDealId={deepLinkDealId} />;
         default:
           return (
             <MobileDashboard
@@ -440,12 +546,17 @@ function App() {
     };
 
     return (
-      <ToastProvider>
-        <MobileLayout activeView={view} onViewChange={handleMobileNav}>
-          <ErrorBoundary>{renderMobileContent()}</ErrorBoundary>
-        </MobileLayout>
-        <ToastContainer />
-      </ToastProvider>
+      <ErrorBoundary>
+        <ConfirmProvider>
+          <ToastProvider>
+            <MobileLayout activeView={view} onViewChange={handleMobileNav}>
+              <ErrorBoundary>{renderMobileContent()}</ErrorBoundary>
+            </MobileLayout>
+            <ToastContainer />
+            <ConfirmDialogRoot />
+          </ToastProvider>
+        </ConfirmProvider>
+      </ErrorBoundary>
     );
   }
 
@@ -467,6 +578,7 @@ function App() {
                 contact={selectedContact}
                 interactions={interactions}
                 onReportNoShow={handleReportNoShow}
+                onMarkLeadLost={handleMarkLeadLost}
                 onUpdateContactType={handleUpdateContactType}
               />
             ) : (
@@ -494,10 +606,14 @@ function App() {
         return <ExternalLeads />;
       case 'buyer-chat':
         return <BuyerChatWorkflowPanel onBack={() => setView('dashboard')} />;
+      case 'my-profile':
+        return <MyProfile />;
       case 'team':
         return <TeamManagement />;
       case 'partners':
         return <PartnerManagement />;
+      case 'taxonomy':
+        return <PropertyTaxonomy />;
       case 'reports':
         return <ReportsView />;
       case 'ai-dashboard':
@@ -511,11 +627,11 @@ function App() {
       case 'marketing':
         return <MarketingCampaign />;
       case 'lead-tasks':
-        return <LeadWorkflowPage />;
+        return <DealPipeline initialDealId={deepLinkDealId} />;
       case 'tasks':
         return <TaskBoard />;
       case 'deals':
-        return <DealPipeline />;
+        return <DealPipeline initialDealId={deepLinkDealId} />;
       case 'analytics':
         return <AdvancedAnalytics />;
       default:
@@ -524,13 +640,26 @@ function App() {
   };
 
   return (
-    <ToastProvider>
-      <DashboardLayout activeView={view} onViewChange={setView}>
-        <ErrorBoundary>{renderContent()}</ErrorBoundary>
-      </DashboardLayout>
-      <VoiceCommands onNavigate={setView} currentView={view} />
-      <ToastContainer />
-    </ToastProvider>
+    <ErrorBoundary>
+      <ConfirmProvider>
+        <ToastProvider>
+          <a
+            href="#main-content"
+            style={{ position: 'absolute', left: '-9999px', top: 'auto', width: '1px', height: '1px', overflow: 'hidden' }}
+            onFocus={(e) => { (e.target as HTMLElement).style.cssText = 'position:fixed;top:4px;left:4px;padding:8px 16px;background:#3b82f6;color:white;border-radius:4px;z-index:9999;width:auto;height:auto;overflow:visible'; }}
+            onBlur={(e) => { (e.target as HTMLElement).style.cssText = 'position:absolute;left:-9999px;top:auto;width:1px;height:1px;overflow:hidden'; }}
+          >
+            Skip to main content
+          </a>
+          <DashboardLayout activeView={view} onViewChange={setView}>
+            <ErrorBoundary>{renderContent()}</ErrorBoundary>
+          </DashboardLayout>
+          <VoiceCommands onNavigate={setView} currentView={view} />
+          <ToastContainer />
+          <ConfirmDialogRoot />
+        </ToastProvider>
+      </ConfirmProvider>
+    </ErrorBoundary>
   );
 }
 

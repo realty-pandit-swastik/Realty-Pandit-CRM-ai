@@ -1,7 +1,11 @@
 
 import { useEffect, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import client, { setMemberPassword, resendSetupLink } from '../api/client';
+import client, { setMemberPassword, resendSetupLink, getTeamMembers } from '../api/client';
+import { useToast } from '../contexts/ToastContext';
+import { useConfirm } from '../contexts/ConfirmContext';
+import { TeamDeactivateDialog } from './TeamDeactivateDialog';
+import { TeamMemberProfile } from './TeamMemberProfile';
 
 interface TeamMember {
     id: string;
@@ -14,7 +18,7 @@ interface TeamMember {
     last_login_at?: string;
     created_at: string;
     _count?: { assigned_leads: number };
-    reports_to?: { name: string; email: string } | null;
+    reports_to?: { id: string; name: string; email: string } | null;
 }
 
 const DEPARTMENTS = [
@@ -33,14 +37,20 @@ const DEPT_COLORS: Record<string, string> = {
 
 export function TeamManagement() {
     const { agent, hasPermission } = useAuth();
+    const { showToast } = useToast();
+    const confirm = useConfirm();
     const [members, setMembers] = useState<TeamMember[]>([]);
     const [loading, setLoading] = useState(true);
     const [showAddForm, setShowAddForm] = useState(false);
     const [editMember, setEditMember] = useState<TeamMember | null>(null);
     const [createdCredentials, setCreatedCredentials] = useState<any | null>(null);
     const [phonelessCount, setPhonelessCount] = useState(0);
+    // Deactivation dialog shows ownership cascade preview (middleman model, 2026-04-17)
+    const [deactivateTarget, setDeactivateTarget] = useState<TeamMember | null>(null);
+    // Profile navigation
+    const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null);
 
-    const [formData, setFormData] = useState({ name: '', phone: '', department: 'property_sales', role: 'employee' });
+    const [formData, setFormData] = useState({ name: '', phone: '', department: 'property_sales', role: 'employee', reports_to_id: '', personal_email: '' });
     const [useCustomPassword, setUseCustomPassword] = useState(false);
     const [customPassword, setCustomPassword] = useState('');
     const [emailPreview, setEmailPreview] = useState('');
@@ -57,7 +67,38 @@ export function TeamManagement() {
     const [setPwdError, setSetPwdError] = useState('');
     const [setPwdSuccess, setSetPwdSuccess] = useState(false);
 
-    useEffect(() => { loadTeam(); loadPhonelessCount(); }, []);
+    // Self-service portal-email (used by 99acres SubUserName / Housing routing).
+    const [portalEmail, setPortalEmail] = useState('');
+    const [portalEmailSaving, setPortalEmailSaving] = useState(false);
+    const [portalEmailLoaded, setPortalEmailLoaded] = useState('');
+
+    useEffect(() => { loadTeam(); loadPhonelessCount(); loadMyProfile(); }, []);
+
+    const loadMyProfile = async () => {
+        try {
+            const res = await client.get('/api/team/me');
+            const value = res.data?.data?.personal_email || '';
+            setPortalEmail(value);
+            setPortalEmailLoaded(value);
+        } catch { /* non-fatal */ }
+    };
+
+    const savePortalEmail = async () => {
+        if (portalEmail.trim() === portalEmailLoaded) return;
+        setPortalEmailSaving(true);
+        try {
+            const res = await client.patch('/api/team/me/portal-email', { portal_email: portalEmail.trim() });
+            const newValue = res.data?.personal_email || '';
+            setPortalEmailLoaded(newValue);
+            setPortalEmail(newValue);
+            showToast('Portal email saved', 'success');
+        } catch (err: any) {
+            showToast(err?.response?.data?.error || 'Save failed', 'error');
+            setPortalEmail(portalEmailLoaded);
+        } finally {
+            setPortalEmailSaving(false);
+        }
+    };
 
     useEffect(() => {
         if (formData.name.length > 1) {
@@ -68,8 +109,8 @@ export function TeamManagement() {
 
     const loadTeam = async () => {
         try {
-            const res = await client.get('/api/team/members');
-            setMembers(res.data);
+            const data = await getTeamMembers();
+            setMembers(data);
         } catch (err) { console.error('Failed to load team', err); }
         finally { setLoading(false); }
     };
@@ -97,7 +138,7 @@ export function TeamManagement() {
             const res = await client.post('/api/team/members', payload);
             setCreatedCredentials(res.data.credentials);
             setShowAddForm(false);
-            setFormData({ name: '', phone: '', department: 'property_sales', role: 'employee' });
+            setFormData({ name: '', phone: '', department: 'property_sales', role: 'employee', reports_to_id: '', personal_email: '' });
             setUseCustomPassword(false);
             setCustomPassword('');
             setEmailPreview('');
@@ -125,28 +166,37 @@ export function TeamManagement() {
     };
 
     const handleToggleStatus = async (member: TeamMember) => {
-        const newStatus = member.status === 'active' ? 'inactive' : 'active';
-        if (!confirm(`${newStatus === 'inactive' ? 'Deactivate' : 'Reactivate'} ${member.name}?`)) return;
+        // Deactivation runs the ownership cascade — show the preview dialog instead of
+        // a plain confirm so the super_boss can see exactly what transfers to them.
+        if (member.status === 'active') {
+            setDeactivateTarget(member);
+            return;
+        }
+        // Reactivation is a no-cascade status flip — keep the simple confirm flow.
+        const ok = await confirm(`Reactivate ${member.name}?`);
+        if (!ok) return;
         try {
-            await client.patch(`/api/team/members/${member.id}/deactivate`, { status: newStatus });
+            await client.patch(`/api/team/members/${member.id}/deactivate`, { status: 'active' });
             await loadTeam();
-        } catch (err: any) { alert(err.response?.data?.error || 'Failed'); }
+        } catch (err: any) { showToast(err.response?.data?.error || 'Failed', 'error'); }
     };
 
     const handleResetPassword = async (member: TeamMember) => {
-        if (!confirm(`Reset password for ${member.name}? A new temporary password will be generated.`)) return;
+        const ok = await confirm(`Reset password for ${member.name}? A new temporary password will be generated.`);
+        if (!ok) return;
         try {
             const res = await client.patch(`/api/team/members/${member.id}/reset-password`);
             setCreatedCredentials({ email: res.data.email, tempPassword: res.data.newPassword, note: res.data.note });
-        } catch (err: any) { alert(err.response?.data?.error || 'Failed to reset password'); }
+        } catch (err: any) { showToast(err.response?.data?.error || 'Failed to reset password', 'error'); }
     };
 
     const handleResendSetup = async (member: TeamMember) => {
-        if (!confirm(`Resend setup link to ${member.name} on WhatsApp?`)) return;
+        const ok = await confirm(`Resend setup link to ${member.name} on WhatsApp?`);
+        if (!ok) return;
         try {
             await resendSetupLink(member.id);
-            alert(`Setup link sent to ${member.name}'s WhatsApp.`);
-        } catch (err: any) { alert(err.response?.data?.error || 'Failed to resend setup link'); }
+            showToast(`Setup link sent to ${member.name}'s WhatsApp.`, 'success');
+        } catch (err: any) { showToast(err.response?.data?.error || 'Failed to resend setup link', 'error'); }
     };
 
     const openSetPassword = (member: TeamMember) => {
@@ -202,6 +252,20 @@ export function TeamManagement() {
     };
 
     if (loading) return <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)' }}>Loading team...</div>;
+
+    // Profile page view
+    if (selectedMemberId) {
+        return (
+            <TeamMemberProfile
+                memberId={selectedMemberId}
+                onBack={() => setSelectedMemberId(null)}
+                onReload={loadTeam}
+            />
+        );
+    }
+
+    // Managers/super_bosses list for the Add Member form
+    const managerOptions = members.filter(m => m.role === 'manager' || m.role === 'super_boss');
 
     return (
         <div style={{ flex: 1, padding: window.innerWidth < 768 ? '12px' : '24px', overflowY: 'auto', backgroundColor: 'var(--bg-primary)' }}>
@@ -275,6 +339,29 @@ export function TeamManagement() {
                             {agent?.role === 'super_boss' && <option value="manager">Manager</option>}
                             {agent?.role === 'super_boss' && <option value="super_boss">Super Boss</option>}
                         </select>
+                        {managerOptions.length > 0 && (
+                            <select title="Manager" value={formData.reports_to_id} onChange={e => setFormData({ ...formData, reports_to_id: e.target.value })} style={inputStyle}>
+                                <option value="">— Select Manager (optional) —</option>
+                                {managerOptions.map(m => (
+                                    <option key={m.id} value={m.id}>{m.name} ({m.role.replace('_', ' ')})</option>
+                                ))}
+                            </select>
+                        )}
+                        <div style={{ gridColumn: '1 / -1' }}>
+                            <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase' as const, marginBottom: '5px', letterSpacing: '0.05em' }}>
+                                Portal Account Email <span style={{ fontWeight: 400, textTransform: 'none' as const }}>(optional)</span>
+                            </div>
+                            <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '6px' }}>
+                                Gmail they use on 99acres / MagicBricks / Housing — incoming leads on their listings will be auto-assigned to them.
+                            </div>
+                            <input
+                                type="email"
+                                placeholder="their-portal-email@gmail.com"
+                                value={formData.personal_email}
+                                onChange={e => setFormData({ ...formData, personal_email: e.target.value })}
+                                style={inputStyle}
+                            />
+                        </div>
                         <div style={{ gridColumn: '1 / -1', display: 'flex', alignItems: 'center', gap: '8px' }}>
                             <input
                                 type="checkbox"
@@ -398,12 +485,52 @@ export function TeamManagement() {
                 </div>
             )}
 
+            {/* Self-service: my portal account email (used by 99acres / Housing lead routing) */}
+            <div style={{ backgroundColor: 'var(--bg-secondary)', borderRadius: '12px', padding: '16px', marginBottom: '16px', border: '1px solid var(--border-secondary)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                    <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>My Portal Account Email</span>
+                    <span style={{ fontSize: '11px', color: 'var(--text-link)', backgroundColor: 'rgba(59,130,246,0.12)', padding: '2px 8px', borderRadius: '8px' }}>self-service</span>
+                </div>
+                <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '10px' }}>
+                    The Gmail you use to log in to <strong>99acres</strong> / <strong>MagicBricks</strong> / <strong>Housing</strong>. Incoming leads on listings posted under this email will be auto-assigned to you.
+                </div>
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' as const }}>
+                    <input
+                        type="email"
+                        placeholder="your-portal-email@gmail.com"
+                        value={portalEmail}
+                        onChange={(e) => setPortalEmail(e.target.value)}
+                        onBlur={savePortalEmail}
+                        disabled={portalEmailSaving}
+                        style={{
+                            flex: 1, minWidth: '260px', padding: '8px 12px', borderRadius: '8px', fontSize: '13px',
+                            border: '1px solid var(--border-secondary)', backgroundColor: 'var(--bg-primary)',
+                            color: 'var(--text-primary)',
+                        }}
+                    />
+                    {portalEmail && portalEmail.trim() !== portalEmailLoaded && (
+                        <button
+                            type="button"
+                            onClick={savePortalEmail}
+                            disabled={portalEmailSaving}
+                            style={{ padding: '8px 14px', borderRadius: '8px', fontSize: '12px', fontWeight: 600,
+                                     border: 'none', backgroundColor: 'var(--accent-primary)', color: '#fff', cursor: 'pointer' }}
+                        >
+                            {portalEmailSaving ? 'Saving...' : 'Save'}
+                        </button>
+                    )}
+                    {portalEmailLoaded && portalEmail.trim() === portalEmailLoaded && (
+                        <span style={{ fontSize: '11px', color: '#22c55e' }}>✓ saved</span>
+                    )}
+                </div>
+            </div>
+
             {/* Team Table */}
             <div style={{ backgroundColor: 'var(--bg-secondary)', borderRadius: '12px', overflow: 'hidden', border: '1px solid var(--border-secondary)', overflowX: 'auto' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                     <thead>
                         <tr style={{ borderBottom: '1px solid var(--border-secondary)', backgroundColor: 'var(--bg-primary)' }}>
-                            {['Member', 'Phone', 'Role', 'Department', 'Status', 'Last Login', 'Actions'].map(h => (
+                            {['Member', 'Phone', 'Role', 'Department', 'Manager', 'Status', 'Last Login', 'Actions'].map(h => (
                                 <th key={h} style={{ textAlign: 'left', padding: '12px 16px', color: 'var(--text-secondary)', fontSize: '11px', fontWeight: 600, textTransform: 'uppercase' as const, whiteSpace: 'nowrap' as const }}>{h}</th>
                             ))}
                         </tr>
@@ -423,6 +550,16 @@ export function TeamManagement() {
                                 </td>
                                 <td style={cellStyle}>{getRoleBadge(m.role)}</td>
                                 <td style={cellStyle}>{getDeptBadge(m.department)}</td>
+                                <td style={{ ...cellStyle, fontSize: '13px', color: 'var(--text-secondary)' }}>
+                                    {m.reports_to ? (
+                                        <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                            <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: ROLE_COLORS[m.reports_to.id ? 'manager' : 'super_boss'] || '#94a3b8', display: 'inline-block', flexShrink: 0 }} />
+                                            {m.reports_to.name}
+                                        </span>
+                                    ) : (
+                                        <span style={{ color: 'var(--text-muted)' }}>—</span>
+                                    )}
+                                </td>
                                 <td style={cellStyle}>
                                     <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: m.status === 'active' ? '#22c55e' : '#f59e0b', display: 'inline-block', marginRight: '6px' }} />
                                     <span style={{ color: 'var(--text-bright)', fontSize: '13px' }}>{m.status}</span>
@@ -431,28 +568,51 @@ export function TeamManagement() {
                                     {m.last_login_at ? new Date(m.last_login_at).toLocaleDateString('en-IN') : 'Never'}
                                 </td>
                                 <td style={{ ...cellStyle, whiteSpace: 'nowrap' as const }}>
-                                    {hasPermission('manage_team') && m.id !== agent?.id && (
-                                        <div style={{ display: 'flex', gap: '6px' }}>
-                                            <button onClick={() => handleEdit(m)} style={actionBtnStyle('#3b82f6')} title="Edit">✏️</button>
-                                            <button onClick={() => handleResetPassword(m)} style={actionBtnStyle('#f59e0b')} title="Reset Password">🔑</button>
-                                            <button onClick={() => openSetPassword(m)} style={actionBtnStyle('#8b5cf6')} title="Set Password">🔐</button>
-                                            <button onClick={() => handleResendSetup(m)} style={actionBtnStyle('#06b6d4')} title="Resend Setup Link">📩</button>
-                                            {hasPermission('manage_settings') && (
-                                                <button onClick={() => handleToggleStatus(m)} style={actionBtnStyle(m.status === 'active' ? '#ef4444' : '#22c55e')} title={m.status === 'active' ? 'Deactivate' : 'Reactivate'}>
-                                                    {m.status === 'active' ? '🚫' : '✅'}
-                                                </button>
-                                            )}
-                                        </div>
-                                    )}
+                                    <div style={{ display: 'flex', gap: '6px' }}>
+                                        <button onClick={() => setSelectedMemberId(m.id)} style={actionBtnStyle('#6366f1')} title="View Profile">👤</button>
+                                        {hasPermission('manage_team') && m.id !== agent?.id && (
+                                            <>
+                                                <button onClick={() => handleEdit(m)} style={actionBtnStyle('#3b82f6')} title="Edit">✏️</button>
+                                                <button onClick={() => handleResetPassword(m)} style={actionBtnStyle('#f59e0b')} title="Reset Password">🔑</button>
+                                                <button onClick={() => openSetPassword(m)} style={actionBtnStyle('#8b5cf6')} title="Set Password">🔐</button>
+                                                <button onClick={() => handleResendSetup(m)} style={actionBtnStyle('#06b6d4')} title="Resend Setup Link">📩</button>
+                                                {hasPermission('manage_settings') && (
+                                                    <button onClick={() => handleToggleStatus(m)} style={actionBtnStyle(m.status === 'active' ? '#ef4444' : '#22c55e')} title={m.status === 'active' ? 'Deactivate' : 'Reactivate'}>
+                                                        {m.status === 'active' ? '🚫' : '✅'}
+                                                    </button>
+                                                )}
+                                            </>
+                                        )}
+                                    </div>
                                 </td>
                             </tr>
                         ))}
                         {members.length === 0 && (
-                            <tr><td colSpan={7} style={{ ...cellStyle, textAlign: 'center', color: 'var(--text-muted)', padding: '32px' }}>No team members yet. Add your first member above.</td></tr>
+                            <tr><td colSpan={8} style={{ ...cellStyle, textAlign: 'center', color: 'var(--text-muted)', padding: '32px' }}>No team members yet. Add your first member above.</td></tr>
                         )}
                     </tbody>
                 </table>
             </div>
+
+            {/* Deactivation dialog with ownership cascade preview */}
+            {deactivateTarget && (
+                <TeamDeactivateDialog
+                    agentId={deactivateTarget.id}
+                    agentName={deactivateTarget.name}
+                    onClose={() => setDeactivateTarget(null)}
+                    onSuccess={(counts) => {
+                        const total = counts.partners + counts.inventory + counts.contacts + counts.transactions;
+                        showToast(
+                            total > 0
+                                ? `${deactivateTarget.name} deactivated. ${total} asset${total === 1 ? '' : 's'} transferred to super boss.`
+                                : `${deactivateTarget.name} deactivated.`,
+                            'success',
+                        );
+                        setDeactivateTarget(null);
+                        loadTeam();
+                    }}
+                />
+            )}
         </div>
     );
 }

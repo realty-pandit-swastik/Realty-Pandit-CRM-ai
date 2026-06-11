@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
 import { getAppointments, getCalendarSummary, updateAppointment, cancelAppointment } from '../api/client';
+import { useToast } from '../contexts/ToastContext';
+import { useConfirm } from '../contexts/ConfirmContext';
 
 interface Appointment {
     id: string;
@@ -35,6 +37,8 @@ interface Summary {
 }
 
 export function CalendarView() {
+    const { showToast } = useToast();
+    const confirm = useConfirm();
     const [appointments, setAppointments] = useState<Appointment[]>([]);
     const [summary, setSummary] = useState<Summary>({ today: 0, this_week: 0, pending: 0 });
     const [loading, setLoading] = useState(true);
@@ -76,12 +80,13 @@ export function CalendarView() {
             setSelectedAppointment(null);
         } catch (error) {
             console.error('Failed to update appointment:', error);
-            alert('Failed to update appointment status');
+            showToast('Failed to update appointment status', 'error');
         }
     };
 
     const handleCancel = async (id: string) => {
-        if (!confirm('Are you sure you want to cancel this appointment?')) return;
+        const ok = await confirm('Are you sure you want to cancel this appointment?');
+        if (!ok) return;
 
         try {
             await cancelAppointment(id);
@@ -89,7 +94,7 @@ export function CalendarView() {
             setSelectedAppointment(null);
         } catch (error) {
             console.error('Failed to cancel appointment:', error);
-            alert('Failed to cancel appointment');
+            showToast('Failed to cancel appointment', 'error');
         }
     };
 

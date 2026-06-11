@@ -1,0 +1,724 @@
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import type { Deal } from '../../api/client';
+import { getDealMatchedInventory, shareDealProperties, getInventoryItem, getTaxonomyTree } from '../../api/client';
+import { useToast } from '../../contexts/ToastContext';
+import { useConfirm } from '../../contexts/ConfirmContext';
+import { toDialablePhone } from '../../lib/phone';
+
+interface MatchedProperty {
+    id: string;
+    type: string;
+    location: string;
+    city: string;
+    sub_locality?: string | null;
+    locality?: string | null;
+    state?: string | null;
+    pincode?: string | null;
+    description?: string | null;
+    slug?: string | null;
+    display_id?: string | null;
+    price: number | null;
+    display_price?: number | null;
+    price_unit: string | null;
+    facing?: string | null;
+    property_age?: string | null;
+    furnishing?: string | null;
+    floor_number?: number | null;
+    total_floors?: number | null;
+    features?: Record<string, any> | string[] | null;
+    match_score: number;
+    match_reason?: string | null;
+    distance_km?: number | null;
+    already_shared: boolean;
+    media_urls?: string[];
+    specs?: { society_name?: string; bhk_count?: number; bedrooms?: number; bathrooms?: number; area?: number; area_unit?: string };
+    intent?: string;
+}
+
+// ── Canonical taxonomy tree (GET /public/taxonomy/tree) — same source the demand form uses ──
+interface TaxonomyTreeNode { id: string; name: string; slug: string; node_kind: string; children?: TaxonomyTreeNode[] }
+
+interface Props {
+    deal: Deal;
+    onShared: () => void;
+}
+
+function formatPrice(price: number | null, _unit?: string | null): string {
+    if (!price) return '-';
+    if (price >= 10000000) return `₹${(price / 10000000).toFixed(1)}Cr`;
+    if (price >= 100000)   return `₹${(price / 100000).toFixed(1)}L`;
+    if (price >= 1000)     return `₹${(price / 1000).toFixed(0)}K`;
+    return `₹${price}`;
+}
+
+// Readable label fallback for property type slugs in messages/result rows.
+function prettyType(type: string): string {
+    if (!type) return 'Property';
+    return type.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+}
+
+// Title-case a slug-ish value ("south_west" → "South West", "3-5_years" → "3-5 Years").
+function prettyValue(s?: string | null): string {
+    if (!s) return '';
+    return s.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+}
+
+// Most listings don't fill specs.bhk_count, but the slug encodes it ("3bhk-villa-…").
+function bhkFromSlug(slug?: string | null): number | null {
+    const m = (slug || '').match(/(\d+)\s*bhk/i);
+    return m ? parseInt(m[1], 10) : null;
+}
+
+// Multi-word state → initials ("Uttar Pradesh" → "UP"); single-word kept as-is.
+function abbrevState(state?: string | null): string {
+    if (!state) return '';
+    const words = state.trim().split(/\s+/);
+    return words.length > 1 ? words.map(w => w[0].toUpperCase()).join('') : state;
+}
+
+// Price in compact Indian units, trimming trailing zeros (1.25Cr, 40 L, 18 K).
+function priceForMsg(n?: number | null): string {
+    if (!n || n <= 0) return 'Price on request';
+    const trim = (x: number) => parseFloat(x.toFixed(2)).toString();
+    if (n >= 1e7) return `₹${trim(n / 1e7)} Cr`;
+    if (n >= 1e5) return `₹${trim(n / 1e5)} L`;
+    if (n >= 1e3) return `₹${Math.round(n / 1e3)} K`;
+    return `₹${n}`;
+}
+
+// Amenities from the saved `features` JSON (object of truthy flags, or array).
+function featureList(features?: Record<string, any> | string[] | null): string {
+    if (!features) return '';
+    const list = Array.isArray(features) ? features : Object.keys(features).filter(k => (features as any)[k]);
+    return list.slice(0, 6).map(f => prettyValue(String(f))).join(', ');
+}
+
+// ── Taxonomy helpers ──────────────────────────────────────────────────────────
+// Path root→node (used to resolve the deal's category / sub-category / type).
+function findPath(nodes: TaxonomyTreeNode[], targetId: string, anc: TaxonomyTreeNode[] = []): TaxonomyTreeNode[] | null {
+    for (const n of nodes) {
+        if (n.id === targetId) return [...anc, n];
+        if (n.children?.length) {
+            const r = findPath(n.children, targetId, [...anc, n]);
+            if (r) return r;
+        }
+    }
+    return null;
+}
+// All TYPE-level nodes under a category, grouped by their immediate sub-category for display.
+// TYPE nodes are what inventory is actually classified by (legacy_sub_category_id), so these
+// are the chips the "Type" multi-select offers. Default = the deal's own TYPE node.
+function collectTypeGroups(category: TaxonomyTreeNode): { sub: string; types: TaxonomyTreeNode[] }[] {
+    const groups: { sub: string; types: TaxonomyTreeNode[] }[] = [];
+    for (const sub of category.children || []) {
+        const types: TaxonomyTreeNode[] = [];
+        const walk = (n: TaxonomyTreeNode) => {
+            if (n.node_kind === 'TYPE') types.push(n);
+            (n.children || []).forEach(walk);
+        };
+        (sub.children || []).forEach(walk);
+        if (types.length) groups.push({ sub: sub.name, types });
+    }
+    return groups;
+}
+
+export function InventoryPreviewModal({ inventoryId, onClose }: { inventoryId: string; onClose: () => void }) {
+    const [inv, setInv] = useState<any>(null);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        getInventoryItem(inventoryId)
+            .then((data: any) => setInv(data))
+            .catch(() => {})
+            .finally(() => setLoading(false));
+    }, [inventoryId]);
+
+    const API_BASE = 'https://api.realtypandit.in';
+    const imageUrl = inv?.media_urls?.[0]
+        ? (inv.media_urls[0].startsWith('http') ? inv.media_urls[0] : `${API_BASE}${inv.media_urls[0]}`)
+        : null;
+
+    const title = inv?.specs?.bhk_count
+        ? `${inv.specs.bhk_count}BHK ${inv.flat_property_type?.name || inv.type || 'Property'}`
+        : (inv?.flat_property_type?.name || inv?.type || 'Property');
+    const society = inv?.specs?.society_name || inv?.locality || inv?.location || '';
+    const price = inv ? formatPrice(inv.price, inv.price_unit) : '-';
+
+    return (
+        <>
+            <div onClick={onClose} style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.55)', zIndex: 300, backdropFilter: 'blur(2px)' }} />
+            <div style={{
+                position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)',
+                backgroundColor: 'var(--bg-primary)', borderRadius: 14, width: 480, maxWidth: '95vw',
+                maxHeight: '85vh', overflow: 'auto', zIndex: 301,
+                boxShadow: '0 20px 60px rgba(0,0,0,0.35)',
+            }}>
+                {/* Header */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 18px', borderBottom: '1px solid var(--border-secondary)' }}>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>Property Details</div>
+                    <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: 'var(--text-secondary)' }}>×</button>
+                </div>
+
+                {loading ? (
+                    <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>Loading…</div>
+                ) : !inv ? (
+                    <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>Property not found</div>
+                ) : (
+                    <div style={{ padding: 18 }}>
+                        {/* Image */}
+                        {imageUrl && (
+                            <img src={imageUrl} alt="" style={{ width: '100%', height: 200, objectFit: 'cover', borderRadius: 10, marginBottom: 14 }} />
+                        )}
+
+                        {/* Title + price */}
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
+                            <div>
+                                <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>{title}</div>
+                                {society && <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>{society}</div>}
+                                <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>📍 {[inv.locality, inv.city, inv.state].filter(Boolean).join(', ')}</div>
+                            </div>
+                            <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--accent-primary)', flexShrink: 0, marginLeft: 12 }}>{price}</div>
+                        </div>
+
+                        {/* Specs grid */}
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px 16px', marginBottom: 12 }}>
+                            {inv.specs?.bhk_count && <SpecRow label="BHK" value={`${inv.specs.bhk_count} BHK`} />}
+                            {inv.specs?.area && <SpecRow label="Area" value={`${inv.specs.area} sq.ft`} />}
+                            {inv.specs?.floor && <SpecRow label="Floor" value={inv.specs.floor} />}
+                            {inv.specs?.furnishing && <SpecRow label="Furnishing" value={inv.specs.furnishing} />}
+                            {inv.specs?.facing && <SpecRow label="Facing" value={inv.specs.facing} />}
+                            {inv.intent && <SpecRow label="Intent" value={inv.intent === 'sell' ? 'For Sale' : inv.intent === 'rent' ? 'For Rent' : inv.intent} />}
+                            {inv.status && <SpecRow label="Status" value={inv.status} />}
+                            {inv.ownership_type && <SpecRow label="Listed by" value={inv.ownership_type} />}
+                        </div>
+
+                        {/* Classification */}
+                        {(inv.property_category || inv.property_sub_category || inv.flat_property_type) && (
+                            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 10 }}>
+                                {[inv.property_category?.name, inv.property_sub_category?.name, inv.flat_property_type?.name].filter(Boolean).join(' → ')}
+                            </div>
+                        )}
+
+                        {/* Description */}
+                        {inv.description && (
+                            <div style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.6, borderTop: '1px solid var(--border-secondary)', paddingTop: 10 }}>
+                                {inv.description}
+                            </div>
+                        )}
+                    </div>
+                )}
+            </div>
+        </>
+    );
+}
+
+function SpecRow({ label, value }: { label: string; value: string }) {
+    return (
+        <div style={{ fontSize: 11 }}>
+            <span style={{ color: 'var(--text-muted)', fontWeight: 600 }}>{label}: </span>
+            <span style={{ color: 'var(--text-primary)' }}>{value}</span>
+        </div>
+    );
+}
+
+const BHK_CHOICES = [1, 2, 3, 4, 5];
+const RADIUS_CHOICES = [2, 5, 10, 20];
+
+export function MatchShareTab({ deal, onShared }: Props) {
+    const { showToast } = useToast();
+    const confirm = useConfirm();
+
+    // ── Canonical demand off the deal (SoT) ───────────────────────────────────
+    const dealSV = ((deal as any).demand_schema_values
+        ?? (deal.demand_contact as any)?.demand_schema_values ?? {}) as Record<string, any>;
+    const demandNodeId: string | null = (deal as any).demand_taxonomy_node_id
+        ?? (deal.demand_contact as any)?.demand_taxonomy_node_id ?? null;
+    const dealBhk: number | null = (() => {
+        // residential stores `bhk`, commercial stores `rooms` — both ride the same selector + bhk_list filter.
+        const v = dealSV.bhk ?? dealSV.rooms;
+        if (typeof v === 'number') return v;
+        if (typeof v === 'string') { const n = parseInt(v.replace(/\D/g, ''), 10); return Number.isNaN(n) ? null : n; }
+        return null;
+    })();
+    const hasGeo = (deal.demand_contact as any)?.preferred_lat != null && (deal.demand_contact as any)?.preferred_lng != null;
+    // Canonical, country-coded recipient for any WhatsApp send. null for placeholder/junk phones
+    // (e.g. a partner-referral deal whose contact PK is a PENDING- key) → both send buttons disable.
+    const customerTel = toDialablePhone(deal.demand_contact?.phone_number);
+
+    // ── Filter state ───────────────────────────────────────────────────────────
+    const [intent] = useState<string>(deal.demand_intent || 'buy');
+    const [bhkSet, setBhkSet] = useState<Set<number>>(new Set(dealBhk != null ? [dealBhk] : []));
+    const [typeNodeSet, setTypeNodeSet] = useState<Set<string>>(new Set());
+    const [budgetMin, setBudgetMin] = useState<string>(deal.demand_budget_min?.toString() || '');
+    const [budgetMax, setBudgetMax] = useState<string>(deal.demand_budget_max?.toString() || '');
+    const [radiusKm, setRadiusKm] = useState<number | null>(null); // null = auto-escalate 2→20
+    const [location, setLocation] = useState<string>(deal.demand_location || (deal.demand_contact as any)?.preferred_location || '');
+
+    const [results, setResults] = useState<MatchedProperty[]>([]);
+    const [loading, setLoading] = useState(false);
+    const [selected, setSelected] = useState<Set<string>>(new Set());
+    const [sending, setSending] = useState(false);
+    const [sendResults, setSendResults] = useState<Record<string, 'pending' | 'sent' | 'failed'>>({});
+    const [previewId, setPreviewId] = useState<string | null>(null);
+    const [sortBy, setSortBy] = useState<'score' | 'price' | 'distance'>('score');
+    const [broadenNote, setBroadenNote] = useState<string>('');
+    const [budgetRaised, setBudgetRaised] = useState(false);
+
+    // ── Taxonomy tree + the deal's path / type options ─────────────────────────
+    const [tree, setTree] = useState<TaxonomyTreeNode[]>([]);
+    useEffect(() => {
+        let cancelled = false;
+        getTaxonomyTree().then((data: any) => {
+            if (cancelled) return;
+            const roots: TaxonomyTreeNode[] = Array.isArray(data) ? data : (data?.tree || data?.roots || []);
+            setTree(roots);
+        }).catch(() => { if (!cancelled) setTree([]); });
+        return () => { cancelled = true; };
+    }, []);
+
+    const demandPath = useMemo(() => (demandNodeId && tree.length ? (findPath(tree, demandNodeId) || []) : []), [tree, demandNodeId]);
+    const categoryNode = demandPath[0] || null;
+    const subCatLabel = demandPath[1]?.name || null;
+    const dealTypeNode = demandPath.length ? demandPath[demandPath.length - 1] : null;
+    // Which spec selector fits this deal: residential→BHK, commercial→Rooms, plot/land/orchard→none.
+    // Both BHK and Rooms send the same `bhk_list` param (the matcher filters the bhk→rooms→bedrooms chain).
+    // Default to BHK when the category is unknown/still loading (preserves the residential default).
+    const specMode: 'bhk' | 'rooms' | 'none' = useMemo(() => {
+        const catSlug = (categoryNode?.slug || '').toLowerCase();
+        const leaf = `${dealTypeNode?.slug || ''} ${subCatLabel || ''}`.toLowerCase();
+        if (/plot|land|orchard/.test(leaf)) return 'none';
+        if (catSlug === 'commercial') return 'rooms';
+        return 'bhk';
+    }, [categoryNode, dealTypeNode, subCatLabel]);
+    const specLabel = specMode === 'rooms' ? 'Rooms' : 'BHK';
+    const typeGroups = useMemo(() => (categoryNode ? collectTypeGroups(categoryNode) : []), [categoryNode]);
+
+    // ── Search ─────────────────────────────────────────────────────────────────
+    type Snapshot = { bhkSet: Set<number>; typeNodeSet: Set<string>; budgetMin: string; budgetMax: string; radiusKm: number | null; location: string };
+    const buildParams = (s: Snapshot): Record<string, string> => {
+        const p: Record<string, string> = {};
+        if (intent) p.intent = intent;
+        if (s.budgetMin) p.budget_min = s.budgetMin;
+        if (s.budgetMax) p.budget_max = s.budgetMax;
+        if (s.bhkSet.size) p.bhk_list = [...s.bhkSet].sort((a, b) => a - b).join(',');
+        if (s.typeNodeSet.size) p.type_node_list = [...s.typeNodeSet].join(',');
+        if (s.radiusKm != null) p.radius_km = String(s.radiusKm);
+        // Always send `location` (even empty) so clearing it actually drops the filter — the
+        // endpoint only falls back to the deal's stored location when the param is ABSENT.
+        p.location = s.location || '';
+        return p;
+    };
+
+    const runSearch = useCallback(async (override?: Partial<Snapshot>) => {
+        const snap: Snapshot = { bhkSet, typeNodeSet, budgetMin, budgetMax, radiusKm, location, ...override };
+        setLoading(true);
+        setSendResults({});
+        try {
+            const res = await getDealMatchedInventory(deal.id, buildParams(snap));
+            setResults(res.data || []);
+        } catch {
+            showToast('Failed to load matches', 'error');
+        } finally {
+            setLoading(false);
+        }
+    }, [deal.id, bhkSet, typeNodeSet, budgetMin, budgetMax, radiusKm, location, intent, showToast]);
+
+    // First load: once the tree resolves, default-select the deal's own TYPE node and search
+    // with it EXPLICITLY (override) — avoids the stale-closure race where the auto-search would
+    // otherwise fire before the setTypeNodeSet state update is applied.
+    const firstSearchRef = useRef(false);
+    useEffect(() => {
+        if (firstSearchRef.current || tree.length === 0) return;
+        firstSearchRef.current = true;
+        const initialTypes = dealTypeNode?.node_kind === 'TYPE' ? new Set<string>([dealTypeNode.id]) : new Set<string>();
+        if (initialTypes.size) setTypeNodeSet(initialTypes);
+        runSearch({ typeNodeSet: initialTypes });
+    }, [tree, dealTypeNode, runSearch]);
+
+    // ── Filter toggles ─────────────────────────────────────────────────────────
+    const toggleBhk = (n: number) => {
+        const next = new Set(bhkSet);
+        next.has(n) ? next.delete(n) : next.add(n);
+        setBhkSet(next);
+        runSearch({ bhkSet: next });
+    };
+    const toggleType = (id: string) => {
+        const next = new Set(typeNodeSet);
+        next.has(id) ? next.delete(id) : next.add(id);
+        setTypeNodeSet(next);
+        runSearch({ typeNodeSet: next });
+    };
+    const changeRadius = (km: number | null) => {
+        setRadiusKm(km);
+        runSearch({ radiusKm: km });
+    };
+
+    // ── Smart Broaden — relax one axis at a time, narrate each step ─────────────
+    const broaden = async () => {
+        // 0. No-geo deals with a text location are the #1 cause of zero results (brittle/typo text
+        // that matches no inventory). Drop it first — geo deals skip this (radius drives location).
+        if (!hasGeo && location) {
+            setLocation('');
+            setBroadenNote('Searched without the location text (this deal has no map pin)');
+            runSearch({ location: '' });
+            return;
+        }
+        // 1. Widen radius (only meaningful if a specific radius is pinned and < max)
+        if (radiusKm != null && radiusKm < RADIUS_CHOICES[RADIUS_CHOICES.length - 1]) {
+            const next = RADIUS_CHOICES.find(r => r > radiusKm)!;
+            setRadiusKm(next);
+            setBroadenNote(`Widened radius to ${next} km`);
+            runSearch({ radiusKm: next });
+            return;
+        }
+        // 2. Expand BHK ±1
+        if (bhkSet.size) {
+            const min = Math.min(...bhkSet), max = Math.max(...bhkSet);
+            const next = new Set(bhkSet);
+            if (min - 1 >= 1) next.add(min - 1);
+            if (max + 1 <= 5) next.add(max + 1);
+            if (next.size > bhkSet.size) {
+                setBhkSet(next);
+                setBroadenNote(`Expanded BHK to ${[...next].sort((a, b) => a - b).join(', ')}`);
+                runSearch({ bhkSet: next });
+                return;
+            }
+        }
+        // 3. Raise the budget cap — never silently; agent confirms.
+        if (!budgetRaised && budgetMax) {
+            const cur = Number(budgetMax);
+            const raised = Math.round(cur * 1.15);
+            const ok = await confirm(`Raise max budget to ${formatPrice(raised)} (from ${formatPrice(cur)}) to see more?`);
+            if (ok) {
+                setBudgetMax(String(raised));
+                setBudgetRaised(true);
+                setBroadenNote(`Raised budget cap to ${formatPrice(raised)}`);
+                runSearch({ budgetMax: String(raised) });
+            }
+            return;
+        }
+        // 4. Drop the Type filter (search the whole category/sub-category)
+        if (typeNodeSet.size) {
+            setTypeNodeSet(new Set());
+            setBroadenNote('Dropped type filter — searching all property types');
+            runSearch({ typeNodeSet: new Set() });
+            return;
+        }
+        setBroadenNote('No further broadening available — try adjusting filters manually');
+    };
+
+    const toggleSelect = (id: string, e: React.MouseEvent) => {
+        e.stopPropagation();
+        setSelected(prev => {
+            const next = new Set(prev);
+            next.has(id) ? next.delete(id) : next.add(id);
+            return next;
+        });
+    };
+
+    const sortedResults = useMemo(() => {
+        const r = [...results];
+        if (sortBy === 'price') r.sort((a, b) => (a.price ?? Infinity) - (b.price ?? Infinity));
+        else if (sortBy === 'distance') r.sort((a, b) => (a.distance_km ?? Infinity) - (b.distance_km ?? Infinity));
+        else r.sort((a, b) => (b.match_score || 0) - (a.match_score || 0));
+        // Keep already-shared at the bottom regardless of sort.
+        r.sort((a, b) => Number(a.already_shared) - Number(b.already_shared));
+        return r;
+    }, [results, sortBy]);
+
+    const sendViaCompanyWA = async () => {
+        if (selected.size === 0) return;
+        setSending(true);
+        const ids = Array.from(selected);
+        ids.forEach(id => setSendResults(p => ({ ...p, [id]: 'pending' })));
+        try {
+            const res = await shareDealProperties(deal.id, ids);
+            const shareResults: any[] = res.data.results || [];
+            shareResults.forEach((r: any) => {
+                setSendResults(p => ({ ...p, [r.inventory_id]: r.sent ? 'sent' : 'failed' }));
+            });
+            const sentCount = shareResults.filter((r: any) => r.sent).length;
+            showToast(`${sentCount} propert${sentCount === 1 ? 'y' : 'ies'} sent via WhatsApp`, 'success');
+            setSelected(new Set());
+            onShared();
+        } catch {
+            showToast('Send failed', 'error');
+        } finally {
+            setSending(false);
+        }
+    };
+
+    const sendViaPersonalWA = () => {
+        if (selected.size === 0) return;
+        const selectedProps = results.filter(r => selected.has(r.id));
+        const multi = selectedProps.length > 1;
+        const isRent = (i?: string) => i === 'rent' || i === 'rent_lease' || i === 'lease';
+
+        const blocks = selectedProps.map((p, i) => {
+            const beds = p.specs?.bhk_count || p.specs?.bedrooms || bhkFromSlug(p.slug);
+            const title = beds ? `${beds}BHK ${prettyType(p.type)}` : prettyType(p.type);
+            const intentLabel = isRent(p.intent) ? 'For Rent' : 'For Sale';
+
+            const seenLoc = new Set<string>();
+            const locParts = [p.sub_locality, p.locality, p.city, abbrevState(p.state)]
+                .map(x => (x || '').trim())
+                .filter(x => { const k = x.toLowerCase(); if (!x || seenLoc.has(k)) return false; seenLoc.add(k); return true; });
+            let locLine = locParts.join(', ');
+            if (p.pincode) locLine += ` – ${p.pincode}`;
+
+            const specBits: string[] = [];
+            if (p.specs?.area) specBits.push(`📐 ${p.specs.area} ${p.specs.area_unit || 'sq.ft'}`);
+            if (beds) specBits.push(`🛏 ${beds} Bed`);
+            if (p.specs?.bathrooms) specBits.push(`🛁 ${p.specs.bathrooms} Bath`);
+
+            const ffBits: string[] = [];
+            if (p.floor_number != null && p.total_floors) ffBits.push(`🏢 Floor ${p.floor_number} of ${p.total_floors}`);
+            else if (p.floor_number != null) ffBits.push(`🏢 Floor ${p.floor_number}`);
+            if (p.facing) ffBits.push(`🧭 ${prettyValue(p.facing)}`);
+
+            const amenities = featureList(p.features);
+            const desc = p.description ? p.description.replace(/\s+/g, ' ').trim().slice(0, 160) : '';
+            const link = `https://www.realtypandit.in/properties/${p.slug || p.display_id || p.id}`;
+
+            const lines: string[] = [`🏡 *${title}* — ${intentLabel}`];
+            if (locLine) lines.push(`📍 ${locLine}`);
+            lines.push('');
+            lines.push(`💰 *${priceForMsg(p.display_price ?? p.price)}*${isRent(p.intent) ? '/month' : ''}`);
+            if (specBits.length) lines.push(specBits.join('   '));
+            if (ffBits.length) lines.push(ffBits.join('   '));
+            if (p.property_age) lines.push(`🏗 Age: ${prettyValue(p.property_age)}`);
+            if (p.furnishing) lines.push(`🛋 ${prettyValue(p.furnishing)}`);
+            if (amenities) lines.push(`✨ ${amenities}`);
+            if (desc) lines.push(`📝 ${desc}`);
+            lines.push('');
+            lines.push('🔗 Photos & full details:');
+            lines.push(link);
+
+            const block = lines.join('\n');
+            return multi ? `*${i + 1}.*\n${block}` : block;
+        });
+
+        const msg = encodeURIComponent(
+            `Hi! Here are some properties for you:\n\n${blocks.join('\n\n')}\n\n— Realty Pandit Team`
+        );
+        if (!customerTel) return;
+        window.open(`https://wa.me/${customerTel.slice(1)}?text=${msg}`, '_blank');
+    };
+
+    const inputStyle: React.CSSProperties = {
+        padding: '6px 10px', borderRadius: 7, border: '1px solid var(--border-secondary)',
+        backgroundColor: 'var(--bg-secondary)', color: 'var(--text-primary)', fontSize: 12,
+        outline: 'none', width: '100%', boxSizing: 'border-box',
+    };
+    const chip = (active: boolean): React.CSSProperties => ({
+        padding: '5px 12px', borderRadius: 999, fontSize: 12, fontWeight: 600, cursor: 'pointer',
+        border: active ? '1.5px solid var(--accent-primary)' : '1px solid var(--border-secondary)',
+        background: active ? 'var(--accent-primary)' : 'var(--bg-tertiary)',
+        color: active ? '#fff' : 'var(--text-primary)',
+    });
+    const labelStyle: React.CSSProperties = {
+        fontSize: 10, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase',
+        letterSpacing: '0.5px', marginBottom: 5, display: 'block',
+    };
+
+    return (
+        <div style={{ padding: '14px 20px' }}>
+            {/* Requirement summary chip row (live filters) */}
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 12, alignItems: 'center' }}>
+                <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Matching:</span>
+                {categoryNode && <span style={chip(false)}>{categoryNode.name}</span>}
+                {subCatLabel && <span style={chip(false)}>{subCatLabel}</span>}
+                {bhkSet.size > 0 && <span style={chip(false)}>{[...bhkSet].sort((a, b) => a - b).join('/')} {specLabel}</span>}
+                {(budgetMin || budgetMax) && <span style={chip(false)}>{budgetMin ? formatPrice(Number(budgetMin)) : '—'} – {budgetMax ? formatPrice(Number(budgetMax)) : '—'}</span>}
+                {location && (
+                    <span style={chip(false)}>📍 {location}{radiusKm ? ` · ${radiusKm}km` : ''}
+                        <span onClick={() => { setLocation(''); runSearch({ location: '' }); }}
+                            style={{ cursor: 'pointer', marginLeft: 6, fontWeight: 700 }} title="Remove location filter">×</span>
+                    </span>
+                )}
+            </div>
+
+            {/* Filters */}
+            <div style={{ marginBottom: 14, display: 'flex', flexDirection: 'column', gap: 12 }}>
+                {/* BHK / Rooms multi-select — category-aware; hidden for plot/land/orchard (no rooms). */}
+                {specMode !== 'none' && (
+                <div>
+                    <label style={labelStyle}>{specLabel} (pick one or more)</label>
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                        {BHK_CHOICES.map(n => (
+                            <span key={n} onClick={() => toggleBhk(n)} style={chip(bhkSet.has(n))}>{n} {specLabel}</span>
+                        ))}
+                    </div>
+                </div>
+                )}
+
+                {/* Type multi-select (TYPE nodes under the deal's category, grouped by sub-category) */}
+                {typeGroups.length > 0 && (
+                    <div>
+                        <label style={labelStyle}>Property Type (pick one or more)</label>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                            {typeGroups.map(g => (
+                                <div key={g.sub} style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                                    <span style={{ fontSize: 10, color: 'var(--text-muted)', minWidth: 90 }}>{g.sub}</span>
+                                    {g.types.map(t => (
+                                        <span key={t.id} onClick={() => toggleType(t.id)} style={chip(typeNodeSet.has(t.id))}>{t.name}</span>
+                                    ))}
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
+                {/* Budget (hard cap) + Radius + Location */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
+                    <div>
+                        <label style={labelStyle}>Budget Min ₹ (hard)</label>
+                        <input type="number" style={inputStyle} placeholder="Min" value={budgetMin}
+                            onChange={e => setBudgetMin(e.target.value)} onBlur={() => runSearch()} />
+                    </div>
+                    <div>
+                        <label style={labelStyle}>Budget Max ₹ (hard)</label>
+                        <input type="number" style={inputStyle} placeholder="Max" value={budgetMax}
+                            onChange={e => setBudgetMax(e.target.value)} onBlur={() => runSearch()} />
+                    </div>
+                    <div>
+                        <label style={labelStyle}>{hasGeo ? 'Radius' : 'Radius (needs geo)'}</label>
+                        <select style={inputStyle} value={radiusKm ?? ''} disabled={!hasGeo}
+                            onChange={e => changeRadius(e.target.value ? parseInt(e.target.value, 10) : null)}>
+                            <option value="">Auto (2→20km)</option>
+                            {RADIUS_CHOICES.map(r => <option key={r} value={r}>{r} km</option>)}
+                        </select>
+                    </div>
+                </div>
+                <div>
+                    <label style={labelStyle}>Location {hasGeo ? '(geo radius active)' : '(text match)'}</label>
+                    <input style={inputStyle} placeholder="Locality / area" value={location}
+                        onChange={e => setLocation(e.target.value)} onBlur={() => runSearch()} />
+                </div>
+
+                {/* Actions */}
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                    <button onClick={() => runSearch()} disabled={loading} style={{
+                        padding: '7px 16px', borderRadius: 7, fontSize: 12, fontWeight: 700, cursor: 'pointer',
+                        backgroundColor: 'var(--accent-primary)', color: '#fff', border: 'none',
+                    }}>
+                        {loading ? 'Searching…' : '🔍 Search'}
+                    </button>
+                    <button onClick={broaden} disabled={loading} style={{
+                        padding: '7px 14px', borderRadius: 7, fontSize: 12, fontWeight: 700, cursor: 'pointer',
+                        backgroundColor: 'var(--bg-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border-secondary)',
+                    }}>
+                        ➕ Broaden
+                    </button>
+                    <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>Sort</span>
+                        <select style={{ ...inputStyle, width: 'auto', fontSize: 11, padding: '4px 8px' }} value={sortBy} onChange={e => setSortBy(e.target.value as any)}>
+                            <option value="score">Best match</option>
+                            <option value="price">Price</option>
+                            {hasGeo && <option value="distance">Distance</option>}
+                        </select>
+                    </div>
+                </div>
+                {broadenNote && <div style={{ fontSize: 11, color: 'var(--accent-primary)', fontWeight: 600 }}>↔ {broadenNote}</div>}
+            </div>
+
+            {/* Action bar */}
+            {selected.size > 0 && (
+                <div style={{ display: 'flex', gap: 8, marginBottom: 12, padding: '8px 12px', borderRadius: 8, backgroundColor: 'var(--bg-secondary)' }}>
+                    <span style={{ fontSize: 12, color: 'var(--text-secondary)', flex: 1, alignSelf: 'center' }}>
+                        {selected.size} selected
+                    </span>
+                    {!customerTel && (
+                        <span style={{ fontSize: 12, color: 'var(--text-muted)', fontStyle: 'italic', alignSelf: 'center' }}>
+                            No customer phone on file — can't share
+                        </span>
+                    )}
+                    {customerTel && (
+                        <>
+                            <button onClick={sendViaCompanyWA} disabled={sending} style={{
+                                padding: '6px 14px', borderRadius: 7, fontSize: 12, fontWeight: 700, cursor: 'pointer',
+                                backgroundColor: 'rgba(37,211,102,0.12)', border: '1.5px solid rgba(37,211,102,0.5)', color: '#16a34a',
+                            }}>
+                                {sending ? '⏳ Sending…' : '📤 Company WhatsApp'}
+                            </button>
+                            <button onClick={sendViaPersonalWA} style={{
+                                padding: '6px 14px', borderRadius: 7, fontSize: 12, fontWeight: 700, cursor: 'pointer',
+                                backgroundColor: 'rgba(59,130,246,0.1)', border: '1.5px solid rgba(59,130,246,0.4)', color: 'var(--btn-blue-text)',
+                            }}>
+                                💬 Personal WhatsApp
+                            </button>
+                        </>
+                    )}
+                </div>
+            )}
+
+            {/* Results */}
+            {loading ? (
+                <div style={{ padding: 24, textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>Loading matches…</div>
+            ) : sortedResults.length === 0 ? (
+                <div style={{ padding: 24, textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>No matching inventory found. Try ➕ Broaden or adjust filters.</div>
+            ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {sortedResults.map(prop => {
+                        const isSelected = selected.has(prop.id);
+                        const status = sendResults[prop.id];
+                        const label = prop.specs?.bhk_count ? `${prop.specs.bhk_count}BHK ${prettyType(prop.type)}` : prettyType(prop.type);
+                        const society = prop.specs?.society_name || prop.location;
+                        return (
+                            <div key={prop.id} style={{
+                                display: 'flex', alignItems: 'center', gap: 10,
+                                padding: '10px 12px', borderRadius: 8,
+                                border: `1.5px solid ${isSelected ? 'var(--accent-primary)' : 'var(--border-secondary)'}`,
+                                backgroundColor: isSelected ? 'rgba(37,99,235,0.06)' : 'var(--bg-primary)',
+                                opacity: prop.already_shared ? 0.65 : 1,
+                            }}>
+                                <div onClick={() => setPreviewId(prop.id)} style={{ cursor: 'pointer', flexShrink: 0 }}>
+                                    {prop.media_urls?.[0] ? (
+                                        <img src={prop.media_urls[0]} alt="" style={{ width: 52, height: 40, borderRadius: 6, objectFit: 'cover' }} />
+                                    ) : (
+                                        <div style={{ width: 52, height: 40, borderRadius: 6, backgroundColor: 'var(--bg-secondary)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>🏡</div>
+                                    )}
+                                </div>
+
+                                <div style={{ flex: 1, minWidth: 0 }}>
+                                    <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>{label} — {society}</div>
+                                    <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>📍 {prop.city} · {formatPrice(prop.price, prop.price_unit)}</div>
+                                    {prop.match_reason && (
+                                        <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 1 }}>{prop.match_reason}</div>
+                                    )}
+                                    <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 1 }}>
+                                        Match: {Math.round((prop.match_score || 0))}%
+                                        {prop.distance_km != null && <span> · {prop.distance_km.toFixed(1)} km</span>}
+                                        {prop.already_shared && <span style={{ marginLeft: 6, color: '#f59e0b', fontWeight: 600 }}>✓ Already sent</span>}
+                                        <button onClick={() => setPreviewId(prop.id)} style={{
+                                            marginLeft: 8, background: 'none', border: 'none', color: 'var(--accent-primary)',
+                                            fontSize: 10, cursor: 'pointer', padding: 0, fontWeight: 600,
+                                        }}>👁 View</button>
+                                    </div>
+                                </div>
+
+                                {status === 'pending' && <span style={{ fontSize: 14 }}>⏳</span>}
+                                {status === 'sent'    && <span style={{ fontSize: 14 }}>✅</span>}
+                                {status === 'failed'  && <span style={{ fontSize: 14 }}>❌</span>}
+
+                                <div onClick={e => toggleSelect(prop.id, e)} style={{
+                                    width: 18, height: 18, borderRadius: 4, flexShrink: 0, cursor: 'pointer',
+                                    border: `2px solid ${isSelected ? 'var(--accent-primary)' : 'var(--border-secondary)'}`,
+                                    backgroundColor: isSelected ? 'var(--accent-primary)' : 'transparent',
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                    color: '#fff', fontSize: 11,
+                                }}>
+                                    {isSelected ? '✓' : ''}
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
+            )}
+
+            {previewId && (
+                <InventoryPreviewModal inventoryId={previewId} onClose={() => setPreviewId(null)} />
+            )}
+        </div>
+    );
+}

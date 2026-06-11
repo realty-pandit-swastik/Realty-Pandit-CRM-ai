@@ -1,6 +1,7 @@
 
 import { useEffect, useState } from 'react';
 import { getAppointments, updateAppointment } from '../../api/client';
+import { useToast } from '../../contexts/ToastContext';
 
 const CARD_RADIUS = '12px';
 
@@ -17,6 +18,7 @@ const TYPE_ICONS: Record<string, string> = {
 };
 
 export function MobileCalendar() {
+    const { showToast } = useToast();
     const [appointments, setAppointments] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [filter, setFilter] = useState('');
@@ -39,7 +41,7 @@ export function MobileCalendar() {
             await updateAppointment(id, { status });
             await loadAppointments();
         } catch (err: any) {
-            alert(err.response?.data?.error || 'Failed');
+            showToast(err.response?.data?.error || 'Failed', 'error');
         }
     };
 

@@ -33,7 +33,9 @@ export default function BookVisitModal({ item, onClose, onBooked }: BookVisitMod
     useEffect(() => {
         getTeamMembersList().then(data => {
             setAgents(Array.isArray(data) ? data : data?.members || []);
-        }).catch(() => {});
+        }).catch(err => {
+            console.error('[BookVisitModal] failed to load team members:', err);
+        });
     }, []);
 
     // Set default date to tomorrow
@@ -55,7 +57,8 @@ export default function BookVisitModal({ item, onClose, onBooked }: BookVisitMod
             setFoundContact(res.contact);
             if (res.contact?.name) setClientName(res.contact.name);
             setSearched(true);
-        } catch {
+        } catch (err) {
+            console.error('[BookVisitModal] contact search failed:', err);
             setError('Search failed');
         } finally {
             setSearching(false);

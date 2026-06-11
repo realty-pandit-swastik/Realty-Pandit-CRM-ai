@@ -11,7 +11,7 @@ export default function ShareToClientModal({ item, onClose, onShared }: ShareToC
     const [phone, setPhone] = useState('');
     const [clientName, setClientName] = useState('');
     const [sending, setSending] = useState(false);
-    const [result, setResult] = useState<{ share_link: string; whatsapp_sent: boolean } | null>(null);
+    const [result, setResult] = useState<{ share_link: string; whatsapp_sent: boolean; already_shared?: boolean; previously_shared_at?: string | null } | null>(null);
     const [error, setError] = useState('');
     const [copied, setCopied] = useState(false);
 
@@ -171,6 +171,13 @@ export default function ShareToClientModal({ item, onClose, onShared }: ShareToC
                                     : 'WhatsApp delivery pending (client may need to message first)'}
                             </span>
                         </div>
+
+                        {/* Non-blocking re-share notice (the send still went out). */}
+                        {result.already_shared && (
+                            <div style={{ fontSize: '12px', color: '#f59e0b', marginBottom: '12px' }}>
+                                ⚠ Previously shared with this client{result.previously_shared_at ? ` on ${new Date(result.previously_shared_at).toLocaleDateString('en-IN')}` : ''} — re-sent now.
+                            </div>
+                        )}
 
                         {/* Copyable Link */}
                         <label style={s.label}>Property Link — share via any channel</label>

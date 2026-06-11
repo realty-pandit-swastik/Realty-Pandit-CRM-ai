@@ -1,8 +1,11 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { useWorkflow, type WorkflowStep, type StepOption, type DocType } from '../hooks/useWorkflow';
-import { GooglePlacesInput, type PlaceResult } from './GooglePlacesInput';
 import { EnrichmentPanel } from './EnrichmentPanel';
-import { getStates } from '../api/client';
+import ParkingListField from './ParkingListField';
+import AddressFields, { type AddressValue, inferAddressLayout } from './AddressFields';
+import DuplicateAddressWarning from './DuplicateAddressWarning';
+import { getTaxonomyTree } from '../api/client';
+import { useConfirm } from '../contexts/ConfirmContext';
 
 interface AddInventoryProps {
     onBack: () => void;
@@ -11,6 +14,7 @@ interface AddInventoryProps {
 
 export const AddInventory: React.FC<AddInventoryProps> = ({ onBack, onCreated }) => {
     const wf = useWorkflow();
+    const confirm = useConfirm();
 
     // Cleanup workflow state when component unmounts
     useEffect(() => {
@@ -114,9 +118,10 @@ export const AddInventory: React.FC<AddInventoryProps> = ({ onBack, onCreated })
             {/* Header */}
             <div style={s.header}>
                 <h2 style={s.h2}>Add Property (Workflow)</h2>
-                <button style={s.backBtn} onClick={() => {
+                <button style={s.backBtn} onClick={async () => {
                     if (wf.stepHistory.length > 0 && !wf.submitted) {
-                        if (confirm('Discard current progress?')) {
+                        const ok = await confirm('Discard current progress?');
+                        if (ok) {
                             wf.reset();
                             onBack();
                         }
@@ -269,6 +274,12 @@ function StepPanel({ step, options, metadata, currentValue, secondaryValue, docu
                 )}
                 {step.input_type === 'address_block' && (
                     <AddressBlockField value={currentValue} onSubmit={onAnswer} addressConfig={metadata?.address_config} />
+                )}
+                {step.input_type === 'taxonomy' && (
+                    <TaxonomyPicker value={currentValue} onSubmit={onAnswer} />
+                )}
+                {step.input_type === 'schema_fields' && (
+                    <SchemaFields fields={metadata?.schema_fields || []} value={currentValue} onSubmit={onAnswer} />
                 )}
                 {step.input_type === 'owner_block' && (
                     <>
@@ -453,6 +464,137 @@ function TextAreaField({ value, placeholder, onSubmit }: {
             />
             <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '8px' }}>
                 <button style={s.primaryBtn} onClick={() => onSubmit(local)}>Next &rarr;</button>
+            </div>
+        </div>
+    );
+}
+
+// ─── Phase 1d: canonical taxonomy tree picker (admin) ──────────────────────────
+interface TaxNode { id: string; name: string; node_kind: string; children?: TaxNode[]; }
+
+function TaxonomyPicker({ value, onSubmit }: { value: any; onSubmit: (v: string) => void }) {
+    const [tree, setTree] = useState<TaxNode[]>([]);
+    const [path, setPath] = useState<TaxNode[]>([]); // chosen node at each level
+    const [loadErr, setLoadErr] = useState('');
+
+    useEffect(() => {
+        getTaxonomyTree()
+            .then((d: any) => setTree(d.tree || []))
+            .catch((e: any) => setLoadErr(e?.message || 'Failed to load taxonomy'));
+    }, []);
+
+    // Build the option list for each visible dropdown level from the current path.
+    const levels: TaxNode[][] = [];
+    let opts: TaxNode[] = tree;
+    for (let i = 0; i <= path.length; i++) {
+        if (!opts || opts.length === 0) break;
+        levels.push(opts);
+        opts = path[i]?.children || [];
+    }
+
+    const leaf = path.length > 0 ? path[path.length - 1] : null;
+    const leafChosen = !!leaf && (!leaf.children || leaf.children.length === 0);
+
+    if (loadErr) return <div style={s.error}>{loadErr}</div>;
+
+    return (
+        <div>
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                {levels.map((lvl, i) => (
+                    <select
+                        key={i}
+                        value={path[i]?.id || ''}
+                        style={{ ...s.input, flex: '1 1 180px', minWidth: '160px' }}
+                        onChange={e => {
+                            const node = lvl.find(n => n.id === e.target.value) || null;
+                            const np = path.slice(0, i);
+                            if (node) np.push(node);
+                            setPath(np);
+                        }}
+                    >
+                        <option value="">{i === 0 ? 'Category…' : 'Select…'}</option>
+                        {lvl.map(n => <option key={n.id} value={n.id}>{n.name}</option>)}
+                    </select>
+                ))}
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '12px' }}>
+                <button
+                    style={s.primaryBtn}
+                    disabled={!leafChosen}
+                    onClick={() => leaf && onSubmit(leaf.id)}
+                >
+                    {leafChosen ? 'Next →' : 'Pick a property type'}
+                </button>
+            </div>
+            {value && <p style={{ color: 'var(--text-muted)', fontSize: '12px', marginTop: '6px' }}>Selected: {leaf?.name || value}</p>}
+        </div>
+    );
+}
+
+// ─── Phase 1d: dynamic per-type field schema (BHK / Rooms / FAR / …) ───────────
+interface SchemaField { key: string; label: string; input_type: string; required: boolean; options: string[] | null; unit: string | null; }
+
+function SchemaFields({ fields, value, onSubmit }: { fields: SchemaField[]; value: any; onSubmit: (v: Record<string, any>) => void }) {
+    const [vals, setVals] = useState<Record<string, any>>(value || {});
+    const toggle = (key: string, opt: string) => {
+        const cur: string[] = Array.isArray(vals[key]) ? vals[key] : [];
+        setVals({ ...vals, [key]: cur.includes(opt) ? cur.filter(x => x !== opt) : [...cur, opt] });
+    };
+    if (!fields || fields.length === 0) {
+        // No per-type schema attached — let the user continue (specs stay empty for this type).
+        return (
+            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                <button style={s.primaryBtn} onClick={() => onSubmit({})}>Next &rarr;</button>
+            </div>
+        );
+    }
+    const isEmpty = (v: any) => v === undefined || v === '' || v === null || (Array.isArray(v) && v.length === 0);
+    const missingRequired = fields.some(f => f.required && isEmpty(vals[f.key]));
+    return (
+        <div>
+            {fields.map(f => (
+                <div key={f.key} style={{ marginBottom: '12px' }}>
+                    <label style={{ fontSize: '13px', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>
+                        {f.label}{f.required ? ' *' : ''}{f.unit ? ` (${f.unit})` : ''}
+                    </label>
+                    {f.input_type === 'parking_list' ? (
+                        <ParkingListField value={vals[f.key]} onChange={(v) => setVals({ ...vals, [f.key]: v })} />
+                    ) : f.input_type === 'multiselect' && Array.isArray(f.options) && f.options.length > 0 ? (
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                            {f.options.map(o => {
+                                const on = Array.isArray(vals[f.key]) && vals[f.key].includes(o);
+                                return (
+                                    <button key={o} type="button" onClick={() => toggle(f.key, o)}
+                                        style={{ padding: '6px 12px', borderRadius: '999px', fontSize: '12px', cursor: 'pointer',
+                                            border: on ? '1px solid var(--accent-primary)' : '1px solid var(--border-secondary)',
+                                            background: on ? 'var(--accent-primary)' : 'var(--bg-secondary)', color: on ? '#fff' : 'var(--text-primary)' }}>
+                                        {o}
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    ) : Array.isArray(f.options) && f.options.length > 0 ? (
+                        <select
+                            style={s.input}
+                            value={vals[f.key] ?? ''}
+                            onChange={e => setVals({ ...vals, [f.key]: e.target.value })}
+                        >
+                            <option value="">Select…</option>
+                            {f.options.map(o => <option key={o} value={o}>{o}</option>)}
+                        </select>
+                    ) : (
+                        <input
+                            style={s.input}
+                            type={f.input_type === 'number' ? 'number' : 'text'}
+                            value={vals[f.key] ?? ''}
+                            placeholder={f.unit || ''}
+                            onChange={e => setVals({ ...vals, [f.key]: e.target.value })}
+                        />
+                    )}
+                </div>
+            ))}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '8px' }}>
+                <button style={s.primaryBtn} disabled={missingRequired} onClick={() => onSubmit(vals)}>Next &rarr;</button>
             </div>
         </div>
     );
@@ -705,6 +847,7 @@ interface AddressConfig {
     floor_required: boolean;
     bhk_required: boolean;
     plot_area_required: boolean;
+    main_category?: string;
 }
 
 function AddressBlockField({ value, onSubmit, addressConfig }: {
@@ -712,194 +855,42 @@ function AddressBlockField({ value, onSubmit, addressConfig }: {
     onSubmit: (v: any) => void;
     addressConfig?: AddressConfig;
 }) {
-    const [flatNo, setFlatNo] = useState(value?.flat_no || '');
-    const [floorNumber, setFloorNumber] = useState(value?.floor_number || '');
-    const [plotNo, setPlotNo] = useState(value?.plot_no || '');
-    const [apartmentName, setApartmentName] = useState(value?.apartment_name || '');
-    const [locality, setLocality] = useState(value?.locality || '');
-    const [district, setDistrict] = useState(value?.district || '');
-    const [state, setState] = useState(value?.state || '');
-    const [pincode, setPincode] = useState(value?.pincode || '');
-    const [fullAddress, setFullAddress] = useState(value?.full_address || '');
-    const [latitude, setLatitude] = useState<number | undefined>(value?.latitude);
-    const [longitude, setLongitude] = useState<number | undefined>(value?.longitude);
-    const [states, setStates] = useState<string[]>([]);
-    const [errors, setErrors] = useState<Record<string, string>>({});
-
-    // Derive which fields to show from addressConfig
-    const cfg = addressConfig || { sub_category_slug: '', floor_required: true, bhk_required: false, plot_area_required: false };
-    const showFlatNo = cfg.floor_required;
-    const showFloorNumber = cfg.floor_required;
-    const showApartmentName = cfg.floor_required || cfg.bhk_required;
-    const showPlotNo = !cfg.floor_required; // Show for land, houses, industrial, etc.
-    const plotNoRequired = cfg.plot_area_required && !cfg.floor_required;
-
-    // Contextual labels
-    const slug = cfg.sub_category_slug;
-    const flatLabel = slug === 'office' ? 'Office No *' : slug === 'retail' ? 'Shop / Unit No *' : slug === 'healthcare' ? 'Unit No *' : 'Flat / Unit No *';
-    const apartmentLabel = cfg.floor_required
-        ? (slug === 'office' || slug === 'healthcare' ? 'Building / Complex *' : slug === 'retail' ? 'Mall / Market / Complex *' : slug === 'mixed_development' ? 'Complex Name *' : 'Society / Apartment *')
-        : (cfg.bhk_required ? 'Colony / Society' : 'Building / Complex');
-    const plotLabel = plotNoRequired ? 'Plot No *' : cfg.bhk_required ? 'House / Plot No' : 'Plot No';
-
-    // Inject z-index for Google Places dropdown (.pac-container)
-    useEffect(() => {
-        const style = document.createElement('style');
-        style.textContent = '.pac-container { z-index: 99999 !important; }';
-        document.head.appendChild(style);
-        return () => { document.head.removeChild(style); };
-    }, []);
-
-    // Load states from API
-    useEffect(() => {
-        getStates().then((data: any) => {
-            const list = Array.isArray(data) ? data : data?.states || [];
-            setStates(list.map((st: any) => typeof st === 'string' ? st : st.name || st.label || '').filter(Boolean));
-        }).catch(() => {});
-    }, []);
-
-    const handlePlaceSelect = useCallback((place: PlaceResult) => {
-        if (place.locality) setLocality(place.locality);
-        if (place.district) setDistrict(place.district);
-        if (place.state) setState(place.state);
-        if (place.pincode) setPincode(place.pincode);
-        if (place.full_address) setFullAddress(place.full_address);
-        if (place.latitude != null) setLatitude(place.latitude);
-        if (place.longitude != null) setLongitude(place.longitude);
-    }, []);
-
-    const validate = useCallback(() => {
-        const errs: Record<string, string> = {};
-        if (showFlatNo && !flatNo.trim()) errs.flat_no = `${flatLabel.replace(' *', '')} is required`;
-        if (showFloorNumber && !floorNumber.trim()) errs.floor_number = 'Floor No is required';
-        if (showApartmentName && cfg.floor_required && !apartmentName.trim()) errs.apartment_name = `${apartmentLabel.replace(' *', '')} is required`;
-        if (plotNoRequired && !plotNo.trim()) errs.plot_no = 'Plot No is required';
-        if (!locality.trim()) errs.locality = 'Locality is required';
-        if (!district.trim()) errs.district = 'City is required';
-        if (!state.trim()) errs.state = 'State is required';
-        if (!pincode.trim() || !/^[1-9][0-9]{5}$/.test(pincode.trim())) errs.pincode = 'Valid 6-digit pincode required';
-        setErrors(errs);
-        return Object.keys(errs).length === 0;
-    }, [flatNo, floorNumber, apartmentName, plotNo, locality, district, state, pincode, showFlatNo, showFloorNumber, showApartmentName, cfg.floor_required, plotNoRequired, flatLabel, apartmentLabel]);
+    const cfg = addressConfig || { sub_category_slug: '', floor_required: true, bhk_required: false, plot_area_required: false, main_category: '' };
+    const layout = inferAddressLayout({ slug: cfg.sub_category_slug, type: cfg.sub_category_slug, mainCategory: cfg.main_category, floorRequired: cfg.floor_required, plotAreaRequired: cfg.plot_area_required });
+    const [addr, setAddr] = useState<AddressValue>({
+        city: value?.city || value?.district || '',
+        district: value?.district || value?.city || '',
+        locality: value?.locality || '',
+        sub_locality: value?.sub_locality || '',
+        state: value?.state || '',
+        pincode: value?.pincode || '',
+        apartment_name: value?.apartment_name || '',
+        flat_no: value?.flat_no || '',
+        floor_number: value?.floor_number ?? '',
+        total_floors: value?.total_floors ?? '',
+        plot_no: value?.plot_no || '',
+        latitude: value?.latitude,
+        longitude: value?.longitude,
+        full_address: value?.full_address || '',
+    });
+    const [error, setError] = useState('');
 
     const handleSubmit = useCallback(() => {
-        if (!validate()) return;
-        const addr: Record<string, any> = {
-            locality: locality.trim(),
-            district: district.trim(),
-            state: state.trim(),
-            pincode: pincode.trim(),
-        };
-        if (showFlatNo && flatNo.trim()) addr.flat_no = flatNo.trim();
-        if (showFloorNumber && floorNumber.trim()) addr.floor_number = floorNumber.trim();
-        if (showApartmentName && apartmentName.trim()) addr.apartment_name = apartmentName.trim();
-        if (showPlotNo && plotNo.trim()) addr.plot_no = plotNo.trim();
-        addr.full_address = fullAddress.trim() || [
-            addr.flat_no, addr.plot_no, addr.apartment_name, locality.trim(), district.trim(), state.trim(), pincode.trim() ? `- ${pincode.trim()}` : ''
-        ].filter(Boolean).join(', ').replace(', -', ' -');
-        if (latitude != null) addr.latitude = latitude;
-        if (longitude != null) addr.longitude = longitude;
-        onSubmit(addr);
-    }, [flatNo, floorNumber, plotNo, apartmentName, locality, district, state, pincode, fullAddress, showFlatNo, showFloorNumber, showApartmentName, showPlotNo, validate, onSubmit]);
-
-    const fieldStyle: React.CSSProperties = {
-        width: '100%', padding: '10px 12px', borderRadius: '8px', fontSize: '14px',
-        backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)',
-        border: '1px solid var(--border-secondary)', outline: 'none', boxSizing: 'border-box',
-    };
-    const errFieldStyle: React.CSSProperties = { ...fieldStyle, border: '1px solid #ef4444' };
-    const labelStyle: React.CSSProperties = { fontSize: '12px', color: 'var(--text-muted)', marginBottom: '4px', fontWeight: 600 };
-    const errStyle: React.CSSProperties = { fontSize: '11px', color: '#fca5a5', marginTop: '2px' };
-
-    const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
-        if (e.key === 'Enter') e.preventDefault();
-    }, []);
+        if (!(addr.city || '').toString().trim()) { setError('City is required'); return; }
+        if (!(addr.locality || '').toString().trim()) { setError('Locality is required'); return; }
+        const out: Record<string, any> = { ...addr, district: (addr.city || addr.district || '').toString().trim() };
+        if (!out.full_address) {
+            out.full_address = [addr.flat_no, addr.plot_no, addr.apartment_name, addr.locality, addr.sub_locality, addr.city, addr.state, addr.pincode ? `- ${addr.pincode}` : '']
+                .filter(Boolean).join(', ').replace(', -', ' -');
+        }
+        onSubmit(out);
+    }, [addr, onSubmit]);
 
     return (
-        <div onKeyDown={handleKeyDown}>
-            {/* Google Places Search */}
-            <div style={{ marginBottom: '16px' }}>
-                <label style={labelStyle}>Search Location (auto-fills fields below)</label>
-                <GooglePlacesInput
-                    value={fullAddress}
-                    onChange={setFullAddress}
-                    onPlaceSelect={handlePlaceSelect}
-                    placeholder="Type to search (e.g. Gaur City 2, Sector 150, Noida)"
-                    style={fieldStyle}
-                />
-            </div>
-
-            {/* Row 1: Flat No + Floor No (only for floor_required types) */}
-            {(showFlatNo || showFloorNumber) && (
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
-                    {showFlatNo && (
-                        <div>
-                            <label style={labelStyle}>{flatLabel}</label>
-                            <input type="text" value={flatNo} onChange={e => setFlatNo(e.target.value)} placeholder="e.g. A-1201" style={errors.flat_no ? errFieldStyle : fieldStyle} />
-                            {errors.flat_no && <div style={errStyle}>{errors.flat_no}</div>}
-                        </div>
-                    )}
-                    {showFloorNumber && (
-                        <div>
-                            <label style={labelStyle}>Floor No *</label>
-                            <input type="text" value={floorNumber} onChange={e => setFloorNumber(e.target.value)} placeholder="e.g. 5" style={errors.floor_number ? errFieldStyle : fieldStyle} />
-                            {errors.floor_number && <div style={errStyle}>{errors.floor_number}</div>}
-                        </div>
-                    )}
-                </div>
-            )}
-
-            {/* Row 2: Plot No + Apartment/Society (adaptive) */}
-            {(showPlotNo || showApartmentName) && (
-                <div style={{ display: 'grid', gridTemplateColumns: showPlotNo && showApartmentName ? '1fr 1fr' : '1fr', gap: '12px', marginBottom: '12px' }}>
-                    {showPlotNo && (
-                        <div>
-                            <label style={labelStyle}>{plotLabel}</label>
-                            <input type="text" value={plotNo} onChange={e => setPlotNo(e.target.value)} placeholder="e.g. Plot 42" style={errors.plot_no ? errFieldStyle : fieldStyle} />
-                            {errors.plot_no && <div style={errStyle}>{errors.plot_no}</div>}
-                        </div>
-                    )}
-                    {showApartmentName && (
-                        <div>
-                            <label style={labelStyle}>{apartmentLabel}</label>
-                            <input type="text" value={apartmentName} onChange={e => setApartmentName(e.target.value)} placeholder="e.g. Gaur City 2" style={errors.apartment_name ? errFieldStyle : fieldStyle} />
-                            {errors.apartment_name && <div style={errStyle}>{errors.apartment_name}</div>}
-                        </div>
-                    )}
-                </div>
-            )}
-
-            {/* Locality */}
-            <div style={{ marginBottom: '12px' }}>
-                <label style={labelStyle}>Locality *</label>
-                <input type="text" value={locality} onChange={e => setLocality(e.target.value)} placeholder="e.g. Sector 150" style={errors.locality ? errFieldStyle : fieldStyle} />
-                {errors.locality && <div style={errStyle}>{errors.locality}</div>}
-            </div>
-
-            {/* Row 3: City + State */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
-                <div>
-                    <label style={labelStyle}>City *</label>
-                    <input type="text" value={district} onChange={e => setDistrict(e.target.value)} placeholder="e.g. Gautam Buddha Nagar" style={errors.district ? errFieldStyle : fieldStyle} />
-                    {errors.district && <div style={errStyle}>{errors.district}</div>}
-                </div>
-                <div>
-                    <label style={labelStyle}>State *</label>
-                    <select value={state} onChange={e => setState(e.target.value)} style={errors.state ? errFieldStyle : fieldStyle}>
-                        <option value="">Select State</option>
-                        {states.map(st => <option key={st} value={st}>{st}</option>)}
-                    </select>
-                    {errors.state && <div style={errStyle}>{errors.state}</div>}
-                </div>
-            </div>
-
-            {/* Pincode */}
-            <div style={{ marginBottom: '16px' }}>
-                <label style={labelStyle}>Pincode *</label>
-                <input type="text" value={pincode} onChange={e => setPincode(e.target.value.replace(/\D/g, '').slice(0, 6))} placeholder="e.g. 201310" style={errors.pincode ? errFieldStyle : fieldStyle} maxLength={6} />
-                {errors.pincode && <div style={errStyle}>{errors.pincode}</div>}
-            </div>
-
+        <div>
+            <AddressFields value={addr} onChange={setAddr} layout={layout} mainCategory={cfg.main_category} slug={cfg.sub_category_slug} />
+            <DuplicateAddressWarning value={addr} />
+            {error && <div style={{ fontSize: '12px', color: '#fca5a5', marginBottom: '8px' }}>{error}</div>}
             <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
                 <button type="button" style={{ padding: '10px 20px', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: 600, backgroundColor: '#059669', color: '#fff', border: 'none' }} onClick={handleSubmit}>Next &rarr;</button>
             </div>

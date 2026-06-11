@@ -170,6 +170,30 @@ export function LoginPage() {
         if (forgotStep === 'otp') setResendCountdown(60);
     }, [forgotStep]);
 
+    // Surface a failed Google sign-in (?login_error=...) bounced back by the
+    // /auth/google/callback. On success the callback sets cookies + redirects
+    // to the dashboard, so this page never renders in that case.
+    useEffect(() => {
+        const params = new URLSearchParams(window.location.search);
+        const code = params.get('login_error');
+        if (!code) return;
+        const msgs: Record<string, string> = {
+            google_unlinked: "This Google account isn't linked to a team member. Log in with your phone number, then connect Google from your profile first.",
+            google_denied: 'Google sign-in was cancelled.',
+            google_expired: 'The Google sign-in link expired. Please try again.',
+            google_unavailable: "Google sign-in isn't available right now. Use your phone number.",
+            google_error: 'Google sign-in failed. Please try again.',
+        };
+        setError(msgs[code] || 'Google sign-in failed. Please try again.');
+        params.delete('login_error');
+        const qs = params.toString();
+        window.history.replaceState({}, '', window.location.pathname + (qs ? `?${qs}` : ''));
+    }, []);
+
+    const handleGoogleSignIn = () => {
+        window.location.href = `${API_BASE_URL}/auth/google`;
+    };
+
     const handleResendOtp = async () => {
         setResendLoading(true);
         setError('');
@@ -397,6 +421,39 @@ export function LoginPage() {
                         >
                             {loading ? 'Signing in...' : 'Login'}
                         </button>
+
+                        {/* Divider */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', margin: '18px 0' }}>
+                            <div style={{ flex: 1, height: '1px', backgroundColor: '#334155' }} />
+                            <span style={{ color: '#64748b', fontSize: '12px' }}>or</span>
+                            <div style={{ flex: 1, height: '1px', backgroundColor: '#334155' }} />
+                        </div>
+
+                        {/* Sign in with Google (P1b) — only works for members who
+                            already linked Google from their profile. */}
+                        <button
+                            type="button"
+                            onClick={handleGoogleSignIn}
+                            disabled={loading}
+                            style={{
+                                width: '100%', padding: '12px', backgroundColor: '#fff',
+                                color: '#1f2937', border: '1px solid #e5e7eb', borderRadius: '10px',
+                                fontSize: '14px', fontWeight: 600,
+                                cursor: loading ? 'not-allowed' : 'pointer',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px',
+                            }}
+                        >
+                            <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
+                                <path fill="#4285F4" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.92c1.7-1.57 2.68-3.88 2.68-6.62z"/>
+                                <path fill="#34A853" d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.92-2.26c-.8.54-1.84.86-3.04.86-2.34 0-4.32-1.58-5.03-3.7H.96v2.33A9 9 0 0 0 9 18z"/>
+                                <path fill="#FBBC05" d="M3.97 10.72a5.4 5.4 0 0 1 0-3.44V4.95H.96a9 9 0 0 0 0 8.1l3.01-2.33z"/>
+                                <path fill="#EA4335" d="M9 3.58c1.32 0 2.5.45 3.44 1.35l2.58-2.58A9 9 0 0 0 .96 4.95l3.01 2.33C4.68 5.16 6.66 3.58 9 3.58z"/>
+                            </svg>
+                            Sign in with Google
+                        </button>
+                        <p style={{ color: '#64748b', fontSize: '11px', textAlign: 'center', marginTop: '10px', marginBottom: 0 }}>
+                            Works only after you've connected Google in your profile.
+                        </p>
                     </form>
                 )}
 

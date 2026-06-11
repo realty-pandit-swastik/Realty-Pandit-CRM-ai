@@ -1,9 +1,13 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useWorkflow, type WorkflowStep, type StepOption, type DocType } from '../hooks/useWorkflow';
-import { GooglePlacesInput, type PlaceResult } from './GooglePlacesInput';
 import { EnrichmentPanel } from './EnrichmentPanel';
+import ParkingListField from './ParkingListField';
+import AddressFields, { type AddressValue, inferAddressLayout } from './AddressFields';
+import DuplicateAddressWarning from './DuplicateAddressWarning';
 import { ContactSearchField, type SelectedContact } from './ContactSearchField';
-import { getStates } from '../api/client';
+import { PartnerSourceAutocomplete, type SourcePartnerValue } from './PartnerSourceAutocomplete';
+import { getTaxonomyTree } from '../api/client';
+import { useConfirm } from '../contexts/ConfirmContext';
 
 interface InventoryModalProps {
     isOpen: boolean;
@@ -17,14 +21,45 @@ type ModalPhase = 'contact' | 'prefilling' | 'workflow' | 'confirm' | 'success' 
 // Steps that are auto-filled from contact selection
 const PREFILL_STEPS = ['user_role', 'uploader_phone', 'uploader_name'];
 
+/**
+ * Translate the UI's SourcePartnerValue into the flat fields the workflow engine expects
+ * in the commit payload. Returns {} when no partner selected (no field injection).
+ */
+function buildSourcePartnerExtras(partner: SourcePartnerValue): Record<string, string> {
+    if (partner.partner_id) return { source_partner_id: partner.partner_id };
+    if (partner.phone) {
+        const extras: Record<string, string> = { source_partner_phone: partner.phone };
+        if (partner.name) extras.source_partner_name = partner.name;
+        return extras;
+    }
+    return {};
+}
+
+type PreRentedValue = { pre_rented: boolean; rent: string };
+
+/** Pre-rented (pre-lease) — inject the flag + rent into the commit payload, only for FOR-SALE listings. */
+function buildPreRentedExtras(pr: PreRentedValue, intent: any): Record<string, string> {
+    const isSale = ['sell', 'sale'].includes(String(intent || '').toLowerCase());
+    if (!isSale || !pr.pre_rented) return {};
+    const extras: Record<string, string> = { pre_rented: 'true' };
+    if (pr.rent && String(pr.rent).trim()) extras.pre_rented_monthly_rent = String(pr.rent).trim();
+    return extras;
+}
+
 export const InventoryModal: React.FC<InventoryModalProps> = ({ isOpen, onClose, onCreated, onEditInventory }) => {
     const wf = useWorkflow();
+    const confirm = useConfirm();
     const [phase, setPhase] = useState<ModalPhase>('contact');
     const [sourceContact, setSourceContact] = useState<SelectedContact | null>(null);
     const [keyHolderMode, setKeyHolderMode] = useState<'search' | null>(null);
     const [keyHolderPhone, setKeyHolderPhone] = useState<string | null>(null);
     const [ownerHoldsKey, setOwnerHoldsKey] = useState(false);
     const [prefilling, setPrefilling] = useState(false);
+    // Middleman model (2026-04-17): optional partner source for this listing.
+    // Captured on the confirmation step and merged into the commit payload.
+    const [sourcePartner, setSourcePartner] = useState<SourcePartnerValue>({});
+    // Pre-rented (pre-lease) — captured on the confirm step, only for for-sale listings.
+    const [preRented, setPreRented] = useState<PreRentedValue>({ pre_rented: false, rent: '' });
 
     // Body scroll lock
     useEffect(() => {
@@ -98,9 +133,10 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({ isOpen, onClose,
         setPhase('prefilling');
     }, []);
 
-    const handleClose = useCallback(() => {
+    const handleClose = useCallback(async () => {
         if (phase === 'workflow' || phase === 'confirm') {
-            if (!confirm('Discard current progress?')) return;
+            const ok = await confirm('Discard current progress?');
+            if (!ok) return;
         }
         wf.reset();
         setPhase('contact');
@@ -253,9 +289,13 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({ isOpen, onClose,
                                     loading={wf.stepLoading || wf.submitting}
                                     onSubmit={async () => {
                                         await wf.answerStep(true);
-                                        await wf.submit();
+                                        await wf.submit({ ...buildSourcePartnerExtras(sourcePartner), ...buildPreRentedExtras(preRented, wf.answers.intent) });
                                     }}
                                     onBack={handleBack}
+                                    sourcePartner={sourcePartner}
+                                    onSourcePartnerChange={setSourcePartner}
+                                    preRented={preRented}
+                                    onPreRentedChange={setPreRented}
                                 />
                             ) : (
                                 <StepPanel
@@ -288,8 +328,12 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({ isOpen, onClose,
                                 answers={wf.answers}
                                 error={wf.error}
                                 submitting={wf.submitting}
-                                onConfirm={wf.submit}
+                                onConfirm={() => wf.submit({ ...buildSourcePartnerExtras(sourcePartner), ...buildPreRentedExtras(preRented, wf.answers.intent) })}
                                 onBack={handleBack}
+                                sourcePartner={sourcePartner}
+                                onSourcePartnerChange={setSourcePartner}
+                                preRented={preRented}
+                                onPreRentedChange={setPreRented}
                             />
                         </div>
                     )}
@@ -498,13 +542,42 @@ function KeyHolderContactSearch({ onContactFound }: {
 
 // ─── Confirm Step (input_type: 'confirm' — final review + submit) ───────────
 
-function ConfirmStep({ answers, summary, error, loading, onSubmit, onBack }: {
+// Pre-rented (pre-lease) capture — shown on the confirm step ONLY for for-sale listings.
+function PreRentedField({ value, onChange, intent }: {
+    value: PreRentedValue;
+    onChange: (v: PreRentedValue) => void;
+    intent: any;
+}) {
+    const isSale = ['sell', 'sale'].includes(String(intent || '').toLowerCase());
+    if (!isSale) return null;
+    return (
+        <div style={{ marginBottom: 16, padding: 14, borderRadius: 10, border: '1px dashed var(--border-secondary)', backgroundColor: 'var(--bg-secondary)' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
+                <input type="checkbox" checked={value.pre_rented}
+                    onChange={e => onChange({ pre_rented: e.target.checked, rent: e.target.checked ? value.rent : '' })} />
+                <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>Pre-rented — already has a tenant paying rent</span>
+            </label>
+            {value.pre_rented && (
+                <input type="number" min={0} value={value.rent}
+                    onChange={e => onChange({ ...value, rent: e.target.value })}
+                    placeholder="Current rent ₹ / month (e.g. 25000)"
+                    style={{ ...styles.input, marginTop: 10 }} />
+            )}
+        </div>
+    );
+}
+
+function ConfirmStep({ answers, summary, error, loading, onSubmit, onBack, sourcePartner, onSourcePartnerChange, preRented, onPreRentedChange }: {
     answers: Record<string, any>;
     summary: Record<string, string> | null;
     error: string;
     loading: boolean;
     onSubmit: () => void;
     onBack: () => void;
+    sourcePartner?: SourcePartnerValue;
+    onSourcePartnerChange?: (v: SourcePartnerValue) => void;
+    preRented?: PreRentedValue;
+    onPreRentedChange?: (v: PreRentedValue) => void;
 }) {
     const displayData = summary || flattenAnswers(answers);
     const hasData = Object.keys(displayData).length > 0;
@@ -530,6 +603,21 @@ function ConfirmStep({ answers, summary, error, loading, onSubmit, onBack }: {
                 </div>
             )}
 
+            {/* Middleman model (2026-04-17) — optional source partner for this listing */}
+            {onSourcePartnerChange && (
+                <div style={{ marginBottom: 16, padding: 14, borderRadius: 10, border: '1px dashed var(--border-secondary)', backgroundColor: 'var(--bg-secondary)' }}>
+                    <PartnerSourceAutocomplete
+                        value={sourcePartner || {}}
+                        onChange={onSourcePartnerChange}
+                        label="Did a partner agent refer this property?"
+                    />
+                </div>
+            )}
+
+            {onPreRentedChange && (
+                <PreRentedField value={preRented || { pre_rented: false, rent: '' }} onChange={onPreRentedChange} intent={answers.intent} />
+            )}
+
             {error && <div style={{ padding: '10px 14px', borderRadius: '8px', fontSize: '13px', backgroundColor: '#7f1d1d', color: '#fca5a5', border: '1px solid #991b1b', marginBottom: '12px' }}>{error}</div>}
 
             <div style={{ display: 'flex', gap: '12px' }}>
@@ -537,6 +625,120 @@ function ConfirmStep({ answers, summary, error, loading, onSubmit, onBack }: {
                 <button style={{ ...styles.primaryBtn, flex: 1, padding: '14px', fontSize: '15px' }} onClick={onSubmit} disabled={loading}>
                     {loading ? 'Submitting...' : 'Submit Property'}
                 </button>
+            </div>
+        </div>
+    );
+}
+
+// ─── Phase 1d: canonical taxonomy tree picker (admin) ──────────────────────────
+interface TaxNode { id: string; name: string; node_kind: string; children?: TaxNode[]; }
+
+function TaxonomyPicker({ value, onSubmit }: { value: any; onSubmit: (v: string) => void }) {
+    const [tree, setTree] = useState<TaxNode[]>([]);
+    const [path, setPath] = useState<TaxNode[]>([]);
+    const [loadErr, setLoadErr] = useState('');
+
+    useEffect(() => {
+        getTaxonomyTree()
+            .then((d: any) => setTree(d.tree || []))
+            .catch((e: any) => setLoadErr(e?.message || 'Failed to load taxonomy'));
+    }, []);
+
+    const levels: TaxNode[][] = [];
+    let opts: TaxNode[] = tree;
+    for (let i = 0; i <= path.length; i++) {
+        if (!opts || opts.length === 0) break;
+        levels.push(opts);
+        opts = path[i]?.children || [];
+    }
+    const leaf = path.length > 0 ? path[path.length - 1] : null;
+    const leafChosen = !!leaf && (!leaf.children || leaf.children.length === 0);
+
+    if (loadErr) return <div style={{ color: '#fca5a5', fontSize: '13px' }}>{loadErr}</div>;
+
+    return (
+        <div>
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                {levels.map((lvl, i) => (
+                    <select
+                        key={i}
+                        value={path[i]?.id || ''}
+                        style={{ ...styles.input, flex: '1 1 180px', minWidth: '160px', cursor: 'pointer' }}
+                        onChange={e => {
+                            const node = lvl.find(n => n.id === e.target.value) || null;
+                            const np = path.slice(0, i);
+                            if (node) np.push(node);
+                            setPath(np);
+                        }}
+                    >
+                        <option value="">{i === 0 ? 'Category…' : 'Select…'}</option>
+                        {lvl.map(n => <option key={n.id} value={n.id}>{n.name}</option>)}
+                    </select>
+                ))}
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '12px' }}>
+                <button style={{ ...styles.primaryBtn, opacity: leafChosen ? 1 : 0.5 }} disabled={!leafChosen} onClick={() => leaf && onSubmit(leaf.id)}>
+                    {leafChosen ? 'Next →' : 'Pick a property type'}
+                </button>
+            </div>
+            {value && <p style={{ color: 'var(--text-muted)', fontSize: '12px', marginTop: '6px' }}>Selected: {leaf?.name || value}</p>}
+        </div>
+    );
+}
+
+// ─── Phase 1d: dynamic per-type field schema (BHK / Rooms / FAR / …) ───────────
+interface SchemaField { key: string; label: string; input_type: string; required: boolean; options: string[] | null; unit: string | null; }
+
+function SchemaFields({ fields, value, onSubmit }: { fields: SchemaField[]; value: any; onSubmit: (v: Record<string, any>) => void }) {
+    const [vals, setVals] = useState<Record<string, any>>(value || {});
+    const toggle = (key: string, opt: string) => {
+        const cur: string[] = Array.isArray(vals[key]) ? vals[key] : [];
+        setVals({ ...vals, [key]: cur.includes(opt) ? cur.filter(x => x !== opt) : [...cur, opt] });
+    };
+    if (!fields || fields.length === 0) {
+        return (
+            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                <button style={styles.primaryBtn} onClick={() => onSubmit({})}>Next &rarr;</button>
+            </div>
+        );
+    }
+    const isEmpty = (v: any) => v === undefined || v === '' || v === null || (Array.isArray(v) && v.length === 0);
+    const missingRequired = fields.some(f => f.required && isEmpty(vals[f.key]));
+    return (
+        <div>
+            {fields.map(f => (
+                <div key={f.key} style={{ marginBottom: '12px' }}>
+                    <label style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'block', marginBottom: '4px' }}>
+                        {f.label}{f.required ? ' *' : ''}{f.unit ? ` (${f.unit})` : ''}
+                    </label>
+                    {f.input_type === 'parking_list' ? (
+                        <ParkingListField value={vals[f.key]} onChange={(v) => setVals({ ...vals, [f.key]: v })} />
+                    ) : f.input_type === 'multiselect' && Array.isArray(f.options) && f.options.length > 0 ? (
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                            {f.options.map(o => {
+                                const on = Array.isArray(vals[f.key]) && vals[f.key].includes(o);
+                                return (
+                                    <button key={o} type="button" onClick={() => toggle(f.key, o)}
+                                        style={{ padding: '6px 12px', borderRadius: '999px', fontSize: '12px', cursor: 'pointer',
+                                            border: on ? '1px solid #059669' : '1px solid var(--border-secondary)',
+                                            backgroundColor: on ? '#059669' : 'var(--bg-primary)', color: on ? '#fff' : 'var(--text-primary)' }}>
+                                        {o}
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    ) : Array.isArray(f.options) && f.options.length > 0 ? (
+                        <select style={{ ...styles.input, cursor: 'pointer' }} value={vals[f.key] ?? ''} onChange={e => setVals({ ...vals, [f.key]: e.target.value })}>
+                            <option value="">Select…</option>
+                            {f.options.map(o => <option key={o} value={o}>{o}</option>)}
+                        </select>
+                    ) : (
+                        <input style={styles.input} type={f.input_type === 'number' ? 'number' : 'text'} value={vals[f.key] ?? ''} placeholder={f.unit || ''} onChange={e => setVals({ ...vals, [f.key]: e.target.value })} />
+                    )}
+                </div>
+            ))}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '8px' }}>
+                <button style={{ ...styles.primaryBtn, opacity: missingRequired ? 0.5 : 1 }} disabled={missingRequired} onClick={() => onSubmit(vals)}>Next &rarr;</button>
             </div>
         </div>
     );
@@ -605,6 +807,12 @@ function StepPanel({ step, options, metadata, currentValue, secondaryValue, docu
                 )}
                 {step.input_type === 'address_block' && (
                     <AddressBlockField value={currentValue} onSubmit={onAnswer} addressConfig={metadata?.address_config} />
+                )}
+                {step.input_type === 'taxonomy' && (
+                    <TaxonomyPicker value={currentValue} onSubmit={onAnswer} />
+                )}
+                {step.input_type === 'schema_fields' && (
+                    <SchemaFields fields={metadata?.schema_fields || []} value={currentValue} onSubmit={onAnswer} />
                 )}
                 {step.input_type === 'owner_block' && (
                     <>
@@ -681,13 +889,17 @@ function flattenAnswers(answers: Record<string, any>): Record<string, string> {
     return result;
 }
 
-function ConfirmationPanel({ summary, answers, error, submitting, onConfirm, onBack }: {
+function ConfirmationPanel({ summary, answers, error, submitting, onConfirm, onBack, sourcePartner, onSourcePartnerChange, preRented, onPreRentedChange }: {
     summary: Record<string, string> | null;
     answers: Record<string, any>;
     error: string;
     submitting: boolean;
     onConfirm: () => void;
     onBack: () => void;
+    sourcePartner?: SourcePartnerValue;
+    onSourcePartnerChange?: (v: SourcePartnerValue) => void;
+    preRented?: PreRentedValue;
+    onPreRentedChange?: (v: PreRentedValue) => void;
 }) {
     const displayData = summary || flattenAnswers(answers);
     const hasData = Object.keys(displayData).length > 0;
@@ -734,6 +946,21 @@ function ConfirmationPanel({ summary, answers, error, submitting, onConfirm, onB
                 <div style={{ textAlign: 'center', padding: '30px 0', color: 'var(--text-muted)', marginBottom: '16px' }}>
                     Loading summary...
                 </div>
+            )}
+
+            {/* Middleman model (2026-04-17) — optional source partner for this listing */}
+            {onSourcePartnerChange && (
+                <div style={{ marginBottom: 16, padding: 14, borderRadius: 10, border: '1px dashed var(--border-secondary)', backgroundColor: 'var(--bg-secondary)' }}>
+                    <PartnerSourceAutocomplete
+                        value={sourcePartner || {}}
+                        onChange={onSourcePartnerChange}
+                        label="Did a partner agent refer this property?"
+                    />
+                </div>
+            )}
+
+            {onPreRentedChange && (
+                <PreRentedField value={preRented || { pre_rented: false, rent: '' }} onChange={onPreRentedChange} intent={answers.intent} />
             )}
 
             {error && <div style={{ padding: '10px 14px', borderRadius: '8px', fontSize: '13px', backgroundColor: '#7f1d1d', color: '#fca5a5', border: '1px solid #991b1b', marginBottom: '12px' }}>{error}</div>}
@@ -1008,116 +1235,48 @@ interface AddressConfig {
     floor_required: boolean;
     bhk_required: boolean;
     plot_area_required: boolean;
+    main_category?: string;
 }
 
 function AddressBlockField({ value, onSubmit, addressConfig }: {
     value: any; onSubmit: (v: any) => void; addressConfig?: AddressConfig;
 }) {
-    const [flatNo, setFlatNo] = useState(value?.flat_no || '');
-    const [floorNumber, setFloorNumber] = useState(value?.floor_number || '');
-    const [plotNo, setPlotNo] = useState(value?.plot_no || '');
-    const [apartmentName, setApartmentName] = useState(value?.apartment_name || '');
-    const [locality, setLocality] = useState(value?.locality || '');
-    const [district, setDistrict] = useState(value?.district || '');
-    const [state, setState] = useState(value?.state || '');
-    const [pincode, setPincode] = useState(value?.pincode || '');
-    const [fullAddress, setFullAddress] = useState(value?.full_address || '');
-    const [latitude, setLatitude] = useState<number | undefined>(value?.latitude);
-    const [longitude, setLongitude] = useState<number | undefined>(value?.longitude);
-    const [states, setStates] = useState<string[]>([]);
-    const [errors, setErrors] = useState<Record<string, string>>({});
-
-    const cfg = addressConfig || { sub_category_slug: '', floor_required: true, bhk_required: false, plot_area_required: false };
-    const showFlatNo = cfg.floor_required;
-    const showFloorNumber = cfg.floor_required;
-    const showApartmentName = cfg.floor_required || cfg.bhk_required;
-    const showPlotNo = true;
-
-    const slug = cfg.sub_category_slug;
-    const flatLabel = slug === 'office' ? 'Office No' : slug === 'retail' ? 'Shop / Unit No' : slug === 'healthcare' ? 'Unit No' : 'Flat / Unit No';
-    const apartmentLabel = cfg.floor_required
-        ? (slug === 'office' || slug === 'healthcare' ? 'Building / Complex' : slug === 'retail' ? 'Mall / Market / Complex' : slug === 'mixed_development' ? 'Complex Name' : 'Society / Apartment')
-        : (cfg.bhk_required ? 'Colony / Society' : 'Building / Complex');
-    const plotLabel = cfg.floor_required ? 'Plot / Sector No' : (cfg.bhk_required ? 'House / Plot No' : 'Plot No');
-
-    useEffect(() => {
-        const style = document.createElement('style');
-        style.textContent = '.pac-container { z-index: 99999 !important; }';
-        document.head.appendChild(style);
-        return () => { document.head.removeChild(style); };
-    }, []);
-
-    useEffect(() => {
-        getStates().then((data: any) => {
-            const list = Array.isArray(data) ? data : data?.states || [];
-            setStates(list.map((st: any) => typeof st === 'string' ? st : st.name || st.label || '').filter(Boolean));
-        }).catch(() => {});
-    }, []);
-
-    const handlePlaceSelect = useCallback((place: PlaceResult) => {
-        if (place.locality) setLocality(place.locality);
-        if (place.district) setDistrict(place.district);
-        if (place.state) setState(place.state);
-        if (place.pincode) setPincode(place.pincode);
-        if (place.full_address) setFullAddress(place.full_address);
-        if (place.latitude != null) setLatitude(place.latitude);
-        if (place.longitude != null) setLongitude(place.longitude);
-    }, []);
-
-    const validate = useCallback(() => {
-        const errs: Record<string, string> = {};
-        // Only Locality, City, State are mandatory
-        if (!locality.trim()) errs.locality = 'Locality is required';
-        if (!district.trim()) errs.district = 'City is required';
-        if (!state.trim()) errs.state = 'State is required';
-        // Pincode optional but validate format if provided
-        if (pincode.trim() && !/^[1-9][0-9]{5}$/.test(pincode.trim())) errs.pincode = 'Enter valid 6-digit pincode';
-        setErrors(errs);
-        return Object.keys(errs).length === 0;
-    }, [locality, district, state, pincode]);
+    const cfg = addressConfig || { sub_category_slug: '', floor_required: true, bhk_required: false, plot_area_required: false, main_category: '' };
+    const layout = inferAddressLayout({ slug: cfg.sub_category_slug, type: cfg.sub_category_slug, mainCategory: cfg.main_category, floorRequired: cfg.floor_required, plotAreaRequired: cfg.plot_area_required });
+    const [addr, setAddr] = useState<AddressValue>({
+        city: value?.city || value?.district || '',
+        district: value?.district || value?.city || '',
+        locality: value?.locality || '',
+        sub_locality: value?.sub_locality || '',
+        state: value?.state || '',
+        pincode: value?.pincode || '',
+        apartment_name: value?.apartment_name || '',
+        flat_no: value?.flat_no || '',
+        floor_number: value?.floor_number ?? '',
+        total_floors: value?.total_floors ?? '',
+        plot_no: value?.plot_no || '',
+        latitude: value?.latitude,
+        longitude: value?.longitude,
+        full_address: value?.full_address || '',
+    });
+    const [error, setError] = useState('');
 
     const handleSubmit = useCallback(() => {
-        if (!validate()) return;
-        const addr: Record<string, any> = { locality: locality.trim(), district: district.trim(), state: state.trim(), pincode: pincode.trim() };
-        if (showFlatNo && flatNo.trim()) addr.flat_no = flatNo.trim();
-        if (showFloorNumber && floorNumber.trim()) addr.floor_number = floorNumber.trim();
-        if (showApartmentName && apartmentName.trim()) addr.apartment_name = apartmentName.trim();
-        if (plotNo.trim()) addr.plot_no = plotNo.trim();
-        addr.full_address = fullAddress.trim() || [addr.flat_no, addr.plot_no, addr.apartment_name, locality.trim(), district.trim(), state.trim(), pincode.trim() ? `- ${pincode.trim()}` : ''].filter(Boolean).join(', ').replace(', -', ' -');
-        if (latitude != null) addr.latitude = latitude;
-        if (longitude != null) addr.longitude = longitude;
-        onSubmit(addr);
-    }, [flatNo, floorNumber, plotNo, apartmentName, locality, district, state, pincode, fullAddress, showFlatNo, showFloorNumber, showApartmentName, showPlotNo, validate, onSubmit, latitude, longitude]);
-
-    const fieldStyle: React.CSSProperties = { width: '100%', padding: '10px 12px', borderRadius: '8px', fontSize: '14px', backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)', border: '1px solid var(--border-secondary)', outline: 'none', boxSizing: 'border-box' };
-    const errFieldStyle: React.CSSProperties = { ...fieldStyle, border: '1px solid #ef4444' };
-    const labelStyle: React.CSSProperties = { fontSize: '12px', color: 'var(--text-muted)', marginBottom: '4px', fontWeight: 600 };
-    const errStyle: React.CSSProperties = { fontSize: '11px', color: '#fca5a5', marginTop: '2px' };
+        if (!(addr.city || '').toString().trim()) { setError('City is required'); return; }
+        if (!(addr.locality || '').toString().trim()) { setError('Locality is required'); return; }
+        const out: Record<string, any> = { ...addr, district: (addr.city || addr.district || '').toString().trim() };
+        if (!out.full_address) {
+            out.full_address = [addr.flat_no, addr.plot_no, addr.apartment_name, addr.locality, addr.sub_locality, addr.city, addr.state, addr.pincode ? `- ${addr.pincode}` : '']
+                .filter(Boolean).join(', ').replace(', -', ' -');
+        }
+        onSubmit(out);
+    }, [addr, onSubmit]);
 
     return (
-        <div onKeyDown={e => { if (e.key === 'Enter') e.preventDefault(); }}>
-            <div style={{ marginBottom: '16px' }}>
-                <label style={labelStyle}>Search Location (auto-fills fields below)</label>
-                <GooglePlacesInput value={fullAddress} onChange={setFullAddress} onPlaceSelect={handlePlaceSelect} placeholder="Type to search (e.g. Gaur City 2, Sector 150, Noida)" style={fieldStyle} />
-            </div>
-            {(showFlatNo || showFloorNumber) && (
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
-                    {showFlatNo && (<div><label style={labelStyle}>{flatLabel}</label><input type="text" value={flatNo} onChange={e => setFlatNo(e.target.value)} placeholder="e.g. A-1201" style={errors.flat_no ? errFieldStyle : fieldStyle} />{errors.flat_no && <div style={errStyle}>{errors.flat_no}</div>}</div>)}
-                    {showFloorNumber && (<div><label style={labelStyle}>Floor No *</label><input type="text" value={floorNumber} onChange={e => setFloorNumber(e.target.value)} placeholder="e.g. 5" style={errors.floor_number ? errFieldStyle : fieldStyle} />{errors.floor_number && <div style={errStyle}>{errors.floor_number}</div>}</div>)}
-                </div>
-            )}
-            {(showPlotNo || showApartmentName) && (
-                <div style={{ display: 'grid', gridTemplateColumns: showPlotNo && showApartmentName ? '1fr 1fr' : '1fr', gap: '12px', marginBottom: '12px' }}>
-                    {showPlotNo && (<div><label style={labelStyle}>{plotLabel}</label><input type="text" value={plotNo} onChange={e => setPlotNo(e.target.value)} placeholder="e.g. Plot 42" style={errors.plot_no ? errFieldStyle : fieldStyle} />{errors.plot_no && <div style={errStyle}>{errors.plot_no}</div>}</div>)}
-                    {showApartmentName && (<div><label style={labelStyle}>{apartmentLabel}</label><input type="text" value={apartmentName} onChange={e => setApartmentName(e.target.value)} placeholder="e.g. Gaur City 2" style={errors.apartment_name ? errFieldStyle : fieldStyle} />{errors.apartment_name && <div style={errStyle}>{errors.apartment_name}</div>}</div>)}
-                </div>
-            )}
-            <div style={{ marginBottom: '12px' }}><label style={labelStyle}>Locality *</label><input type="text" value={locality} onChange={e => setLocality(e.target.value)} placeholder="e.g. Sector 150" style={errors.locality ? errFieldStyle : fieldStyle} />{errors.locality && <div style={errStyle}>{errors.locality}</div>}</div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
-                <div><label style={labelStyle}>City *</label><input type="text" value={district} onChange={e => setDistrict(e.target.value)} placeholder="e.g. Gautam Buddha Nagar" style={errors.district ? errFieldStyle : fieldStyle} />{errors.district && <div style={errStyle}>{errors.district}</div>}</div>
-                <div><label style={labelStyle}>State *</label><select value={state} onChange={e => setState(e.target.value)} style={errors.state ? errFieldStyle : fieldStyle}><option value="">Select State</option>{states.map(st => <option key={st} value={st}>{st}</option>)}</select>{errors.state && <div style={errStyle}>{errors.state}</div>}</div>
-            </div>
-            <div style={{ marginBottom: '16px' }}><label style={labelStyle}>Pincode *</label><input type="text" value={pincode} onChange={e => setPincode(e.target.value.replace(/\D/g, '').slice(0, 6))} placeholder="e.g. 201310" style={errors.pincode ? errFieldStyle : fieldStyle} maxLength={6} />{errors.pincode && <div style={errStyle}>{errors.pincode}</div>}</div>
+        <div>
+            <AddressFields value={addr} onChange={setAddr} layout={layout} mainCategory={cfg.main_category} slug={cfg.sub_category_slug} />
+            <DuplicateAddressWarning value={addr} />
+            {error && <div style={{ fontSize: '12px', color: '#fca5a5', marginBottom: '8px' }}>{error}</div>}
             <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
                 <button type="button" style={styles.primaryBtn} onClick={handleSubmit}>Next &rarr;</button>
             </div>

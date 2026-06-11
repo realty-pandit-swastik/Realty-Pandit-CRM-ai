@@ -5,8 +5,8 @@
 
 import { useState, useEffect } from 'react';
 import { Send, Save, Calendar, Users, FileText, Play, Trash2, Plus, X, Copy } from 'lucide-react';
-import { useAuth } from '../contexts/AuthContext';
-import { API_BASE_URL } from '../lib/api';
+import { API_BASE_URL, authedFetch } from '../lib/api';
+import { useConfirm } from '../contexts/ConfirmContext';
 
 interface CampaignTemplate {
   id?: string;
@@ -61,7 +61,7 @@ const TEMPLATE_CATEGORIES = [
 ];
 
 export default function MarketingCampaign() {
-  const { token } = useAuth();
+  const confirm = useConfirm();
   const [activeTab, setActiveTab] = useState<'campaigns' | 'templates'>('campaigns');
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [templates, setTemplates] = useState<CampaignTemplate[]>([]);
@@ -103,9 +103,7 @@ export default function MarketingCampaign() {
   const fetchCampaigns = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`${API_BASE_URL}/api/marketing/campaigns`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const response = await authedFetch(`${API_BASE_URL}/api/marketing/campaigns`);
       const data = await response.json();
       setCampaigns(data.campaigns || []);
     } catch (err: any) {
@@ -117,9 +115,7 @@ export default function MarketingCampaign() {
 
   const fetchTemplates = async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/marketing/templates`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const response = await authedFetch(`${API_BASE_URL}/api/marketing/templates`);
       const data = await response.json();
       setTemplates(data.templates || []);
     } catch (err: any) {
@@ -129,12 +125,8 @@ export default function MarketingCampaign() {
 
   const fetchAudiencePreview = async (audience: any) => {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/marketing/audience/preview`, {
+      const response = await authedFetch(`${API_BASE_URL}/api/marketing/audience/preview`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
         body: JSON.stringify({ audience }),
       });
       const data = await response.json();
@@ -157,12 +149,8 @@ export default function MarketingCampaign() {
 
       const method = selectedCampaign ? 'PATCH' : 'POST';
 
-      const response = await fetch(url, {
+      const response = await authedFetch(url, {
         method,
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
         body: JSON.stringify(campaignForm),
       });
 
@@ -194,12 +182,8 @@ export default function MarketingCampaign() {
 
       const method = selectedTemplate ? 'PATCH' : 'POST';
 
-      const response = await fetch(url, {
+      const response = await authedFetch(url, {
         method,
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
         body: JSON.stringify(templateForm),
       });
 
@@ -219,13 +203,11 @@ export default function MarketingCampaign() {
   };
 
   const handleDeleteCampaign = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this campaign?')) return;
+    const ok = await confirm('Are you sure you want to delete this campaign?');
+    if (!ok) return;
 
     try {
-      const response = await fetch(`${API_BASE_URL}/api/marketing/campaigns/${id}`, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const response = await authedFetch(`${API_BASE_URL}/api/marketing/campaigns/${id}`, { method: 'DELETE' });
 
       if (!response.ok) throw new Error('Failed to delete campaign');
 
@@ -239,13 +221,11 @@ export default function MarketingCampaign() {
   };
 
   const handleDeleteTemplate = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this template?')) return;
+    const ok = await confirm('Are you sure you want to delete this template?');
+    if (!ok) return;
 
     try {
-      const response = await fetch(`${API_BASE_URL}/api/marketing/templates/${id}`, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const response = await authedFetch(`${API_BASE_URL}/api/marketing/templates/${id}`, { method: 'DELETE' });
 
       if (!response.ok) throw new Error('Failed to delete template');
 
@@ -259,13 +239,11 @@ export default function MarketingCampaign() {
   };
 
   const handleLaunchCampaign = async (id: string) => {
-    if (!confirm('Launch this campaign now?')) return;
+    const ok = await confirm('Launch this campaign now?');
+    if (!ok) return;
 
     try {
-      const response = await fetch(`${API_BASE_URL}/api/marketing/campaigns/${id}/launch`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const response = await authedFetch(`${API_BASE_URL}/api/marketing/campaigns/${id}/launch`, { method: 'POST' });
 
       const data = await response.json();
 

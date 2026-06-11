@@ -42,12 +42,13 @@ interface SystemHealth {
 const FUNNEL_STAGES = [
     { key: 'NEW', label: 'New', color: 'var(--text-secondary)' },
     { key: 'QUALIFIED', label: 'Qualified', color: 'var(--text-link)' },
-    { key: 'MATCHED', label: 'Matched', color: '#a78bfa' },
+    { key: 'MATCHING_APPOINTMENT', label: 'Matching Appt.', color: '#ec4899' },
     { key: 'VISIT_SCHEDULED', label: 'Visit Scheduled', color: '#fbbf24' },
     { key: 'VISITED', label: 'Visited', color: '#f97316' },
     { key: 'NEGOTIATION', label: 'Negotiation', color: '#fb923c' },
     { key: 'CLOSED_WON', label: 'Closed Won', color: '#22c55e' },
     { key: 'CLOSED_LOST', label: 'Closed Lost', color: '#ef4444' },
+    { key: 'ON_HOLD', label: 'On Hold', color: '#6b7280' },
 ];
 
 const SENTIMENT_COLORS: Record<string, string> = {

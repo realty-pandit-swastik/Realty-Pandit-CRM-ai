@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { getInventory, updateInventory } from '../api/client';
 import { useAuth } from '../contexts/AuthContext';
+import { useToast } from '../contexts/ToastContext';
 
 interface Unit {
   id: string;
@@ -21,6 +22,7 @@ const STATUS_COLORS = {
 
 export const PropertyLiveStatus: React.FC = () => {
   const { hasPermission } = useAuth();
+  const { showToast } = useToast();
   const [properties, setProperties] = useState<Unit[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedUnit, setSelectedUnit] = useState<Unit | null>(null);
@@ -52,7 +54,7 @@ export const PropertyLiveStatus: React.FC = () => {
       setSelectedUnit(null);
     } catch (error) {
       console.error('Error updating status:', error);
-      alert('Failed to update status');
+      showToast('Failed to update status', 'error');
     }
   };
 

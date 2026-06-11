@@ -1,20 +1,9 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { loadGoogleMaps } from '../../lib/loadGoogleMaps';
 
-const MAPS_KEY = import.meta.env.VITE_GOOGLE_MAPS_KEY as string | undefined;
+const MAPS_KEY = (import.meta as any).env?.VITE_GOOGLE_MAPS_API_KEY as string | undefined;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-
-export interface PropertyTypeDef { id: string; name: string; slug: string; }
-export interface SubCategory { id: string; name: string; slug: string; types: PropertyTypeDef[]; }
-export interface Category { id: string; name: string; slug: string; subcategories: SubCategory[]; }
-
-export interface CategorySelection {
-    categoryId: string;
-    subCategoryId: string;
-    typeId: string;
-    bhk: number[];
-}
 
 export interface LocationSelection {
     label: string;
@@ -63,8 +52,7 @@ export function FilterSection({
     );
 }
 
-// ─── FilterCategorySection ────────────────────────────────────────────────────
-// Cascading: Category → SubCategory → Type, plus BHK for Residential
+// ─── Shared chip styles (used by all filter sections) ────────────────────────
 
 const CHIP_STYLE_ACTIVE: React.CSSProperties = {
     padding: '6px 12px', borderRadius: '20px', fontSize: '12px', fontWeight: 600,
@@ -77,99 +65,122 @@ const CHIP_STYLE_INACTIVE: React.CSSProperties = {
     backgroundColor: 'var(--bg-primary)', color: 'var(--text-secondary)',
 };
 
-export function FilterCategorySection({
+// ─── FilterTaxonomySection (new TaxonomyNode tree) ────────────────────────────
+// Drives filters from GET /public/taxonomy/tree (the same tree the add/edit forms use), instead of
+// the legacy /public/classification-tree. Generic drill (any depth) + multi-select at leaf TYPE
+// nodes; emits the selected node ids (the backend expands each to its descendants).
+
+export interface TaxNode { id: string; name: string; children?: TaxNode[]; }
+export interface TaxonomySelection { nodeIds: string[]; bhk: number[]; }
+
+// Walk the tree to find a node by id, returning the ancestor chain (root → node) or null.
+// Used to rebuild the drill path from an already-applied selection (e.g. after the sheet
+// is closed & reopened, which remounts this section with empty local state).
+function findChain(nodes: TaxNode[], id: string, trail: TaxNode[] = []): TaxNode[] | null {
+    for (const n of nodes) {
+        const next = [...trail, n];
+        if (n.id === id) return next;
+        if (n.children?.length) {
+            const found = findChain(n.children, id, next);
+            if (found) return found;
+        }
+    }
+    return null;
+}
+
+export function FilterTaxonomySection({
     tree,
     value,
     onChange,
 }: {
-    tree: Category[];
-    value: CategorySelection;
-    onChange: (v: CategorySelection) => void;
+    tree: TaxNode[];
+    value: TaxonomySelection;
+    onChange: (v: TaxonomySelection) => void;
 }) {
-    const selectedCategory = tree.find(c => c.id === value.categoryId);
-    const selectedSubCategory = selectedCategory?.subcategories.find(s => s.id === value.subCategoryId);
-    const isResidential = selectedCategory?.slug === 'residential';
+    const [path, setPath] = useState<TaxNode[]>([]);   // drilled branch nodes
+    const [leafIds, setLeafIds] = useState<string[]>([]); // multi-selected leaf TYPE nodes
 
-    const setCategory = (id: string) => {
-        if (value.categoryId === id) {
-            onChange({ categoryId: '', subCategoryId: '', typeId: '', bhk: [] });
-        } else {
-            onChange({ categoryId: id, subCategoryId: '', typeId: '', bhk: [] });
+    // Reset internal drill when the parent clears the filter (e.g. "Clear all").
+    useEffect(() => {
+        if (value.nodeIds.length === 0 && value.bhk.length === 0 && (path.length || leafIds.length)) {
+            setPath([]); setLeafIds([]);
         }
-    };
+    }, [value.nodeIds.length, value.bhk.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
-    const setSubCategory = (id: string) => {
-        if (value.subCategoryId === id) {
-            onChange({ ...value, subCategoryId: '', typeId: '' });
+    // Self-heal: if there's an applied selection but no local drill (fresh mount — e.g. the
+    // sheet was closed & reopened), rebuild the drill path + leaf picks from value.nodeIds so
+    // the UI reflects the active filter. Guarded to never override an in-progress user drill.
+    useEffect(() => {
+        if (value.nodeIds.length === 0 || path.length || leafIds.length || tree.length === 0) return;
+        const chain = findChain(tree, value.nodeIds[0]);
+        if (!chain || chain.length === 0) return;
+        const last = chain[chain.length - 1];
+        if (!last.children || last.children.length === 0) {
+            setPath(chain.slice(0, -1)); setLeafIds(value.nodeIds);  // leaf(s) → drill to parent, select leaves
         } else {
-            onChange({ ...value, subCategoryId: id, typeId: '' });
+            setPath(chain); setLeafIds([]);                          // branch → drill into it, show its children
         }
-    };
+    }, [tree.length, value.nodeIds.join(',')]); // eslint-disable-line react-hooks/exhaustive-deps
 
-    const setType = (id: string) => {
-        onChange({ ...value, typeId: value.typeId === id ? '' : id });
+    const isLeaf = (n: TaxNode) => !n.children || n.children.length === 0;
+    const effective = (leaves: string[], p: TaxNode[]) =>
+        leaves.length ? leaves : (p.length ? [p[p.length - 1].id] : []);
+
+    // Visible levels: roots, then children of each drilled node.
+    const levels: TaxNode[][] = [];
+    let opts: TaxNode[] = tree;
+    for (let i = 0; i <= path.length; i++) {
+        if (!opts || opts.length === 0) break;
+        levels.push(opts);
+        opts = path[i]?.children || [];
+    }
+    const isResidential = (path[0]?.name || '').toLowerCase().includes('resident');
+
+    const clickNode = (node: TaxNode, level: number) => {
+        if (isLeaf(node)) {
+            const next = leafIds.includes(node.id) ? leafIds.filter(x => x !== node.id) : [...leafIds, node.id];
+            setLeafIds(next);
+            onChange({ nodeIds: effective(next, path), bhk: value.bhk });
+        } else {
+            // Toggle the drill at this level; changing branch clears leaf picks. A drilled branch with
+            // no leaf selected filters the whole branch (backend expands to descendants).
+            const np = path.slice(0, level);
+            if (path[level]?.id !== node.id) np.push(node);
+            setPath(np); setLeafIds([]);
+            onChange({ nodeIds: effective([], np), bhk: value.bhk });
+        }
     };
 
     const toggleBhk = (n: number) => {
         const next = value.bhk.includes(n) ? value.bhk.filter(x => x !== n) : [...value.bhk, n];
-        onChange({ ...value, bhk: next });
+        onChange({ nodeIds: value.nodeIds, bhk: next });
     };
 
     return (
-        <FilterSection title="Property Category" defaultOpen={false} badge={
-            (value.categoryId ? 1 : 0) + (value.subCategoryId ? 1 : 0) + (value.typeId ? 1 : 0) + (value.bhk.length > 0 ? 1 : 0)
-        }>
-            {/* Level 1: Main category */}
-            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '10px' }}>
-                {tree.map(cat => (
-                    <button key={cat.id} type="button"
-                        onClick={() => setCategory(cat.id)}
-                        style={value.categoryId === cat.id ? CHIP_STYLE_ACTIVE : CHIP_STYLE_INACTIVE}>
-                        {cat.name}
-                    </button>
-                ))}
-            </div>
-
-            {/* Level 2: Sub-categories */}
-            {selectedCategory && selectedCategory.subcategories.length > 0 && (
-                <div style={{ marginLeft: '8px', borderLeft: '2px solid var(--border-secondary)', paddingLeft: '12px', marginBottom: '10px' }}>
-                    <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600, marginBottom: '6px', textTransform: 'uppercase' }}>Sub-category</div>
-                    <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                        {selectedCategory.subcategories.map(sub => (
-                            <button key={sub.id} type="button"
-                                onClick={() => setSubCategory(sub.id)}
-                                style={value.subCategoryId === sub.id ? CHIP_STYLE_ACTIVE : CHIP_STYLE_INACTIVE}>
-                                {sub.name}
-                            </button>
-                        ))}
+        <FilterSection title="Property Type" defaultOpen={false}
+            badge={(value.nodeIds.length ? 1 : 0) + (value.bhk.length ? 1 : 0)}>
+            {levels.map((lvl, i) => (
+                <div key={i} style={{ marginLeft: i ? 8 : 0, borderLeft: i ? '2px solid var(--border-secondary)' : 'none', paddingLeft: i ? 12 : 0, marginBottom: 10 }}>
+                    {i > 0 && <div style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 600, marginBottom: 6, textTransform: 'uppercase' }}>Refine</div>}
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                        {lvl.map(n => {
+                            const active = isLeaf(n) ? leafIds.includes(n.id) : path[i]?.id === n.id;
+                            return (
+                                <button key={n.id} type="button" onClick={() => clickNode(n, i)}
+                                    style={active ? CHIP_STYLE_ACTIVE : CHIP_STYLE_INACTIVE}>
+                                    {n.name}{isLeaf(n) ? '' : ' ›'}
+                                </button>
+                            );
+                        })}
                     </div>
                 </div>
-            )}
-
-            {/* Level 3: Types */}
-            {selectedSubCategory && selectedSubCategory.types.length > 0 && (
-                <div style={{ marginLeft: '20px', borderLeft: '2px solid var(--border-secondary)', paddingLeft: '12px', marginBottom: '10px' }}>
-                    <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600, marginBottom: '6px', textTransform: 'uppercase' }}>Type</div>
-                    <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                        {selectedSubCategory.types.map(t => (
-                            <button key={t.id} type="button"
-                                onClick={() => setType(t.id)}
-                                style={value.typeId === t.id ? CHIP_STYLE_ACTIVE : CHIP_STYLE_INACTIVE}>
-                                {t.name}
-                            </button>
-                        ))}
-                    </div>
-                </div>
-            )}
-
-            {/* BHK — only for Residential */}
+            ))}
             {isResidential && (
-                <div style={{ marginLeft: '8px', marginTop: '6px' }}>
-                    <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600, marginBottom: '6px', textTransform: 'uppercase' }}>BHK</div>
-                    <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                <div style={{ marginTop: 6 }}>
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 600, marginBottom: 6, textTransform: 'uppercase' }}>BHK</div>
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                         {[1, 2, 3, 4, 5].map(n => (
-                            <button key={n} type="button"
-                                onClick={() => toggleBhk(n)}
+                            <button key={n} type="button" onClick={() => toggleBhk(n)}
                                 style={value.bhk.includes(n) ? CHIP_STYLE_ACTIVE : CHIP_STYLE_INACTIVE}>
                                 {n === 5 ? '5+ BHK' : `${n} BHK`}
                             </button>
@@ -252,6 +263,8 @@ export function FilterLocationSection({
                     ref={inputRef}
                     defaultValue={value.label}
                     placeholder="Search area, locality, city..."
+                    autoComplete="off"
+                    name="rp-filter-location"
                     style={{
                         width: '100%', padding: '9px 36px 9px 12px', borderRadius: '10px',
                         border: '1px solid var(--border-secondary)', backgroundColor: 'var(--bg-primary)',
@@ -283,6 +296,42 @@ export function FilterLocationSection({
                     </div>
                 </div>
             )}
+        </FilterSection>
+    );
+}
+
+// ─── FilterFloorSection ───────────────────────────────────────────────────────
+// Filter by the unit's floor_number. Multi-select chips; emits string tokens
+// ('0'=Ground … '4', plus '5plus' meaning floor >= 5). Backend maps tokens → floor_number IN / >=5.
+
+const FLOOR_OPTIONS = [
+    { label: 'Ground', value: '0' },
+    { label: '1st', value: '1' },
+    { label: '2nd', value: '2' },
+    { label: '3rd', value: '3' },
+    { label: '4th', value: '4' },
+    { label: '5+', value: '5plus' },
+];
+
+export function FilterFloorSection({
+    value,
+    onChange,
+}: {
+    value: string[];
+    onChange: (v: string[]) => void;
+}) {
+    const toggle = (v: string) =>
+        onChange(value.includes(v) ? value.filter(x => x !== v) : [...value, v]);
+    return (
+        <FilterSection title="Floor" defaultOpen={false} badge={value.length ? 1 : 0}>
+            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                {FLOOR_OPTIONS.map(opt => (
+                    <button key={opt.value} type="button" onClick={() => toggle(opt.value)}
+                        style={value.includes(opt.value) ? CHIP_STYLE_ACTIVE : CHIP_STYLE_INACTIVE}>
+                        {opt.label}
+                    </button>
+                ))}
+            </div>
         </FilterSection>
     );
 }

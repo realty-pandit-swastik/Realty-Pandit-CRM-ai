@@ -1,0 +1,39 @@
+{
+  "ci": {
+    "collect": {
+      "startServerCommand": "npm run preview -- --port 4173",
+      "startServerReadyPattern": "Local.*4173|localhost:4173",
+      "startServerReadyTimeout": 60000,
+      "url": [
+        "http://localhost:4173"
+      ],
+      "numberOfRuns": 1,
+      "settings": {
+        "throttlingMethod": "simulate",
+        "skipAudits": ["uses-http2"],
+        "chromeFlags": "--no-sandbox --disable-dev-shm-usage --disable-gpu"
+      }
+    },
+    "assert": {
+      "assertions": {
+        "categories:performance":    ["warn",  { "minScore": 0.85 }],
+        "categories:accessibility":  ["warn",  { "minScore": 0.85 }],
+        "categories:best-practices": ["warn",  { "minScore": 0.90 }],
+        "categories:seo":            ["warn",  { "minScore": 0.80 }],
+        "categories:pwa":            ["warn",  { "minScore": 0.80 }],
+        "first-contentful-paint":    ["warn",  { "maxNumericValue": 3000 }],
+        "largest-contentful-paint":  ["warn",  { "maxNumericValue": 4000 }],
+        "cumulative-layout-shift":   ["warn",  { "maxNumericValue": 0.1  }],
+        "total-blocking-time":       ["warn",  { "maxNumericValue": 600  }],
+        "installable-manifest":      ["warn",  { "minScore": 1 }],
+        "service-worker":            ["warn",  { "minScore": 1 }],
+        "color-contrast":            ["warn",  { "minScore": 1 }],
+        "image-alt":                 ["error", { "minScore": 1 }],
+        "is-on-https":               ["warn",  { "minScore": 1 }]
+      }
+    },
+    "upload": {
+      "target": "temporary-public-storage"
+    }
+  }
+}

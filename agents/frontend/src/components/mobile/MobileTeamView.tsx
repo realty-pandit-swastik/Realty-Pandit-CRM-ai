@@ -2,6 +2,8 @@
 import { useEffect, useState } from 'react';
 import { getTeamMembers, setMemberPassword, resendSetupLink } from '../../api/client';
 import { useAuth } from '../../contexts/AuthContext';
+import { useToast } from '../../contexts/ToastContext';
+import { useConfirm } from '../../contexts/ConfirmContext';
 
 const CARD_RADIUS = '12px';
 
@@ -13,6 +15,8 @@ const ROLE_COLORS: Record<string, { bg: string; color: string }> = {
 
 export function MobileTeamView() {
     const { hasPermission, agent } = useAuth();
+    const { showToast } = useToast();
+    const confirm = useConfirm();
     const [members, setMembers] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [actionMember, setActionMember] = useState<any>(null);
@@ -38,17 +42,18 @@ export function MobileTeamView() {
             await setMemberPassword(actionMember.id, newPassword);
             setPasswordResult(newPassword);
         } catch (err: any) {
-            alert(err.response?.data?.error || 'Failed');
+            showToast(err.response?.data?.error || 'Failed', 'error');
         }
     };
 
     const handleResendSetup = async (member: any) => {
-        if (!confirm(`Resend setup link to ${member.name}?`)) return;
+        const ok = await confirm(`Resend setup link to ${member.name}?`);
+        if (!ok) return;
         try {
             await resendSetupLink(member.id);
-            alert('Setup link sent!');
+            showToast('Setup link sent!', 'success');
         } catch (err: any) {
-            alert(err.response?.data?.error || 'Failed');
+            showToast(err.response?.data?.error || 'Failed', 'error');
         }
     };
 
@@ -161,7 +166,7 @@ export function MobileTeamView() {
                                     </div>
                                     <div style={{ color: '#6ee7b7', fontSize: '11px', marginTop: '6px' }}>Save this — won't be shown again</div>
                                 </div>
-                                <button onClick={() => { navigator.clipboard.writeText(passwordResult); alert('Copied!'); }}
+                                <button onClick={() => { navigator.clipboard.writeText(passwordResult); showToast('Copied!', 'success'); }}
                                     style={{ width: '100%', padding: '12px', borderRadius: '8px', border: 'none', backgroundColor: '#4F46E5', color: '#fff', cursor: 'pointer', fontSize: '14px', fontWeight: 600, marginBottom: '8px' }}>
                                     Copy Password
                                 </button>

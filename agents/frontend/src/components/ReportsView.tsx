@@ -6,6 +6,7 @@
 import { useState, useEffect } from 'react';
 import * as api from '../api/client';
 import { exportToCSV, exportToExcel, exportToPDF, exportSummaryToCSV, exportSummaryToExcel } from '../utils/exportHelpers';
+import { useToast } from '../contexts/ToastContext';
 
 // Report Definitions
 interface ReportDefinition {
@@ -99,6 +100,7 @@ const REPORT_CATEGORIES = [
 ];
 
 export function ReportsView() {
+  const { showToast } = useToast();
   const [selectedCategory, setSelectedCategory] = useState('account');
   const [selectedReport, setSelectedReport] = useState('customer-outstanding');
   const [reportData, setReportData] = useState<any>(null);
@@ -243,7 +245,7 @@ export function ReportsView() {
   // Export handlers
   const handleExport = (format: 'csv' | 'pdf' | 'excel') => {
     if (!reportData) {
-      alert('No data to export');
+      showToast('No data to export', 'info');
       return;
     }
 
@@ -258,44 +260,48 @@ export function ReportsView() {
       type: typeFilter,
     };
 
-    // For reports with data arrays
-    if (reportData.data && Array.isArray(reportData.data)) {
-      switch (format) {
-        case 'csv':
-          exportToCSV(reportData.data, filename);
-          break;
-        case 'excel':
-          exportToExcel(reportData.data, filename);
-          break;
-        case 'pdf':
-          exportToPDF(reportData.data, filename, reportTitle, filters);
-          break;
-      }
-    } else {
-      // For summary reports
-      // Convert summary to flat array for export
-      const flatSummary: Record<string, any>[] = [];
-      Object.entries(reportData).forEach(([key, value]: [string, any]) => {
-        if (Array.isArray(value)) {
-          value.forEach((item: any) => flatSummary.push({ category: key, ...item }));
+    try {
+      // For reports with data arrays
+      if (reportData.data && Array.isArray(reportData.data)) {
+        switch (format) {
+          case 'csv':
+            exportToCSV(reportData.data, filename);
+            break;
+          case 'excel':
+            exportToExcel(reportData.data, filename);
+            break;
+          case 'pdf':
+            exportToPDF(reportData.data, filename, reportTitle, filters);
+            break;
         }
-      });
-
-      switch (format) {
-        case 'csv':
-          exportSummaryToCSV(reportData, filename);
-          break;
-        case 'excel':
-          exportSummaryToExcel(reportData, filename);
-          break;
-        case 'pdf':
-          if (flatSummary.length > 0) {
-            exportToPDF(flatSummary, filename, reportTitle, filters);
-          } else {
-            alert('No data available for PDF export');
+      } else {
+        // For summary reports
+        // Convert summary to flat array for export
+        const flatSummary: Record<string, any>[] = [];
+        Object.entries(reportData).forEach(([key, value]: [string, any]) => {
+          if (Array.isArray(value)) {
+            value.forEach((item: any) => flatSummary.push({ category: key, ...item }));
           }
-          break;
+        });
+
+        switch (format) {
+          case 'csv':
+            exportSummaryToCSV(reportData, filename);
+            break;
+          case 'excel':
+            exportSummaryToExcel(reportData, filename);
+            break;
+          case 'pdf':
+            if (flatSummary.length > 0) {
+              exportToPDF(flatSummary, filename, reportTitle, filters);
+            } else {
+              showToast('No data available for PDF export', 'info');
+            }
+            break;
+        }
       }
+    } catch (err: any) {
+      showToast(err.message || 'Export failed', 'error');
     }
   };
 

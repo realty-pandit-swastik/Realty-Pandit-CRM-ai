@@ -1,22 +1,30 @@
 
 import React, { useEffect, useRef, useState } from 'react';
-import axios from 'axios';
-import { getInventory, getInventoryItem, updateInventory, deleteInventory, approveInventory, rejectInventory, getCategoryTree, getStates, getTeamMembers, getTeamMembersList, uploadInventoryImages, deleteInventoryMedia, transferInventory, uploadInventoryDocument, deleteInventoryDocument } from '../api/client';
+
+import { getInventory, getInventoryItem, updateInventory, deleteInventory, approveInventory, rejectInventory, getCategoryTree, getStates, getTeamMembers, getTeamMembersList, uploadInventoryImages, deleteInventoryMedia, transferInventory, uploadInventoryDocument, deleteInventoryDocument, getNodeFields } from '../api/client';
 import client from '../api/client';
 import { useAuth } from '../contexts/AuthContext';
+import { useToast } from '../contexts/ToastContext';
+import { useConfirm } from '../contexts/ConfirmContext';
 import { InventoryModal } from './InventoryModal';
+import ParkingListField from './ParkingListField';
+import TaxonomyCascade from './TaxonomyCascade';
+import AddressFields, { inferAddressLayout } from './AddressFields';
+import { toDialablePhone } from '../lib/phone';
 import { GooglePlacesInput } from './GooglePlacesInput';
 import ShareToClientModal from './ShareToClientModal';
+import SharePropertyOptions from './SharePropertyOptions';
 import BookVisitModal from './BookVisitModal';
 import { ContactSearchField, type SelectedContact } from './ContactSearchField';
 import type { PlaceResult } from './GooglePlacesInput';
 import {
     FilterSection,
-    FilterCategorySection,
+    FilterTaxonomySection,
     FilterLocationSection,
+    FilterFloorSection,
     StalenessSection,
 } from './filters/FilterSheetShared';
-import type { CategorySelection, LocationSelection } from './filters/FilterSheetShared';
+import type { TaxonomySelection, LocationSelection } from './filters/FilterSheetShared';
 
 function formatPrice(price: number | null, intent: string): string {
     if (!price || price === 0) return 'Price on request';
@@ -105,8 +113,14 @@ function EditContactSection({ label, color, currentPhone, currentName, onContact
 
 export const InventoryList: React.FC = () => {
     const { hasPermission } = useAuth();
+    const { showToast } = useToast();
+    const confirm = useConfirm();
     const [inventory, setInventory] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
+    // Only the very first load takes over the whole page with a spinner. Subsequent
+    // filter/search/page refetches keep the page (and the filter sheet) mounted so the
+    // accordion open-state + Property Type drill aren't reset on every refetch.
+    const [initialLoad, setInitialLoad] = useState(true);
     const [totalCount, setTotalCount] = useState(0);
     const [currentPage, setCurrentPage] = useState(1);
     const [totalPages, setTotalPages] = useState(1);
@@ -119,15 +133,16 @@ export const InventoryList: React.FC = () => {
     const [filterStatus, setFilterStatus] = useState('');
     const [filterAgent, setFilterAgent] = useState('');
     const [searchQuery, setSearchQuery] = useState('');
-    const [filterBhk, setFilterBhk] = useState<number[]>([]);
     const [filterLocation, setFilterLocation] = useState('');
     const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     // ── Filter sheet state (v2 redesign) ──
     const [showFilterSheet, setShowFilterSheet] = useState(false);
-    const [filterCategorySelection, setFilterCategorySelection] = useState<CategorySelection>({
-        categoryId: '', subCategoryId: '', typeId: '', bhk: [],
-    });
+    const [filterCounts, setFilterCounts] = useState<any>(null);
+
+    // Detect desktop vs mobile for filter panel style
+    const isDesktop = typeof window !== 'undefined' && window.innerWidth >= 768;
+    const [filterTaxonomy, setFilterTaxonomy] = useState<TaxonomySelection>({ nodeIds: [], bhk: [] });
     const [filterLocationSelection, setFilterLocationSelection] = useState<LocationSelection>({
         label: '', lat: null, lng: null, radiusKm: 2,
     });
@@ -135,7 +150,25 @@ export const InventoryList: React.FC = () => {
     const [filterDataSource, setFilterDataSource] = useState('');
     const [filterDaysInSystem, setFilterDaysInSystem] = useState(0);
     const [filterDaysNoVisit, setFilterDaysNoVisit] = useState(0);
-    const [filterClassificationTree, setFilterClassificationTree] = useState<any[]>([]);
+    const [filterFloors, setFilterFloors] = useState<string[]>([]); // floor_number tokens ('0'..'4','5plus')
+    const [taxonomyTree, setTaxonomyTree] = useState<any[]>([]);
+
+    // Fetch filter counts when filter panel opens
+    useEffect(() => {
+        if (!showFilterSheet) return;
+        client.get('/api/inventory/filter-counts').then(res => {
+            setFilterCounts(res.data);
+        }).catch(() => {});
+    }, [showFilterSheet]);
+
+    // Helper to get count for a filter value
+    const getCount = (field: string, value: string | number): string => {
+        if (!filterCounts) return '';
+        const arr = filterCounts[field];
+        if (!Array.isArray(arr)) return '';
+        const match = arr.find((c: any) => String(c.value) === String(value));
+        return match ? ` (${match.count})` : '';
+    };
 
     // Dropdown data for filters
     const [statesList, setStatesList] = useState<string[]>([]);
@@ -154,6 +187,11 @@ export const InventoryList: React.FC = () => {
 
     // Edit state
     const [editingId, setEditingId] = useState<string | null>(null);
+    // Original (unmodified) row, captured at handleEdit time. handleSaveEdit reads
+    // editingItem.specs to merge unknown taxonomy keys forward — never delete on save
+    // (Phase 1 dedup, 2026-05-28). editData holds the form values which is a flat
+    // projection of the row + can't preserve unknown specs keys on its own.
+    const [editingItem, setEditingItem] = useState<any>(null);
     const [editData, setEditData] = useState<Record<string, any>>({});
     const [saving, setSaving] = useState(false);
 
@@ -163,11 +201,17 @@ export const InventoryList: React.FC = () => {
 
     // Share to Client & Book Visit modals
     const [shareItem, setShareItem] = useState<any>(null);
+    // 2026-05-13: SharePropertyOptions is the 3-option chooser shown BEFORE the
+    // existing WhatsApp share modal. Clicking 💬 inside it falls through to setShareItem.
+    const [shareOptionsItem, setShareOptionsItem] = useState<any>(null);
     const [bookVisitItem, setBookVisitItem] = useState<any>(null);
 
     // Edit modal tab state
     const [editTab, setEditTab] = useState('media');
     const [editLoading, setEditLoading] = useState(false);
+    // Taxonomy-driven Property Details (shows the new clean field schema for the inventory's type)
+    const [editNodeFields, setEditNodeFields] = useState<Array<{ key: string; label: string; input_type: string; required: boolean; options: string[] | null; unit: string | null }>>([]);
+    const [editSchemaValues, setEditSchemaValues] = useState<Record<string, any>>({});
 
     // Media edit state (live media_urls/video_urls for the item being edited)
     const [editMediaUrls, setEditMediaUrls] = useState<string[]>([]);
@@ -210,7 +254,7 @@ export const InventoryList: React.FC = () => {
 
     useEffect(() => {
         loadInventory();
-    }, [currentPage, filterIntent, filterState, filterType, filterStatus, filterAgent, filterBhk, filterLocation, filterCategorySelection, filterLocationSelection, filterListingSource, filterDataSource, filterDaysInSystem, filterDaysNoVisit]);
+    }, [currentPage, filterIntent, filterState, filterType, filterStatus, filterAgent, filterLocation, filterTaxonomy, filterLocationSelection, filterListingSource, filterDataSource, filterDaysInSystem, filterDaysNoVisit, filterFloors]);
 
     // Close call dropdown on outside click
     useEffect(() => {
@@ -247,8 +291,8 @@ export const InventoryList: React.FC = () => {
     }, []);
 
     useEffect(() => {
-        client.get('/public/classification-tree')
-            .then((r: any) => setFilterClassificationTree(r.data.categories || []))
+        client.get('/public/taxonomy/tree')
+            .then((r: any) => setTaxonomyTree(r.data.tree || []))
             .catch(() => {});
     }, []);
 
@@ -272,16 +316,16 @@ export const InventoryList: React.FC = () => {
             if (filterStatus) params.status = filterStatus;
             if (filterAgent) params.agent_id = filterAgent;
             if (searchQuery.trim()) params.search = searchQuery.trim();
-            if (filterBhk.length > 0) params.bhk = filterBhk.join(',');
+            if (filterTaxonomy.bhk.length > 0) params.bhk = filterTaxonomy.bhk.join(',');
             if (filterLocation.trim()) params.location = filterLocation.trim();
-            if (filterCategorySelection.categoryId) params.category_id = filterCategorySelection.categoryId;
-            if (filterCategorySelection.subCategoryId) params.sub_category_id = filterCategorySelection.subCategoryId;
+            if (filterTaxonomy.nodeIds.length > 0) params.taxonomy_node_ids = filterTaxonomy.nodeIds.join(',');
             if (filterListingSource) params.listing_source = filterListingSource;
             if (filterDataSource) params.data_source = filterDataSource;
             if (filterLocationSelection.lat !== null) params.lat = String(filterLocationSelection.lat);
             if (filterLocationSelection.lng !== null) params.lng = String(filterLocationSelection.lng);
             if (filterLocationSelection.lat !== null && filterLocationSelection.radiusKm > 0) params.radius_km = String(filterLocationSelection.radiusKm);
             if (filterDaysInSystem > 0) params.days_in_system = String(filterDaysInSystem);
+            if (filterFloors.length > 0) params.floors = filterFloors.join(',');
             if (filterDaysNoVisit > 0) params.days_no_visit = String(filterDaysNoVisit);
 
             const res = await getInventory(params);
@@ -299,6 +343,7 @@ export const InventoryList: React.FC = () => {
             console.error(err);
         } finally {
             setLoading(false);
+            setInitialLoad(false);
         }
     };
 
@@ -309,9 +354,8 @@ export const InventoryList: React.FC = () => {
         batchSearchTimer.current = setTimeout(async () => {
             setBatchContactSearching(true);
             try {
-                const res = await axios.get(`${(import.meta as any).env.VITE_API_BASE_URL}/api/leads/search`, {
+                const res = await client.get('/api/leads/search', {
                     params: { q: batchContactSearch.trim() },
-                    headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
                 });
                 setBatchContactResults(res.data || []);
             } catch { setBatchContactResults([]); }
@@ -328,15 +372,19 @@ export const InventoryList: React.FC = () => {
             const inv = inventory.find(i => i.id === invId);
             const title = [inv?.apartment_name, inv?.locality || inv?.full_address].filter(Boolean).join(', ') || invId;
             try {
-                const res = await axios.post(
-                    `${(import.meta as any).env.VITE_API_BASE_URL}/api/inventory/${invId}/share-to-client`,
-                    { client_phone: batchShareContact.phone_number },
-                    { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } }
+                const res = await client.post(
+                    `/api/inventory/${invId}/share-to-client`,
+                    { client_phone: batchShareContact.phone_number }
                 );
-                if (res.data.already_shared) {
-                    results.push({ id: invId, title, status: 'already_shared', message: `Already shared on ${new Date(res.data.shared_at).toLocaleDateString('en-IN')}` });
+                // Re-sending is allowed (never blocked). Judge by the REAL delivery outcome; when the
+                // property was shared to this client before, append an informational notice — but it IS sent.
+                if (res.data.whatsapp_sent === false) {
+                    results.push({ id: invId, title, status: 'error', message: 'Not delivered — WhatsApp send failed (try again)' });
                 } else {
-                    results.push({ id: invId, title, status: 'sent', message: 'Sent via WhatsApp' });
+                    const note = res.data.already_shared && res.data.previously_shared_at
+                        ? ` (previously shared on ${new Date(res.data.previously_shared_at).toLocaleDateString('en-IN')} — re-sent)`
+                        : '';
+                    results.push({ id: invId, title, status: 'sent', message: `Sent via WhatsApp${note}` });
                 }
             } catch (err: any) {
                 results.push({ id: invId, title, status: 'error', message: err?.response?.data?.error || 'Failed to share' });
@@ -353,12 +401,12 @@ export const InventoryList: React.FC = () => {
         setFilterStatus('');
         setFilterAgent('');
         setSearchQuery('');
-        setFilterBhk([]);
+        setFilterTaxonomy({ nodeIds: [], bhk: [] });
         setFilterLocation('');
         setCurrentPage(1);
     };
 
-    const hasActiveFilters = filterIntent || filterState || filterType || filterStatus || filterAgent || searchQuery.trim() || filterBhk.length > 0 || filterLocation.trim();
+    const hasActiveFilters = filterIntent || filterState || filterType || filterStatus || filterAgent || searchQuery.trim() || filterTaxonomy.nodeIds.length > 0 || filterTaxonomy.bhk.length > 0 || filterLocation.trim();
 
     const activeInventoryFilterCount = [
         filterIntent,
@@ -366,25 +414,32 @@ export const InventoryList: React.FC = () => {
         filterAgent,
         filterListingSource,
         filterDataSource,
-        filterCategorySelection.categoryId,
-        filterCategorySelection.subCategoryId,
         filterLocationSelection.lat !== null ? '1' : '',
         filterDaysInSystem > 0 ? '1' : '',
         filterDaysNoVisit > 0 ? '1' : '',
-    ].filter(Boolean).length + (filterCategorySelection.bhk.length > 0 ? 1 : 0);
+        filterFloors.length > 0 ? '1' : '',
+    ].filter(Boolean).length + (filterTaxonomy.nodeIds.length > 0 ? 1 : 0) + (filterTaxonomy.bhk.length > 0 ? 1 : 0);
 
+    // Amenities aligned with the taxonomy `amenities` field (Phase 4, 2026-05-27). Stored in
+    // `features{}` (what matching + the website read); the taxonomy `amenities` field is excluded
+    // from the per-type render so amenities are captured here once. Keys kept snake_case so existing
+    // features data (gym/lift/security/…) still matches.
     const AMENITIES_LIST = [
-        { value: 'parking', label: 'Parking' }, { value: 'lift', label: 'Lift' },
-        { value: 'security', label: 'Security' }, { value: 'power_backup', label: 'Power Backup' },
-        { value: 'swimming_pool', label: 'Swimming Pool' }, { value: 'gym', label: 'Gym' },
-        { value: 'garden', label: 'Garden' }, { value: 'club_house', label: 'Club House' },
-        { value: 'wifi', label: 'WiFi' }, { value: 'air_conditioning', label: 'Air Conditioning' },
-        { value: 'balcony', label: 'Balcony' }, { value: 'cctv', label: 'CCTV' },
-        { value: 'visitor_parking', label: 'Visitor Parking' }, { value: 'water_supply', label: '24hr Water' },
-        { value: 'gas_pipeline', label: 'Gas Pipeline' }, { value: 'gated_community', label: 'Gated Community' },
-        { value: 'fire_safety', label: 'Fire Safety' }, { value: 'solar_panels', label: 'Solar Panels' },
-        { value: 'rainwater_harvesting', label: 'Rainwater Harvesting' }, { value: 'intercom', label: 'Intercom' },
+        { value: 'gym', label: 'Gym' }, { value: 'club_house', label: 'Club House' },
+        { value: 'power_backup', label: 'Power Backup' }, { value: 'lift', label: 'Lift' },
+        { value: 'intercom', label: 'Intercom' }, { value: 'guest_house', label: 'Guest House' },
+        { value: 'park', label: 'Park' }, { value: 'community_hall', label: 'Community Hall' },
+        { value: 'mini_theater', label: 'Mini Theater' }, { value: 'swimming_pool', label: 'Swimming Pool' },
+        { value: 'security', label: 'Security' }, { value: 'gas_pipeline', label: 'Gas Pipeline' },
     ];
+
+    // Phase 2 dedup (2026-05-28): the dynamic per-type "Property Details" panel is now
+    // the SOLE renderer for BHK / Rooms / Furnishing / Facing / Property Age / Floors /
+    // Ownership-Tenure / Amenities / Additional Rooms / Parking / etc. — they all live
+    // in specs.* keyed by FieldDefinition.key. Only the three universal inputs at the
+    // top of the Specs tab (Bathrooms, Area, Area Unit) are still excluded here, since
+    // they're always shown irrespective of property type.
+    const TAXONOMY_RENDER_EXCLUDE = ['area', 'area_unit', 'bathrooms'];
 
     const populateEditForm = (item: any) => {
         const specs = item.specs || {};
@@ -421,18 +476,21 @@ export const InventoryList: React.FC = () => {
             configuration_id: item.configuration_id || '',
             usage_type_id: item.usage_type_id || '',
             investment_type_id: item.investment_type_id || '',
+            taxonomy_node_id: item.taxonomy_node_id || '',
             // Legacy text fields (auto-derived)
             type: item.type || '',
             category: item.category || '',
-            // Property details
+            // Property details — specs.* is the SOLE SoT (Phase 3 dedup, 2026-05-28).
+            // Column fallbacks dropped: every row's data was backfilled + normalized in
+            // Phases 0 and 2.5; new writes since Phase 1 only touch specs.
             intent: item.intent || '',
             status: item.status || 'active',
-            furnishing: item.furnishing || '',
-            property_age: item.property_age || '',
-            facing: item.facing || '',
+            // Note: furnishing/property_age/facing are no longer in editData — the dynamic
+            // by-type renderer owns them via editSchemaValues. ownership_type stays as a
+            // column (business-logic enum, not duplicated by taxonomy 'ownership-tenure').
             ownership_type: item.ownership_type || '',
-            // Specs
-            bedrooms: specs.bedrooms ?? '',
+            // Specs top-row reads — room count from canonical taxonomy keys.
+            bedrooms: specs.bhk ?? specs.rooms ?? specs.bedrooms ?? specs.bhk_count ?? '',
             bathrooms: specs.bathrooms ?? '',
             area: specs.area ?? '',
             area_unit: specs.area_unit || 'sqft',
@@ -472,20 +530,40 @@ export const InventoryList: React.FC = () => {
             shared_with_ids: item.shared_with_ids || [],
             // Renovation
             renovated: item.renovated || false,
+            // Pre-rented (pre-lease)
+            pre_rented: item.pre_rented || false,
+            pre_rented_monthly_rent: item.pre_rented_monthly_rent != null ? String(item.pre_rented_monthly_rent) : '',
         });
     };
 
     const handleEdit = async (item: any) => {
         setEditingId(item.id);
+        setEditingItem(item);   // ← Phase 1 dedup: keep raw row for save-merge
         setEditTab('media');
         setEditLoading(true);
         setEditDocuments([]);
+        setEditNodeFields([]);
+        setEditSchemaValues({});
         populateEditForm(item); // populate immediately with list data
         try {
             const fullItem = await getInventoryItem(item.id);
             if (fullItem) {
+                setEditingItem(fullItem);   // ← refresh raw row with fresh full payload
                 populateEditForm(fullItem); // re-populate with full fresh data
                 setEditDocuments(fullItem.documents || []);
+                // Load the taxonomy field schema for this inventory's type + prefill from saved specs
+                if (fullItem.taxonomy_node_id) {
+                    try {
+                        const res = await getNodeFields(fullItem.taxonomy_node_id);
+                        // Exclude keys captured by dedicated legacy inputs (avoid double inputs)
+                        const flds = (res?.fields || []).filter((f: any) => !TAXONOMY_RENDER_EXCLUDE.includes(f.key));
+                        setEditNodeFields(flds);
+                        const specs = (fullItem.specs && typeof fullItem.specs === 'object') ? fullItem.specs : {};
+                        const init: Record<string, any> = {};
+                        for (const f of flds) if (specs[f.key] !== undefined) init[f.key] = specs[f.key];
+                        setEditSchemaValues(init);
+                    } catch { /* taxonomy fields optional — keep edit form usable */ }
+                }
             }
         } catch {
             // keep the list data already populated
@@ -494,25 +572,44 @@ export const InventoryList: React.FC = () => {
         }
     };
 
+    // Classification cascade picked a (new) taxonomy TYPE node: set it + reload the per-type
+    // field schema. Keeps any current schema values whose keys still exist for the new type.
+    const handleTaxonomyChange = async (nodeId: string | null) => {
+        setEditData((p: any) => ({ ...p, taxonomy_node_id: nodeId || '' }));
+        if (!nodeId) { setEditNodeFields([]); return; }
+        try {
+            const res = await getNodeFields(nodeId);
+            const flds = (res?.fields || []).filter((f: any) => !TAXONOMY_RENDER_EXCLUDE.includes(f.key));
+            setEditNodeFields(flds);
+            setEditSchemaValues((prev: any) => {
+                const next: Record<string, any> = {};
+                for (const f of flds) if (prev?.[f.key] !== undefined) next[f.key] = prev[f.key];
+                return next;
+            });
+        } catch { /* keep the form usable on fetch failure */ }
+    };
+
     const handleDeleteMedia = async (invId: string, url: string) => {
         const filename = url.split('/').pop() || '';
-        if (!confirm(`Delete this image?`)) return;
+        const ok = await confirm(`Delete this image?`);
+        if (!ok) return;
         try {
             await deleteInventoryMedia(invId, filename);
             setEditMediaUrls(prev => prev.filter(u => u !== url));
         } catch (err: any) {
-            alert(err.response?.data?.error || 'Failed to delete image');
+            showToast(err.response?.data?.error || 'Failed to delete image', 'error');
         }
     };
 
     const handleDeleteVideo = async (invId: string, url: string) => {
         const filename = url.split('/').pop() || '';
-        if (!confirm(`Delete this video?`)) return;
+        const ok = await confirm(`Delete this video?`);
+        if (!ok) return;
         try {
             await deleteInventoryMedia(invId, filename);
             setEditVideoUrls(prev => prev.filter(u => u !== url));
         } catch (err: any) {
-            alert(err.response?.data?.error || 'Failed to delete video');
+            showToast(err.response?.data?.error || 'Failed to delete video', 'error');
         }
     };
 
@@ -523,7 +620,7 @@ export const InventoryList: React.FC = () => {
             const result = await uploadInventoryImages(invId, Array.from(files));
             if (result.media_urls) setEditMediaUrls(result.media_urls);
         } catch (err: any) {
-            alert(err.response?.data?.error || 'Upload failed');
+            showToast(err.response?.data?.error || 'Upload failed', 'error');
         } finally {
             setMediaUploading(false);
             if (imageUploadRef.current) imageUploadRef.current.value = '';
@@ -537,7 +634,7 @@ export const InventoryList: React.FC = () => {
             const result = await uploadInventoryImages(invId, Array.from(files));
             if (result.video_urls) setEditVideoUrls(result.video_urls);
         } catch (err: any) {
-            alert(err.response?.data?.error || 'Upload failed');
+            showToast(err.response?.data?.error || 'Upload failed', 'error');
         } finally {
             setMediaUploading(false);
             if (videoUploadRef.current) videoUploadRef.current.value = '';
@@ -548,15 +645,36 @@ export const InventoryList: React.FC = () => {
         if (!editingId) return;
         setSaving(true);
         try {
-            // Build specs JSON from individual fields
-            const specs: Record<string, any> = {};
-            if (editData.bedrooms) specs.bedrooms = Number(editData.bedrooms);
-            if (editData.bathrooms) specs.bathrooms = Number(editData.bathrooms);
-            if (editData.area) specs.area = Number(editData.area);
+            // ── Specs merge (Phase 1 dedup, 2026-05-28) ───────────────────────────
+            // CRITICAL: start from the ORIGINAL row's specs so keys not rendered by
+            // any current input (e.g. taxonomy keys for a different node type, legacy
+            // fields, future fields) are PRESERVED, not silently deleted on save.
+            // Previous version started from {} and rebuilt — that destroyed data.
+            const orig = editingItem?.specs && typeof editingItem.specs === 'object' && !Array.isArray(editingItem.specs)
+                ? { ...(editingItem.specs as Record<string, any>) }
+                : {};
+            const specs: Record<string, any> = orig;
+            if (editData.bathrooms) specs.bathrooms = Number(editData.bathrooms); else delete specs.bathrooms;
+            if (editData.area) specs.area = Number(editData.area); else delete specs.area;
             if (editData.area_unit) specs.area_unit = editData.area_unit;
+            // Room count: write under whichever canonical key the taxonomy node uses
+            // (bhk for residential, rooms for commercial). Fall back to bhk if neither
+            // is present in editSchemaValues (since the taxonomy field would have set it).
+            // The dynamic by-type renderer (Phase 2) makes this even cleaner.
+            if (editData.bedrooms) {
+                if (specs.rooms !== undefined) specs.rooms = Number(editData.bedrooms);
+                else specs.bhk = String(editData.bedrooms);
+            }
+            // Layer taxonomy Property Details (clean per-type fields) on top
+            for (const [k, v] of Object.entries(editSchemaValues)) {
+                if (v !== undefined && v !== null && v !== '' && !(Array.isArray(v) && v.length === 0)) specs[k] = v;
+            }
 
-            // Build payload — exclude UI-only fields
-            const { bedrooms: _b, bathrooms: _ba, area: _a, area_unit: _au, ...rest } = editData;
+            // Build payload — exclude UI-only fields AND the deprecated scalar fields
+            // (furnishing/facing/property_age — Phase 2 dedup, 2026-05-28). Those now live
+            // in specs.* via editSchemaValues; sending them at the top-level too would let
+            // the backend's legacy-fold logic overwrite the canonical specs value.
+            const { bedrooms: _b, bathrooms: _ba, area: _a, area_unit: _au, furnishing: _f, facing: _fc, property_age: _pa, features: _ft, ...rest } = editData;
             const payload: Record<string, any> = { ...rest, specs };
 
             // Parse numeric coordinate fields
@@ -603,7 +721,7 @@ export const InventoryList: React.FC = () => {
                 setEditData({});
             }
         } catch (err: any) {
-            alert(err.response?.data?.error || 'Failed to update');
+            showToast(err.response?.data?.error || 'Failed to update', 'error');
         } finally {
             setSaving(false);
         }
@@ -617,7 +735,7 @@ export const InventoryList: React.FC = () => {
             setDeletingId(null);
             await loadInventory();
         } catch (err: any) {
-            alert(err.response?.data?.error || 'Failed to delete');
+            showToast(err.response?.data?.error || 'Failed to delete', 'error');
         } finally {
             setDeleting(false);
         }
@@ -638,12 +756,8 @@ export const InventoryList: React.FC = () => {
         formData.append('file', uploadFile);
 
         try {
-            const token = localStorage.getItem('token');
-            const res = await axios.post('/api/team/inventory/bulk-upload', formData, {
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                    'Content-Type': 'multipart/form-data',
-                }
+            const res = await client.post('/api/team/inventory/bulk-upload', formData, {
+                headers: { 'Content-Type': 'multipart/form-data' },
             });
             setUploadResult(res.data);
             // Reload inventory after successful upload
@@ -759,7 +873,9 @@ export const InventoryList: React.FC = () => {
 
     // InventoryModal is rendered at end of main return JSX (no longer a full-page takeover)
 
-    if (loading) return (
+    // Full-page takeover only for the very first load. Refetches (filter/search/page) keep
+    // the page + filter sheet mounted — the "Updating…" affordance shows on the list instead.
+    if (loading && initialLoad) return (
         <div style={{ ...s.page, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <span style={{ color: 'var(--text-muted)' }}>Loading inventory...</span>
         </div>
@@ -768,7 +884,12 @@ export const InventoryList: React.FC = () => {
     return (
         <div style={s.page}>
             <div style={s.header}>
-                <h2 style={s.h2}>Property Inventory ({totalCount})</h2>
+                <h2 style={s.h2}>
+                    Property Inventory ({totalCount})
+                    {loading && !initialLoad && (
+                        <span style={{ marginLeft: 10, fontSize: '12px', fontWeight: 500, color: 'var(--text-muted)' }}>Updating…</span>
+                    )}
+                </h2>
                 <div style={{ display: 'flex', gap: '10px' }}>
                     <button
                         onClick={() => { setSelectionMode(p => !p); setSelectedIds(new Set()); }}
@@ -794,11 +915,14 @@ export const InventoryList: React.FC = () => {
                 </div>
             </div>
 
-            {/* Filter Bar */}
-            <div style={{ backgroundColor: 'var(--bg-secondary)', borderRadius: '8px', padding: '12px 16px', marginBottom: '16px', display: 'flex', flexWrap: 'wrap', gap: '10px', alignItems: 'center', border: '1px solid var(--border-secondary)' }}>
+            {/* 2026-05-13: Inline filter chrome stripped (Intent / Category / Status /
+                State / Agent dropdowns, BHK chips, Location input). All same options
+                live inside the Filters sheet — single source of truth. Keep only
+                search bar + Filters button. */}
+            <div style={{ backgroundColor: 'var(--bg-secondary)', borderRadius: '8px', padding: '12px 16px', marginBottom: '16px', display: 'flex', gap: '10px', alignItems: 'center', border: '1px solid var(--border-secondary)' }}>
                 <input
-                    style={{ ...s.editInput, marginBottom: 0, flex: '1 1 200px', minWidth: '160px' }}
-                    placeholder="Search location, locality, apartment..."
+                    style={{ ...s.editInput, marginBottom: 0, flex: 1, minWidth: 0 }}
+                    placeholder="Search full address, locality, apartment, owner, phone..."
                     value={searchQuery}
                     onChange={e => setSearchQuery(e.target.value)}
                     onKeyDown={e => {
@@ -808,62 +932,6 @@ export const InventoryList: React.FC = () => {
                             loadInventory();
                         }
                     }}
-                />
-                <select style={{ ...s.editInput, marginBottom: 0, flex: '0 1 130px' }} value={filterIntent} onChange={e => { setFilterIntent(e.target.value); setCurrentPage(1); }}>
-                    <option value="">All Intent</option>
-                    <option value="sell">Sell</option>
-                    <option value="rent">Rent</option>
-                    <option value="lease">Lease</option>
-                </select>
-                <select style={{ ...s.editInput, marginBottom: 0, flex: '0 1 130px' }} value={filterType} onChange={e => { setFilterType(e.target.value); setCurrentPage(1); }}>
-                    <option value="">All Category</option>
-                    <option value="residential">Residential</option>
-                    <option value="commercial">Commercial</option>
-                    <option value="agricultural_land">Agricultural Land</option>
-                </select>
-                <select style={{ ...s.editInput, marginBottom: 0, flex: '0 1 150px' }} value={filterStatus} onChange={e => { setFilterStatus(e.target.value); setCurrentPage(1); }}>
-                    <option value="">All Status</option>
-                    <option value="pending_approval">⏳ Pending Approval</option>
-                    <option value="active">Active</option>
-                    <option value="inactive">Inactive</option>
-                    <option value="sold">Sold</option>
-                    <option value="rented">Rented</option>
-                    <option value="withdrawn">Withdrawn</option>
-                </select>
-                <select style={{ ...s.editInput, marginBottom: 0, flex: '0 1 150px' }} value={filterState} onChange={e => { setFilterState(e.target.value); setCurrentPage(1); }}>
-                    <option value="">All States</option>
-                    {statesList.map(st => <option key={st} value={st}>{st}</option>)}
-                </select>
-                <select style={{ ...s.editInput, marginBottom: 0, flex: '0 1 150px' }} value={filterAgent} onChange={e => { setFilterAgent(e.target.value); setCurrentPage(1); }}>
-                    <option value="">All Agents</option>
-                    {agentsList.map(ag => <option key={ag.id} value={ag.id}>{ag.name}</option>)}
-                </select>
-                {/* BHK multi-select chips */}
-                <div style={{ display: 'flex', gap: '4px', alignItems: 'center', flexShrink: 0 }}>
-                    {[1, 2, 3, 4, 5].map(bhk => (
-                        <button
-                            key={bhk}
-                            onClick={() => {
-                                setFilterBhk(prev => prev.includes(bhk) ? prev.filter(b => b !== bhk) : [...prev, bhk]);
-                                setCurrentPage(1);
-                            }}
-                            style={{
-                                padding: '4px 10px', fontSize: '12px', borderRadius: '6px', cursor: 'pointer',
-                                border: filterBhk.includes(bhk) ? '1px solid var(--text-link)' : '1px solid var(--border-secondary)',
-                                background: filterBhk.includes(bhk) ? 'var(--text-link)' : 'transparent',
-                                color: filterBhk.includes(bhk) ? '#fff' : 'var(--text-muted)',
-                                fontWeight: filterBhk.includes(bhk) ? 600 : 400,
-                            }}
-                        >{bhk}BHK</button>
-                    ))}
-                </div>
-                {/* Location search */}
-                <input
-                    type="text"
-                    placeholder="Location..."
-                    value={filterLocation}
-                    onChange={e => { setFilterLocation(e.target.value); setCurrentPage(1); }}
-                    style={{ ...s.editInput, marginBottom: 0, flex: '0 1 140px' }}
                 />
                 {hasActiveFilters && (
                     <button style={{ ...s.smallBtn, color: '#f87171', borderColor: '#f87171' }} onClick={clearFilters}>
@@ -884,12 +952,31 @@ export const InventoryList: React.FC = () => {
                 >
                     <span>⚙</span>
                     <span>Filters{activeInventoryFilterCount > 0 ? ` (${activeInventoryFilterCount})` : ''}</span>
+                    {hasActiveFilters && (
+                        <span style={{
+                            marginLeft: 2, padding: '1px 7px', borderRadius: 999,
+                            backgroundColor: 'rgba(255,255,255,0.25)', fontWeight: 700, fontSize: '12px',
+                        }}>
+                            {totalCount} result{totalCount !== 1 ? 's' : ''}
+                        </span>
+                    )}
                 </button>
             </div>
 
             {inventory.length === 0 ? (
-                <div style={{ color: 'var(--text-muted)', textAlign: 'center', marginTop: '60px' }}>
-                    {hasActiveFilters ? 'No properties match your filters.' : 'No inventory found. Use Bulk Upload to add properties.'}
+                <div className="empty-state" style={{ padding: '64px 16px' }}>
+                    <span className="empty-state__icon" style={{ fontSize: '48px' }}>{hasActiveFilters ? '🔍' : '🏠'}</span>
+                    <p className="empty-state__title" style={{ fontSize: '16px' }}>
+                        {hasActiveFilters ? 'No properties match your filters' : 'No inventory yet'}
+                    </p>
+                    <p className="empty-state__body" style={{ fontSize: '14px' }}>
+                        {hasActiveFilters ? 'Try adjusting your filters to see more results.' : 'Add your first property to get started.'}
+                    </p>
+                    {!hasActiveFilters && (
+                        <button type="button" onClick={() => setShowAddForm(true)} className="empty-state__cta">
+                            + Add Property
+                        </button>
+                    )}
                 </div>
             ) : (
                 <div>
@@ -912,7 +999,7 @@ export const InventoryList: React.FC = () => {
                                                         <div key={url} style={{ position: 'relative', width: '80px', height: '60px' }}>
                                                             <img
                                                                 src={url.replace(/(\.[^.]+)$/, '_thumb$1').replace('.webp', '_thumb.webp')}
-                                                                onError={e => { (e.target as HTMLImageElement).src = url; }}
+                                                                onError={e => { const i = e.target as HTMLImageElement; if (i.dataset.fb) return; i.dataset.fb = '1'; i.src = url; }}
                                                                 style={{ width: '80px', height: '60px', objectFit: 'cover', borderRadius: '4px', border: '1px solid var(--border-secondary)' }}
                                                                 alt=""
                                                             />
@@ -954,43 +1041,43 @@ export const InventoryList: React.FC = () => {
                                         <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-link)', marginBottom: '8px', borderBottom: '1px solid var(--border-secondary)', paddingBottom: '4px' }}>Classification</div>
                                         <div style={{ display: 'grid', gridTemplateColumns: window.innerWidth < 768 ? '1fr' : '1fr 1fr 1fr', gap: '8px' }}>
                                             <div>
-                                                <label style={s.editLabel}>Category</label>
-                                                <select style={s.editInput} value={editData.category_id} onChange={e => setEditData({ ...editData, category_id: e.target.value, sub_category_id: '', type_id: '' })}>
+                                                <label htmlFor="inv-category" style={s.editLabel}>Category</label>
+                                                <select id="inv-category" style={s.editInput} value={editData.category_id} onChange={e => setEditData({ ...editData, category_id: e.target.value, sub_category_id: '', type_id: '' })}>
                                                     <option value="">Select Category</option>
                                                     {classTree.categories.map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
                                                 </select>
                                             </div>
                                             <div>
-                                                <label style={s.editLabel}>Sub Category</label>
-                                                <select style={s.editInput} value={editData.sub_category_id} onChange={e => setEditData({ ...editData, sub_category_id: e.target.value, type_id: '' })}>
+                                                <label htmlFor="inv-sub-category" style={s.editLabel}>Sub Category</label>
+                                                <select id="inv-sub-category" style={s.editInput} value={editData.sub_category_id} onChange={e => setEditData({ ...editData, sub_category_id: e.target.value, type_id: '' })}>
                                                     <option value="">Select Sub Category</option>
                                                     {(classTree.categories.find((c: any) => c.id === editData.category_id)?.subcategories || []).map((sc: any) => <option key={sc.id} value={sc.id}>{sc.name}</option>)}
                                                 </select>
                                             </div>
                                             <div>
-                                                <label style={s.editLabel}>Property Type</label>
-                                                <select style={s.editInput} value={editData.type_id} onChange={e => setEditData({ ...editData, type_id: e.target.value })}>
+                                                <label htmlFor="inv-type" style={s.editLabel}>Property Type</label>
+                                                <select id="inv-type" style={s.editInput} value={editData.type_id} onChange={e => setEditData({ ...editData, type_id: e.target.value })}>
                                                     <option value="">Select Type</option>
                                                     {(classTree.categories.find((c: any) => c.id === editData.category_id)?.subcategories?.find((sc: any) => sc.id === editData.sub_category_id)?.types || []).map((t: any) => <option key={t.id} value={t.id}>{t.name}</option>)}
                                                 </select>
                                             </div>
                                             <div>
-                                                <label style={s.editLabel}>Configuration</label>
-                                                <select style={s.editInput} value={editData.configuration_id} onChange={e => setEditData({ ...editData, configuration_id: e.target.value })}>
+                                                <label htmlFor="inv-configuration" style={s.editLabel}>Configuration</label>
+                                                <select id="inv-configuration" style={s.editInput} value={editData.configuration_id} onChange={e => setEditData({ ...editData, configuration_id: e.target.value })}>
                                                     <option value="">Select Config</option>
                                                     {classTree.configurations.map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
                                                 </select>
                                             </div>
                                             <div>
-                                                <label style={s.editLabel}>Usage Type</label>
-                                                <select style={s.editInput} value={editData.usage_type_id} onChange={e => setEditData({ ...editData, usage_type_id: e.target.value })}>
+                                                <label htmlFor="inv-usage-type" style={s.editLabel}>Usage Type</label>
+                                                <select id="inv-usage-type" style={s.editInput} value={editData.usage_type_id} onChange={e => setEditData({ ...editData, usage_type_id: e.target.value })}>
                                                     <option value="">Select Usage</option>
                                                     {classTree.usage_types.map((u: any) => <option key={u.id} value={u.id}>{u.name}</option>)}
                                                 </select>
                                             </div>
                                             <div>
-                                                <label style={s.editLabel}>Investment Type</label>
-                                                <select style={s.editInput} value={editData.investment_type_id} onChange={e => setEditData({ ...editData, investment_type_id: e.target.value })}>
+                                                <label htmlFor="inv-investment-type" style={s.editLabel}>Investment Type</label>
+                                                <select id="inv-investment-type" style={s.editInput} value={editData.investment_type_id} onChange={e => setEditData({ ...editData, investment_type_id: e.target.value })}>
                                                     <option value="">Select Investment</option>
                                                     {classTree.investment_types.map((i: any) => <option key={i.id} value={i.id}>{i.name}</option>)}
                                                 </select>
@@ -1003,16 +1090,16 @@ export const InventoryList: React.FC = () => {
                                         <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-link)', marginBottom: '8px', borderBottom: '1px solid var(--border-secondary)', paddingBottom: '4px' }}>Property Details</div>
                                         <div style={{ display: 'grid', gridTemplateColumns: window.innerWidth < 768 ? '1fr' : '1fr 1fr 1fr', gap: '8px' }}>
                                             <div>
-                                                <label style={s.editLabel}>Intent</label>
-                                                <select style={s.editInput} value={editData.intent} onChange={e => setEditData({ ...editData, intent: e.target.value })}>
+                                                <label htmlFor="inv-intent" style={s.editLabel}>Intent</label>
+                                                <select id="inv-intent" style={s.editInput} value={editData.intent} onChange={e => setEditData({ ...editData, intent: e.target.value })}>
                                                     <option value="sell">Sell</option>
                                                     <option value="rent">Rent</option>
                                                     <option value="lease">Lease</option>
                                                 </select>
                                             </div>
                                             <div>
-                                                <label style={s.editLabel}>Status</label>
-                                                <select style={s.editInput} value={editData.status} onChange={e => setEditData({ ...editData, status: e.target.value })}>
+                                                <label htmlFor="inv-status" style={s.editLabel}>Status</label>
+                                                <select id="inv-status" style={s.editInput} value={editData.status} onChange={e => setEditData({ ...editData, status: e.target.value })}>
                                                     <option value="pending_approval">Pending Approval</option>
                                                     <option value="active">Active</option>
                                                     <option value="inactive">Inactive</option>
@@ -1022,8 +1109,8 @@ export const InventoryList: React.FC = () => {
                                                 </select>
                                             </div>
                                             <div>
-                                                <label style={s.editLabel}>Furnishing</label>
-                                                <select style={s.editInput} value={editData.furnishing} onChange={e => setEditData({ ...editData, furnishing: e.target.value })}>
+                                                <label htmlFor="inv-furnishing" style={s.editLabel}>Furnishing</label>
+                                                <select id="inv-furnishing" style={s.editInput} value={editData.furnishing} onChange={e => setEditData({ ...editData, furnishing: e.target.value })}>
                                                     <option value="">None</option>
                                                     <option value="unfurnished">Unfurnished</option>
                                                     <option value="semi_furnished">Semi-Furnished</option>
@@ -1031,8 +1118,8 @@ export const InventoryList: React.FC = () => {
                                                 </select>
                                             </div>
                                             <div>
-                                                <label style={s.editLabel}>Property Age</label>
-                                                <select style={s.editInput} value={editData.property_age} onChange={e => setEditData({ ...editData, property_age: e.target.value })}>
+                                                <label htmlFor="inv-property-age" style={s.editLabel}>Property Age</label>
+                                                <select id="inv-property-age" style={s.editInput} value={editData.property_age} onChange={e => setEditData({ ...editData, property_age: e.target.value })}>
                                                     <option value="">Select</option>
                                                     <option value="new_construction">New</option>
                                                     <option value="1-3_years">1-3 Years</option>
@@ -1042,8 +1129,8 @@ export const InventoryList: React.FC = () => {
                                                 </select>
                                             </div>
                                             <div>
-                                                <label style={s.editLabel}>Facing</label>
-                                                <select style={s.editInput} value={editData.facing} onChange={e => setEditData({ ...editData, facing: e.target.value })}>
+                                                <label htmlFor="inv-facing" style={s.editLabel}>Facing</label>
+                                                <select id="inv-facing" style={s.editInput} value={editData.facing} onChange={e => setEditData({ ...editData, facing: e.target.value })}>
                                                     <option value="">Select</option>
                                                     {['north','south','east','west','north_east','north_west','south_east','south_west'].map(f =>
                                                         <option key={f} value={f}>{f.replace(/_/g, ' ')}</option>
@@ -1067,20 +1154,20 @@ export const InventoryList: React.FC = () => {
                                         <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-link)', marginBottom: '8px', borderBottom: '1px solid var(--border-secondary)', paddingBottom: '4px' }}>Specifications</div>
                                         <div style={{ display: 'grid', gridTemplateColumns: window.innerWidth < 768 ? '1fr 1fr' : '1fr 1fr 1fr 1fr', gap: '8px' }}>
                                             <div>
-                                                <label style={s.editLabel}>Bedrooms</label>
-                                                <input style={s.editInput} type="number" min="0" value={editData.bedrooms} onChange={e => setEditData({ ...editData, bedrooms: e.target.value })} placeholder="e.g. 2" />
+                                                <label htmlFor="inv-bedrooms" style={s.editLabel}>Bedrooms</label>
+                                                <input id="inv-bedrooms" style={s.editInput} type="number" min="0" value={editData.bedrooms} onChange={e => setEditData({ ...editData, bedrooms: e.target.value })} placeholder="e.g. 2" />
                                             </div>
                                             <div>
-                                                <label style={s.editLabel}>Bathrooms</label>
-                                                <input style={s.editInput} type="number" min="0" value={editData.bathrooms} onChange={e => setEditData({ ...editData, bathrooms: e.target.value })} placeholder="e.g. 2" />
+                                                <label htmlFor="inv-bathrooms" style={s.editLabel}>Bathrooms</label>
+                                                <input id="inv-bathrooms" style={s.editInput} type="number" min="0" value={editData.bathrooms} onChange={e => setEditData({ ...editData, bathrooms: e.target.value })} placeholder="e.g. 2" />
                                             </div>
                                             <div>
-                                                <label style={s.editLabel}>Area</label>
-                                                <input style={s.editInput} type="number" min="0" value={editData.area} onChange={e => setEditData({ ...editData, area: e.target.value })} placeholder="e.g. 1200" />
+                                                <label htmlFor="inv-area" style={s.editLabel}>Area</label>
+                                                <input id="inv-area" style={s.editInput} type="number" min="0" value={editData.area} onChange={e => setEditData({ ...editData, area: e.target.value })} placeholder="e.g. 1200" />
                                             </div>
                                             <div>
-                                                <label style={s.editLabel}>Area Unit</label>
-                                                <select style={s.editInput} value={editData.area_unit} onChange={e => setEditData({ ...editData, area_unit: e.target.value })}>
+                                                <label htmlFor="inv-area-unit" style={s.editLabel}>Area Unit</label>
+                                                <select id="inv-area-unit" style={s.editInput} value={editData.area_unit} onChange={e => setEditData({ ...editData, area_unit: e.target.value })}>
                                                     <option value="sqft">Sq.Ft</option>
                                                     <option value="sqm">Sq.M</option>
                                                     <option value="sqyd">Sq.Yd</option>
@@ -1114,24 +1201,24 @@ export const InventoryList: React.FC = () => {
                                         <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-link)', marginBottom: '8px', borderBottom: '1px solid var(--border-secondary)', paddingBottom: '4px' }}>Address</div>
                                         <div style={{ display: 'grid', gridTemplateColumns: window.innerWidth < 768 ? '1fr' : '1fr 1fr 1fr', gap: '8px' }}>
                                             <div>
-                                                <label style={s.editLabel}>Flat / Unit No</label>
-                                                <input style={s.editInput} value={editData.flat_no} onChange={e => setEditData({ ...editData, flat_no: e.target.value })} placeholder="e.g. A-1201" />
+                                                <label htmlFor="inv-flat-no" style={s.editLabel}>Flat / Unit No</label>
+                                                <input id="inv-flat-no" style={s.editInput} value={editData.flat_no} onChange={e => setEditData({ ...editData, flat_no: e.target.value })} placeholder="e.g. A-1201" />
                                             </div>
                                             <div>
-                                                <label style={s.editLabel}>Floor</label>
-                                                <input style={s.editInput} type="number" value={editData.floor_number} onChange={e => setEditData({ ...editData, floor_number: e.target.value })} placeholder="e.g. 3" />
+                                                <label htmlFor="inv-floor" style={s.editLabel}>Floor</label>
+                                                <input id="inv-floor" style={s.editInput} type="number" value={editData.floor_number} onChange={e => setEditData({ ...editData, floor_number: e.target.value })} placeholder="e.g. 3" />
                                             </div>
                                             <div>
-                                                <label style={s.editLabel}>Total Floors</label>
-                                                <input style={s.editInput} type="number" value={editData.total_floors} onChange={e => setEditData({ ...editData, total_floors: e.target.value })} placeholder="e.g. 12" />
+                                                <label htmlFor="inv-total-floors" style={s.editLabel}>Total Floors</label>
+                                                <input id="inv-total-floors" style={s.editInput} type="number" value={editData.total_floors} onChange={e => setEditData({ ...editData, total_floors: e.target.value })} placeholder="e.g. 12" />
                                             </div>
                                             <div>
-                                                <label style={s.editLabel}>Plot No / Building</label>
-                                                <input style={s.editInput} value={editData.plot_no} onChange={e => setEditData({ ...editData, plot_no: e.target.value })} placeholder="e.g. Plot 42" />
+                                                <label htmlFor="inv-plot-no" style={s.editLabel}>Plot No / Building</label>
+                                                <input id="inv-plot-no" style={s.editInput} value={editData.plot_no} onChange={e => setEditData({ ...editData, plot_no: e.target.value })} placeholder="e.g. Plot 42" />
                                             </div>
                                             <div style={{ gridColumn: window.innerWidth < 768 ? 'span 1' : 'span 2' }}>
-                                                <label style={s.editLabel}>Apartment / Society</label>
-                                                <input style={s.editInput} value={editData.apartment_name} onChange={e => setEditData({ ...editData, apartment_name: e.target.value })} placeholder="e.g. Gaur City 2" />
+                                                <label htmlFor="inv-apartment" style={s.editLabel}>Apartment / Society</label>
+                                                <input id="inv-apartment" style={s.editInput} value={editData.apartment_name} onChange={e => setEditData({ ...editData, apartment_name: e.target.value })} placeholder="e.g. Gaur City 2" />
                                             </div>
                                             <div style={{ gridColumn: window.innerWidth < 768 ? 'span 1' : 'span 3' }}>
                                                 <label style={s.editLabel}>Search Address (Google Places)</label>
@@ -1153,35 +1240,35 @@ export const InventoryList: React.FC = () => {
                                                 />
                                             </div>
                                             <div>
-                                                <label style={s.editLabel}>Locality / Area</label>
-                                                <input style={s.editInput} value={editData.locality} onChange={e => setEditData({ ...editData, locality: e.target.value })} placeholder="e.g. Sector 150" />
+                                                <label htmlFor="inv-locality" style={s.editLabel}>Locality / Area</label>
+                                                <input id="inv-locality" style={s.editInput} value={editData.locality} onChange={e => setEditData({ ...editData, locality: e.target.value })} placeholder="e.g. Sector 150" />
                                             </div>
                                             <div>
-                                                <label style={s.editLabel}>Sub Locality</label>
-                                                <input style={s.editInput} value={editData.sub_locality} onChange={e => setEditData({ ...editData, sub_locality: e.target.value })} placeholder="e.g. Block A" />
+                                                <label htmlFor="inv-sub-locality" style={s.editLabel}>Sub Locality</label>
+                                                <input id="inv-sub-locality" style={s.editInput} value={editData.sub_locality} onChange={e => setEditData({ ...editData, sub_locality: e.target.value })} placeholder="e.g. Block A" />
                                             </div>
                                             <div>
-                                                <label style={s.editLabel}>City</label>
-                                                <input style={s.editInput} value={editData.district} onChange={e => setEditData({ ...editData, district: e.target.value })} placeholder="e.g. Gautam Buddh Nagar" />
+                                                <label htmlFor="inv-city" style={s.editLabel}>City</label>
+                                                <input id="inv-city" style={s.editInput} value={editData.district} onChange={e => setEditData({ ...editData, district: e.target.value })} placeholder="e.g. Gautam Buddh Nagar" />
                                             </div>
                                             <div>
-                                                <label style={s.editLabel}>State</label>
-                                                <select style={s.editInput} value={editData.state} onChange={e => setEditData({ ...editData, state: e.target.value })}>
+                                                <label htmlFor="inv-state" style={s.editLabel}>State</label>
+                                                <select id="inv-state" style={s.editInput} value={editData.state} onChange={e => setEditData({ ...editData, state: e.target.value })}>
                                                     <option value="">Select State</option>
                                                     {statesList.map(st => <option key={st} value={st}>{st}</option>)}
                                                 </select>
                                             </div>
                                             <div>
-                                                <label style={s.editLabel}>Pincode</label>
-                                                <input style={s.editInput} value={editData.pincode} onChange={e => setEditData({ ...editData, pincode: e.target.value })} placeholder="e.g. 201310" maxLength={6} />
+                                                <label htmlFor="inv-pincode" style={s.editLabel}>Pincode</label>
+                                                <input id="inv-pincode" style={s.editInput} value={editData.pincode} onChange={e => setEditData({ ...editData, pincode: e.target.value })} placeholder="e.g. 201310" maxLength={6} />
                                             </div>
                                             <div>
-                                                <label style={s.editLabel}>Latitude</label>
-                                                <input style={s.editInput} type="number" step="any" value={editData.latitude} onChange={e => setEditData({ ...editData, latitude: e.target.value })} placeholder="e.g. 28.5355" />
+                                                <label htmlFor="inv-latitude" style={s.editLabel}>Latitude</label>
+                                                <input id="inv-latitude" style={s.editInput} type="number" step="any" value={editData.latitude} onChange={e => setEditData({ ...editData, latitude: e.target.value })} placeholder="e.g. 28.5355" />
                                             </div>
                                             <div>
-                                                <label style={s.editLabel}>Longitude</label>
-                                                <input style={s.editInput} type="number" step="any" value={editData.longitude} onChange={e => setEditData({ ...editData, longitude: e.target.value })} placeholder="e.g. 77.3910" />
+                                                <label htmlFor="inv-longitude" style={s.editLabel}>Longitude</label>
+                                                <input id="inv-longitude" style={s.editInput} type="number" step="any" value={editData.longitude} onChange={e => setEditData({ ...editData, longitude: e.target.value })} placeholder="e.g. 77.3910" />
                                             </div>
                                         </div>
                                     </div>
@@ -1291,13 +1378,13 @@ export const InventoryList: React.FC = () => {
                                             {item.media_urls?.[0] ? (
                                                 <img
                                                     src={item.media_urls[0].replace(/(\.[^.]+)$/, '_thumb$1')}
-                                                    onError={e => { (e.target as HTMLImageElement).src = item.media_urls[0]; }}
+                                                    onError={e => { const i = e.target as HTMLImageElement; if (i.dataset.fb) return; i.dataset.fb = '1'; i.src = item.media_urls[0]; }}
                                                     style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                                                     alt=""
                                                 />
                                             ) : (
                                                 <span style={{ fontSize: '28px', color: 'var(--text-muted)', fontWeight: 700 }}>
-                                                    {(item.flat_property_type?.name || item.type || 'P')[0].toUpperCase()}
+                                                    {(item.taxonomy_node?.name || item.flat_property_type?.name || item.type || 'P')[0].toUpperCase()}
                                                 </span>
                                             )}
                                         </div>
@@ -1307,7 +1394,7 @@ export const InventoryList: React.FC = () => {
                                             {/* Row 1: Title + badges */}
                                             <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', marginBottom: '4px' }}>
                                                 <span style={{ fontWeight: 700, fontSize: '14px', color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '300px' }}>
-                                                    {item.flat_property_type?.name || item.property_type_link?.name || item.type?.replace(/_/g, ' ') || 'Property'}
+                                                    {item.taxonomy_node?.name || item.flat_property_type?.name || item.property_type_link?.name || item.type?.replace(/_/g, ' ') || 'Property'}
                                                 </span>
                                                 <span style={{
                                                     fontSize: '11px', padding: '2px 8px', borderRadius: '10px', fontWeight: 600,
@@ -1329,12 +1416,21 @@ export const InventoryList: React.FC = () => {
                                                 {item.renovated && (
                                                     <span style={{ fontSize: 10, background: 'rgba(34,197,94,0.12)', color: '#22c55e', borderRadius: 4, padding: '1px 6px', fontWeight: 700 }}>🔨 Renovated</span>
                                                 )}
+                                                {item.pre_rented && (
+                                                    <span style={{ fontSize: 10, background: 'rgba(59,130,246,0.12)', color: '#3b82f6', borderRadius: 4, padding: '1px 6px', fontWeight: 700 }}>
+                                                        🏷 Pre-rented{item.pre_rented_monthly_rent ? ` · ₹${Number(item.pre_rented_monthly_rent).toLocaleString('en-IN')}/mo` : ''}
+                                                    </span>
+                                                )}
                                             </div>
 
                                             {/* Row 2: Location */}
                                             <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '6px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                                {[item.apartment_name, item.full_address || [item.sub_locality, item.locality, item.district || item.city, item.state].filter(Boolean).join(', ')].filter(Boolean).join(', ') || 'Location N/A'}
-                                                {item.specs?.bedrooms && ` | ${item.specs.bedrooms}BHK`}
+                                                {/* full_address already contains building + locality + city + state + pincode for new picks.
+                                                    Only fall back to structured parts when full_address is empty. Avoids the
+                                                    "apartment_name + full_address" double-print that was jumbling cards. */}
+                                                {item.full_address || [item.apartment_name, item.sub_locality, item.locality, item.district || item.city, item.state, item.pincode].filter(Boolean).join(', ') || 'Location N/A'}
+                                                {/* Room count: canonical taxonomy keys (bhk for residential, rooms for commercial) → legacy fallbacks */}
+                                                {(item.specs?.bhk ?? item.specs?.rooms ?? item.specs?.bedrooms ?? item.specs?.bhk_count) && ` | ${item.specs.bhk ?? item.specs.rooms ?? item.specs.bedrooms ?? item.specs.bhk_count}BHK`}
                                                 {item.specs?.area && ` | ${item.specs.area} ${item.specs.area_unit || 'sqft'}`}
                                             </div>
 
@@ -1410,8 +1506,8 @@ export const InventoryList: React.FC = () => {
                                                         >&#9742; Call</button>
                                                         {callDropdownId === item.id && (
                                                             <div style={s.callDropdown} onClick={e => e.stopPropagation()}>
-                                                                {item.uploader_phone && (
-                                                                    <a href={`tel:${item.uploader_phone}`} style={s.callEntry}
+                                                                {toDialablePhone(item.uploader_phone) && (
+                                                                    <a href={`tel:${toDialablePhone(item.uploader_phone)}`} style={s.callEntry}
                                                                        onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--bg-primary)')}
                                                                        onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}>
                                                                         <span style={s.callLabel}>{item.ownership_type === 'OWNER' ? 'Owner' : 'Uploader'}</span>
@@ -1419,16 +1515,16 @@ export const InventoryList: React.FC = () => {
                                                                         <span style={s.callPhone}>{item.uploader_phone}</span>
                                                                     </a>
                                                                 )}
-                                                                {item.owner_phone && item.owner_phone !== item.uploader_phone && (
-                                                                    <a href={`tel:${item.owner_phone}`} style={s.callEntry}
+                                                                {toDialablePhone(item.owner_phone) && item.owner_phone !== item.uploader_phone && (
+                                                                    <a href={`tel:${toDialablePhone(item.owner_phone)}`} style={s.callEntry}
                                                                        onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--bg-primary)')}
                                                                        onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}>
                                                                         <span style={s.callLabel}>Owner</span>
                                                                         <span style={s.callPhone}>{item.owner_phone}</span>
                                                                     </a>
                                                                 )}
-                                                                {item.key_holder_type === 'EXTERNAL' && item.key_holder_phone && (
-                                                                    <a href={`tel:${item.key_holder_phone}`} style={s.callEntry}
+                                                                {item.key_holder_type === 'EXTERNAL' && toDialablePhone(item.key_holder_phone) && (
+                                                                    <a href={`tel:${toDialablePhone(item.key_holder_phone)}`} style={s.callEntry}
                                                                        onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--bg-primary)')}
                                                                        onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}>
                                                                         <span style={s.callLabel}>Key Holder</span>
@@ -1445,9 +1541,10 @@ export const InventoryList: React.FC = () => {
                                                         <button
                                                             style={{ ...s.actionBtn, color: '#34d399', borderColor: '#34d399' }}
                                                             onClick={async () => {
-                                                                if (!confirm('Approve this listing?')) return;
+                                                                const ok = await confirm('Approve this listing?');
+                                                                if (!ok) return;
                                                                 try { await approveInventory(item.id); await loadInventory(); }
-                                                                catch (err: any) { alert(err.response?.data?.error || 'Failed'); }
+                                                                catch (err: any) { showToast(err.response?.data?.error || 'Failed', 'error'); }
                                                             }}
                                                         >Approve</button>
                                                         <button
@@ -1456,12 +1553,12 @@ export const InventoryList: React.FC = () => {
                                                                 const reason = prompt('Rejection reason (optional):') ?? undefined;
                                                                 if (reason === null) return;
                                                                 try { await rejectInventory(item.id, reason || undefined); await loadInventory(); }
-                                                                catch (err: any) { alert(err.response?.data?.error || 'Failed'); }
+                                                                catch (err: any) { showToast(err.response?.data?.error || 'Failed', 'error'); }
                                                             }}
                                                         >Reject</button>
                                                     </>
                                                 )}
-                                                <button style={{ ...s.actionBtn, color: '#22c55e', borderColor: '#22c55e' }} onClick={() => setShareItem(item)}>Share Client</button>
+                                                <button style={{ ...s.actionBtn, color: '#22c55e', borderColor: '#22c55e' }} onClick={() => setShareOptionsItem(item)}>Share</button>
                                                 <button style={{ ...s.actionBtn, color: '#8b5cf6', borderColor: '#8b5cf6' }} onClick={() => setBookVisitItem(item)}>Visit</button>
                                                 {hasPermission('edit_inventory') && (
                                                     <button style={{ ...s.actionBtn, color: 'var(--text-link)', borderColor: 'var(--text-link)' }} onClick={() => handleEdit(item)}>Edit</button>
@@ -1471,9 +1568,10 @@ export const InventoryList: React.FC = () => {
                                                         style={{ ...s.actionBtn, color: item.status === 'active' ? '#f59e0b' : '#10b981' }}
                                                         onClick={async () => {
                                                             const newStatus = item.status === 'active' ? 'inactive' : 'active';
-                                                            if (!confirm(`${newStatus === 'inactive' ? 'Deactivate' : 'Activate'} this property?`)) return;
+                                                            const ok = await confirm(`${newStatus === 'inactive' ? 'Deactivate' : 'Activate'} this property?`);
+                                                            if (!ok) return;
                                                             try { await updateInventory(item.id, { status: newStatus }); await loadInventory(); }
-                                                            catch (err: any) { alert(err.response?.data?.error || 'Failed'); }
+                                                            catch (err: any) { showToast(err.response?.data?.error || 'Failed', 'error'); }
                                                         }}
                                                     >
                                                         {item.status === 'active' ? 'Deactivate' : 'Activate'}
@@ -1706,7 +1804,9 @@ export const InventoryList: React.FC = () => {
                                 { id: 'classification', label: 'Classification' },
                                 { id: 'details', label: 'Details' },
                                 { id: 'specs', label: 'Specs' },
-                                { id: 'amenities', label: 'Amenities' },
+                                // Amenities tab removed Phase 2 dedup (2026-05-28) — amenities
+                                // now live in specs.amenities and render in the Specs tab's
+                                // by-type panel (taxonomy 'amenities' multiselect field).
                                 { id: 'address', label: 'Address' },
                                 { id: 'pricing', label: 'Pricing' },
                                 { id: 'more', label: 'More' },
@@ -1783,50 +1883,17 @@ export const InventoryList: React.FC = () => {
                             )}
 
                             {/* ── Tab: Classification ── */}
-                            {editTab === 'classification' && (
-                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
-                                    <div>
-                                        <label style={s.editLabel}>Category</label>
-                                        <select style={s.editInput} value={editData.category_id} onChange={e => setEditData({ ...editData, category_id: e.target.value, sub_category_id: '', type_id: '' })}>
-                                            <option value="">Select Category</option>
-                                            {classTree.categories.map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                                        </select>
-                                    </div>
-                                    <div>
-                                        <label style={s.editLabel}>Sub Category</label>
-                                        <select style={s.editInput} value={editData.sub_category_id} onChange={e => setEditData({ ...editData, sub_category_id: e.target.value, type_id: '' })}>
-                                            <option value="">Select Sub Category</option>
-                                            {(classTree.categories.find((c: any) => c.id === editData.category_id)?.subcategories || []).map((sc: any) => <option key={sc.id} value={sc.id}>{sc.name}</option>)}
-                                        </select>
-                                    </div>
-                                    <div>
-                                        <label style={s.editLabel}>Property Type</label>
-                                        <select style={s.editInput} value={editData.type_id} onChange={e => setEditData({ ...editData, type_id: e.target.value })}>
-                                            <option value="">Select Type</option>
-                                            {(classTree.categories.find((c: any) => c.id === editData.category_id)?.subcategories?.find((sc: any) => sc.id === editData.sub_category_id)?.types || []).map((t: any) => <option key={t.id} value={t.id}>{t.name}</option>)}
-                                        </select>
-                                    </div>
-                                    <div>
-                                        <label style={s.editLabel}>Configuration</label>
-                                        <select style={s.editInput} value={editData.configuration_id} onChange={e => setEditData({ ...editData, configuration_id: e.target.value })}>
-                                            <option value="">Select Config</option>
-                                            {classTree.configurations.map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                                        </select>
-                                    </div>
-                                    <div>
-                                        <label style={s.editLabel}>Usage Type</label>
-                                        <select style={s.editInput} value={editData.usage_type_id} onChange={e => setEditData({ ...editData, usage_type_id: e.target.value })}>
-                                            <option value="">Select Usage</option>
-                                            {classTree.usage_types.map((u: any) => <option key={u.id} value={u.id}>{u.name}</option>)}
-                                        </select>
-                                    </div>
-                                    <div>
-                                        <label style={s.editLabel}>Investment Type</label>
-                                        <select style={s.editInput} value={editData.investment_type_id} onChange={e => setEditData({ ...editData, investment_type_id: e.target.value })}>
-                                            <option value="">Select Investment</option>
-                                            {classTree.investment_types.map((i: any) => <option key={i.id} value={i.id}>{i.name}</option>)}
-                                        </select>
-                                    </div>
+            {editTab === 'classification' && (
+                                <div>
+                                    <label style={s.editLabel}>Property type (Category → Sub-category → Type)</label>
+                                    <TaxonomyCascade
+                                        value={editData.taxonomy_node_id}
+                                        onChange={handleTaxonomyChange}
+                                        inputStyle={{ ...s.editInput, flex: '1 1 200px', minWidth: '180px' }}
+                                    />
+                                    <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '10px' }}>
+                                        This sets the property’s type. Type-specific fields (BHK, parking, road facing, …) appear under the <strong>Specs</strong> tab.
+                                    </p>
                                 </div>
                             )}
 
@@ -1852,35 +1919,9 @@ export const InventoryList: React.FC = () => {
                                             <option value="withdrawn">Withdrawn</option>
                                         </select>
                                     </div>
-                                    <div>
-                                        <label style={s.editLabel}>Furnishing</label>
-                                        <select style={s.editInput} value={editData.furnishing} onChange={e => setEditData({ ...editData, furnishing: e.target.value })}>
-                                            <option value="">None</option>
-                                            <option value="unfurnished">Unfurnished</option>
-                                            <option value="semi_furnished">Semi-Furnished</option>
-                                            <option value="fully_furnished">Fully Furnished</option>
-                                        </select>
-                                    </div>
-                                    <div>
-                                        <label style={s.editLabel}>Property Age</label>
-                                        <select style={s.editInput} value={editData.property_age} onChange={e => setEditData({ ...editData, property_age: e.target.value })}>
-                                            <option value="">Select</option>
-                                            <option value="new_construction">New</option>
-                                            <option value="1-3_years">1-3 Years</option>
-                                            <option value="3-5_years">3-5 Years</option>
-                                            <option value="5-10_years">5-10 Years</option>
-                                            <option value="10+_years">10+ Years</option>
-                                        </select>
-                                    </div>
-                                    <div>
-                                        <label style={s.editLabel}>Facing</label>
-                                        <select style={s.editInput} value={editData.facing} onChange={e => setEditData({ ...editData, facing: e.target.value })}>
-                                            <option value="">Select</option>
-                                            {['north','south','east','west','north_east','north_west','south_east','south_west'].map(f =>
-                                                <option key={f} value={f}>{f.replace(/_/g, ' ')}</option>
-                                            )}
-                                        </select>
-                                    </div>
+                                    {/* Furnishing / Property Age / Facing inputs removed Phase 2 dedup (2026-05-28) —
+                                        now rendered by the taxonomy-driven "Property Details (by type)" panel
+                                        on the Specs tab so the labels + options match the actual property type. */}
                                     <div>
                                         <label style={s.editLabel}>Ownership Type</label>
                                         <select title="Ownership Type" style={s.editInput} value={editData.ownership_type} onChange={e => setEditData({ ...editData, ownership_type: e.target.value })}>
@@ -1919,16 +1960,62 @@ export const InventoryList: React.FC = () => {
                                             </div>
                                         </button>
                                     </div>
+                                    {/* Pre-rented (pre-lease) — only for FOR-SALE listings */}
+                                    {editData.intent === 'sell' && (
+                                        <div style={{ gridColumn: '1 / -1' }}>
+                                            <label style={s.editLabel}>Pre-rented (already tenanted)</label>
+                                            <button
+                                                type="button"
+                                                onClick={() => setEditData((p: any) => ({ ...p, pre_rented: !p.pre_rented, pre_rented_monthly_rent: !p.pre_rented ? p.pre_rented_monthly_rent : '' }))}
+                                                style={{
+                                                    display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 14px',
+                                                    borderRadius: '8px', cursor: 'pointer', width: '100%', textAlign: 'left',
+                                                    border: editData.pre_rented ? '1.5px solid #3b82f6' : '1px solid var(--border-secondary)',
+                                                    backgroundColor: editData.pre_rented ? 'rgba(59,130,246,0.08)' : 'var(--bg-secondary)',
+                                                }}
+                                            >
+                                                <div style={{
+                                                    width: '20px', height: '20px', borderRadius: '4px', flexShrink: 0,
+                                                    border: editData.pre_rented ? '2px solid #3b82f6' : '2px solid var(--border-secondary)',
+                                                    backgroundColor: editData.pre_rented ? '#3b82f6' : 'transparent',
+                                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                }}>
+                                                    {editData.pre_rented && <span style={{ color: '#fff', fontSize: '12px', lineHeight: 1 }}>✓</span>}
+                                                </div>
+                                                <div>
+                                                    <div style={{ fontSize: '13px', fontWeight: 600, color: editData.pre_rented ? '#3b82f6' : 'var(--text-secondary)' }}>
+                                                        {editData.pre_rented ? 'Pre-rented ✓' : 'Mark as Pre-rented'}
+                                                    </div>
+                                                    <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                                                        {editData.pre_rented ? 'Shows "Pre-rented" + the rent on the website' : 'For-sale property that already has a tenant paying rent'}
+                                                    </div>
+                                                </div>
+                                            </button>
+                                            {editData.pre_rented && (
+                                                <div style={{ marginTop: '10px' }}>
+                                                    <label style={s.editLabel}>Current rent (₹ / month)</label>
+                                                    <input
+                                                        type="number" min={0}
+                                                        value={editData.pre_rented_monthly_rent || ''}
+                                                        onChange={e => setEditData((p: any) => ({ ...p, pre_rented_monthly_rent: e.target.value }))}
+                                                        placeholder="e.g. 25000"
+                                                        style={s.editInput}
+                                                    />
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
                                 </div>
                             )}
 
                             {/* ── Tab: Specs ── */}
                             {editTab === 'specs' && (
-                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '12px' }}>
-                                    <div>
-                                        <label style={s.editLabel}>Bedrooms</label>
-                                        <input style={s.editInput} type="number" min="0" value={editData.bedrooms} onChange={e => setEditData({ ...editData, bedrooms: e.target.value })} placeholder="e.g. 2" />
-                                    </div>
+                                <>
+                                {/* Universal top row — Bathrooms / Area / Area Unit. BHK/Rooms moved
+                                    to the dynamic by-type panel below (Phase 2 dedup, 2026-05-28),
+                                    since the right label depends on the property type (BHK for residential,
+                                    Rooms for commercial). */}
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
                                     <div>
                                         <label style={s.editLabel}>Bathrooms</label>
                                         <input style={s.editInput} type="number" min="0" value={editData.bathrooms} onChange={e => setEditData({ ...editData, bathrooms: e.target.value })} placeholder="e.g. 2" />
@@ -1949,101 +2036,75 @@ export const InventoryList: React.FC = () => {
                                         </select>
                                     </div>
                                 </div>
+                                {/* Taxonomy-driven Property Details — SOLE renderer for type-specific fields
+                                    (BHK/Rooms, Furnishing, Facing, Age, Floors, Amenities, Additional Rooms,
+                                    Parking, Ownership-Tenure, Road Facing, etc.). All prefilled from specs.* */}
+                                {editNodeFields.length > 0 && (
+                                    <div style={{ marginTop: '18px', borderTop: '1px solid var(--border-secondary)', paddingTop: '14px' }}>
+                                        <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '10px' }}>Property Details (by type)</div>
+                                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
+                                            {editNodeFields.map(f => {
+                                                const set = (v: any) => setEditSchemaValues({ ...editSchemaValues, [f.key]: v });
+                                                const toggle = (opt: string) => { const cur: string[] = Array.isArray(editSchemaValues[f.key]) ? editSchemaValues[f.key] : []; set(cur.includes(opt) ? cur.filter(x => x !== opt) : [...cur, opt]); };
+                                                return (
+                                                    <div key={f.key} style={{ gridColumn: (f.input_type === 'multiselect' || f.input_type === 'parking_list') ? '1 / -1' : 'auto' }}>
+                                                        <label style={s.editLabel}>{f.label}{f.unit ? ` (${f.unit})` : ''}</label>
+                                                        {f.input_type === 'parking_list' ? (
+                                                            <ParkingListField value={editSchemaValues[f.key]} onChange={(v) => set(v)} />
+                                                        ) : f.input_type === 'multiselect' && Array.isArray(f.options) && f.options.length > 0 ? (
+                                                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                                                                {f.options.map(o => {
+                                                                    const on = Array.isArray(editSchemaValues[f.key]) && editSchemaValues[f.key].includes(o);
+                                                                    return <button key={o} type="button" onClick={() => toggle(o)} style={{ padding: '6px 12px', borderRadius: '999px', fontSize: '12px', cursor: 'pointer', border: on ? '1px solid var(--text-link)' : '1px solid var(--border-secondary)', background: on ? 'var(--text-link)' : 'var(--bg-tertiary)', color: on ? '#fff' : 'var(--text-primary)' }}>{o}</button>;
+                                                                })}
+                                                            </div>
+                                                        ) : Array.isArray(f.options) && f.options.length > 0 ? (
+                                                            <select style={s.editInput} value={editSchemaValues[f.key] ?? ''} onChange={e => set(e.target.value)}>
+                                                                <option value="">Select…</option>
+                                                                {f.options.map(o => <option key={o} value={o}>{o}</option>)}
+                                                            </select>
+                                                        ) : (
+                                                            <input style={s.editInput} type={f.input_type === 'number' ? 'number' : 'text'} value={editSchemaValues[f.key] ?? ''} onChange={e => set(e.target.value)} placeholder={f.unit || ''} />
+                                                        )}
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                )}
+                                </>
                             )}
 
-                            {/* ── Tab: Amenities ── */}
-                            {editTab === 'amenities' && (
-                                <div>
-                                    <div style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '12px' }}>Select all amenities available at this property.</div>
-                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '10px' }}>
-                                        {AMENITIES_LIST.map(a => (
-                                            <label key={a.value} style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: 'var(--text-secondary)', cursor: 'pointer' }}>
-                                                <input
-                                                    type="checkbox"
-                                                    checked={!!editData.features?.[a.value]}
-                                                    onChange={e => setEditData({ ...editData, features: { ...editData.features, [a.value]: e.target.checked } })}
-                                                />
-                                                {a.label}
-                                            </label>
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
+                            {/* Amenities tab removed Phase 2 dedup (2026-05-28) — amenities now live
+                                in specs.amenities (array of label strings) and are rendered by the
+                                multiselect chips in the by-type panel on the Specs tab. */}
 
                             {/* ── Tab: Address ── */}
                             {editTab === 'address' && (
-                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
-                                    <div>
-                                        <label style={s.editLabel}>Flat / Unit No</label>
-                                        <input style={s.editInput} value={editData.flat_no} onChange={e => setEditData({ ...editData, flat_no: e.target.value })} placeholder="e.g. A-1201" />
-                                    </div>
-                                    <div>
-                                        <label style={s.editLabel}>Floor</label>
-                                        <input style={s.editInput} type="number" value={editData.floor_number} onChange={e => setEditData({ ...editData, floor_number: e.target.value })} placeholder="e.g. 3" />
-                                    </div>
-                                    <div>
-                                        <label style={s.editLabel}>Total Floors</label>
-                                        <input style={s.editInput} type="number" value={editData.total_floors} onChange={e => setEditData({ ...editData, total_floors: e.target.value })} placeholder="e.g. 12" />
-                                    </div>
-                                    <div>
-                                        <label style={s.editLabel}>Plot No / Building</label>
-                                        <input style={s.editInput} value={editData.plot_no} onChange={e => setEditData({ ...editData, plot_no: e.target.value })} placeholder="e.g. Plot 42" />
-                                    </div>
-                                    <div style={{ gridColumn: 'span 2' }}>
-                                        <label style={s.editLabel}>Apartment / Society</label>
-                                        <input style={s.editInput} value={editData.apartment_name} onChange={e => setEditData({ ...editData, apartment_name: e.target.value })} placeholder="e.g. Gaur City 2" />
-                                    </div>
-                                    <div style={{ gridColumn: 'span 3' }}>
-                                        <label style={s.editLabel}>Search Address (Google Places)</label>
-                                        <GooglePlacesInput
-                                            value={editData.full_address || ''}
-                                            onChange={v => setEditData({ ...editData, full_address: v })}
-                                            onPlaceSelect={(place: PlaceResult) => {
-                                                setEditData(prev => ({
-                                                    ...prev,
-                                                    state: place.state || prev.state,
-                                                    district: place.district || prev.district,
-                                                    locality: place.locality || prev.locality,
-                                                    pincode: place.pincode || prev.pincode,
-                                                    full_address: place.full_address || prev.full_address,
-                                                }));
-                                            }}
-                                            placeholder="Type to search and auto-fill address fields..."
-                                            style={s.editInput}
-                                        />
-                                    </div>
-                                    <div>
-                                        <label style={s.editLabel}>Locality / Area</label>
-                                        <input style={s.editInput} value={editData.locality} onChange={e => setEditData({ ...editData, locality: e.target.value })} placeholder="e.g. Sector 150" />
-                                    </div>
-                                    <div>
-                                        <label style={s.editLabel}>Sub Locality</label>
-                                        <input style={s.editInput} value={editData.sub_locality} onChange={e => setEditData({ ...editData, sub_locality: e.target.value })} placeholder="e.g. Block A" />
-                                    </div>
-                                    <div>
-                                        <label style={s.editLabel}>City</label>
-                                        <input style={s.editInput} value={editData.district} onChange={e => setEditData({ ...editData, district: e.target.value })} placeholder="e.g. Gautam Buddh Nagar" />
-                                    </div>
-                                    <div>
-                                        <label style={s.editLabel}>State</label>
-                                        <select style={s.editInput} value={editData.state} onChange={e => setEditData({ ...editData, state: e.target.value })}>
-                                            <option value="">Select State</option>
-                                            {statesList.map(st => <option key={st} value={st}>{st}</option>)}
-                                        </select>
-                                    </div>
-                                    <div>
-                                        <label style={s.editLabel}>Pincode</label>
-                                        <input style={s.editInput} value={editData.pincode} onChange={e => setEditData({ ...editData, pincode: e.target.value })} placeholder="e.g. 201310" maxLength={6} />
-                                    </div>
-                                    <div>
-                                        <label style={s.editLabel}>Latitude</label>
-                                        <input style={s.editInput} type="number" step="any" value={editData.latitude} onChange={e => setEditData({ ...editData, latitude: e.target.value })} placeholder="e.g. 28.5355" />
-                                    </div>
-                                    <div>
-                                        <label style={s.editLabel}>Longitude</label>
-                                        <input style={s.editInput} type="number" step="any" value={editData.longitude} onChange={e => setEditData({ ...editData, longitude: e.target.value })} placeholder="e.g. 77.3910" />
-                                    </div>
-                                </div>
+                                <AddressFields
+                                    layout={inferAddressLayout({ category: editData.category, type: editData.type })}
+                                    mainCategory={editData.category}
+                                    slug={editData.type}
+                                    value={{
+                                        city: editData.city || editData.district || '',
+                                        district: editData.district || '',
+                                        locality: editData.locality || '',
+                                        sub_locality: editData.sub_locality || '',
+                                        state: editData.state || '',
+                                        pincode: editData.pincode || '',
+                                        apartment_name: editData.apartment_name || '',
+                                        flat_no: editData.flat_no || '',
+                                        floor_number: editData.floor_number ?? '',
+                                        total_floors: editData.total_floors ?? '',
+                                        plot_no: editData.plot_no || '',
+                                        latitude: (editData.latitude === '' || editData.latitude == null) ? undefined : Number(editData.latitude),
+                                        longitude: (editData.longitude === '' || editData.longitude == null) ? undefined : Number(editData.longitude),
+                                        full_address: editData.full_address || '',
+                                    }}
+                                    onChange={(a) => setEditData((prev: any) => ({ ...prev, ...a, district: a.city || a.district || prev.district }))}
+                                    inputStyle={s.editInput}
+                                    labelStyle={s.editLabel}
+                                />
                             )}
 
                             {/* ── Tab: Pricing ── */}
@@ -2251,7 +2312,7 @@ export const InventoryList: React.FC = () => {
                                                     setEditDocuments(prev => [doc, ...prev]);
                                                     setNewDocTitle('');
                                                 } catch (err: any) {
-                                                    alert(err.response?.data?.error || 'Upload failed');
+                                                    showToast(err.response?.data?.error || 'Upload failed', 'error');
                                                 } finally {
                                                     setDocUploading(false);
                                                     if (docUploadRef.current) docUploadRef.current.value = '';
@@ -2321,12 +2382,13 @@ export const InventoryList: React.FC = () => {
                                                         <button
                                                             style={{ ...s.smallBtn, color: '#f87171', borderColor: '#f87171' }}
                                                             onClick={async () => {
-                                                                if (!confirm('Delete this document?') || !editingId) return;
+                                                                const ok = await confirm('Delete this document?');
+                                                                if (!ok || !editingId) return;
                                                                 try {
                                                                     await deleteInventoryDocument(editingId, doc.id);
                                                                     setEditDocuments(prev => prev.filter((d: any) => d.id !== doc.id));
                                                                 } catch (err: any) {
-                                                                    alert(err.response?.data?.error || 'Failed to delete');
+                                                                    showToast(err.response?.data?.error || 'Failed to delete', 'error');
                                                                 }
                                                             }}
                                                         >Delete</button>
@@ -2395,16 +2457,17 @@ export const InventoryList: React.FC = () => {
                                                     onClick={async () => {
                                                         const sel = document.getElementById('transfer-target-select') as HTMLSelectElement;
                                                         const target = sel?.value;
-                                                        if (!target) return alert('Select a team member to transfer to');
+                                                        if (!target) { showToast('Select a team member to transfer to', 'info'); return; }
                                                         const targetName = agentsList.find((a: any) => a.id === target)?.name || target;
-                                                        if (!confirm(`Transfer this property to ${targetName}? This changes the assigned agent.`)) return;
+                                                        const ok = await confirm(`Transfer this property to ${targetName}? This changes the assigned agent.`);
+                                                        if (!ok) return;
                                                         try {
                                                             await transferInventory(editingId!, target);
                                                             setEditData({ ...editData, assigned_agent_id: target });
-                                                            alert(`Transferred to ${targetName}`);
+                                                            showToast(`Transferred to ${targetName}`, 'success');
                                                             await loadInventory();
                                                         } catch (err: any) {
-                                                            alert(err.response?.data?.error || 'Transfer failed');
+                                                            showToast(err.response?.data?.error || 'Transfer failed', 'error');
                                                         }
                                                     }}
                                                 >Transfer Now</button>
@@ -2430,7 +2493,16 @@ export const InventoryList: React.FC = () => {
                 </div>
             )}
 
-            {/* Share to Client Modal */}
+            {/* Share — 3-option chooser */}
+            {shareOptionsItem && (
+                <SharePropertyOptions
+                    item={shareOptionsItem}
+                    onClose={() => setShareOptionsItem(null)}
+                    onWhatsAppChosen={() => { setShareItem(shareOptionsItem); setShareOptionsItem(null); }}
+                />
+            )}
+
+            {/* Share to Client Modal (WhatsApp branch) */}
             {shareItem && (
                 <ShareToClientModal
                     item={shareItem}
@@ -2570,14 +2642,22 @@ export const InventoryList: React.FC = () => {
                 }}
             />
 
-            {/* ── Inventory Filter Bottom Sheet ── */}
+            {/* ── Inventory Filter Panel (right slide-over on desktop, bottom sheet on mobile) ── */}
             {showFilterSheet && (
                 <div
                     style={{ position: 'fixed', inset: 0, backgroundColor: 'var(--sheet-backdrop)', zIndex: 900 }}
                     onClick={() => setShowFilterSheet(false)}
                 >
                     <div
-                        style={{
+                        style={isDesktop ? {
+                            position: 'absolute', top: 0, right: 0, bottom: 0,
+                            width: '380px',
+                            backgroundColor: 'var(--bg-secondary)',
+                            overflowY: 'auto',
+                            padding: '0 0 32px',
+                            boxShadow: '-8px 0 40px rgba(0,0,0,0.25)',
+                            animation: 'slide-in-right 250ms cubic-bezier(0.34,1.2,0.64,1) forwards',
+                        } : {
                             position: 'absolute', bottom: 0, left: 0, right: 0,
                             backgroundColor: 'var(--bg-secondary)',
                             borderRadius: '20px 20px 0 0',
@@ -2599,9 +2679,11 @@ export const InventoryList: React.FC = () => {
                             <span style={{ fontWeight: 700, fontSize: '16px', color: 'var(--text-primary)' }}>Filters</span>
                             <button type="button" onClick={() => {
                                 setFilterListingSource(''); setFilterDataSource('');
-                                setFilterCategorySelection({ categoryId: '', subCategoryId: '', typeId: '', bhk: [] });
+                                setFilterTaxonomy({ nodeIds: [], bhk: [] });
                                 setFilterLocationSelection({ label: '', lat: null, lng: null, radiusKm: 2 });
                                 setFilterDaysInSystem(0); setFilterDaysNoVisit(0);
+                                setFilterFloors([]);
+                                setFilterAgent('');
                             }} style={{ background: 'none', border: 'none', color: 'var(--text-link)', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}>
                                 Clear All
                             </button>
@@ -2619,7 +2701,7 @@ export const InventoryList: React.FC = () => {
                                     <button key={opt.value} type="button"
                                         onClick={() => setFilterListingSource(filterListingSource === opt.value ? '' : opt.value)}
                                         className={`chip ${filterListingSource === opt.value ? 'chip-active' : 'chip-inactive'}`}>
-                                        {opt.label}
+                                        {opt.label}{getCount('ownership_type', opt.value)}
                                     </button>
                                 ))}
                             </div>
@@ -2631,17 +2713,19 @@ export const InventoryList: React.FC = () => {
                                     <button key={opt.value} type="button"
                                         onClick={() => setFilterIntent(filterIntent === opt.value ? '' : opt.value)}
                                         className={`chip ${filterIntent === opt.value ? 'chip-active' : 'chip-inactive'}`}>
-                                        {opt.label}
+                                        {opt.label}{getCount('intent', opt.value)}
                                     </button>
                                 ))}
                             </div>
                         </FilterSection>
 
-                        <FilterCategorySection
-                            tree={filterClassificationTree}
-                            value={filterCategorySelection}
-                            onChange={setFilterCategorySelection}
+                        <FilterTaxonomySection
+                            tree={taxonomyTree}
+                            value={filterTaxonomy}
+                            onChange={setFilterTaxonomy}
                         />
+
+                        <FilterFloorSection value={filterFloors} onChange={setFilterFloors} />
 
                         <FilterSection title="Listing Status" defaultOpen={false} badge={filterStatus ? 1 : 0}>
                             <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
@@ -2654,6 +2738,20 @@ export const InventoryList: React.FC = () => {
                                 ))}
                             </div>
                         </FilterSection>
+
+                        {agentsList.length > 0 && (
+                            <FilterSection title="Agent" defaultOpen={false} badge={filterAgent ? 1 : 0}>
+                                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                                    {agentsList.map(ag => (
+                                        <button key={ag.id} type="button"
+                                            onClick={() => setFilterAgent(filterAgent === ag.id ? '' : ag.id)}
+                                            className={`chip ${filterAgent === ag.id ? 'chip-active' : 'chip-inactive'}`}>
+                                            {ag.name}
+                                        </button>
+                                    ))}
+                                </div>
+                            </FilterSection>
+                        )}
 
                         <FilterSection title="Data Source" defaultOpen={false} badge={filterDataSource ? 1 : 0}>
                             <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>

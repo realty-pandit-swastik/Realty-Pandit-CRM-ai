@@ -6,7 +6,8 @@
 import { useState, useEffect } from 'react';
 import { Calendar, List, LayoutGrid, Plus, X, Save } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
-import { API_BASE_URL } from '../lib/api';
+import { API_BASE_URL, authedFetch } from '../lib/api';
+import { useConfirm } from '../contexts/ConfirmContext';
 
 interface Project {
   id: string;
@@ -53,7 +54,8 @@ const PRIORITY_COLORS: Record<string, string> = {
 };
 
 export default function TaskBoard() {
-  const { token, agent } = useAuth();
+  const { agent } = useAuth();
+  const confirm = useConfirm();
   const [viewMode, setViewMode] = useState<'kanban' | 'list' | 'calendar'>('kanban');
   const [tasks, setTasks] = useState<Task[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
@@ -95,9 +97,7 @@ export default function TaskBoard() {
       const params = new URLSearchParams();
       if (selectedProject) params.append('project_id', selectedProject);
 
-      const response = await fetch(`${API_BASE_URL}/api/tasks?${params}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const response = await authedFetch(`${API_BASE_URL}/api/tasks?${params}`);
       const data = await response.json();
       setTasks(data.tasks || []);
     } catch (err: any) {
@@ -109,9 +109,7 @@ export default function TaskBoard() {
 
   const fetchProjects = async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/projects`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const response = await authedFetch(`${API_BASE_URL}/api/projects`);
       const data = await response.json();
       setProjects(data.projects || []);
     } catch (err: any) {
@@ -121,9 +119,7 @@ export default function TaskBoard() {
 
   const fetchStats = async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/tasks/stats/summary`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const response = await authedFetch(`${API_BASE_URL}/api/tasks/stats/summary`);
       const data = await response.json();
       setStats(data);
     } catch (err: any) {
@@ -144,12 +140,9 @@ export default function TaskBoard() {
 
       const method = editingTask ? 'PATCH' : 'POST';
 
-      const response = await fetch(url, {
+      const response = await authedFetch(url, {
         method,
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...taskForm,
           project_id: selectedProject,
@@ -180,12 +173,9 @@ export default function TaskBoard() {
         return;
       }
 
-      const response = await fetch(`${API_BASE_URL}/api/projects`, {
+      const response = await authedFetch(`${API_BASE_URL}/api/projects`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(projectForm),
       });
 
@@ -205,12 +195,12 @@ export default function TaskBoard() {
   };
 
   const handleDeleteTask = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this task?')) return;
+    const ok = await confirm('Are you sure you want to delete this task?');
+    if (!ok) return;
 
     try {
-      const response = await fetch(`${API_BASE_URL}/api/tasks/${id}`, {
+      const response = await authedFetch(`${API_BASE_URL}/api/tasks/${id}`, {
         method: 'DELETE',
-        headers: { Authorization: `Bearer ${token}` },
       });
 
       if (!response.ok) throw new Error('Failed to delete task');
@@ -227,12 +217,9 @@ export default function TaskBoard() {
 
   const handleStatusChange = async (taskId: string, newStatus: string) => {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/tasks/${taskId}`, {
+      const response = await authedFetch(`${API_BASE_URL}/api/tasks/${taskId}`, {
         method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: newStatus }),
       });
 

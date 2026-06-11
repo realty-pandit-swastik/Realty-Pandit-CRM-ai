@@ -15,9 +15,10 @@
 
   --text-primary: #0f172a;
   --text-secondary: #475569;
-  --text-muted: #94a3b8;
+  --text-muted: #64748b;      /* slate-500 — 4.9:1 on #f8fafc ✓ WCAG AA */
   --text-bright: #1e293b;
   --text-link: #3b82f6;
+  --accent-primary: #2563eb;  /* blue-600 — 4.7:1 on white ✓ WCAG AA, used for primary buttons/active states */
 
   --border-primary: #e2e8f0;
   --border-secondary: #cbd5e1;
@@ -56,6 +57,37 @@
   /* ── Theme transition ── */
   --theme-transition: background-color 200ms ease, color 200ms ease, border-color 200ms ease, box-shadow 200ms ease;
 
+  /* Chrome autofill override — keep inputs themed instead of Chrome's default yellow/white */
+  --autofill-bg-light: #f8fafc;
+  --autofill-text-light: #0f172a;
+
+  /* ── Source badge colours (light) ── */
+  --tag-99acres-bg:        #fef3c7; --tag-99acres-text:        #92400e;
+  --tag-magicbricks-bg:    #ffedd5; --tag-magicbricks-text:    #9a3412;
+  --tag-housing-bg:        #dcfce7; --tag-housing-text:        #166534;
+  --tag-facebook-bg:       #ede9fe; --tag-facebook-text:       #5b21b6;
+  --tag-website-bg:        #dbeafe; --tag-website-text:        #1e40af;
+  --tag-whatsapp-bg:       #dcfce7; --tag-whatsapp-text:       #166534;
+  --tag-source-default-bg: #f1f5f9; --tag-source-default-text: #475569;
+
+  /* ── Scenario / coordinator tag colours (light) ── */
+  --tag-blue-bg:  #dbeafe; --tag-blue-text:  #1d4ed8;
+  --tag-green-bg: #dcfce7; --tag-green-text: #166534;
+
+  /* ── Column + card improvements (light) ── */
+  --column-border:     #e2e8f0;
+  --card-shadow:       0 1px 4px rgba(0,0,0,0.07), 0 0 0 1px rgba(0,0,0,0.05);
+  --card-shadow-hover: 0 3px 12px rgba(0,0,0,0.12), 0 0 0 1px rgba(0,0,0,0.07);
+
+  /* ── Action button variables (light) ── */
+  --btn-blue-bg:    rgba(59,130,246,0.10);  --btn-blue-border:   rgba(59,130,246,0.45);  --btn-blue-text:   #1d4ed8;
+  --btn-purple-bg:  rgba(79,70,229,0.10);   --btn-purple-border: rgba(79,70,229,0.45);   --btn-purple-text: #4338ca;
+  --btn-amber-bg:   rgba(245,158,11,0.10);  --btn-amber-border:  rgba(245,158,11,0.50);  --btn-amber-text:  #92400e;
+  --btn-cyan-bg:    rgba(6,182,212,0.10);   --btn-cyan-border:   rgba(6,182,212,0.45);   --btn-cyan-text:   #0e7490;
+  --btn-green-bg:   rgba(34,197,94,0.10);   --btn-green-border:  rgba(34,197,94,0.45);   --btn-green-text:  #166534;
+  --btn-orange-bg:  rgba(249,115,22,0.10);  --btn-orange-border: rgba(249,115,22,0.45);  --btn-orange-text: #9a3412;
+  --btn-gray-bg:    rgba(107,114,128,0.10); --btn-gray-border:   rgba(107,114,128,0.40); --btn-gray-text:   #374151;
+
   font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
   line-height: 1.5;
   font-weight: 400;
@@ -76,10 +108,11 @@
   --bg-active: #1e293b;
 
   --text-primary: #f8fafc;
-  --text-secondary: #94a3b8;
-  --text-muted: #64748b;
+  --text-secondary: #cbd5e1;  /* slate-300 — 10.6:1 on #0f172a ✓ WCAG AAA */
+  --text-muted: #94a3b8;      /* slate-400 — 5.9:1 on #0f172a  ✓ WCAG AA */
   --text-bright: #e2e8f0;
   --text-link: #60a5fa;
+  --accent-primary: #3b82f6;  /* blue-500 — visible on dark bg, used for primary buttons/active states */
 
   --border-primary: #1e293b;
   --border-secondary: #334155;
@@ -105,6 +138,33 @@
 
   /* ── Bottom sheet (dark) ── */
   --sheet-backdrop: rgba(0, 0, 0, 0.6);
+
+  /* ── Source badge colours (dark) ── */
+  --tag-99acres-bg:        #78350f; --tag-99acres-text:        #fde68a;
+  --tag-magicbricks-bg:    #7c2d12; --tag-magicbricks-text:    #fed7aa;
+  --tag-housing-bg:        #14532d; --tag-housing-text:        #86efac;
+  --tag-facebook-bg:       #2e1065; --tag-facebook-text:       #c4b5fd;
+  --tag-website-bg:        #1e3a5f; --tag-website-text:        #93c5fd;
+  --tag-whatsapp-bg:       #14532d; --tag-whatsapp-text:       #86efac;
+  --tag-source-default-bg: #1e293b; --tag-source-default-text: #94a3b8;
+
+  /* ── Scenario / coordinator tag colours (dark) ── */
+  --tag-blue-bg:  #1e3a5f; --tag-blue-text:  #93c5fd;
+  --tag-green-bg: #14532d; --tag-green-text: #86efac;
+
+  /* ── Column + card improvements (dark) ── */
+  --column-border:     #334155;
+  --card-shadow:       0 1px 4px rgba(0,0,0,0.30), 0 0 0 1px rgba(255,255,255,0.04);
+  --card-shadow-hover: 0 3px 12px rgba(0,0,0,0.50), 0 0 0 1px rgba(255,255,255,0.07);
+
+  /* ── Action button variables (dark) ── */
+  --btn-blue-bg:    rgba(59,130,246,0.18);  --btn-blue-border:   rgba(59,130,246,0.60);  --btn-blue-text:   #93c5fd;
+  --btn-purple-bg:  rgba(79,70,229,0.18);   --btn-purple-border: rgba(79,70,229,0.60);   --btn-purple-text: #a5b4fc;
+  --btn-amber-bg:   rgba(245,158,11,0.18);  --btn-amber-border:  rgba(245,158,11,0.60);  --btn-amber-text:  #fde68a;
+  --btn-cyan-bg:    rgba(6,182,212,0.18);   --btn-cyan-border:   rgba(6,182,212,0.60);   --btn-cyan-text:   #67e8f9;
+  --btn-green-bg:   rgba(34,197,94,0.18);   --btn-green-border:  rgba(34,197,94,0.60);   --btn-green-text:  #86efac;
+  --btn-orange-bg:  rgba(249,115,22,0.18);  --btn-orange-border: rgba(249,115,22,0.60);  --btn-orange-text: #fed7aa;
+  --btn-gray-bg:    rgba(107,114,128,0.18); --btn-gray-border:   rgba(107,114,128,0.55); --btn-gray-text:   #d1d5db;
 }
 
 body {
@@ -116,9 +176,42 @@ body {
   transition: background-color 0.2s ease, color 0.2s ease;
 }
 
+/* Chrome autofill override — force inputs to match our theme instead of Chrome's yellow/white.
+   Chrome paints autofilled fields directly via -webkit-autofill; we use a huge inset box-shadow
+   to win the specificity war, then set the caret/text color. */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+input:-webkit-autofill:active,
+textarea:-webkit-autofill,
+select:-webkit-autofill {
+  -webkit-box-shadow: 0 0 0 1000px var(--bg-secondary) inset !important;
+  -webkit-text-fill-color: var(--text-primary) !important;
+  caret-color: var(--text-primary) !important;
+  transition: background-color 9999s ease-in-out 0s !important;
+}
+
 a {
   color: var(--text-link);
   text-decoration: none;
+}
+
+/* Skip-to-content: visually hidden until focused (WCAG 2.4.1) */
+.skip-to-content {
+  position: absolute;
+  top: -9999px;
+  left: 0;
+  z-index: 10000;
+  padding: 8px 16px;
+  background: #3b82f6;
+  color: #fff;
+  border-radius: 0 0 8px 0;
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+}
+.skip-to-content:focus {
+  top: 0;
 }
 
 button {
@@ -236,15 +329,28 @@ button {
    Mobile Utilities
    ======================================== */
 
+/* iOS font-size 16px minimum — prevents Safari auto-zoom on focus */
+input[type="text"],
+input[type="number"],
+input[type="password"],
+input[type="email"],
+input[type="tel"],
+input[type="search"],
+input[type="url"],
+select,
+textarea {
+  font-size: 16px;
+}
+
 /* Touch targets — min 44px for mobile */
 @media (max-width: 768px) {
   button, select, input[type="text"], input[type="number"], input[type="password"], input[type="email"], textarea {
     min-height: 44px;
   }
 
-  /* Safe area insets for devices with notches */
+  /* DashboardLayout handles its own safe-area via paddingTop on the fixed top bar.
+     Avoid double-counting here. Left/right safe areas are still needed. */
   body {
-    padding-top: env(safe-area-inset-top, 0px);
     padding-left: env(safe-area-inset-left, 0px);
     padding-right: env(safe-area-inset-right, 0px);
   }
@@ -262,7 +368,7 @@ button {
     -webkit-tap-highlight-color: transparent;
   }
 
-  /* Disable pull-to-refresh in PWA mode */
+  /* Disable pull-to-refresh in PWA standalone mode */
   html {
     overscroll-behavior-y: contain;
   }
@@ -286,6 +392,11 @@ button {
 @keyframes slide-up-in {
   from { transform: translateY(100%); opacity: 0; }
   to   { transform: translateY(0);    opacity: 1; }
+}
+
+@keyframes slide-in-right {
+  from { transform: translateX(100%); opacity: 0; }
+  to   { transform: translateX(0);    opacity: 1; }
 }
 
 @keyframes slide-up-out {
@@ -334,7 +445,7 @@ button {
   gap: 4px;
   padding: 6px 14px;
   border-radius: var(--radius-chip);
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 600;
   cursor: pointer;
   border: 1.5px solid transparent;
@@ -350,6 +461,44 @@ button {
   background-color: var(--text-link);
   color: #fff;
   border-color: var(--text-link);
+}
+
+/* ── Empty state ── */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 16px;
+  text-align: center;
+  gap: 10px;
+}
+.empty-state__icon {
+  font-size: 40px;
+  line-height: 1;
+}
+.empty-state__title {
+  color: var(--text-primary);
+  font-weight: 600;
+  font-size: 15px;
+  margin: 0;
+}
+.empty-state__body {
+  color: var(--text-muted);
+  font-size: 13px;
+  margin: 0;
+}
+.empty-state__cta {
+  margin-top: 8px;
+  padding: 10px 20px;
+  background: #059669;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 14px;
+  min-height: 44px;
 }
 
 /* ── Smooth theme transitions ── */
@@ -451,4 +600,46 @@ button {
   animation: toast-in 200ms ease forwards;
   white-space: nowrap;
   transition: none;
+}
+
+/* Session-expired banner — shown when the auth cookie expires */
+.session-expired-banner {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 9999;
+  background: #b91c1c;
+  color: #fff;
+  text-align: center;
+  padding: 10px 16px;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.session-expired-banner__close {
+  margin-left: 12px;
+  background: none;
+  border: none;
+  color: #fff;
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+}
+
+/* Focus visible — keyboard navigation */
+:focus-visible {
+  outline: 2px solid #3b82f6;
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Touch target minimum size */
+button, [role="button"], a, input, select, textarea {
+  touch-action: manipulation;
+}
+
+/* Remove focus ring on mouse click, keep for keyboard */
+:focus:not(:focus-visible) {
+  outline: none;
 }

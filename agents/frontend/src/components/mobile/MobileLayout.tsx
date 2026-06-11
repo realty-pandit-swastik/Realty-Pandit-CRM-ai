@@ -16,7 +16,6 @@ const NAV_SECTIONS: { label: string; items: { id: string; label: string; icon: s
     {
         label: "Today's Tasks",
         items: [
-            { id: 'lead-tasks', label: 'Lead Tasks', icon: '📋', permission: null },
             { id: 'tasks', label: 'Tasks', icon: '🗒', permission: null },
             { id: 'calendar', label: 'Calendar', icon: '📅', permission: null },
         ],
@@ -48,6 +47,7 @@ const NAV_SECTIONS: { label: string; items: { id: string; label: string; icon: s
     {
         label: 'Team',
         items: [
+            { id: 'my-profile', label: 'My Profile', icon: '👤', permission: null },
             { id: 'partners', label: 'Partner Agents', icon: '🤝', permission: 'manage_agents' },
             { id: 'team', label: 'Team', icon: '👥', permission: 'manage_agents' },
         ],
@@ -83,7 +83,7 @@ export function MobileLayout({ activeView, onViewChange, children }: MobileLayou
 
     const tabs = [
         { id: 'dashboard', label: 'Home', icon: '🏡' },
-        { id: 'lead-tasks', label: 'My Tasks', icon: '📋' },
+        { id: 'deals', label: 'Pipeline', icon: '🎯' },
         { id: 'leads', label: 'Leads', icon: '📥' },
         { id: 'chats', label: 'Chats', icon: '💬' },
         { id: '_menu', label: 'Menu', icon: '☰' },
@@ -236,7 +236,11 @@ export function MobileLayout({ activeView, onViewChange, children }: MobileLayou
 
                             {/* Profile — bottom of scroll area */}
                             <div style={{ marginTop: '16px', paddingTop: '16px', borderTop: '1px solid var(--border-primary)', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                <div
+                                    role="button"
+                                    onClick={() => handleDrawerNav('my-profile')}
+                                    style={{ display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer' }}
+                                >
                                     <div style={{
                                         width: '40px', height: '40px', borderRadius: '50%',
                                         backgroundColor: PRIMARY, display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -254,6 +258,9 @@ export function MobileLayout({ activeView, onViewChange, children }: MobileLayou
                                             padding: '1px 8px', borderRadius: '8px', fontSize: '10px', fontWeight: 700, textTransform: 'uppercase',
                                         }}>
                                             {agent?.role?.replace('_', ' ')}
+                                        </span>
+                                        <span style={{ display: 'block', marginTop: '4px', fontSize: '11px', color: 'var(--text-link)' }}>
+                                            View My Profile →
                                         </span>
                                     </div>
                                 </div>

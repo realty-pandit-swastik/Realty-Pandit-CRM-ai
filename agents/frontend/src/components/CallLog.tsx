@@ -6,7 +6,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { Phone, PhoneIncoming, PhoneOutgoing, PhoneMissed, Play, Pause, Download, Filter, Calendar, Clock, FileText, MessageSquare } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
-import { API_BASE_URL } from '../lib/api';
+import { API_BASE_URL, authedFetch } from '../lib/api';
+import { useToast } from '../contexts/ToastContext';
 
 interface VoiceCall {
   id: string;
@@ -37,7 +38,8 @@ const DIRECTIONS = [
 ];
 
 export default function CallLog() {
-  const { token, hasPermission } = useAuth();
+  const { hasPermission } = useAuth();
+  const { showToast } = useToast();
   const [calls, setCalls] = useState<VoiceCall[]>([]);
   const [filteredCalls, setFilteredCalls] = useState<VoiceCall[]>([]);
   const [loading, setLoading] = useState(true);
@@ -76,13 +78,11 @@ export default function CallLog() {
   const fetchCalls = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`${API_BASE_URL}/api/calls/voice-log/all`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const response = await authedFetch(`${API_BASE_URL}/api/calls/voice-log/all`);
 
       if (response.status === 403) {
         // User doesn't have permission - don't show error, just don't render
-        console.log('[CallLog] User lacks view_reports permission');
+        console.warn('[CallLog] User lacks view_reports permission');
         setError('You do not have permission to view call logs');
         return;
       }
@@ -138,7 +138,7 @@ export default function CallLog() {
 
   const handlePlayPause = (call: VoiceCall) => {
     if (!call.recording_url) {
-      alert('No recording available for this call');
+      showToast('No recording available for this call', 'info');
       return;
     }
 
@@ -300,8 +300,9 @@ export default function CallLog() {
             />
           </div>
           <div>
-            <label className="block text-sm text-gray-600 mb-1">Status</label>
+            <label htmlFor="status-filter" className="block text-sm text-gray-600 mb-1">Status</label>
             <select
+              id="status-filter"
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
               className="w-full px-3 py-2 border rounded-lg text-sm"
@@ -312,8 +313,9 @@ export default function CallLog() {
             </select>
           </div>
           <div>
-            <label className="block text-sm text-gray-600 mb-1">Direction</label>
+            <label htmlFor="direction-filter" className="block text-sm text-gray-600 mb-1">Direction</label>
             <select
+              id="direction-filter"
               value={directionFilter}
               onChange={(e) => setDirectionFilter(e.target.value)}
               className="w-full px-3 py-2 border rounded-lg text-sm"
@@ -324,8 +326,9 @@ export default function CallLog() {
             </select>
           </div>
           <div>
-            <label className="block text-sm text-gray-600 mb-1">From Date</label>
+            <label htmlFor="date-from" className="block text-sm text-gray-600 mb-1">From Date</label>
             <input
+              id="date-from"
               type="date"
               value={dateFrom}
               onChange={(e) => setDateFrom(e.target.value)}
@@ -333,8 +336,9 @@ export default function CallLog() {
             />
           </div>
           <div>
-            <label className="block text-sm text-gray-600 mb-1">To Date</label>
+            <label htmlFor="date-to" className="block text-sm text-gray-600 mb-1">To Date</label>
             <input
+              id="date-to"
               type="date"
               value={dateTo}
               onChange={(e) => setDateTo(e.target.value)}
@@ -429,6 +433,7 @@ export default function CallLog() {
                           {playingCallId === call.id && (
                             <div className="flex-1">
                               <input
+                                aria-label="Audio scrubber"
                                 type="range"
                                 min="0"
                                 max={duration}

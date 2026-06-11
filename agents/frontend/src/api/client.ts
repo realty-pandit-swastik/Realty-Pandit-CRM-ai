@@ -1,26 +1,49 @@
 
 import axios from 'axios';
+import * as SentrySDK from '@sentry/react';
 
-// Use environment variable for API base URL (production) or fallback to localhost
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:7071';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
+if (!API_BASE_URL && import.meta.env.PROD) {
+  throw new Error('[client] VITE_API_BASE_URL is required in production. Check your .env.production file.');
+}
+const baseURL = API_BASE_URL || 'http://localhost:7071';
 
-const client = axios.create({
-    baseURL: API_BASE_URL
-});
-
-// Set auth header from localStorage on init
-const savedToken = localStorage.getItem('token');
-if (savedToken) {
-    client.defaults.headers.common['Authorization'] = `Bearer ${savedToken}`;
+/**
+ * Read the CSRF token from the rp_csrf cookie (set by the server on login).
+ * The cookie is intentionally NOT HttpOnly so JS can read it to attach as a header.
+ */
+function getCsrfFromCookie(): string | null {
+    if (typeof document === 'undefined') return null;
+    const match = document.cookie.match(/(?:^|;\s*)rp_csrf=([^;]+)/);
+    return match ? decodeURIComponent(match[1]) : null;
 }
 
-// Token refresh interceptor — on 401, try refreshing before giving up
-let isRefreshing = false;
-let failedQueue: Array<{ resolve: (token: string) => void; reject: (err: any) => void }> = [];
+const client = axios.create({
+    baseURL,
+    // withCredentials sends the HttpOnly auth cookies on every request
+    withCredentials: true,
+});
 
-const processQueue = (error: any, token: string | null = null) => {
+// CSRF request interceptor — attach rp_csrf cookie value as X-CSRF-Token header
+// for all state-changing requests. GET/HEAD/OPTIONS are safe and exempt.
+client.interceptors.request.use((config) => {
+    const method = (config.method ?? '').toLowerCase();
+    if (['post', 'put', 'patch', 'delete'].includes(method)) {
+        const csrfToken = getCsrfFromCookie();
+        if (csrfToken) {
+            config.headers['X-CSRF-Token'] = csrfToken;
+        }
+    }
+    return config;
+});
+
+// Token refresh interceptor — on 401, try refreshing the cookie before giving up
+let isRefreshing = false;
+let failedQueue: Array<{ resolve: () => void; reject: (err: any) => void }> = [];
+
+const processQueue = (error: any, success = false) => {
     failedQueue.forEach(prom => {
-        if (token) prom.resolve(token);
+        if (success) prom.resolve();
         else prom.reject(error);
     });
     failedQueue = [];
@@ -31,47 +54,82 @@ client.interceptors.response.use(
     async error => {
         const originalRequest = error.config;
 
-        // 403 — permission denied, don't retry
-        if (error.response?.status === 403) {
+        // 403 — could be CSRF token expired. Auto-refresh CSRF and retry once.
+        if (error.response?.status === 403 && !originalRequest._csrfRetry) {
+            const isCsrfFailure = error.response?.data?.error?.includes?.('CSRF');
+            if (isCsrfFailure) {
+                originalRequest._csrfRetry = true;
+                try {
+                    // Fetch a fresh CSRF token — server sets new rp_csrf cookie
+                    await axios.get(`${baseURL}/auth/csrf`, { withCredentials: true });
+                    // Re-read the new cookie value and attach it
+                    const newToken = getCsrfFromCookie();
+                    if (newToken) originalRequest.headers['X-CSRF-Token'] = newToken;
+                    return client(originalRequest);
+                } catch {
+                    // CSRF refresh failed — user is not authenticated, fall through
+                }
+            }
             console.warn('Permission denied:', originalRequest?.url);
             return Promise.reject(error);
         }
 
         if (error.response?.status === 401 && !originalRequest._retry) {
-            const refreshToken = localStorage.getItem('refreshToken');
-            if (!refreshToken) return Promise.reject(error);
+            // Don't retry the refresh endpoint itself to avoid loops
+            if (originalRequest.url?.includes('/auth/refresh')) {
+                window.dispatchEvent(new CustomEvent('session-expired'));
+                return Promise.reject(error);
+            }
+
+            // Don't retry /auth/me — it's the initial session check.
+            // A 401 here means "not logged in" (fresh visit), NOT "session expired".
+            if (originalRequest.url?.includes('/auth/me')) {
+                return Promise.reject(error);
+            }
+
+            // Don't retry /auth/login — 401 means wrong credentials, not an expired session.
+            if (originalRequest.url?.includes('/auth/login')) {
+                return Promise.reject(error);
+            }
 
             if (isRefreshing) {
-                return new Promise<string>((resolve, reject) => {
+                return new Promise<void>((resolve, reject) => {
                     failedQueue.push({ resolve, reject });
-                }).then(token => {
-                    originalRequest.headers['Authorization'] = `Bearer ${token}`;
-                    return client(originalRequest);
-                });
+                }).then(() => client(originalRequest));
             }
 
             originalRequest._retry = true;
             isRefreshing = true;
 
             try {
-                const res = await axios.post(`${API_BASE_URL}/auth/refresh`, { refreshToken });
-                const { token: newToken, refreshToken: newRefreshToken } = res.data;
-                localStorage.setItem('token', newToken);
-                if (newRefreshToken) localStorage.setItem('refreshToken', newRefreshToken);
-                client.defaults.headers.common['Authorization'] = `Bearer ${newToken}`;
-                processQueue(null, newToken);
-                originalRequest.headers['Authorization'] = `Bearer ${newToken}`;
+                // Cookie-based refresh: the rp_refresh_token HttpOnly cookie is sent
+                // automatically via withCredentials — no token in the request body needed.
+                await axios.post(`${baseURL}/auth/refresh`, {}, { withCredentials: true });
+                processQueue(null, true);
                 return client(originalRequest);
             } catch (refreshError) {
-                processQueue(refreshError, null);
-                localStorage.removeItem('token');
-                localStorage.removeItem('refreshToken');
-                delete client.defaults.headers.common['Authorization'];
-                window.location.href = '/';
+                processQueue(refreshError, false);
+                // Notify the app that the session has expired (show modal, not hard redirect)
+                window.dispatchEvent(new CustomEvent('session-expired'));
                 return Promise.reject(refreshError);
             } finally {
                 isRefreshing = false;
             }
+        }
+
+        // Report ONLY real server errors (5xx) to GlitchTip. 4xx are user/permission issues
+        // (excluded above), and no-response network errors are transient offline/flaky-wifi
+        // blips during PWA use (not actionable) — don't report them. (2026-06-01)
+        const status = error.response?.status;
+        if (status && status >= 500) {
+            SentrySDK.captureException(error, {
+                tags: { axios: 'true', status: String(status) },
+                extra: {
+                    url: originalRequest?.url,
+                    method: originalRequest?.method,
+                    response_data: error.response?.data,
+                },
+            });
         }
 
         return Promise.reject(error);
@@ -152,10 +210,35 @@ export const getTeamActivity = async (params?: {
     return res.data;
 };
 
-export const transferInventory = async (id: string, to_agent_id: string) => {
-    const res = await client.post(`/api/inventory/${id}/transfer`, { to_agent_id });
+export const transferInventory = async (id: string, to_agent_id: string, reason?: string) => {
+    const res = await client.post(`/api/inventory/${id}/transfer`, { to_agent_id, reason });
     return res.data;
 };
+
+export const reassignLead = async (phone: string, agent_id: string, reason?: string) => {
+    const res = await client.patch(`/api/leads/${encodeURIComponent(phone)}/reassign`, { agent_id, reason });
+    return res.data;
+};
+
+export const convertLeadToPartner = async (
+    phone: string,
+    payload: { name?: string; partner_category?: 'INDIVIDUAL' | 'COMPANY'; company_name?: string },
+) => {
+    const res = await client.post(`/api/leads/${encodeURIComponent(phone)}/convert-to-partner`, payload);
+    return res.data;
+};
+
+// ── Taxonomy (Phase 1a read + 1c admin editor) ──
+export const getTaxonomyTree = async () => (await client.get('/public/taxonomy/tree')).data;
+export const getNodeFields = async (nodeId: string) => (await client.get(`/public/taxonomy/nodes/${nodeId}/fields`)).data;
+export const getFieldCatalog = async () => (await client.get('/api/taxonomy/fields')).data;
+export const updateNodeFields = async (nodeId: string, fields: any[]) =>
+    (await client.patch(`/api/taxonomy/nodes/${nodeId}/fields`, { fields })).data;
+export const getReviewQueue = async () => (await client.get('/api/taxonomy/review-queue')).data;
+export const reassignInventoryNode = async (inventoryId: string, taxonomy_node_id: string) =>
+    (await client.patch(`/api/taxonomy/inventory/${inventoryId}/node`, { taxonomy_node_id })).data;
+export const bulkReassignReview = async (from_node_id: string | null, to_node_id: string) =>
+    (await client.patch('/api/taxonomy/review/bulk', { from_node_id, to_node_id })).data;
 
 export const approveInventory = async (id: string) => {
     const res = await client.post(`/api/inventory/${id}/approve`);
@@ -166,6 +249,17 @@ export const rejectInventory = async (id: string, reason?: string) => {
     const res = await client.post(`/api/inventory/${id}/reject`, { reason });
     return res.data;
 };
+
+// Partner-claim approvals: a partner submitted (via their portal) a lead for one of our existing direct
+// clients. The team approves (credits the partner) or rejects (stays our direct client).
+export const getPendingPartnerClaims = async () =>
+    (await client.get('/api/leads/pending-partner-claims')).data;
+
+export const approvePartnerClaim = async (phone: string) =>
+    (await client.post(`/api/leads/${encodeURIComponent(phone)}/approve-partner-claim`)).data;
+
+export const rejectPartnerClaim = async (phone: string, reason?: string) =>
+    (await client.post(`/api/leads/${encodeURIComponent(phone)}/reject-partner-claim`, { reason })).data;
 
 export const createInventory = async (data: Record<string, any>) => {
     const res = await client.post('/api/inventory', data);
@@ -197,9 +291,30 @@ export const getTeamMembersList = async () => {
     return res.data;
 };
 
+export const getTeamMemberProfile = async (id: string) => {
+    const res = await client.get(`/api/team/members/${id}`);
+    return res.data;
+};
+
+export const updateTeamMemberManager = async (id: string, reports_to_id: string | null) => {
+    const res = await client.patch(`/api/team/members/${id}`, { reports_to_id });
+    return res.data;
+};
+
 export const reportNoShow = async (phoneNumber: string) => {
     const res = await client.post(`/api/leads/${phoneNumber}/no-show`);
     return res.data;
+};
+
+// 2026-05-12: Mark Lead Lost. Closes the contact + any active deals for it.
+export const markLeadLost = async (phoneNumber: string, reason?: string, note?: string) => {
+    const res = await client.patch(`/api/leads/${phoneNumber}/mark-lost`, { reason, note });
+    return res.data as {
+        success: boolean;
+        contact: { phone_number: string; name: string | null; lead_status: string; lifecycle_stage: string };
+        deals_closed: number;
+        closed_deal_ids: string[];
+    };
 };
 
 export const updateContactType = async (phoneNumber: string, contactType: string) => {
@@ -219,6 +334,8 @@ export const createPartner = async (data: {
     partner_category: string;
     business_name: string;
     business_address: string;
+    business_lat?: number | null;
+    business_lng?: number | null;
     registration_number: string;
     agency_name?: string;
     partner_type?: string;
@@ -245,6 +362,48 @@ export const updatePartnerPackage = async (id: string, package_type: string) => 
 
 export const updatePartnerCommission = async (id: string, rate: number) => {
     const res = await client.patch(`/api/partners/${id}/commission`, { rate });
+    return res.data;
+};
+
+export const updatePartner = async (id: string, data: {
+    name?: string; email?: string; company_name?: string; city?: string; agency_name?: string;
+    business_name?: string; business_address?: string; registration_number?: string;
+    business_lat?: number | null; business_lng?: number | null;
+    partner_type?: string; partner_category?: string;
+    listing_limit?: number | string; priority_score?: number | string;
+    commission_rate?: number | string | null; subscription_start?: string | null; subscription_end?: string | null;
+}) => {
+    const res = await client.patch(`/api/partners/${id}`, data);
+    return res.data;
+};
+
+export const getPartner = async (id: string) => {
+    const res = await client.get(`/api/partners/${id}`);
+    return res.data;
+};
+
+export const getPartnerInventory = async (id: string) => {
+    const res = await client.get(`/api/partners/${id}/inventory`);
+    return res.data;
+};
+
+export const getPartnerLeads = async (id: string) => {
+    const res = await client.get(`/api/partners/${id}/leads`);
+    return res.data;
+};
+
+export const getPartnerCommissions = async (id: string) => {
+    const res = await client.get(`/api/partners/${id}/commissions`);
+    return res.data;
+};
+
+export const setPartnerPassword = async (id: string, password: string) => {
+    const res = await client.post(`/api/partners/${id}/set-password`, { password });
+    return res.data;
+};
+
+export const updateContactIdentity = async (phone: string, data: { name?: string; email?: string }) => {
+    const res = await client.patch(`/api/leads/${encodeURIComponent(phone)}`, data);
     return res.data;
 };
 
@@ -799,6 +958,7 @@ export interface Deal {
     type: string;
     status: string;
     deal_scenario: string | null;
+    source?: string;
     demand_contact_id: string;
     supply_contact_id: string | null;
     coordinator_agent_id: string | null;
@@ -807,16 +967,48 @@ export interface Deal {
     supply_handler_type: string | null;
     supply_handler_id: string | null;
     inventory_id: string | null;
+    demand_intent: string | null;
     demand_property_type: string | null;
     demand_type_slug: string | null;
+    demand_category: string | null;
+    demand_bedrooms: string | null;
     demand_location: string | null;
     demand_budget_min: number | null;
     demand_budget_max: number | null;
-    demand_contact?: { phone_number?: string; name?: string; email?: string; contact_type?: string };
+    demand_area_min: number | null;
+    demand_area_max: number | null;
+    demand_amenities: string[] | null;
+    demand_notes: string | null;
+    // Phase 2 demand-side unification (2026-05-29) — canonical SoT mirror on the Deal model.
+    demand_taxonomy_node_id?: string | null;
+    demand_schema_values?: Record<string, any> | null;
+    demand_contact?: {
+        phone_number?: string;
+        name?: string;
+        email?: string;
+        contact_type?: string;
+        // Requirements fields (SSOT — fallback source for RequirementsTab)
+        intent?: string | null;
+        demand_main_category?: string | null;   // = demand_property_type on transaction
+        demand_category?: string | null;
+        demand_type_slug?: string | null;
+        demand_bhk?: number | null;             // = demand_bedrooms as number
+        budget_min?: number | null;             // = demand_budget_min
+        budget_max?: number | null;             // = demand_budget_max
+        preferred_location?: string | null;     // = demand_location
+        area_min?: number | null;
+        area_max?: number | null;
+        demand_amenities?: string[] | null;
+        // Phase 2 demand-side unification — canonical SoT.
+        demand_taxonomy_node_id?: string | null;
+        demand_schema_values?: Record<string, any> | null;
+    };
     supply_contact?: { phone_number?: string; name?: string };
     coordinator?: { id: string; name: string; phone?: string };
     inventory?: { id: string; type: string; location: string; price: number | null; media_urls?: string[] };
     valid_next_statuses?: string[];
+    ai_status?: string;
+    ai_paused?: boolean;
     created_at: string;
     updated_at: string;
 }
@@ -872,6 +1064,107 @@ export const createDealQuery = async (id: string, subject: string, message: stri
 
 export const answerDealQuery = async (dealId: string, queryId: string, answer: string) => {
     const res = await client.patch(`/api/deals/${dealId}/query/${queryId}`, { answer });
+    return res.data;
+};
+
+export const updateDealRequirements = async (dealId: string, fields: Partial<{
+    demand_intent: string;
+    demand_category: string;
+    demand_type_slug: string;
+    demand_property_type: string;
+    demand_bedrooms: string;
+    demand_location: string;
+    demand_budget_min: number;
+    demand_budget_max: number;
+    demand_area_min: number;
+    demand_area_max: number;
+    demand_amenities: string[];
+    demand_notes: string;
+    // Phase 2 demand-side unification (2026-05-29) — canonical SoT mirror.
+    demand_taxonomy_node_id: string | null;
+    demand_schema_values: Record<string, any> | null;
+}>) => {
+    const res = await client.patch(`/api/deals/${dealId}/requirements`, fields);
+    return res.data;
+};
+
+export const updateLeadRequirements = async (phone: string, fields: {
+    intent?: string;
+    demand_main_category?: string | null;
+    demand_category?: string | null;
+    demand_type_slug?: string | null;
+    demand_bhk?: number | null;
+    budget_min?: number | null;
+    budget_max?: number | null;
+    preferred_location?: string;
+    preferred_lat?: number | null;
+    preferred_lng?: number | null;
+    area_min?: number | null;
+    area_max?: number | null;
+    area_unit?: string | null;
+    timeline?: string | null;
+    demand_amenities?: string[];
+    category_id?: string | null;
+    sub_category_id?: string | null;
+    type_id?: string | null;
+    // Phase 2 demand-side unification (2026-05-29) — canonical SoT mirror.
+    demand_taxonomy_node_id?: string | null;
+    demand_schema_values?: Record<string, any> | null;
+}) => {
+    const res = await client.patch(`/api/leads/${encodeURIComponent(phone)}/requirements`, fields);
+    return res.data;
+};
+
+export const reassignDeal = async (dealId: string, agentId: string, reason?: string) => {
+    const res = await client.patch(`/api/deals/${dealId}/reassign`, { agent_id: agentId, reason });
+    return res.data;
+};
+
+export const setDealReminder = async (
+    dealId: string,
+    payload: { remind_at: string; note?: string; advance_minutes?: number },
+) => {
+    const res = await client.post(`/api/deals/${dealId}/reminder`, payload);
+    return res.data;
+};
+
+export const getDealMatchedInventory = async (dealId: string, filters?: Record<string, string>) => {
+    const res = await client.get(`/api/deals/${dealId}/matched-inventory`, { params: filters });
+    return res.data;
+};
+
+// Quick "N matching properties" counts for pipeline tiles (lightweight; budget+type+BHK, no geo).
+export const getDealMatchCounts = async (dealIds: string[]): Promise<Record<string, number>> => {
+    if (!dealIds.length) return {};
+    const res = await client.post('/api/deals/match-counts', { deal_ids: dealIds });
+    return res.data?.data || {};
+};
+
+export const shareDealProperties = async (dealId: string, inventoryIds: string[]) => {
+    const res = await client.post(`/api/deals/${dealId}/share-properties`, { inventory_ids: inventoryIds });
+    return res.data;
+};
+
+export const bookDealAppointment = async (dealId: string, payload: {
+    inventory_id: string;
+    date: string;
+    time: string;
+}) => {
+    const res = await client.post(`/api/deals/${dealId}/book-appointment`, payload);
+    return res.data;
+};
+
+export const getDealPropertyShares = async (dealId: string) => {
+    const res = await client.get(`/api/deals/${dealId}/property-shares`);
+    return res.data;
+};
+
+export const logDealAction = async (dealId: string, payload: {
+    action_type: string;
+    notes?: string;
+    outcome?: string;
+}) => {
+    const res = await client.post(`/api/deals/${dealId}/log-action`, payload);
     return res.data;
 };
 

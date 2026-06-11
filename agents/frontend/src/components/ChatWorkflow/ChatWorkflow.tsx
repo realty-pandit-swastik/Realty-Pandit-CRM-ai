@@ -2,7 +2,7 @@
  * ChatWorkflow — Admin Panel
  *
  * Conversational chat UI for inventory upload workflow.
- * All inline styles with CSS variables matching admin panel patterns.
+ * Styles live in ChatWorkflow.module.css (CSS variables matching admin panel patterns).
  */
 
 import React, { useEffect, useRef, useState } from 'react';
@@ -10,6 +10,7 @@ import { MessageSquare, Send, Loader2, ArrowLeft, X, Camera, Video, FileText, Ch
 import { useChatWorkflow, type ChatWorkflowState } from '../../hooks/useChatWorkflow';
 import { GooglePlacesInput, type PlaceResult } from '../GooglePlacesInput';
 import type { ChatMessage } from '../../api/client';
+import styles from './ChatWorkflow.module.css';
 
 // ─── Price Formatter ─────────────────────────────────────────────────────────
 
@@ -58,35 +59,40 @@ export const ChatWorkflowPanel: React.FC<ChatWorkflowPanelProps> = ({ onBack, on
     if (chat.inventoryId && !chat.sessionActive) {
         const detailTags = ['Amenities', 'Photos', 'Videos', 'Floor Plan', 'Furnishing', 'Parking', 'Age', 'Description', 'Facing', 'Balcony'];
         return (
-            <div style={s.container}>
-                <div style={s.header}>
-                    <button onClick={() => { chat.reset(); onCreated(); }} style={s.backBtn}><ArrowLeft size={16} /></button>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <div className={styles.container}>
+                <div className={styles.header}>
+                    <button
+                        type="button"
+                        aria-label="Go back"
+                        onClick={() => { chat.reset(); onCreated(); }}
+                        className={styles.backBtn}
+                    >
+                        <ArrowLeft size={16} />
+                    </button>
+                    <div className={styles.headerInfo}>
                         <CheckCircle2 size={18} style={{ color: '#059669' }} />
-                        <span style={{ fontWeight: 600, fontSize: '16px', color: '#059669' }}>Property Saved!</span>
+                        <span className={styles.headerTitleSuccess}>Property Saved!</span>
                     </div>
                 </div>
-                <div style={{ padding: '30px 20px', textAlign: 'center' }}>
-                    <div style={{ fontSize: '48px', marginBottom: '12px' }}>&#10004;</div>
-                    <h2 style={{ fontSize: '20px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '8px' }}>Property Saved Successfully!</h2>
-                    <p style={{ color: 'var(--text-muted)', fontSize: '13px', marginBottom: '4px' }}>Inventory ID:</p>
-                    <p style={{ fontFamily: 'monospace', fontSize: '20px', color: '#059669', fontWeight: 'bold', marginBottom: '24px' }}>
-                        {chat.displayId || chat.inventoryId}
-                    </p>
+                <div className={styles.successBody}>
+                    <div className={styles.successCheckmark}>&#10004;</div>
+                    <h2 className={styles.successTitle}>Property Saved Successfully!</h2>
+                    <p className={styles.successSubtitle}>Inventory ID:</p>
+                    <p className={styles.successId}>{chat.displayId || chat.inventoryId}</p>
 
-                    <div style={{ background: 'linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 100%)', border: '2px solid #059669', borderRadius: '12px', padding: '20px', marginBottom: '20px', textAlign: 'left' }}>
-                        <p style={{ fontWeight: 600, fontSize: '15px', color: '#059669', marginBottom: '8px' }}>
-                            Want to improve this listing?
-                        </p>
-                        <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '12px' }}>
+                    <div className={styles.successCard}>
+                        <p className={styles.successCardTitle}>Want to improve this listing?</p>
+                        <p className={styles.successCardText}>
                             Add more details to make your listing stand out and attract more buyers:
                         </p>
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '16px' }}>
+                        <div className={styles.successTagsRow}>
                             {detailTags.map(tag => (
-                                <span key={tag} style={{ padding: '4px 10px', borderRadius: '12px', fontSize: '11px', backgroundColor: '#d1fae5', color: '#065f46' }}>{tag}</span>
+                                <span key={tag} className={styles.successTag}>{tag}</span>
                             ))}
                         </div>
                         <button
+                            type="button"
+                            className={styles.successPrimaryBtn}
                             onClick={() => {
                                 const invId = chat.inventoryId;
                                 chat.reset();
@@ -96,15 +102,15 @@ export const ChatWorkflowPanel: React.FC<ChatWorkflowPanelProps> = ({ onBack, on
                                     onCreated();
                                 }
                             }}
-                            style={{ width: '100%', padding: '10px', borderRadius: '8px', backgroundColor: '#059669', color: '#fff', fontWeight: 600, fontSize: '14px', border: 'none', cursor: 'pointer' }}
                         >
                             Add More Details
                         </button>
                     </div>
 
                     <button
+                        type="button"
+                        className={styles.successSecondaryBtn}
                         onClick={() => { chat.reset(); onCreated(); }}
-                        style={{ padding: '10px 24px', borderRadius: '8px', backgroundColor: 'var(--bg-secondary)', color: 'var(--text-primary)', fontWeight: 500, fontSize: '13px', border: '1px solid var(--border-secondary)', cursor: 'pointer' }}
                     >
                         Back to Inventory List
                     </button>
@@ -114,23 +120,30 @@ export const ChatWorkflowPanel: React.FC<ChatWorkflowPanelProps> = ({ onBack, on
     }
 
     return (
-        <div style={s.container}>
+        <div className={styles.container}>
             {/* Header */}
-            <div style={s.header}>
-                <button onClick={onBack} style={s.backBtn}><ArrowLeft size={16} /></button>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <div className={styles.header}>
+                <button
+                    type="button"
+                    aria-label="Back"
+                    onClick={onBack}
+                    className={styles.backBtn}
+                >
+                    <ArrowLeft size={16} />
+                </button>
+                <div className={styles.headerInfo}>
                     <MessageSquare size={18} style={{ color: '#059669' }} />
-                    <span style={{ fontWeight: 600, fontSize: '16px', color: 'var(--text-primary)' }}>Add Property (Chat)</span>
+                    <span className={styles.headerTitlePrimary}>Add Property (Chat)</span>
                 </div>
                 <ProgressBadge progress={chat.progress} />
             </div>
 
             {/* Messages */}
-            <div style={s.messagesArea}>
+            <div className={styles.messagesArea}>
                 {chat.loading && (
-                    <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--text-muted)' }}>
-                        <Loader2 size={24} style={{ animation: 'spin 1s linear infinite' }} />
-                        <p style={{ marginTop: '8px', fontSize: '13px' }}>Starting chat...</p>
+                    <div className={styles.loadingState}>
+                        <Loader2 size={24} className={styles.spinAnimation} />
+                        <p className={styles.loadingText}>Starting chat...</p>
                     </div>
                 )}
 
@@ -173,13 +186,16 @@ function ProgressBadge({ progress }: { progress: { current: number; total: numbe
     if (!progress) return null;
     const pct = Math.round((progress.current / progress.total) * 100);
     return (
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginLeft: 'auto' }}>
-            <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+        <div className={styles.progressBadge}>
+            <span className={styles.progressText}>
                 {GROUP_LABELS[progress.group] || progress.group} · {pct}%
             </span>
-            <div style={{ width: '60px', height: '4px', borderRadius: '2px', backgroundColor: 'var(--bg-tertiary)', overflow: 'hidden' }}>
-                <div style={{ width: `${pct}%`, height: '100%', backgroundColor: '#059669', borderRadius: '2px', transition: 'width 0.4s ease' }} />
-            </div>
+            <progress
+                value={pct}
+                max={100}
+                aria-label="Upload progress"
+                className={styles.progressBar}
+            />
         </div>
     );
 }
@@ -199,37 +215,31 @@ function ChatBubble({ message, isLatest, sending, onQuickReply, chat }: ChatBubb
     const isError = message.type === 'error';
     const isSuccess = message.type === 'success';
 
-    const bubbleStyle: React.CSSProperties = isUser
-        ? { ...s.bubble, backgroundColor: '#059669', color: '#fff', marginLeft: 'auto', borderTopRightRadius: '4px' }
+    const bubbleVariant = isUser
+        ? styles.bubbleUser
         : isError
-            ? { ...s.bubble, backgroundColor: 'var(--error-bg, #fef2f2)', color: 'var(--error-text, #dc2626)', borderTopLeftRadius: '4px' }
+            ? styles.bubbleError
             : isSuccess
-                ? { ...s.bubble, backgroundColor: 'var(--success-bg, #f0fdf4)', color: 'var(--success-text, #16a34a)', borderTopLeftRadius: '4px' }
-                : { ...s.bubble, backgroundColor: 'var(--bg-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border-secondary)', borderTopLeftRadius: '4px' };
+                ? styles.bubbleSuccess
+                : styles.bubbleAssistant;
 
     return (
-        <div style={{ display: 'flex', justifyContent: isUser ? 'flex-end' : 'flex-start', marginBottom: '12px' }}>
-            <div style={{ maxWidth: '80%' }}>
-                <div style={bubbleStyle}>
-                    <p style={{ margin: 0, fontSize: '13px', lineHeight: '1.5', whiteSpace: 'pre-wrap' }}>{message.content}</p>
+        <div className={`${styles.bubbleWrapper} ${isUser ? styles.bubbleWrapperUser : styles.bubbleWrapperAssistant}`}>
+            <div className={styles.bubbleInner}>
+                <div className={`${styles.bubble} ${bubbleVariant}`}>
+                    <p className={styles.bubbleText}>{message.content}</p>
                 </div>
 
                 {/* Quick replies */}
                 {isLatest && !isUser && message.quick_replies && message.quick_replies.length > 0 && (
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '8px' }}>
+                    <div className={styles.quickRepliesRow}>
                         {message.quick_replies.map(qr => (
                             <button
                                 key={qr.value}
+                                type="button"
                                 onClick={() => !sending && onQuickReply(qr.value)}
                                 disabled={sending}
-                                style={{
-                                    padding: '6px 12px', borderRadius: '16px', fontSize: '12px', fontWeight: 500,
-                                    border: '1px solid #059669', backgroundColor: 'transparent', color: '#059669',
-                                    cursor: sending ? 'not-allowed' : 'pointer', opacity: sending ? 0.5 : 1,
-                                    transition: 'all 0.15s',
-                                }}
-                                onMouseEnter={e => { if (!sending) { (e.target as HTMLElement).style.backgroundColor = '#059669'; (e.target as HTMLElement).style.color = '#fff'; } }}
-                                onMouseLeave={e => { (e.target as HTMLElement).style.backgroundColor = 'transparent'; (e.target as HTMLElement).style.color = '#059669'; }}
+                                className={styles.quickReplyBtn}
                             >
                                 {qr.label}
                             </button>
@@ -241,7 +251,7 @@ function ChatBubble({ message, isLatest, sending, onQuickReply, chat }: ChatBubb
                 {isLatest && !isUser && renderWidget(message, chat)}
 
                 {/* Timestamp */}
-                <span style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: '4px', display: 'block' }}>
+                <span className={styles.bubbleTimestamp}>
                     {new Date(message.timestamp).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
                 </span>
             </div>
@@ -253,12 +263,9 @@ function ChatBubble({ message, isLatest, sending, onQuickReply, chat }: ChatBubb
 
 function TypingDots() {
     return (
-        <div style={{ display: 'flex', gap: '4px', padding: '8px 14px', backgroundColor: 'var(--bg-secondary)', borderRadius: '16px', width: 'fit-content', border: '1px solid var(--border-secondary)' }}>
-            {[0, 1, 2].map(i => (
-                <div key={i} style={{
-                    width: '6px', height: '6px', borderRadius: '50%', backgroundColor: 'var(--text-muted)',
-                    animation: `typingBounce 0.6s ease-in-out ${i * 0.15}s infinite`,
-                }} />
+        <div className={styles.typingDots}>
+            {[styles.typingDot, `${styles.typingDot} ${styles.typingDot1}`, `${styles.typingDot} ${styles.typingDot2}`].map((cls, i) => (
+                <div key={i} className={cls} />
             ))}
         </div>
     );
@@ -300,37 +307,35 @@ function ChatInputBar({ onSend, disabled, inputType }: ChatInputBarProps) {
         return !isNaN(num) && num > 0 ? formatIndianPrice(num) : null;
     })() : null;
 
+    const isActive = !!text.trim() && !disabled;
+
     return (
-        <div style={{ ...s.inputBar, flexDirection: 'column', gap: '4px' }}>
+        <div className={styles.inputBar}>
             {pricePreview && (
-                <div style={{ fontSize: '12px', color: '#059669', fontWeight: 600, padding: '0 4px' }}>
-                    {pricePreview}
-                </div>
+                <div className={styles.pricePreview}>{pricePreview}</div>
             )}
-            <div style={{ display: 'flex', gap: '8px', width: '100%' }}>
-            <textarea
-                ref={inputRef}
-                value={text}
-                onChange={e => setText(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
-                disabled={disabled}
-                placeholder={placeholder}
-                inputMode={inputMode}
-                rows={1}
-                style={s.textInput}
-            />
-            <button
-                onClick={handleSend}
-                disabled={disabled || !text.trim()}
-                style={{
-                    ...s.sendBtn,
-                    backgroundColor: text.trim() && !disabled ? '#059669' : 'var(--bg-tertiary)',
-                    color: text.trim() && !disabled ? '#fff' : 'var(--text-muted)',
-                    cursor: text.trim() && !disabled ? 'pointer' : 'not-allowed',
-                }}
-            >
-                {disabled ? <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> : <Send size={16} />}
-            </button>
+            <div className={styles.inputBarRow}>
+                <textarea
+                    ref={inputRef}
+                    value={text}
+                    onChange={e => setText(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
+                    disabled={disabled}
+                    placeholder={placeholder}
+                    inputMode={inputMode}
+                    rows={1}
+                    aria-label="Message input"
+                    className={styles.textInput}
+                />
+                <button
+                    type="button"
+                    onClick={handleSend}
+                    disabled={disabled || !text.trim()}
+                    aria-label="Send message"
+                    className={`${styles.sendBtn} ${isActive ? styles.sendBtnActive : ''}`}
+                >
+                    {disabled ? <Loader2 size={16} className={styles.spinAnimation} /> : <Send size={16} />}
+                </button>
             </div>
         </div>
     );
@@ -361,40 +366,62 @@ function MediaUploaderWidget({ mode, onUpload, sending }: MediaUploaderProps) {
     const handleUpload = async () => {
         if (!files.length || uploading) return;
         setUploading(true);
-        try { await onUpload(files); setDone(true); } catch {} finally { setUploading(false); }
+        try { await onUpload(files); setDone(true); } catch (err) { console.error('[ChatWorkflow] Upload failed:', err); } finally { setUploading(false); }
     };
 
     if (done) {
         return (
-            <div style={{ ...s.widget, display: 'flex', alignItems: 'center', gap: '8px', color: '#059669' }}>
+            <div className={`${styles.widget} ${styles.widgetDone}`}>
                 <CheckCircle2 size={16} /> {files.length} {label.toLowerCase()} uploaded
             </div>
         );
     }
 
     return (
-        <div style={s.widget}>
-            <div
-                onClick={() => inputRef.current?.click()}
-                style={{ padding: '16px', textAlign: 'center', cursor: 'pointer', color: 'var(--text-muted)' }}
+        <div className={styles.widget}>
+            <label
+                htmlFor={`file-upload-${mode}`}
+                tabIndex={0}
+                className={styles.widgetDropzone}
             >
-                <Icon size={24} style={{ margin: '0 auto 8px' }} />
-                <p style={{ margin: 0, fontSize: '13px', fontWeight: 500 }}>Upload {label}</p>
-                <p style={{ margin: '4px 0 0', fontSize: '11px' }}>Click to select (max {limit})</p>
-                <input ref={inputRef} type="file" accept={accept} multiple={limit > 1} onChange={e => e.target.files && addFiles(e.target.files)} style={{ display: 'none' }} />
-            </div>
+                <Icon size={24} style={{ margin: '0 auto 8px', display: 'block' }} />
+                <p className={styles.widgetDropzoneTitle}>Upload {label}</p>
+                <p className={styles.widgetDropzoneHint}>Click to select (max {limit})</p>
+                <input
+                    ref={inputRef}
+                    id={`file-upload-${mode}`}
+                    type="file"
+                    accept={accept}
+                    multiple={limit > 1}
+                    aria-label={`Select ${label} to upload`}
+                    onChange={e => e.target.files && addFiles(e.target.files)}
+                    className={styles.fileInputHidden}
+                />
+            </label>
 
             {files.length > 0 && (
-                <div style={{ padding: '8px 12px', borderTop: '1px solid var(--border-secondary)' }}>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '8px' }}>
+                <div className={styles.widgetFileList}>
+                    <div className={styles.fileChipsRow}>
                         {files.map((f, i) => (
-                            <div key={i} style={{ position: 'relative', padding: '4px 24px 4px 8px', borderRadius: '6px', fontSize: '11px', backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-secondary)', maxWidth: '120px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            <div key={i} className={styles.fileChip}>
                                 {f.name}
-                                <button onClick={() => removeFile(i)} style={{ position: 'absolute', right: '2px', top: '2px', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: '2px' }}><X size={12} /></button>
+                                <button
+                                    type="button"
+                                    onClick={() => removeFile(i)}
+                                    aria-label={`Remove ${f.name}`}
+                                    className={styles.fileChipRemove}
+                                >
+                                    <X size={12} />
+                                </button>
                             </div>
                         ))}
                     </div>
-                    <button onClick={handleUpload} disabled={uploading || sending} style={{ ...s.primaryBtn, width: '100%', opacity: uploading || sending ? 0.6 : 1 }}>
+                    <button
+                        type="button"
+                        onClick={handleUpload}
+                        disabled={uploading || sending}
+                        className={`${styles.primaryBtn} ${styles.widgetFullWidth}`}
+                    >
                         {uploading ? 'Uploading...' : `Upload ${files.length} ${label.toLowerCase()}`}
                     </button>
                 </div>
@@ -444,29 +471,37 @@ function LocationPickerWidget({ onSubmit, sending }: { onSubmit: (json: string) 
         onSubmit(JSON.stringify(addr));
     };
 
-    const fieldRow = (label: string, value: string, onChange: (v: string) => void, placeholder: string) => (
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px' }}>
-            <span style={{ width: '80px', fontSize: '11px', color: 'var(--text-muted)', flexShrink: 0 }}>{label}</span>
-            <input value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} style={{ ...s.textField, flex: 1 }} />
+    const fieldRow = (lbl: string, value: string, onChange: (v: string) => void, placeholder: string) => (
+        <div className={styles.fieldRow}>
+            <span className={styles.fieldLabel}>{lbl}</span>
+            <input
+                value={value}
+                onChange={e => onChange(e.target.value)}
+                placeholder={placeholder}
+                aria-label={lbl}
+                className={styles.textField}
+            />
         </div>
     );
 
+    const isIncomplete = !locality.trim() || !district.trim() || !state.trim();
+
     return (
-        <div style={s.widget}>
-            <div style={{ padding: '10px 12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <div className={styles.widget}>
+            <div className={styles.locationSearchRow}>
                 <MapPin size={16} style={{ color: '#059669', flexShrink: 0 }} />
                 <GooglePlacesInput
                     value={searchText}
                     onChange={setSearchText}
                     onPlaceSelect={handlePlaceSelect}
                     placeholder="Search property address..."
-                    style={s.textField}
+                    className={styles.textField}
                 />
             </div>
             {place && (
-                <div style={{ padding: '8px 12px', borderTop: '1px solid var(--border-secondary)' }}>
-                    <p style={{ margin: '0 0 8px', fontSize: '13px', fontWeight: 500, color: 'var(--text-primary)' }}>{place.full_address}</p>
-                    <div style={{ marginBottom: '8px' }}>
+                <div className={styles.locationBody}>
+                    <p className={styles.locationAddressTitle}>{place.full_address}</p>
+                    <div className={styles.locationFields}>
                         {fieldRow('Flat / Unit', flatNo, setFlatNo, 'e.g., A-101')}
                         {fieldRow('Floor No.', floorNumber, setFloorNumber, 'e.g., 2')}
                         {fieldRow('Society / Bldg', apartmentName, setApartmentName, 'e.g., Seemant Vihar')}
@@ -478,15 +513,20 @@ function LocationPickerWidget({ onSubmit, sending }: { onSubmit: (json: string) 
                         {fieldRow('Pincode', pincode, setPincode, '6-digit pincode')}
                     </div>
                     {place.latitude && place.longitude && (
-                        <div style={{ display: 'flex', gap: '4px', marginBottom: '8px', flexWrap: 'wrap' }}>
-                            <span style={{ padding: '2px 8px', borderRadius: '10px', fontSize: '10px', backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-muted)' }}>Lat: {place.latitude.toFixed(6)}</span>
-                            <span style={{ padding: '2px 8px', borderRadius: '10px', fontSize: '10px', backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-muted)' }}>Lng: {place.longitude.toFixed(6)}</span>
+                        <div className={styles.coordsRow}>
+                            <span className={styles.coordChip}>Lat: {place.latitude.toFixed(6)}</span>
+                            <span className={styles.coordChip}>Lng: {place.longitude.toFixed(6)}</span>
                         </div>
                     )}
-                    {(!locality.trim() || !district.trim() || !state.trim()) && (
-                        <p style={{ fontSize: '11px', color: '#dc2626', margin: '0 0 6px' }}>Locality, District/City, and State are required</p>
+                    {isIncomplete && (
+                        <p className={styles.locationWarning}>Locality, District/City, and State are required</p>
                     )}
-                    <button onClick={handleConfirm} disabled={sending || !locality.trim() || !district.trim() || !state.trim()} style={{ ...s.primaryBtn, width: '100%', opacity: sending || !locality.trim() || !district.trim() || !state.trim() ? 0.6 : 1 }}>
+                    <button
+                        type="button"
+                        onClick={handleConfirm}
+                        disabled={sending || isIncomplete}
+                        className={`${styles.primaryBtn} ${styles.fullWidth}`}
+                    >
                         <Check size={14} style={{ marginRight: '4px' }} /> Confirm Address
                     </button>
                 </div>
@@ -499,24 +539,34 @@ function LocationPickerWidget({ onSubmit, sending }: { onSubmit: (json: string) 
 
 function SummaryCardWidget({ summary, onConfirm, onEdit, sending }: { summary: Record<string, string>; onConfirm: () => void; onEdit: () => void; sending: boolean }) {
     return (
-        <div style={s.widget}>
-            <div style={{ padding: '10px 14px', backgroundColor: 'var(--success-bg, #f0fdf4)', borderBottom: '1px solid var(--border-secondary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+        <div className={styles.widget}>
+            <div className={styles.summaryCardHeader}>
                 <CheckCircle2 size={14} style={{ color: '#059669' }} />
-                <span style={{ fontSize: '13px', fontWeight: 600, color: '#059669' }}>Property Summary</span>
+                <span className={styles.summaryCardTitle}>Property Summary</span>
             </div>
             <div>
-                {Object.entries(summary).map(([label, value]) => (
-                    <div key={label} style={{ display: 'flex', padding: '6px 14px', borderBottom: '1px solid var(--bg-tertiary)', fontSize: '12px' }}>
-                        <span style={{ width: '40%', color: 'var(--text-muted)', flexShrink: 0 }}>{label}</span>
-                        <span style={{ color: 'var(--text-primary)', fontWeight: 500 }}>{value}</span>
+                {Object.entries(summary).map(([lbl, value]) => (
+                    <div key={lbl} className={styles.summaryRow}>
+                        <span className={styles.summaryLabel}>{lbl}</span>
+                        <span className={styles.summaryValue}>{value}</span>
                     </div>
                 ))}
             </div>
-            <div style={{ display: 'flex', gap: '8px', padding: '10px 14px' }}>
-                <button onClick={onConfirm} disabled={sending} style={{ ...s.primaryBtn, flex: 1, opacity: sending ? 0.6 : 1 }}>
+            <div className={styles.summaryActions}>
+                <button
+                    type="button"
+                    onClick={onConfirm}
+                    disabled={sending}
+                    className={`${styles.primaryBtn} ${styles.flex1}`}
+                >
                     {sending ? 'Submitting...' : 'Confirm & Submit'}
                 </button>
-                <button onClick={onEdit} disabled={sending} style={{ ...s.secondaryBtn, opacity: sending ? 0.6 : 1 }}>
+                <button
+                    type="button"
+                    onClick={onEdit}
+                    disabled={sending}
+                    className={styles.secondaryBtn}
+                >
                     <Edit3 size={14} /> Edit
                 </button>
             </div>
@@ -531,26 +581,26 @@ function MultiSelectWidget({ options, onDone, sending }: { options: Array<{ valu
     const toggle = (v: string) => setSelected(prev => { const n = new Set(prev); n.has(v) ? n.delete(v) : n.add(v); return n; });
 
     return (
-        <div style={{ marginTop: '8px' }}>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '8px' }}>
+        <div className={styles.multiSelectContainer}>
+            <div className={styles.multiSelectOptions}>
                 {options.map(o => (
                     <button
                         key={o.value}
+                        type="button"
                         onClick={() => toggle(o.value)}
                         disabled={sending}
-                        style={{
-                            padding: '6px 12px', borderRadius: '6px', fontSize: '12px', fontWeight: 500,
-                            border: '1px solid ' + (selected.has(o.value) ? '#059669' : 'var(--border-secondary)'),
-                            backgroundColor: selected.has(o.value) ? '#059669' : 'transparent',
-                            color: selected.has(o.value) ? '#fff' : 'var(--text-secondary)',
-                            cursor: sending ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: '4px',
-                        }}
+                        className={`${styles.multiSelectBtn} ${selected.has(o.value) ? styles.multiSelectBtnSelected : ''}`}
                     >
                         {selected.has(o.value) && <Check size={12} />} {o.label}
                     </button>
                 ))}
             </div>
-            <button onClick={() => onDone(Array.from(selected))} disabled={sending || selected.size === 0} style={{ ...s.primaryBtn, opacity: selected.size === 0 || sending ? 0.5 : 1 }}>
+            <button
+                type="button"
+                onClick={() => onDone(Array.from(selected))}
+                disabled={sending || selected.size === 0}
+                className={styles.primaryBtn}
+            >
                 Done ({selected.size} selected)
             </button>
         </div>
@@ -575,26 +625,51 @@ function ContactFormWidget({ mode, onSubmit, sending }: { mode: 'owner_block' | 
     };
 
     return (
-        <div style={{ ...s.widget, padding: '12px' }}>
-            <p style={{ margin: '0 0 10px', fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>
+        <div className={`${styles.widget} ${styles.contactFormPadded}`}>
+            <p className={styles.contactFormTitle}>
                 {isOwner ? 'Owner Details' : 'Your Details'}
             </p>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+            <div className={styles.contactFormRow}>
                 <User size={14} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
-                <input value={name} onChange={e => setName(e.target.value)} placeholder="Full name" style={s.textField} />
+                <input
+                    value={name}
+                    onChange={e => setName(e.target.value)}
+                    placeholder="Full name"
+                    aria-label="Full name"
+                    className={styles.textField}
+                />
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+            <div className={styles.contactFormRow}>
                 <Phone size={14} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
-                <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>+91</span>
-                <input value={phone} onChange={e => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))} placeholder="10-digit mobile" inputMode="tel" style={s.textField} />
+                <span className={styles.countryCode}>+91</span>
+                <input
+                    value={phone}
+                    onChange={e => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                    placeholder="10-digit mobile"
+                    inputMode="tel"
+                    aria-label="Phone number"
+                    className={styles.textField}
+                />
             </div>
             {!isOwner && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                <div className={styles.contactFormRow}>
                     <Mail size={14} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
-                    <input value={email} onChange={e => setEmail(e.target.value)} placeholder="Email (optional)" type="email" style={s.textField} />
+                    <input
+                        value={email}
+                        onChange={e => setEmail(e.target.value)}
+                        placeholder="Email (optional)"
+                        type="email"
+                        aria-label="Email address"
+                        className={styles.textField}
+                    />
                 </div>
             )}
-            <button onClick={handleSubmit} disabled={!isValid || sending} style={{ ...s.primaryBtn, width: '100%', opacity: !isValid || sending ? 0.5 : 1 }}>
+            <button
+                type="button"
+                onClick={handleSubmit}
+                disabled={!isValid || sending}
+                className={`${styles.primaryBtn} ${styles.fullWidth}`}
+            >
                 Submit
             </button>
         </div>
@@ -634,62 +709,5 @@ function isWidgetOnly(inputType: string | null): boolean {
     return inputType === 'media_upload' || inputType === 'video_upload' || inputType === 'document_upload' ||
            inputType === 'address_block' || inputType === 'confirm' || inputType === 'owner_block' || inputType === 'uploader_block';
 }
-
-// ─── Styles ─────────────────────────────────────────────────────────────────
-
-const s: Record<string, React.CSSProperties> = {
-    container: {
-        display: 'flex', flexDirection: 'column', height: '100%',
-        backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)',
-    },
-    header: {
-        display: 'flex', alignItems: 'center', gap: '10px', padding: '12px 16px',
-        borderBottom: '1px solid var(--border-secondary)', backgroundColor: 'var(--bg-secondary)',
-    },
-    backBtn: {
-        background: 'none', border: '1px solid var(--border-secondary)', color: 'var(--text-link)',
-        padding: '6px 10px', borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center',
-    },
-    messagesArea: {
-        flex: 1, overflowY: 'auto', padding: '16px', display: 'flex', flexDirection: 'column',
-    },
-    bubble: {
-        borderRadius: '16px', padding: '10px 14px', maxWidth: '100%',
-    },
-    inputBar: {
-        display: 'flex', gap: '8px', padding: '10px 16px', borderTop: '1px solid var(--border-secondary)',
-        backgroundColor: 'var(--bg-secondary)',
-    },
-    textInput: {
-        flex: 1, padding: '8px 12px', borderRadius: '8px', fontSize: '13px', resize: 'none' as const,
-        backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)',
-        border: '1px solid var(--border-secondary)', outline: 'none', minHeight: '36px', maxHeight: '80px',
-        fontFamily: 'inherit',
-    },
-    sendBtn: {
-        width: '36px', height: '36px', borderRadius: '8px', border: 'none',
-        display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-        transition: 'all 0.15s',
-    },
-    widget: {
-        marginTop: '8px', borderRadius: '10px', border: '1px solid var(--border-secondary)',
-        backgroundColor: 'var(--bg-secondary)', overflow: 'hidden',
-    },
-    textField: {
-        width: '100%', padding: '6px 10px', borderRadius: '6px', fontSize: '13px',
-        backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)',
-        border: '1px solid var(--border-secondary)', outline: 'none', boxSizing: 'border-box' as const,
-    },
-    primaryBtn: {
-        padding: '8px 16px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: 600,
-        backgroundColor: '#059669', color: '#fff', border: 'none', display: 'flex', alignItems: 'center',
-        justifyContent: 'center', gap: '4px',
-    },
-    secondaryBtn: {
-        padding: '8px 12px', borderRadius: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: 500,
-        backgroundColor: 'var(--bg-secondary)', color: 'var(--text-secondary)',
-        border: '1px solid var(--border-secondary)', display: 'flex', alignItems: 'center', gap: '4px',
-    },
-};
 
 export default ChatWorkflowPanel;

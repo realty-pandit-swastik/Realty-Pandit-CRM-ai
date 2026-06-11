@@ -1,9 +1,21 @@
 
 import { useEffect, useState, useRef } from 'react';
-import { getInventory, getStates, getTeamMembers, updateInventory } from '../../api/client';
+import { getInventory, getTeamMembers, updateInventory } from '../../api/client';
+import client from '../../api/client';
 import { useAuth } from '../../contexts/AuthContext';
+import { useToast } from '../../contexts/ToastContext';
+import { useConfirm } from '../../contexts/ConfirmContext';
 import ShareToClientModal from '../ShareToClientModal';
 import BookVisitModal from '../BookVisitModal';
+import { toDialablePhone } from '../../lib/phone';
+import {
+    FilterSection,
+    FilterTaxonomySection,
+    FilterLocationSection,
+    FilterFloorSection,
+    StalenessSection,
+} from '../filters/FilterSheetShared';
+import type { TaxonomySelection, LocationSelection } from '../filters/FilterSheetShared';
 
 interface MobileInventoryListProps {
     onEditItem: (item: any) => void;
@@ -29,18 +41,26 @@ const INTENT_COLORS: Record<string, { bg: string; color: string }> = {
 
 export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryListProps) {
     const { hasPermission, agent } = useAuth();
+    const { showToast } = useToast();
+    const confirm = useConfirm();
     const [items, setItems] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [page, setPage] = useState(1);
     const [totalPages, setTotalPages] = useState(1);
+    const [totalCount, setTotalCount] = useState(0);
     const [filterIntent, setFilterIntent] = useState('');
-    const [filterType, setFilterType] = useState('');
     const [filterStatus, setFilterStatus] = useState('');
-    const [filterState, setFilterState] = useState('');
-    const [filterAgent, setFilterAgent] = useState('');
     const [search, setSearch] = useState('');
-    const [showFilters, setShowFilters] = useState(false);
-    const [statesList, setStatesList] = useState<string[]>([]);
+    const [showFilterSheet, setShowFilterSheet] = useState(false);
+    const [filterTaxonomy, setFilterTaxonomy] = useState<TaxonomySelection>({ nodeIds: [], bhk: [] });
+    const [filterLocationSelection, setFilterLocationSelection] = useState<LocationSelection>({ label: '', lat: null, lng: null, radiusKm: 2 });
+    const [filterListingSource, setFilterListingSource] = useState('');
+    const [filterDataSource, setFilterDataSource] = useState('');
+    const [filterDaysInSystem, setFilterDaysInSystem] = useState(0);
+    const [filterFloors, setFilterFloors] = useState<string[]>([]); // floor_number tokens ('0'..'4','5plus')
+    const [filterDaysNoVisit, setFilterDaysNoVisit] = useState(0);
+    const [taxonomyTree, setTaxonomyTree] = useState<any[]>([]);
+    const [filterAgent, setFilterAgent] = useState('');
     const [agentsList, setAgentsList] = useState<any[]>([]);
     const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
     const [shareItem, setShareItem] = useState<any>(null);
@@ -48,17 +68,16 @@ export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryLis
     const [activeSheetItem, setActiveSheetItem] = useState<any>(null);
 
     useEffect(() => {
-        getStates().then(d => {
-            if (Array.isArray(d)) setStatesList(d.map((s: any) => s.name || s));
-            else if (d?.states) setStatesList(d.states.map((s: any) => s.name || s));
-        }).catch(() => {});
+        client.get('/public/taxonomy/tree')
+            .then((r: any) => setTaxonomyTree(r.data.tree || []))
+            .catch(() => {});
         getTeamMembers().then(d => {
             if (Array.isArray(d)) setAgentsList(d);
             else if (d?.data) setAgentsList(d.data);
         }).catch(() => {});
     }, []);
 
-    useEffect(() => { loadData(); }, [page, filterIntent, filterType, filterStatus, filterState, filterAgent]);
+    useEffect(() => { loadData(); }, [page, filterIntent, filterStatus, filterAgent, filterTaxonomy, filterLocationSelection, filterListingSource, filterDataSource, filterDaysInSystem, filterDaysNoVisit, filterFloors]);
 
     useEffect(() => {
         if (searchTimer.current) clearTimeout(searchTimer.current);
@@ -71,22 +90,44 @@ export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryLis
             setLoading(true);
             const params: Record<string, any> = { page, limit: 15 };
             if (filterIntent) params.intent = filterIntent;
-            if (filterType) params.category = filterType;
             if (filterStatus) params.status = filterStatus;
-            if (filterState) params.state = filterState;
             if (filterAgent) params.agent_id = filterAgent;
             if (search.trim()) params.search = search.trim();
+            if (filterTaxonomy.nodeIds.length > 0) params.taxonomy_node_ids = filterTaxonomy.nodeIds.join(',');
+            if (filterTaxonomy.bhk.length > 0) params.bhk = filterTaxonomy.bhk.join(',');
+            if (filterListingSource) params.listing_source = filterListingSource;
+            if (filterDataSource) params.data_source = filterDataSource;
+            if (filterLocationSelection.lat !== null) params.lat = String(filterLocationSelection.lat);
+            if (filterLocationSelection.lng !== null) params.lng = String(filterLocationSelection.lng);
+            if (filterLocationSelection.lat !== null && filterLocationSelection.radiusKm > 0) params.radius_km = String(filterLocationSelection.radiusKm);
+            if (filterDaysInSystem > 0) params.days_in_system = String(filterDaysInSystem);
+            if (filterFloors.length > 0) params.floors = filterFloors.join(',');
+            if (filterDaysNoVisit > 0) params.days_no_visit = String(filterDaysNoVisit);
             const res = await getInventory(params);
             if (res?.data && Array.isArray(res.data)) {
                 setItems(res.data);
                 setTotalPages(res.totalPages || 1);
+                setTotalCount(res.total ?? res.data.length);
             } else if (Array.isArray(res)) {
                 setItems(res);
                 setTotalPages(1);
+                setTotalCount(res.length);
             }
         } catch (e) { console.error(e); }
         finally { setLoading(false); }
     };
+
+    const activeSheetFilterCount = (
+        (filterLocationSelection.lat !== null ? 1 : 0) +
+        (filterTaxonomy.nodeIds.length > 0 ? 1 : 0) +
+        (filterTaxonomy.bhk.length > 0 ? 1 : 0) +
+        (filterListingSource ? 1 : 0) +
+        (filterDataSource ? 1 : 0) +
+        (filterAgent ? 1 : 0) +
+        (filterDaysInSystem > 0 ? 1 : 0) +
+        (filterDaysNoVisit > 0 ? 1 : 0) +
+        (filterFloors.length > 0 ? 1 : 0)
+    );
 
     const chips = [
         { key: '', label: 'All' },
@@ -125,53 +166,26 @@ export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryLis
                         {chip.label}
                     </button>
                 ))}
-                <button onClick={() => setShowFilters(p => !p)}
+                <button onClick={() => setShowFilterSheet(true)}
                     style={{
                         flexShrink: 0, padding: '6px 14px', borderRadius: '20px',
-                        border: (filterState || filterAgent || filterType || filterStatus)
-                            ? '1px solid #4F46E5' : '1px solid var(--border-secondary)',
-                        backgroundColor: showFilters ? '#4F46E5' : 'var(--bg-secondary)',
-                        color: showFilters ? '#fff' : 'var(--text-secondary)',
+                        border: activeSheetFilterCount > 0 ? '1px solid #4F46E5' : '1px solid var(--border-secondary)',
+                        backgroundColor: activeSheetFilterCount > 0 ? '#4F46E5' : 'var(--bg-secondary)',
+                        color: activeSheetFilterCount > 0 ? '#fff' : 'var(--text-secondary)',
                         fontSize: '13px', fontWeight: 600, cursor: 'pointer',
                     }}>
-                    Filters {(filterState || filterAgent || filterType || filterStatus) ? '*' : ''}
+                    ⚙ Filters{activeSheetFilterCount > 0 ? ` (${activeSheetFilterCount})` : ''}
+                    {activeSheetFilterCount > 0 && (
+                        <span style={{
+                            marginLeft: 6, padding: '1px 7px', borderRadius: 999,
+                            backgroundColor: 'rgba(255,255,255,0.25)', fontWeight: 700, fontSize: '12px',
+                        }}>
+                            {totalCount}
+                        </span>
+                    )}
                 </button>
             </div>
 
-            {/* Expanded Filters */}
-            {showFilters && (
-                <div style={{ padding: '8px 16px 8px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-                    <select value={filterType} onChange={e => { setFilterType(e.target.value); setPage(1); }}
-                        style={{ padding: '8px 10px', borderRadius: '8px', border: '1px solid var(--border-secondary)', backgroundColor: 'var(--bg-secondary)', color: 'var(--text-primary)', fontSize: '13px' }}>
-                        <option value="">All Category</option>
-                        <option value="residential">Residential</option>
-                        <option value="commercial">Commercial</option>
-                        <option value="agricultural_land">Agricultural Land</option>
-                    </select>
-                    <select value={filterStatus} onChange={e => { setFilterStatus(e.target.value); setPage(1); }}
-                        style={{ padding: '8px 10px', borderRadius: '8px', border: '1px solid var(--border-secondary)', backgroundColor: 'var(--bg-secondary)', color: 'var(--text-primary)', fontSize: '13px' }}>
-                        <option value="">All Status</option>
-                        <option value="active">Active</option>
-                        <option value="inactive">Inactive</option>
-                        <option value="sold">Sold</option>
-                        <option value="rented">Rented</option>
-                    </select>
-                    <select value={filterState} onChange={e => { setFilterState(e.target.value); setPage(1); }}
-                        style={{ padding: '8px 10px', borderRadius: '8px', border: '1px solid var(--border-secondary)', backgroundColor: 'var(--bg-secondary)', color: 'var(--text-primary)', fontSize: '13px' }}>
-                        <option value="">All States</option>
-                        {statesList.map(st => <option key={st} value={st}>{st}</option>)}
-                    </select>
-                    <select value={filterAgent} onChange={e => { setFilterAgent(e.target.value); setPage(1); }}
-                        style={{ padding: '8px 10px', borderRadius: '8px', border: '1px solid var(--border-secondary)', backgroundColor: 'var(--bg-secondary)', color: 'var(--text-primary)', fontSize: '13px' }}>
-                        <option value="">All Agents</option>
-                        {agentsList.map((a: any) => <option key={a.id} value={a.id}>{a.name}</option>)}
-                    </select>
-                    <button onClick={() => { setFilterType(''); setFilterStatus(''); setFilterState(''); setFilterAgent(''); setPage(1); }}
-                        style={{ gridColumn: 'span 2', padding: '8px', borderRadius: '8px', border: '1px solid var(--border-secondary)', backgroundColor: 'var(--bg-primary)', color: 'var(--text-muted)', fontSize: '13px', cursor: 'pointer' }}>
-                        Clear All Filters
-                    </button>
-                </div>
-            )}
 
             {/* Property Cards */}
             <div style={{ flex: 1, overflow: 'auto', padding: '0 16px 80px' }}>
@@ -208,7 +222,7 @@ export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryLis
                                                 <img src={item.media_urls[0]} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="" />
                                             ) : (
                                                 <span style={{ fontSize: '22px', color: 'var(--text-muted)', fontWeight: 700 }}>
-                                                    {(item.flat_property_type?.name || item.type || 'P')[0].toUpperCase()}
+                                                    {(item.taxonomy_node?.name || item.flat_property_type?.name || item.type || 'P')[0].toUpperCase()}
                                                 </span>
                                             )}
                                         </div>
@@ -232,7 +246,7 @@ export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryLis
                                                 )}
                                             </div>
                                             <div style={{ fontWeight: 600, fontSize: '13px', color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                                {item.flat_property_type?.name || item.property_type_link?.name || item.type?.replace(/_/g, ' ') || 'Property'}
+                                                {item.taxonomy_node?.name || item.flat_property_type?.name || item.property_type_link?.name || item.type?.replace(/_/g, ' ') || 'Property'}
                                             </div>
                                             <div style={{ fontSize: '11px', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                                 {location}
@@ -368,7 +382,7 @@ export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryLis
                         {/* Property title */}
                         <div style={{ padding: '0 20px 16px' }}>
                             <div style={{ fontWeight: 700, fontSize: '15px', color: 'var(--text-primary)' }}>
-                                {activeSheetItem.flat_property_type?.name || activeSheetItem.property_type_link?.name || activeSheetItem.type?.replace(/_/g, ' ') || 'Property'}
+                                {activeSheetItem.taxonomy_node?.name || activeSheetItem.flat_property_type?.name || activeSheetItem.property_type_link?.name || activeSheetItem.type?.replace(/_/g, ' ') || 'Property'}
                             </div>
                             <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>
                                 {activeSheetItem.full_address || [activeSheetItem.locality, activeSheetItem.city || activeSheetItem.district, activeSheetItem.state].filter(Boolean).join(', ') || 'Location N/A'}
@@ -376,29 +390,29 @@ export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryLis
                         </div>
 
                         {/* Call Owner — shown only if phone numbers exist */}
-                        {(activeSheetItem.uploader_phone || activeSheetItem.owner_phone || activeSheetItem.key_holder_phone) && (
+                        {(toDialablePhone(activeSheetItem.uploader_phone) || toDialablePhone(activeSheetItem.owner_phone) || toDialablePhone(activeSheetItem.key_holder_phone)) && (
                             <>
-                                {activeSheetItem.uploader_phone && (
+                                {toDialablePhone(activeSheetItem.uploader_phone) && (
                                     <a
-                                        href={`tel:${activeSheetItem.uploader_phone}`}
+                                        href={`tel:${toDialablePhone(activeSheetItem.uploader_phone)}`}
                                         onClick={() => setActiveSheetItem(null)}
                                         style={{ display: 'block', width: '100%', padding: '16px 24px', backgroundColor: 'transparent', borderBottom: '1px solid var(--border-primary)', color: 'var(--text-primary)', fontSize: '15px', textAlign: 'left', cursor: 'pointer', fontWeight: 500, textDecoration: 'none', boxSizing: 'border-box' }}
                                     >
                                         &#9742; Call {activeSheetItem.ownership_type === 'OWNER' ? 'Owner' : 'Uploader'} — {activeSheetItem.uploader_name || activeSheetItem.uploader_phone}
                                     </a>
                                 )}
-                                {activeSheetItem.owner_phone && activeSheetItem.owner_phone !== activeSheetItem.uploader_phone && (
+                                {toDialablePhone(activeSheetItem.owner_phone) && activeSheetItem.owner_phone !== activeSheetItem.uploader_phone && (
                                     <a
-                                        href={`tel:${activeSheetItem.owner_phone}`}
+                                        href={`tel:${toDialablePhone(activeSheetItem.owner_phone)}`}
                                         onClick={() => setActiveSheetItem(null)}
                                         style={{ display: 'block', width: '100%', padding: '16px 24px', backgroundColor: 'transparent', borderBottom: '1px solid var(--border-primary)', color: 'var(--text-primary)', fontSize: '15px', textAlign: 'left', cursor: 'pointer', fontWeight: 500, textDecoration: 'none', boxSizing: 'border-box' }}
                                     >
                                         &#9742; Call Owner — {activeSheetItem.owner_phone}
                                     </a>
                                 )}
-                                {activeSheetItem.key_holder_type === 'EXTERNAL' && activeSheetItem.key_holder_phone && (
+                                {activeSheetItem.key_holder_type === 'EXTERNAL' && toDialablePhone(activeSheetItem.key_holder_phone) && (
                                     <a
-                                        href={`tel:${activeSheetItem.key_holder_phone}`}
+                                        href={`tel:${toDialablePhone(activeSheetItem.key_holder_phone)}`}
                                         onClick={() => setActiveSheetItem(null)}
                                         style={{ display: 'block', width: '100%', padding: '16px 24px', backgroundColor: 'transparent', borderBottom: '1px solid var(--border-primary)', color: 'var(--text-primary)', fontSize: '15px', textAlign: 'left', cursor: 'pointer', fontWeight: 500, textDecoration: 'none', boxSizing: 'border-box' }}
                                     >
@@ -441,13 +455,14 @@ export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryLis
                                 type="button"
                                 onClick={async () => {
                                     const newStatus = activeSheetItem.status === 'active' ? 'inactive' : 'active';
-                                    if (!confirm(`${newStatus === 'inactive' ? 'Deactivate' : 'Activate'}?`)) return;
+                                    const ok = await confirm(`${newStatus === 'inactive' ? 'Deactivate' : 'Activate'}?`);
+                                    if (!ok) return;
                                     try {
                                         await updateInventory(activeSheetItem.id, { status: newStatus });
                                         setActiveSheetItem(null);
                                         loadData();
                                     } catch (err: any) {
-                                        alert(err.response?.data?.error || 'Failed');
+                                        showToast(err.response?.data?.error || 'Failed', 'error');
                                     }
                                 }}
                                 style={{ display: 'block', width: '100%', padding: '16px 24px', backgroundColor: 'transparent', border: 'none', color: '#ef4444', fontSize: '15px', textAlign: 'left', cursor: 'pointer', fontWeight: 500 }}
@@ -455,6 +470,151 @@ export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryLis
                                 🚫 {activeSheetItem.status === 'active' ? 'Deactivate' : 'Activate'}
                             </button>
                         )}
+                    </div>
+                </div>
+            )}
+
+            {/* ── Inventory Filter Bottom Sheet ── */}
+            {showFilterSheet && (
+                <div
+                    style={{ position: 'fixed', inset: 0, backgroundColor: 'var(--sheet-backdrop)', zIndex: 950 }}
+                    onClick={() => setShowFilterSheet(false)}
+                >
+                    <div
+                        style={{
+                            position: 'absolute', bottom: 0, left: 0, right: 0,
+                            backgroundColor: 'var(--bg-secondary)',
+                            borderRadius: '20px 20px 0 0',
+                            maxHeight: '85vh', overflowY: 'auto',
+                            WebkitOverflowScrolling: 'touch',
+                            padding: '0 0 32px',
+                            boxShadow: '0 -8px 40px rgba(0,0,0,0.25)',
+                            animation: 'slide-up-in 250ms cubic-bezier(0.34,1.2,0.64,1) forwards',
+                        }}
+                        onClick={e => e.stopPropagation()}
+                    >
+                        {/* Drag handle */}
+                        <div style={{ display: 'flex', justifyContent: 'center', padding: '12px 0 8px' }}>
+                            <div style={{ width: '40px', height: '4px', borderRadius: '2px', backgroundColor: 'var(--border-secondary)' }} />
+                        </div>
+
+                        {/* Header */}
+                        <div style={{ padding: '0 20px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span style={{ fontWeight: 700, fontSize: '16px', color: 'var(--text-primary)' }}>Filters</span>
+                            <button type="button" onClick={() => {
+                                setFilterListingSource(''); setFilterDataSource('');
+                                setFilterTaxonomy({ nodeIds: [], bhk: [] });
+                                setFilterLocationSelection({ label: '', lat: null, lng: null, radiusKm: 2 });
+                                setFilterDaysInSystem(0); setFilterDaysNoVisit(0);
+                                setFilterFloors([]);
+                                setFilterAgent('');
+                            }} style={{ background: 'none', border: 'none', color: 'var(--text-link)', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}>
+                                Clear All
+                            </button>
+                        </div>
+
+                        <FilterLocationSection value={filterLocationSelection} onChange={setFilterLocationSelection} />
+
+                        <FilterSection title="Listing Source" defaultOpen={false} badge={filterListingSource ? 1 : 0}>
+                            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                                {[
+                                    { label: 'Direct Owner', value: 'OWNER' },
+                                    { label: 'Partner Agent', value: 'EXTERNAL_AGENT' },
+                                    { label: 'Internal Agent', value: 'AGENT_OWNER' },
+                                ].map(opt => (
+                                    <button key={opt.value} type="button"
+                                        onClick={() => setFilterListingSource(filterListingSource === opt.value ? '' : opt.value)}
+                                        className={`chip ${filterListingSource === opt.value ? 'chip-active' : 'chip-inactive'}`}>
+                                        {opt.label}
+                                    </button>
+                                ))}
+                            </div>
+                        </FilterSection>
+
+                        <FilterSection title="Purpose" defaultOpen badge={filterIntent ? 1 : 0}>
+                            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                                {[{ label: 'Sale', value: 'sell' }, { label: 'Rent', value: 'rent' }].map(opt => (
+                                    <button key={opt.value} type="button"
+                                        onClick={() => setFilterIntent(filterIntent === opt.value ? '' : opt.value)}
+                                        className={`chip ${filterIntent === opt.value ? 'chip-active' : 'chip-inactive'}`}>
+                                        {opt.label}
+                                    </button>
+                                ))}
+                            </div>
+                        </FilterSection>
+
+                        <FilterTaxonomySection
+                            tree={taxonomyTree}
+                            value={filterTaxonomy}
+                            onChange={setFilterTaxonomy}
+                        />
+
+                        <FilterFloorSection value={filterFloors} onChange={setFilterFloors} />
+
+                        <FilterSection title="Listing Status" defaultOpen={false} badge={filterStatus ? 1 : 0}>
+                            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                                {['active', 'sold', 'rented', 'withdrawn'].map(s => (
+                                    <button key={s} type="button"
+                                        onClick={() => setFilterStatus(filterStatus === s ? '' : s)}
+                                        className={`chip ${filterStatus === s ? 'chip-active' : 'chip-inactive'}`}>
+                                        {s.charAt(0).toUpperCase() + s.slice(1)}
+                                    </button>
+                                ))}
+                            </div>
+                        </FilterSection>
+
+                        {agentsList.length > 0 && (
+                            <FilterSection title="Agent" defaultOpen={false} badge={filterAgent ? 1 : 0}>
+                                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                                    {agentsList.map((a: any) => (
+                                        <button key={a.id} type="button"
+                                            onClick={() => setFilterAgent(filterAgent === a.id ? '' : a.id)}
+                                            className={`chip ${filterAgent === a.id ? 'chip-active' : 'chip-inactive'}`}>
+                                            {a.name}
+                                        </button>
+                                    ))}
+                                </div>
+                            </FilterSection>
+                        )}
+
+                        <FilterSection title="Data Source" defaultOpen={false} badge={filterDataSource ? 1 : 0}>
+                            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                                {[
+                                    { label: 'WhatsApp', value: 'whatsapp' },
+                                    { label: 'Website', value: 'website' },
+                                    { label: 'Manual Entry', value: 'admin' },
+                                    { label: 'Mobile App', value: 'mobile_app' },
+                                    { label: 'Voice', value: 'voice' },
+                                ].map(opt => (
+                                    <button key={opt.value} type="button"
+                                        onClick={() => setFilterDataSource(filterDataSource === opt.value ? '' : opt.value)}
+                                        className={`chip ${filterDataSource === opt.value ? 'chip-active' : 'chip-inactive'}`}>
+                                        {opt.label}
+                                    </button>
+                                ))}
+                            </div>
+                        </FilterSection>
+
+                        <StalenessSection
+                            title="Inventory Staleness"
+                            label1="Days in system (unsold)"
+                            label2="Days since last visit"
+                            days1={filterDaysInSystem}
+                            days2={filterDaysNoVisit}
+                            onDays1Change={setFilterDaysInSystem}
+                            onDays2Change={setFilterDaysNoVisit}
+                            badge={(filterDaysInSystem > 0 ? 1 : 0) + (filterDaysNoVisit > 0 ? 1 : 0)}
+                        />
+
+                        {/* Apply button */}
+                        <div style={{ padding: '16px 20px 0' }}>
+                            <button type="button"
+                                onClick={() => setShowFilterSheet(false)}
+                                style={{ width: '100%', padding: '14px', borderRadius: '12px', border: 'none', backgroundColor: 'var(--text-link)', color: '#fff', fontWeight: 700, fontSize: '15px', cursor: 'pointer' }}
+                            >
+                                Apply Filters{activeSheetFilterCount > 0 ? ` (${activeSheetFilterCount} active)` : ''}
+                            </button>
+                        </div>
                     </div>
                 </div>
             )}

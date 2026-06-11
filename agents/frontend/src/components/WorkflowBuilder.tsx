@@ -5,8 +5,8 @@
 
 import { useState, useEffect } from 'react';
 import { Save, Plus, Trash2, Power, PowerOff, TestTube, X, Play, ChevronRight } from 'lucide-react';
-import { useAuth } from '../contexts/AuthContext';
-import { API_BASE_URL } from '../lib/api';
+import { API_BASE_URL, authedFetch } from '../lib/api';
+import { useConfirm } from '../contexts/ConfirmContext';
 
 interface WorkflowCondition {
   field: string;
@@ -81,7 +81,7 @@ const COMMON_FIELDS = [
 ];
 
 export default function WorkflowBuilder() {
-  const { token } = useAuth();
+  const confirm = useConfirm();
   const [workflows, setWorkflows] = useState<Workflow[]>([]);
   const [selectedWorkflow, setSelectedWorkflow] = useState<Workflow | null>(null);
   const [isEditing, setIsEditing] = useState(false);
@@ -112,9 +112,7 @@ export default function WorkflowBuilder() {
   const fetchWorkflows = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`${API_BASE}/api/workflows`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const response = await authedFetch(`${API_BASE}/api/workflows`);
       const data = await response.json();
       setWorkflows(data.workflows || []);
     } catch (err: any) {
@@ -126,9 +124,7 @@ export default function WorkflowBuilder() {
 
   const fetchExecutions = async (workflowId: string) => {
     try {
-      const response = await fetch(`${API_BASE}/api/workflows/${workflowId}/executions`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const response = await authedFetch(`${API_BASE}/api/workflows/${workflowId}/executions`);
       const data = await response.json();
       setExecutionHistory(data.executions || []);
       setShowExecutions(true);
@@ -172,12 +168,8 @@ export default function WorkflowBuilder() {
 
       const method = selectedWorkflow ? 'PATCH' : 'POST';
 
-      const response = await fetch(url, {
+      const response = await authedFetch(url, {
         method,
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
         body: JSON.stringify(formData),
       });
 
@@ -197,13 +189,11 @@ export default function WorkflowBuilder() {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this workflow?')) return;
+    const ok = await confirm('Are you sure you want to delete this workflow?');
+    if (!ok) return;
 
     try {
-      const response = await fetch(`${API_BASE}/api/workflows/${id}`, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const response = await authedFetch(`${API_BASE}/api/workflows/${id}`, { method: 'DELETE' });
 
       if (!response.ok) throw new Error('Failed to delete workflow');
 
@@ -218,10 +208,7 @@ export default function WorkflowBuilder() {
 
   const handleToggle = async (id: string) => {
     try {
-      const response = await fetch(`${API_BASE}/api/workflows/${id}/toggle`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const response = await authedFetch(`${API_BASE}/api/workflows/${id}/toggle`, { method: 'POST' });
 
       if (!response.ok) throw new Error('Failed to toggle workflow');
 
@@ -240,12 +227,8 @@ export default function WorkflowBuilder() {
 
     try {
       const parsedData = JSON.parse(testData);
-      const response = await fetch(`${API_BASE}/api/workflows/${id}/test`, {
+      const response = await authedFetch(`${API_BASE}/api/workflows/${id}/test`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
         body: JSON.stringify({ test_data: parsedData }),
       });
 

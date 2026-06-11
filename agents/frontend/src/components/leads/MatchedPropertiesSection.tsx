@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { shareToClient } from '../../api/client';
+import { toDialablePhone } from '../../lib/phone';
 
 interface MatchedProperty {
     id: string;
@@ -22,6 +23,9 @@ interface MatchedPropertiesSectionProps {
     onFindMatches: () => void;
     leadPhone: string;
     leadName: string | null;
+    /** Partner's phone — used as the WhatsApp recipient when the lead has no real client phone
+     *  (partner-referral leads carry a PENDING placeholder as phone_number). */
+    leadPartnerPhone?: string | null;
     scoreColor: (s: number) => string;
 }
 
@@ -45,11 +49,20 @@ function formatPrice(price: number | null, unit: string | null): string {
 
 export default function MatchedPropertiesSection({
     matches, matchLoading, matchError, onFindMatches,
-    leadPhone, leadName, scoreColor,
+    leadPhone, leadName, leadPartnerPhone, scoreColor,
 }: MatchedPropertiesSectionProps) {
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
     const [sharing, setSharing] = useState(false);
     const [shareResults, setShareResults] = useState<Record<string, 'success' | 'failed' | 'pending'>>({});
+
+    // Resolve the WhatsApp recipient as a clean, country-coded number. Prefer the lead's own number;
+    // for partner-referral leads (phone_number is a PENDING placeholder → not dialable) fall back to the
+    // partner, who relays the property to the client. Never digit-strip a raw/placeholder value into wa.me.
+    const clientDial = toDialablePhone(leadPhone);
+    const partnerDial = toDialablePhone(leadPartnerPhone);
+    const recipient = clientDial ?? partnerDial;        // canonical +91… or null
+    const recipientIsPartner = !clientDial && !!partnerDial;
+    const canShare = !!recipient;
 
     const toggleSelect = (id: string) => {
         setSelectedIds(prev => {
@@ -68,15 +81,17 @@ export default function MatchedPropertiesSection({
     };
 
     const handleSendWhatsApp = async () => {
-        if (selectedIds.size === 0) return;
+        if (selectedIds.size === 0 || !recipient) return;
         setSharing(true);
-        const cleanPhone = leadPhone.replace(/\D/g, '');
 
         for (const id of selectedIds) {
             setShareResults(prev => ({ ...prev, [id]: 'pending' }));
             try {
-                await shareToClient(id, { client_phone: cleanPhone, client_name: leadName || undefined });
-                setShareResults(prev => ({ ...prev, [id]: 'success' }));
+                const r = await shareToClient(id, { client_phone: recipient, client_name: leadName || undefined });
+                // Backend returns the REAL outcome now. already_shared = previously delivered (ok);
+                // whatsapp_sent === false = this send failed → show failed, not a false success.
+                const ok = r?.already_shared || r?.whatsapp_sent !== false;
+                setShareResults(prev => ({ ...prev, [id]: ok ? 'success' : 'failed' }));
             } catch {
                 setShareResults(prev => ({ ...prev, [id]: 'failed' }));
             }
@@ -85,14 +100,13 @@ export default function MatchedPropertiesSection({
     };
 
     const handleShareLink = () => {
-        if (selectedIds.size === 0) return;
+        if (selectedIds.size === 0 || !recipient) return;
         const urls = Array.from(selectedIds).map(id =>
             `https://www.realtypandit.in/properties/${id}`
         );
-        const cleanPhone = leadPhone.replace(/\D/g, '');
         const name = leadName || '';
         const text = `Hi ${name}, here are some properties for you from Realty Pandit:\n\n${urls.map((u, i) => `${i + 1}. ${u}`).join('\n')}`;
-        window.open(`https://wa.me/${cleanPhone}?text=${encodeURIComponent(text)}`, '_blank');
+        window.open(`https://wa.me/${recipient.slice(1)}?text=${encodeURIComponent(text)}`, '_blank');
     };
 
     return (
@@ -137,11 +151,17 @@ export default function MatchedPropertiesSection({
                         {selectedIds.size === matches.length ? 'Deselect All' : 'Select All'}
                     </button>
 
-                    {selectedIds.size > 0 && (
+                    {selectedIds.size > 0 && !canShare && (
+                        <span style={{ fontSize: '11px', color: 'var(--text-muted, #94a3b8)', fontStyle: 'italic' }}>
+                            No phone on file — can't share
+                        </span>
+                    )}
+                    {selectedIds.size > 0 && canShare && (
                         <>
                             <button
                                 onClick={handleSendWhatsApp}
                                 disabled={sharing}
+                                title={recipientIsPartner ? 'Lead has no client phone — sends to the referring partner' : undefined}
                                 style={{
                                     padding: '4px 12px', borderRadius: '6px', fontSize: '11px', fontWeight: 600,
                                     backgroundColor: '#25d366', color: '#fff', border: 'none',
@@ -149,10 +169,11 @@ export default function MatchedPropertiesSection({
                                     display: 'flex', alignItems: 'center', gap: '4px',
                                 }}
                             >
-                                💬 Send WhatsApp ({selectedIds.size})
+                                💬 {recipientIsPartner ? 'Share with partner' : 'Send WhatsApp'} ({selectedIds.size})
                             </button>
                             <button
                                 onClick={handleShareLink}
+                                title={recipientIsPartner ? 'Lead has no client phone — sends to the referring partner' : undefined}
                                 style={{
                                     padding: '4px 12px', borderRadius: '6px', fontSize: '11px', fontWeight: 600,
                                     backgroundColor: 'rgba(59,130,246,0.15)', color: '#3b82f6',

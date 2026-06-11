@@ -5,8 +5,7 @@
 
 import { useState, useEffect } from 'react';
 import { Bell, Save, Clock, Phone, MessageSquare, Mail, Volume2, Smartphone } from 'lucide-react';
-import { useAuth } from '../contexts/AuthContext';
-import { API_BASE_URL } from '../lib/api';
+import { API_BASE_URL, authedFetch } from '../lib/api';
 import { usePushSubscription } from '../hooks/usePushSubscription';
 
 interface NotificationPreferences {
@@ -65,7 +64,6 @@ const DEFAULT_PREFERENCES: NotificationPreferences = {
 };
 
 export default function NotificationSettings() {
-  const { token } = useAuth();
   const [preferences, setPreferences] = useState<NotificationPreferences>(DEFAULT_PREFERENCES);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -79,9 +77,7 @@ export default function NotificationSettings() {
   const fetchPreferences = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`${API_BASE_URL}/api/notifications/preferences`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const response = await authedFetch(`${API_BASE_URL}/api/notifications/preferences`);
 
       if (response.ok) {
         const data = await response.json();
@@ -103,12 +99,8 @@ export default function NotificationSettings() {
       setSaving(true);
       setError('');
 
-      const response = await fetch(`${API_BASE_URL}/api/notifications/preferences`, {
+      const response = await authedFetch(`${API_BASE_URL}/api/notifications/preferences`, {
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
         body: JSON.stringify({ preferences }),
       });
 
@@ -143,12 +135,8 @@ export default function NotificationSettings() {
 
   const handleTestNotification = async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/notifications/test`, {
+      const response = await authedFetch(`${API_BASE_URL}/api/notifications/test`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
         body: JSON.stringify({ channel: 'whatsapp' }),
       });
 

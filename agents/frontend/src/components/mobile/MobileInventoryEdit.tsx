@@ -1,11 +1,14 @@
 
 import type React from 'react';
 import { useEffect, useState, useRef } from 'react';
-import { updateInventory, getCategoryTree, getStates, uploadInventoryImages, deleteInventoryMedia, getTeamMembersList, transferInventory, uploadInventoryDocument, deleteInventoryDocument, getInventoryItem } from '../../api/client';
+import { updateInventory, getCategoryTree, uploadInventoryImages, deleteInventoryMedia, getTeamMembersList, transferInventory, uploadInventoryDocument, deleteInventoryDocument, getInventoryItem, getNodeFields } from '../../api/client';
+import { useToast } from '../../contexts/ToastContext';
+import { useConfirm } from '../../contexts/ConfirmContext';
 
-import { GooglePlacesInput } from '../GooglePlacesInput';
+import AddressFields, { inferAddressLayout } from '../AddressFields';
+import TaxonomyCascade from '../TaxonomyCascade';
+import ParkingListField from '../ParkingListField';
 import { ContactSearchField, type SelectedContact } from '../ContactSearchField';
-import type { PlaceResult } from '../GooglePlacesInput';
 
 interface MobileInventoryEditProps {
     item: any;
@@ -22,18 +25,15 @@ const inputStyle: React.CSSProperties = {
 };
 const labelStyle: React.CSSProperties = { fontSize: '12px', color: 'var(--text-muted)', marginBottom: '4px', display: 'block' };
 
-const AMENITIES_LIST = [
-    { value: 'parking', label: 'Parking' }, { value: 'lift', label: 'Lift' },
-    { value: 'security', label: 'Security' }, { value: 'power_backup', label: 'Power Backup' },
-    { value: 'swimming_pool', label: 'Swimming Pool' }, { value: 'gym', label: 'Gym' },
-    { value: 'garden', label: 'Garden' }, { value: 'club_house', label: 'Club House' },
-    { value: 'wifi', label: 'WiFi' }, { value: 'air_conditioning', label: 'Air Conditioning' },
-    { value: 'balcony', label: 'Balcony' }, { value: 'cctv', label: 'CCTV' },
-    { value: 'visitor_parking', label: 'Visitor Parking' }, { value: 'water_supply', label: '24hr Water' },
-    { value: 'gas_pipeline', label: 'Gas Pipeline' }, { value: 'gated_community', label: 'Gated Community' },
-    { value: 'fire_safety', label: 'Fire Safety' }, { value: 'solar_panels', label: 'Solar Panels' },
-    { value: 'rainwater_harvesting', label: 'Rainwater Harvesting' }, { value: 'intercom', label: 'Intercom' },
-];
+// AMENITIES_LIST removed Phase 2 dedup (2026-05-28) — amenities now come from the
+// taxonomy 'amenities' field (multiselect of labels) rendered in the by-type panel.
+
+// Taxonomy field keys captured by dedicated legacy inputs instead of the per-type render
+// (Phase 3 de-dup, 2026-05-27) — keep in sync with InventoryList.tsx.
+// Phase 2 dedup (2026-05-28): the taxonomy by-type panel is now the SOLE renderer for
+// type-specific fields. Only the universal Area/Bathrooms top inputs stay excluded.
+// See InventoryList.tsx for the matching desktop change.
+const TAXONOMY_RENDER_EXCLUDE = ['area', 'area_unit', 'bathrooms'];
 
 // ─── Inline Contact Search for Mobile Edit ──────────────────────────────────
 function MobileEditContactSection({ currentPhone, currentName, color, onContactSelected }: {
@@ -81,6 +81,8 @@ function MobileEditContactSection({ currentPhone, currentName, color, onContactS
 }
 
 export function MobileInventoryEdit({ item, onSaved, onCancel: _onCancel }: MobileInventoryEditProps) {
+    const { showToast } = useToast();
+    const confirm = useConfirm();
     const specs = item.specs || {};
     const features = item.features || {};
     const [data, setData] = useState({
@@ -90,12 +92,14 @@ export function MobileInventoryEdit({ item, onSaved, onCancel: _onCancel }: Mobi
         configuration_id: item.configuration_id || '',
         usage_type_id: item.usage_type_id || '',
         investment_type_id: item.investment_type_id || '',
+        taxonomy_node_id: item.taxonomy_node_id || '',
         intent: item.intent || 'sell',
         status: item.status || 'active',
-        furnishing: item.furnishing || '',
-        property_age: item.property_age || '',
-        facing: item.facing || '',
-        bedrooms: specs.bedrooms ?? '',
+        // specs.* is SOLE SoT (Phase 3 dedup, 2026-05-28) — column fallbacks dropped.
+        // Note: furnishing/property_age/facing live in editSchemaValues now (Phase 2);
+        // kept in `data` here only for back-compat with any code that reads `data.*`.
+        // Room count: canonical taxonomy keys (bhk/rooms) → legacy bedrooms/bhk_count.
+        bedrooms: specs.bhk ?? specs.rooms ?? specs.bedrooms ?? specs.bhk_count ?? '',
         bathrooms: specs.bathrooms ?? '',
         area: specs.area ?? '',
         area_unit: specs.area_unit || 'sqft',
@@ -127,8 +131,9 @@ export function MobileInventoryEdit({ item, onSaved, onCancel: _onCancel }: Mobi
     });
 
     const [saving, setSaving] = useState(false);
+    const [nodeFields, setNodeFields] = useState<any[]>([]);
+    const [schemaValues, setSchemaValues] = useState<Record<string, any>>({});
     const [classTree, setClassTree] = useState<any>({ categories: [], configurations: [], usage_types: [], investment_types: [] });
-    const [statesList, setStatesList] = useState<string[]>([]);
     const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
         photos: true, classification: true, details: false, specs: false, amenities: false, address: true, pricing: false, documents: false, owner_contact: false, keyholder: false, assignment: true,
     });
@@ -150,10 +155,6 @@ export function MobileInventoryEdit({ item, onSaved, onCancel: _onCancel }: Mobi
             categories: d?.categories || [], configurations: d?.configurations || [],
             usage_types: d?.usage_types || [], investment_types: d?.investment_types || [],
         })).catch(() => {});
-        getStates().then(d => {
-            if (Array.isArray(d)) setStatesList(d.map((s: any) => s.name || s));
-            else if (d?.states) setStatesList(d.states.map((s: any) => s.name || s));
-        }).catch(() => {});
         getTeamMembersList().then(d => {
             if (Array.isArray(d)) setAgentsList(d);
             else if (d?.members) setAgentsList(d.members);
@@ -162,6 +163,17 @@ export function MobileInventoryEdit({ item, onSaved, onCancel: _onCancel }: Mobi
         getInventoryItem(item.id).then(full => {
             if (full?.documents) setEditDocuments(full.documents);
         }).catch(() => {});
+        // Load the taxonomy per-type field schema (prefill from saved specs)
+        if (item.taxonomy_node_id) {
+            getNodeFields(item.taxonomy_node_id).then((res: any) => {
+                const flds = (res?.fields || []).filter((f: any) => !TAXONOMY_RENDER_EXCLUDE.includes(f.key));
+                setNodeFields(flds);
+                const sp = item.specs || {};
+                const init: Record<string, any> = {};
+                for (const f of flds) if (sp[f.key] !== undefined) init[f.key] = sp[f.key];
+                setSchemaValues(init);
+            }).catch(() => {});
+        }
     }, []);
 
     // Re-validate category/subcategory/type IDs once classTree loads (handles deactivated categories)
@@ -199,20 +211,51 @@ export function MobileInventoryEdit({ item, onSaved, onCancel: _onCancel }: Mobi
     const toggleSection = (key: string) => setExpandedSections(prev => ({ ...prev, [key]: !prev[key] }));
     const set = (field: string, value: any) => setData(prev => ({ ...prev, [field]: value }));
 
+    // Classification cascade picked a (new) taxonomy TYPE node: set it + reload the per-type schema.
+    const handleTaxonomyChange = async (nodeId: string | null) => {
+        set('taxonomy_node_id', nodeId || '');
+        if (!nodeId) { setNodeFields([]); return; }
+        try {
+            const res = await getNodeFields(nodeId);
+            const flds = (res?.fields || []).filter((f: any) => !TAXONOMY_RENDER_EXCLUDE.includes(f.key));
+            setNodeFields(flds);
+            setSchemaValues(prev => {
+                const next: Record<string, any> = {};
+                for (const f of flds) if (prev?.[f.key] !== undefined) next[f.key] = prev[f.key];
+                return next;
+            });
+        } catch { /* keep the form usable */ }
+    };
+
     const handleSave = async () => {
         setSaving(true);
         try {
-            const specsObj: Record<string, any> = {};
-            if (data.bedrooms) specsObj.bedrooms = Number(data.bedrooms);
-            if (data.bathrooms) specsObj.bathrooms = Number(data.bathrooms);
-            if (data.area) specsObj.area = Number(data.area);
+            // Start from ORIGINAL specs so unknown keys aren't dropped on save
+            // (Phase 1 dedup, 2026-05-28). Backend PATCH also deep-merges as safety.
+            const orig = (item.specs && typeof item.specs === 'object' && !Array.isArray(item.specs))
+                ? { ...item.specs } : {};
+            const specsObj: Record<string, any> = orig;
+            if (data.bathrooms) specsObj.bathrooms = Number(data.bathrooms); else delete specsObj.bathrooms;
+            if (data.area) specsObj.area = Number(data.area); else delete specsObj.area;
             if (data.area_unit) specsObj.area_unit = data.area_unit;
+            // Room count: write under whichever canonical key the taxonomy uses (bhk/rooms).
+            if (data.bedrooms) {
+                if (specsObj.rooms !== undefined) specsObj.rooms = Number(data.bedrooms);
+                else specsObj.bhk = String(data.bedrooms);
+            }
+            // Layer taxonomy per-type field values on top
+            for (const [k, v] of Object.entries(schemaValues)) {
+                if (v !== undefined && v !== null && v !== '' && !(Array.isArray(v) && v.length === 0)) specsObj[k] = v;
+            }
 
-            const { bedrooms, bathrooms, area, area_unit, features: feat, ...rest } = data;
-            await updateInventory(item.id, { ...rest, specs: specsObj, features: feat });
+            // Strip UI-only fields (Phase 3, 2026-05-28): furnishing/facing/property_age
+            // are no longer in `data` since Phase 3 read-fallback removal — they live
+            // exclusively in schemaValues now and round-trip through specsObj above.
+            const { bedrooms: _b, bathrooms: _ba, area: _a, area_unit: _au, features: _ft, ...rest } = data;
+            await updateInventory(item.id, { ...rest, specs: specsObj });
             onSaved();
         } catch (err: any) {
-            alert(err.response?.data?.error || 'Failed to save');
+            showToast(err.response?.data?.error || 'Failed to save', 'error');
         } finally {
             setSaving(false);
         }
@@ -241,7 +284,7 @@ export function MobileInventoryEdit({ item, onSaved, onCancel: _onCancel }: Mobi
             await deleteInventoryMedia(item.id, filename);
             setMediaUrls(prev => prev.filter(u => u !== url));
         } catch (err: any) {
-            alert(err.response?.data?.error || 'Delete failed');
+            showToast(err.response?.data?.error || 'Delete failed', 'error');
         }
     };
 
@@ -263,17 +306,15 @@ export function MobileInventoryEdit({ item, onSaved, onCancel: _onCancel }: Mobi
 
     const handleDeleteVideo = async (url: string) => {
         const filename = url.split('/').pop() || '';
-        if (!confirm('Delete this video?')) return;
+        const ok = await confirm('Delete this video?');
+        if (!ok) return;
         try {
             await deleteInventoryMedia(item.id, filename);
             setVideoUrls(prev => prev.filter(u => u !== url));
         } catch (err: any) {
-            alert(err.response?.data?.error || 'Failed to delete video');
+            showToast(err.response?.data?.error || 'Failed to delete video', 'error');
         }
     };
-
-    const subcategories = classTree.categories.find((c: any) => c.id === data.category_id)?.subcategories || [];
-    const types = subcategories.find((sc: any) => sc.id === data.sub_category_id)?.types || [];
 
     const SectionHeader = ({ title, sectionKey }: { title: string; sectionKey: string }) => (
         <button onClick={() => toggleSection(sectionKey)}
@@ -377,49 +418,16 @@ export function MobileInventoryEdit({ item, onSaved, onCancel: _onCancel }: Mobi
                 {/* Classification */}
                 <SectionHeader title="Classification" sectionKey="classification" />
                 {expandedSections.classification && (
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', padding: '12px 0' }}>
-                        <div style={{ gridColumn: 'span 2' }}>
-                            <label style={labelStyle}>Category</label>
-                            <select style={inputStyle} value={data.category_id} onChange={e => { set('category_id', e.target.value); set('sub_category_id', ''); set('type_id', ''); }}>
-                                <option value="">Select</option>
-                                {classTree.categories.map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                            </select>
-                        </div>
-                        <div>
-                            <label style={labelStyle}>Sub Category</label>
-                            <select style={inputStyle} value={data.sub_category_id} onChange={e => { set('sub_category_id', e.target.value); set('type_id', ''); }}>
-                                <option value="">Select</option>
-                                {subcategories.map((sc: any) => <option key={sc.id} value={sc.id}>{sc.name}</option>)}
-                            </select>
-                        </div>
-                        <div>
-                            <label style={labelStyle}>Type</label>
-                            <select style={inputStyle} value={data.type_id} onChange={e => set('type_id', e.target.value)}>
-                                <option value="">Select</option>
-                                {types.map((t: any) => <option key={t.id} value={t.id}>{t.name}</option>)}
-                            </select>
-                        </div>
-                        <div>
-                            <label style={labelStyle}>Configuration</label>
-                            <select style={inputStyle} value={data.configuration_id} onChange={e => set('configuration_id', e.target.value)}>
-                                <option value="">Select</option>
-                                {classTree.configurations.map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                            </select>
-                        </div>
-                        <div>
-                            <label style={labelStyle}>Usage</label>
-                            <select style={inputStyle} value={data.usage_type_id} onChange={e => set('usage_type_id', e.target.value)}>
-                                <option value="">Select</option>
-                                {classTree.usage_types.map((u: any) => <option key={u.id} value={u.id}>{u.name}</option>)}
-                            </select>
-                        </div>
-                        <div>
-                            <label style={labelStyle}>Investment Type</label>
-                            <select style={inputStyle} value={data.investment_type_id} onChange={e => set('investment_type_id', e.target.value)}>
-                                <option value="">Select</option>
-                                {classTree.investment_types.map((i: any) => <option key={i.id} value={i.id}>{i.name}</option>)}
-                            </select>
-                        </div>
+                    <div style={{ padding: '12px 0' }}>
+                        <label style={labelStyle}>Property type (Category → Sub-category → Type)</label>
+                        <TaxonomyCascade
+                            value={data.taxonomy_node_id}
+                            onChange={handleTaxonomyChange}
+                            inputStyle={{ ...inputStyle, flex: '1 1 140px', minWidth: '130px' }}
+                        />
+                        <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '8px' }}>
+                            Type-specific fields (BHK, parking, road facing, …) appear under <strong>Specifications</strong>.
+                        </p>
                     </div>
                 )}
 
@@ -439,33 +447,16 @@ export function MobileInventoryEdit({ item, onSaved, onCancel: _onCancel }: Mobi
                                 <option value="active">Active</option><option value="inactive">Inactive</option><option value="sold">Sold</option><option value="rented">Rented</option><option value="withdrawn">Withdrawn</option>
                             </select>
                         </div>
-                        <div>
-                            <label style={labelStyle}>Furnishing</label>
-                            <select style={inputStyle} value={data.furnishing} onChange={e => set('furnishing', e.target.value)}>
-                                <option value="">None</option><option value="unfurnished">Unfurnished</option><option value="semi_furnished">Semi</option><option value="fully_furnished">Full</option>
-                            </select>
-                        </div>
-                        <div>
-                            <label style={labelStyle}>Age</label>
-                            <select style={inputStyle} value={data.property_age} onChange={e => set('property_age', e.target.value)}>
-                                <option value="">Select</option><option value="new_construction">New</option><option value="1-3_years">1-3Y</option><option value="3-5_years">3-5Y</option><option value="5-10_years">5-10Y</option><option value="10+_years">10+Y</option>
-                            </select>
-                        </div>
-                        <div style={{ gridColumn: 'span 2' }}>
-                            <label style={labelStyle}>Facing</label>
-                            <select style={inputStyle} value={data.facing} onChange={e => set('facing', e.target.value)}>
-                                <option value="">Select</option>
-                                {['north','south','east','west','north_east','north_west','south_east','south_west'].map(f => <option key={f} value={f}>{f.replace(/_/g, ' ')}</option>)}
-                            </select>
-                        </div>
+                        {/* Furnishing / Age / Facing inputs removed Phase 2 dedup (2026-05-28) —
+                            rendered by the taxonomy-driven by-type panel inside the Specs section below. */}
                     </div>
                 )}
 
-                {/* Specs */}
+                {/* Specs — Bedrooms input removed Phase 2 dedup (2026-05-28); BHK/Rooms
+                    now come from the by-type panel below under the canonical taxonomy key. */}
                 <SectionHeader title="Specifications" sectionKey="specs" />
                 {expandedSections.specs && (
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', padding: '12px 0' }}>
-                        <div><label style={labelStyle}>Bedrooms</label><input style={inputStyle} type="number" value={data.bedrooms} onChange={e => set('bedrooms', e.target.value)} placeholder="2" /></div>
                         <div><label style={labelStyle}>Bathrooms</label><input style={inputStyle} type="number" value={data.bathrooms} onChange={e => set('bathrooms', e.target.value)} placeholder="2" /></div>
                         <div><label style={labelStyle}>Area</label><input style={inputStyle} type="number" value={data.area} onChange={e => set('area', e.target.value)} placeholder="1200" /></div>
                         <div>
@@ -474,76 +465,72 @@ export function MobileInventoryEdit({ item, onSaved, onCancel: _onCancel }: Mobi
                                 <option value="sqft">Sq.Ft</option><option value="sqm">Sq.M</option><option value="sqyd">Sq.Yd</option><option value="acre">Acre</option>
                             </select>
                         </div>
+                        {nodeFields.length > 0 && (
+                            <div style={{ gridColumn: 'span 2', marginTop: '6px', borderTop: '1px solid var(--border-secondary)', paddingTop: '10px' }}>
+                                <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '8px' }}>Property Details (by type)</div>
+                                {nodeFields.map((f: any) => {
+                                    const setV = (v: any) => setSchemaValues({ ...schemaValues, [f.key]: v });
+                                    const toggle = (opt: string) => { const cur: string[] = Array.isArray(schemaValues[f.key]) ? schemaValues[f.key] : []; setV(cur.includes(opt) ? cur.filter(x => x !== opt) : [...cur, opt]); };
+                                    return (
+                                        <div key={f.key} style={{ marginBottom: '10px' }}>
+                                            <label style={labelStyle}>{f.label}{f.unit ? ` (${f.unit})` : ''}</label>
+                                            {f.input_type === 'parking_list' ? (
+                                                <ParkingListField value={schemaValues[f.key]} onChange={(v) => setV(v)} />
+                                            ) : f.input_type === 'multiselect' && Array.isArray(f.options) && f.options.length > 0 ? (
+                                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                                                    {f.options.map((o: string) => {
+                                                        const on = Array.isArray(schemaValues[f.key]) && schemaValues[f.key].includes(o);
+                                                        return <button key={o} type="button" onClick={() => toggle(o)} style={{ padding: '8px 12px', borderRadius: '999px', fontSize: '13px', cursor: 'pointer', minHeight: '40px', border: on ? '1px solid #6366f1' : '1px solid var(--border-secondary)', background: on ? '#6366f1' : 'transparent', color: on ? '#fff' : 'var(--text-primary)' }}>{o}</button>;
+                                                    })}
+                                                </div>
+                                            ) : Array.isArray(f.options) && f.options.length > 0 ? (
+                                                <select style={inputStyle} value={schemaValues[f.key] ?? ''} onChange={e => setV(e.target.value)}>
+                                                    <option value="">Select…</option>
+                                                    {f.options.map((o: string) => <option key={o} value={o}>{o}</option>)}
+                                                </select>
+                                            ) : (
+                                                <input style={inputStyle} type={f.input_type === 'number' ? 'number' : 'text'} value={schemaValues[f.key] ?? ''} onChange={e => setV(e.target.value)} placeholder={f.unit || ''} />
+                                            )}
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
                     </div>
                 )}
 
-                {/* Amenities */}
-                <SectionHeader title="Amenities / Features" sectionKey="amenities" />
-                {expandedSections.amenities && (
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px', padding: '12px 0' }}>
-                        {AMENITIES_LIST.map(a => (
-                            <label key={a.value} style={{
-                                display: 'flex', alignItems: 'center', gap: '8px',
-                                fontSize: '13px', color: 'var(--text-secondary)', cursor: 'pointer',
-                                padding: '8px 10px', borderRadius: '8px',
-                                border: '1px solid var(--border-secondary)',
-                                background: data.features?.[a.value] ? 'rgba(99,102,241,0.1)' : 'transparent',
-                                minHeight: '44px',
-                            }}>
-                                <input
-                                    type="checkbox"
-                                    checked={!!data.features?.[a.value]}
-                                    onChange={e => setData(prev => ({
-                                        ...prev,
-                                        features: { ...prev.features, [a.value]: e.target.checked }
-                                    }))}
-                                    style={{ width: '18px', height: '18px', flexShrink: 0 }}
-                                />
-                                {a.label}
-                            </label>
-                        ))}
-                    </div>
-                )}
+                {/* Amenities section removed Phase 2 dedup (2026-05-28) — amenities now live
+                    in specs.amenities (label array) and are rendered by the taxonomy-driven
+                    by-type panel inside the Specifications section above. */}
 
                 {/* Address */}
                 <SectionHeader title="Address" sectionKey="address" />
                 {expandedSections.address && (
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', padding: '12px 0' }}>
-                        <div><label style={labelStyle}>Flat No</label><input style={inputStyle} value={data.flat_no} onChange={e => set('flat_no', e.target.value)} placeholder="A-1201" /></div>
-                        <div><label style={labelStyle}>Floor</label><input style={inputStyle} type="number" value={data.floor_number} onChange={e => set('floor_number', e.target.value)} /></div>
-                        <div><label style={labelStyle}>Total Floors</label><input style={inputStyle} type="number" value={data.total_floors} onChange={e => set('total_floors', e.target.value)} /></div>
-                        <div><label style={labelStyle}>Plot No</label><input style={inputStyle} value={data.plot_no} onChange={e => set('plot_no', e.target.value)} /></div>
-                        <div style={{ gridColumn: 'span 2' }}><label style={labelStyle}>Society</label><input style={inputStyle} value={data.apartment_name} onChange={e => set('apartment_name', e.target.value)} /></div>
-                        <div style={{ gridColumn: 'span 2' }}>
-                            <label style={labelStyle}>Search Address</label>
-                            <GooglePlacesInput
-                                value={data.full_address}
-                                onChange={v => set('full_address', v)}
-                                onPlaceSelect={(place: PlaceResult) => {
-                                    setData(prev => ({
-                                        ...prev,
-                                        state: place.state || prev.state,
-                                        district: place.district || prev.district,
-                                        locality: place.locality || prev.locality,
-                                        pincode: place.pincode || prev.pincode,
-                                        full_address: place.full_address || prev.full_address,
-                                    }));
-                                }}
-                                placeholder="Search location..."
-                                style={inputStyle}
-                            />
-                        </div>
-                        <div><label style={labelStyle}>Locality</label><input style={inputStyle} value={data.locality} onChange={e => set('locality', e.target.value)} placeholder="e.g. Sector 150" /></div>
-                        <div><label style={labelStyle}>Sub Locality</label><input style={inputStyle} value={data.sub_locality} onChange={e => set('sub_locality', e.target.value)} placeholder="e.g. Block A" /></div>
-                        <div><label style={labelStyle}>City</label><input style={inputStyle} value={data.district} onChange={e => set('district', e.target.value)} /></div>
-                        <div>
-                            <label style={labelStyle}>State</label>
-                            <select style={inputStyle} value={data.state} onChange={e => set('state', e.target.value)}>
-                                <option value="">Select</option>
-                                {statesList.map(st => <option key={st} value={st}>{st}</option>)}
-                            </select>
-                        </div>
-                        <div><label style={labelStyle}>Pincode</label><input style={inputStyle} value={data.pincode} onChange={e => set('pincode', e.target.value)} maxLength={6} /></div>
+                    <div style={{ padding: '12px 0' }}>
+                        <AddressFields
+                            layout={inferAddressLayout({ category: item.category, type: item.type })}
+                            mainCategory={item.category}
+                            slug={item.type}
+                            value={{
+                                city: (data as any).city || data.district || '',
+                                district: data.district || '',
+                                locality: data.locality || '',
+                                sub_locality: data.sub_locality || '',
+                                state: data.state || '',
+                                pincode: data.pincode || '',
+                                apartment_name: data.apartment_name || '',
+                                flat_no: data.flat_no || '',
+                                floor_number: data.floor_number ?? '',
+                                total_floors: data.total_floors ?? '',
+                                plot_no: data.plot_no || '',
+                                latitude: ((data as any).latitude == null || (data as any).latitude === '') ? undefined : Number((data as any).latitude),
+                                longitude: ((data as any).longitude == null || (data as any).longitude === '') ? undefined : Number((data as any).longitude),
+                                full_address: data.full_address || '',
+                            }}
+                            onChange={(a) => setData((prev: any) => ({ ...prev, ...a, district: a.city || a.district || prev.district }))}
+                            inputStyle={inputStyle}
+                            labelStyle={labelStyle}
+                        />
                     </div>
                 )}
 
@@ -646,7 +633,7 @@ export function MobileInventoryEdit({ item, onSaved, onCancel: _onCancel }: Mobi
                                         setEditDocuments(prev => [doc, ...prev]);
                                         setNewDocTitle('');
                                     } catch (err: any) {
-                                        alert(err.response?.data?.error || 'Upload failed');
+                                        showToast(err.response?.data?.error || 'Upload failed', 'error');
                                     } finally {
                                         setDocUploading(false);
                                         if (docUploadRef.current) docUploadRef.current.value = '';
@@ -709,12 +696,13 @@ export function MobileInventoryEdit({ item, onSaved, onCancel: _onCancel }: Mobi
                                             <button type="button"
                                                 style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid #f87171', fontSize: '12px', color: '#f87171', background: 'none', cursor: 'pointer', minHeight: '32px' }}
                                                 onClick={async () => {
-                                                    if (!confirm('Delete this document?')) return;
+                                                    const ok = await confirm('Delete this document?');
+                                                    if (!ok) return;
                                                     try {
                                                         await deleteInventoryDocument(item.id, doc.id);
                                                         setEditDocuments(prev => prev.filter((d: any) => d.id !== doc.id));
                                                     } catch (err: any) {
-                                                        alert(err.response?.data?.error || 'Failed to delete');
+                                                        showToast(err.response?.data?.error || 'Failed to delete', 'error');
                                                     }
                                                 }}>
                                                 Delete
@@ -832,15 +820,16 @@ export function MobileInventoryEdit({ item, onSaved, onCancel: _onCancel }: Mobi
                                     onClick={async () => {
                                         const sel = document.getElementById('mobile-transfer-target') as HTMLSelectElement;
                                         const target = sel?.value;
-                                        if (!target) return alert('Select a team member to transfer to');
+                                        if (!target) { showToast('Select a team member to transfer to', 'info'); return; }
                                         const targetName = agentsList.find((a: any) => a.id === target)?.name || target;
-                                        if (!confirm(`Transfer this property to ${targetName}?`)) return;
+                                        const ok = await confirm(`Transfer this property to ${targetName}?`);
+                                        if (!ok) return;
                                         try {
                                             await transferInventory(item.id, target);
                                             set('assigned_agent_id', target);
-                                            alert(`Transferred to ${targetName}`);
+                                            showToast(`Transferred to ${targetName}`, 'success');
                                         } catch (err: any) {
-                                            alert(err.response?.data?.error || 'Transfer failed');
+                                            showToast(err.response?.data?.error || 'Transfer failed', 'error');
                                         }
                                     }}
                                 >Transfer Now</button>

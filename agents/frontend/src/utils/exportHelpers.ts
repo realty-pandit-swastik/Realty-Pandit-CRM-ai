@@ -48,8 +48,7 @@ const prepareDataForExport = (data: any[]): any[] => {
  */
 export const exportToCSV = (data: any[], filename: string) => {
   if (!data || data.length === 0) {
-    alert('No data to export');
-    return;
+    throw new Error('No data to export');
   }
 
   const preparedData = prepareDataForExport(data);
@@ -72,8 +71,7 @@ export const exportToCSV = (data: any[], filename: string) => {
  */
 export const exportToExcel = (data: any[], filename: string) => {
   if (!data || data.length === 0) {
-    alert('No data to export');
-    return;
+    throw new Error('No data to export');
   }
 
   const preparedData = prepareDataForExport(data);
@@ -113,8 +111,7 @@ export const exportToPDF = (
   filters?: { from?: string; to?: string; status?: string; source?: string; type?: string }
 ) => {
   if (!data || data.length === 0) {
-    alert('No data to export');
-    return;
+    throw new Error('No data to export');
   }
 
   const preparedData = prepareDataForExport(data);

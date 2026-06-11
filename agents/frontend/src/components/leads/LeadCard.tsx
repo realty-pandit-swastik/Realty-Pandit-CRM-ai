@@ -1,3 +1,5 @@
+import { toDialablePhone } from '../../lib/phone';
+
 interface Lead {
     phone_number: string;
     name: string | null;
@@ -13,6 +15,8 @@ interface Lead {
     lead_score: { total_score: number } | null;
     lead_type: string | null;
     referral_partner_name: string | null;
+    referral_partner_phone: string | null;
+    assigned_agent?: { id: string; name: string | null; role: string | null } | null;
 }
 
 interface LeadCardProps {
@@ -36,7 +40,9 @@ export default function LeadCard({
     lead, isSelected, onSelect, onStatusChange, updatingPhone,
     sourceColors, sourceLabels, scoreColor, formatBudget,
 }: LeadCardProps) {
-    const isTemp = lead.phone_number.startsWith('TEMP_');
+    const clientTel = toDialablePhone(lead.phone_number);          // canonical +91… for tel:, or null (placeholder/junk)
+    const partnerTel = toDialablePhone(lead.referral_partner_phone);
+    const dialable = !!clientTel;
     const score = lead.lead_score?.total_score;
     const date = new Date(lead.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
 
@@ -73,7 +79,7 @@ export default function LeadCard({
             {/* Row 2: Phone + Date */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
                 <span style={{ fontSize: '12px', color: 'var(--text-muted, #94a3b8)' }}>
-                    {isTemp ? 'No phone' : lead.phone_number}
+                    {dialable ? lead.phone_number : 'No phone'}
                 </span>
                 <span style={{ fontSize: '11px', color: 'var(--text-muted, #94a3b8)' }}>{date}</span>
             </div>
@@ -147,10 +153,16 @@ export default function LeadCard({
                 </div>
             )}
 
-            {/* Call button */}
-            {!isTemp && (
+            {/* Row 5: Assigned manager (2026-05-13) */}
+            <div style={{ marginTop: 6, fontSize: 11, color: 'var(--text-muted, #94a3b8)', display: 'flex', alignItems: 'center', gap: 4 }}>
+                <span>👤</span>
+                <span>{lead.assigned_agent?.name || <span style={{ fontStyle: 'italic' }}>Unassigned</span>}</span>
+            </div>
+
+            {/* Call button — only for a real, dialable number (not placeholder/junk) */}
+            {dialable && (
                 <a
-                    href={`tel:${lead.phone_number}`}
+                    href={`tel:${clientTel}`}
                     onClick={(e) => e.stopPropagation()}
                     style={{
                         position: 'absolute', top: '10px', right: '10px',
@@ -161,6 +173,24 @@ export default function LeadCard({
                     }}
                 >
                     📞
+                </a>
+            )}
+
+            {/* Call partner — for partner-referral leads, reach the referring partner agent directly */}
+            {lead.lead_type === 'PARTNER_REFERRAL' && partnerTel && (
+                <a
+                    href={`tel:${partnerTel}`}
+                    onClick={(e) => e.stopPropagation()}
+                    title={`Call partner ${lead.referral_partner_name || ''}`}
+                    style={{
+                        position: 'absolute', top: '10px', right: dialable ? '44px' : '10px',
+                        height: '28px', padding: '0 8px', borderRadius: '14px',
+                        backgroundColor: 'rgba(124,58,237,0.15)', color: '#7c3aed',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        fontSize: '12px', fontWeight: 700, textDecoration: 'none',
+                    }}
+                >
+                    🤝📞
                 </a>
             )}
         </div>

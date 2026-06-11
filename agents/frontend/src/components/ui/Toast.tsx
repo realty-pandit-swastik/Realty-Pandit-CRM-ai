@@ -35,16 +35,21 @@ export function ToastContainer() {
 
     return (
         <>
-            {toasts.length > 0 && (
-                <div className="toast-container">
-                    {toasts.map(t => (
-                        <ToastCard key={t.id} toast={t} onDismiss={() => dismissToast(t.id)} />
-                    ))}
-                </div>
-            )}
+            {/* aria-live="polite" announces new toasts without interrupting current speech */}
+            <div
+                className="toast-container"
+                role="status"
+                aria-live="polite"
+                aria-atomic="false"
+                aria-relevant="additions"
+            >
+                {toasts.map(t => (
+                    <ToastCard key={t.id} toast={t} onDismiss={() => dismissToast(t.id)} />
+                ))}
+            </div>
 
             {snackbar && (
-                <div className="snackbar">
+                <div className="snackbar" role="status" aria-live="polite">
                     {snackbar.message}
                 </div>
             )}

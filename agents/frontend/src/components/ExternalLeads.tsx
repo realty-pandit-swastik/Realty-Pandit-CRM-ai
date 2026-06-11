@@ -1,42 +1,31 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react';
 import client from '../api/client';
+import { isPlaceholderPhone, isDialablePhone, isValidPhoneInput, toDialablePhone } from '../lib/phone';
 import { useAuth } from '../contexts/AuthContext';
+import { useToast } from '../contexts/ToastContext';
 import LeadCard from './leads/LeadCard';
+import { WhatsAppChatTab } from './WhatsAppChatTab';
+import { ConvertToPartnerModal } from './ConvertToPartnerModal';
 import MatchedPropertiesSection from './leads/MatchedPropertiesSection';
+import DemandRequirementsForm, { type DemandPayload } from './leads/DemandRequirementsForm';
 import { loadGoogleMaps } from '../lib/loadGoogleMaps';
 import {
     FilterSection,
-    FilterCategorySection,
+    FilterTaxonomySection,
     FilterLocationSection,
     StalenessSection,
 } from './filters/FilterSheetShared';
-import type { CategorySelection, LocationSelection } from './filters/FilterSheetShared';
+import type { TaxonomySelection, LocationSelection } from './filters/FilterSheetShared';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
-const AMENITIES_LIST = [
-    { value: 'parking', label: 'Parking' },
-    { value: 'lift', label: 'Lift' },
-    { value: 'gym', label: 'Gym' },
-    { value: 'security', label: 'Security' },
-    { value: 'power_backup', label: 'Power Backup' },
-    { value: 'garden', label: 'Garden' },
-    { value: 'pool', label: 'Swimming Pool' },
-    { value: 'water_supply', label: 'Water Supply' },
-    { value: 'club_house', label: 'Club House' },
-    { value: 'intercom', label: 'Intercom' },
-    { value: 'gas_pipeline', label: 'Gas Pipeline' },
-    { value: 'park', label: 'Park' },
-];
+// AMENITIES_LIST removed Phase 2 demand-side unification (2026-05-29).
+// Amenities now come from the taxonomy 'amenities' FieldDefinition.options_json
+// rendered inside <DemandRequirementsForm>'s dynamic by-type panel.
 
 // ─── Type Definitions ────────────────────────────────────────────────────────
 
-interface LeadBySource {
-    source: string;
-    _count: number;
-    latest: string | null;
-}
 
 interface Lead {
     phone_number: string;
@@ -66,6 +55,9 @@ interface Lead {
     area_max: number | null;
     area_unit: string | null;
     demand_amenities: string[] | null;
+    // Phase 2 demand-side unification (2026-05-29) — canonical SoT.
+    demand_taxonomy_node_id?: string | null;
+    demand_schema_values?: Record<string, any> | null;
     lead_type: string | null;
     referral_partner_id: string | null;
     referral_partner_name: string | null;
@@ -108,12 +100,8 @@ interface MatchedProperty {
     media_urls: string[];
 }
 
-interface Configuration { id: string; name: string; slug: string; }
 interface TeamMember { id: string; name: string; role: string; }
 
-interface PropertyTypeDef { id: string; name: string; slug: string; }
-interface SubCategory { id: string; name: string; slug: string; types: PropertyTypeDef[]; }
-interface Category { id: string; name: string; slug: string; subcategories: SubCategory[]; }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -130,10 +118,8 @@ const sourceLabels: Record<string, string> = {
     'agent_registration': 'Agent Reg.',
 };
 const LEAD_STATUSES = ['cold', 'warm', 'hot', 'closed', 'lost'];
-const LIFECYCLE_STAGES = ['NEW', 'QUALIFIED', 'MATCHED', 'VISIT_SCHEDULED', 'VISITED', 'NEGOTIATION', 'CLOSED_WON', 'CLOSED_LOST'];
+const LIFECYCLE_STAGES = ['NEW', 'QUALIFIED', 'MATCHING_APPOINTMENT', 'VISIT_SCHEDULED', 'VISITED', 'NEGOTIATION', 'CLOSED_WON', 'CLOSED_LOST', 'ON_HOLD'];
 const SOURCES = ['99acres', 'magicbricks', 'housing', 'website', 'whatsapp', 'voice', 'manual', 'admin_created', 'inventory_workflow', 'website_popup', 'agent_registration'];
-const TIMELINES = ['immediate', '1-3 months', '3-6 months', '6-12 months', '12+ months'];
-const BHK_SLUGS = ['studio', '1-bhk', '2-bhk', '3-bhk', '4-bhk', '5-plus-bhk'];
 const PRIVILEGED_ROLES = ['super_boss', 'manager'];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -156,6 +142,7 @@ function channelIcon(ch: string) {
 
 export function ExternalLeads({ isMobile: isMobileProp }: { isMobile?: boolean } = {}) {
     const { agent, hasPermission } = useAuth();
+    const { showToast } = useToast();
     const isPrivileged = PRIVILEGED_ROLES.includes(agent?.role ?? '');
     const closingViaPopState = useRef(false);
 
@@ -187,13 +174,22 @@ export function ExternalLeads({ isMobile: isMobileProp }: { isMobile?: boolean }
     }, [isMobileProp, isMobile]);
 
     // ── Data state ──
-    const [leadsBySource, setLeadsBySource] = useState<LeadBySource[]>([]);
     const [recentLeads, setRecentLeads] = useState<Lead[]>([]);
+    // True total for the CURRENT filter set (from the server), and the page size we've loaded.
+    // Fixes the counter mismatch: the header/badges used a by-source sum (ignored filters) while
+    // the list is capped at `pageLimit`. recentTotal = the real filtered count; Load-more raises pageLimit.
+    const [recentTotal, setRecentTotal] = useState(0);
+    const [pageLimit, setPageLimit] = useState(500);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
     // ── Filters ──
     const [searchQuery, setSearchQuery] = useState('');
+    const [debouncedSearch, setDebouncedSearch] = useState('');
+    useEffect(() => {
+        const t = setTimeout(() => setDebouncedSearch(searchQuery.trim()), 350);
+        return () => clearTimeout(t);
+    }, [searchQuery]);
     const [statusFilter, setStatusFilter] = useState('');
     const [sourceFilter, setSourceFilter] = useState('');
     const [agentFilter, setAgentFilter] = useState('');
@@ -202,19 +198,18 @@ export function ExternalLeads({ isMobile: isMobileProp }: { isMobile?: boolean }
     const [showFilterSheet, setShowFilterSheet] = useState(false);
     // v2 filter state
     const [intentFilter, setIntentFilter] = useState<'BUYER' | 'TENANT' | ''>('');
-    const [categorySelection, setCategorySelection] = useState<CategorySelection>({
-        categoryId: '', subCategoryId: '', typeId: '', bhk: [],
-    });
+    const [filterTaxonomy, setFilterTaxonomy] = useState<TaxonomySelection>({ nodeIds: [], bhk: [] });
     const [locationSelection, setLocationSelection] = useState<LocationSelection>({
         label: '', lat: null, lng: null, radiusKm: 2,
     });
     const [notContactedDays, setNotContactedDays] = useState(0);
     const [noShowcaseDays, setNoShowcaseDays] = useState(0);
+    // 2026-05-13: active / archived / all — default hides lost+closed so the team
+    // only sees workable leads. Recovered via toggle at top of page.
+    const [activeFilter, setActiveFilter] = useState<'active' | 'archived' | 'all'>('active');
 
-    // ── Classification tree ──
-    const [classificationTree, setClassificationTree] = useState<Category[]>([]);
-    const [configurations, setConfigurations] = useState<Configuration[]>([]);
-
+    // ── Taxonomy tree (new) ──
+    const [taxonomyTree, setTaxonomyTree] = useState<any[]>([]);
     // ── Team members ──
     const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
 
@@ -227,21 +222,9 @@ export function ExternalLeads({ isMobile: isMobileProp }: { isMobile?: boolean }
         name: '', phone: '', email: '', source: 'manual', intent: '', notes: '',
         preferred_location: '',
     });
-    const [createCategoryId, setCreateCategoryId] = useState('');
-    const [createSubCategoryId, setCreateSubCategoryId] = useState('');
-    const [createPreferredLat, setCreatePreferredLat] = useState<number | null>(null);
-    const [createPreferredLng, setCreatePreferredLng] = useState<number | null>(null);
     const [createAssignedAgentId, setCreateAssignedAgentId] = useState('');
-    const [createBudgetMin, setCreateBudgetMin] = useState('');
-    const [createBudgetMax, setCreateBudgetMax] = useState('');
-    const [createBhk, setCreateBhk] = useState('');
-    const [createTimeline, setCreateTimeline] = useState('');
     const [creating, setCreating] = useState(false);
     const [createError, setCreateError] = useState('');
-
-    // Google Maps refs for create modal
-    const createLocationRef = useRef<HTMLInputElement>(null);
-    const createAcRef = useRef<any>(null);
 
     // ── Lead Detail Slide-Over ──
     const [selectedPhone, setSelectedPhone] = useState<string | null>(null);
@@ -257,22 +240,18 @@ export function ExternalLeads({ isMobile: isMobileProp }: { isMobile?: boolean }
     // ── Slide-over edit state ──
     const [editNotes, setEditNotes] = useState('');
     const [savingNotes, setSavingNotes] = useState(false);
+    const [editName, setEditName] = useState('');
+    const [savingName, setSavingName] = useState(false);
     const [editLifecycle, setEditLifecycle] = useState('');
     const [editAgent, setEditAgent] = useState('');
-    const [editBudgetMin, setEditBudgetMin] = useState('');
-    const [editBudgetMax, setEditBudgetMax] = useState('');
-    const [editBhk, setEditBhk] = useState('');
-    const [editCategoryId, setEditCategoryId] = useState('');
-    const [editSubCategoryId, setEditSubCategoryId] = useState('');
-    const [editTypeId, setEditTypeId] = useState('');
-    const [editIntent, setEditIntent] = useState('');
+    // Phase 2 (2026-05-29): inline-form state vars (editBudgetMin/Max, editBhk,
+    // editCategoryId/SubCategoryId/TypeId, editIntent, editTimeline, editAreaMin/Max/Unit,
+    // editAmenities) all removed — they lived in the now-deleted inline form. The new
+    // <DemandRequirementsForm> manages its own state. Preferred lat/lng stay because they
+    // still need to be carried alongside the canonical save (Google Places autocomplete
+    // updates them when the user types a location, via the editLocationRef effect).
     const [editPreferredLat, setEditPreferredLat] = useState<number | null>(null);
     const [editPreferredLng, setEditPreferredLng] = useState<number | null>(null);
-    const [editTimeline, setEditTimeline] = useState('');
-    const [editAreaMin, setEditAreaMin] = useState('');
-    const [editAreaMax, setEditAreaMax] = useState('');
-    const [editAreaUnit, setEditAreaUnit] = useState('sqft');
-    const [editAmenities, setEditAmenities] = useState<string[]>([]);
     const [savingReqs, setSavingReqs] = useState(false);
     const [sessionAnswers, setSessionAnswers] = useState<Record<string, any> | null>(null);
 
@@ -291,6 +270,12 @@ export function ExternalLeads({ isMobile: isMobileProp }: { isMobile?: boolean }
     const [clientSearching, setClientSearching] = useState(false);
     const clientSearchTimer = useRef<any>(null);
     const [preselectedContact, setPreselectedContact] = useState<{ phone_number: string; name: string | null } | null>(null);
+    // Partner-referral flow: if the entered client phone matches an existing client, we surface a notice
+    // ("Add as Direct Client") — the backend attaches this requirement to that contact instead of 409-ing.
+    const [partnerClientMatch, setPartnerClientMatch] = useState<{ phone_number: string; name: string | null } | null>(null);
+    // Partner-claim approvals: partners who submitted a lead for one of our existing direct clients.
+    const [pendingClaims, setPendingClaims] = useState<any[]>([]);
+    const [claimBusy, setClaimBusy] = useState<string | null>(null);
 
     // ── Lead Type Toggle (create modal) ──
     const [createLeadType, setCreateLeadType] = useState<'DIRECT_OWNER' | 'PARTNER_REFERRAL'>('DIRECT_OWNER');
@@ -312,7 +297,8 @@ export function ExternalLeads({ isMobile: isMobileProp }: { isMobile?: boolean }
     const [syncLoading, setSyncLoading] = useState(false);
 
     // ── Visits & Views tab (slide-over) ──
-    const [sliderTab, setSliderTab] = useState<'activity' | 'visits'>('activity');
+    const [sliderTab, setSliderTab] = useState<'activity' | 'chat' | 'visits'>('activity');
+    const [showConvert, setShowConvert] = useState(false);
     const [leadAppointments, setLeadAppointments] = useState<AppointmentEntry[]>([]);
     const [appointmentsLoading, setAppointmentsLoading] = useState(false);
 
@@ -325,42 +311,68 @@ export function ExternalLeads({ isMobile: isMobileProp }: { isMobile?: boolean }
     const loadData = useCallback(async () => {
         try {
             setError(null);
-            const [sourceRes, recentRes] = await Promise.all([
-                client.get('/api/leads/by-source'),
-                client.get('/api/leads/recent-external', {
+            const recentRes = await client.get('/api/leads/recent-external', {
                     params: {
                         ...(sourceFilter ? { source: sourceFilter } : {}),
                         ...(statusFilter ? { status: statusFilter } : {}),
                         ...(agentFilter ? { agent_id: agentFilter } : {}),
+                        ...(debouncedSearch ? { search: debouncedSearch } : {}),
+                        active: activeFilter,
                         intent: intentFilter || undefined,
-                        category_id: categorySelection.categoryId || undefined,
-                        sub_category_id: categorySelection.subCategoryId || undefined,
-                        type_id: categorySelection.typeId || undefined,
-                        bhk: categorySelection.bhk.length > 0 ? categorySelection.bhk.join(',') : undefined,
+                        taxonomy_node_ids: filterTaxonomy.nodeIds.length > 0 ? filterTaxonomy.nodeIds.join(',') : undefined,
+                        bhk: filterTaxonomy.bhk.length > 0 ? filterTaxonomy.bhk.join(',') : undefined,
                         lat: locationSelection.lat !== null ? String(locationSelection.lat) : undefined,
                         lng: locationSelection.lng !== null ? String(locationSelection.lng) : undefined,
                         radius_km: (locationSelection.lat !== null && locationSelection.radiusKm > 0) ? String(locationSelection.radiusKm) : undefined,
                         not_contacted_days: notContactedDays > 0 ? String(notContactedDays) : undefined,
                         no_showcase_days: noShowcaseDays > 0 ? String(noShowcaseDays) : undefined,
+                        limit: String(pageLimit),
                     },
-                }),
-            ]);
-            setLeadsBySource(sourceRes.data);
+                });
             // Support both new format { leads, total } and legacy flat array
             const recentData = recentRes.data;
-            setRecentLeads(Array.isArray(recentData) ? recentData : recentData.leads || []);
+            const loaded: Lead[] = Array.isArray(recentData) ? recentData : (recentData.leads || []);
+            setRecentLeads(loaded);
+            // Capture the server's TRUE filtered count (recent-external returns { leads, total }).
+            setRecentTotal(Array.isArray(recentData) ? loaded.length : (recentData.total ?? loaded.length));
         } catch (err: any) {
             setError(err?.response?.data?.error || err.message || 'Failed to load leads');
         } finally {
             setLoading(false);
         }
-    }, [sourceFilter, statusFilter, agentFilter, intentFilter, categorySelection, locationSelection, notContactedDays, noShowcaseDays]);
+    }, [sourceFilter, statusFilter, agentFilter, intentFilter, filterTaxonomy, locationSelection, notContactedDays, noShowcaseDays, debouncedSearch, activeFilter, pageLimit]);
 
     useEffect(() => { loadData(); }, [loadData]);
     useEffect(() => {
         const interval = setInterval(loadData, 30000);
         return () => clearInterval(interval);
     }, [loadData]);
+
+    // ─── Partner-claim approvals queue ───────────────────────────────────────
+    const canApproveClaims = hasPermission('edit_inventory');
+    const loadPendingClaims = useCallback(async () => {
+        if (!canApproveClaims) return;
+        try {
+            const res = await client.get('/api/leads/pending-partner-claims');
+            setPendingClaims(res.data || []);
+        } catch { /* non-fatal */ }
+    }, [canApproveClaims]);
+    useEffect(() => { loadPendingClaims(); }, [loadPendingClaims]);
+
+    const handleApproveClaim = async (phone: string) => {
+        setClaimBusy(phone);
+        try {
+            await client.post(`/api/leads/${encodeURIComponent(phone)}/approve-partner-claim`);
+            await Promise.all([loadPendingClaims(), loadData()]);
+        } catch { /* surfaced via the row staying */ } finally { setClaimBusy(null); }
+    };
+    const handleRejectClaim = async (phone: string) => {
+        setClaimBusy(phone);
+        try {
+            await client.post(`/api/leads/${encodeURIComponent(phone)}/reject-partner-claim`, {});
+            await Promise.all([loadPendingClaims(), loadData()]);
+        } catch { /* */ } finally { setClaimBusy(null); }
+    };
 
     // Load sync status
     const loadSyncStatus = useCallback(async () => {
@@ -391,10 +403,9 @@ export function ExternalLeads({ isMobile: isMobileProp }: { isMobile?: boolean }
 
     // Load classification tree once
     useEffect(() => {
-        client.get('/public/classification-tree')
+        client.get('/public/taxonomy/tree')
             .then(r => {
-                setClassificationTree(r.data.categories || []);
-                setConfigurations(r.data.configurations || []);
+                setTaxonomyTree(r.data.tree || []);
             })
             .catch(() => {});
     }, []);
@@ -407,24 +418,6 @@ export function ExternalLeads({ isMobile: isMobileProp }: { isMobile?: boolean }
     // ─── Google Maps Autocomplete Setup ───────────────────────────────────────
 
     const MAPS_KEY = (import.meta as any).env?.VITE_GOOGLE_MAPS_API_KEY || '';
-
-    const attachCreateAutocomplete = useCallback(() => {
-        if (!createLocationRef.current || !(window as any).google?.maps?.places) return;
-        if (createAcRef.current) return;
-        const ac = new (window as any).google.maps.places.Autocomplete(createLocationRef.current, {
-            componentRestrictions: { country: 'in' },
-            fields: ['formatted_address', 'geometry'],
-        });
-        ac.addListener('place_changed', () => {
-            const place = ac.getPlace();
-            const lat = place.geometry?.location?.lat() ?? null;
-            const lng = place.geometry?.location?.lng() ?? null;
-            setCreateForm(p => ({ ...p, preferred_location: place.formatted_address || p.preferred_location }));
-            setCreatePreferredLat(lat);
-            setCreatePreferredLng(lng);
-        });
-        createAcRef.current = ac;
-    }, []);
 
     const attachEditAutocomplete = useCallback((onSelect: (location: string, lat: number, lng: number) => void) => {
         if (!editLocationRef.current || !(window as any).google?.maps?.places) return;
@@ -443,19 +436,6 @@ export function ExternalLeads({ isMobile: isMobileProp }: { isMobile?: boolean }
         });
         editAcRef.current = ac;
     }, []);
-
-    useEffect(() => {
-        if (!showCreateModal || !MAPS_KEY) return;
-        loadGoogleMaps().then(() => {
-            setTimeout(attachCreateAutocomplete, 100);
-        });
-        return () => {
-            if (createAcRef.current) {
-                (window as any).google?.maps?.event?.clearInstanceListeners(createAcRef.current);
-                createAcRef.current = null;
-            }
-        };
-    }, [showCreateModal, MAPS_KEY, attachCreateAutocomplete]);
 
     // ─── Partner Search (debounced) ──────────────────────────────────────────
 
@@ -483,6 +463,22 @@ export function ExternalLeads({ isMobile: isMobileProp }: { isMobile?: boolean }
         return () => { if (partnerSearchTimer.current) clearTimeout(partnerSearchTimer.current); };
     }, [partnerSearchQuery, createLeadType]);
 
+    // Partner-referral: detect whether the typed client phone already belongs to a contact, so we can
+    // tell the team it'll attach as a requirement to that client ("Add as Direct Client") rather than fail.
+    useEffect(() => {
+        if (createLeadType !== 'PARTNER_REFERRAL' || preselectedContact) { setPartnerClientMatch(null); return; }
+        const digits = createForm.phone.replace(/\D/g, '').slice(-10);
+        if (digits.length < 10 || !/^[6-9]/.test(digits)) { setPartnerClientMatch(null); return; }
+        const t = setTimeout(async () => {
+            try {
+                const res = await client.get('/api/leads/search', { params: { q: digits } });
+                const match = (res.data || []).find((c: any) => (c.phone_number || '').replace(/\D/g, '').slice(-10) === digits);
+                setPartnerClientMatch(match ? { phone_number: match.phone_number, name: match.name ?? null } : null);
+            } catch { setPartnerClientMatch(null); }
+        }, 350);
+        return () => clearTimeout(t);
+    }, [createForm.phone, createLeadType, preselectedContact]);
+
 
     const selectPartner = (p: typeof partnerSearchResults[0]) => {
         setPartnerSelected(p);
@@ -506,6 +502,10 @@ export function ExternalLeads({ isMobile: isMobileProp }: { isMobile?: boolean }
 
     const confirmNewPartner = () => {
         if (!newPartnerForm.phone.trim()) return;
+        // The partner's phone seeds referral_partner_phone AND the PENDING- contact key — reject junk
+        // here so a name/partial can't become a broken partner number or a malformed key.
+        if (!isValidPhoneInput(newPartnerForm.phone)) { setCreateError('Enter a valid partner phone number (10-digit mobile).'); return; }
+        setCreateError('');
         setCreatePartnerPhone(newPartnerForm.phone.trim());
         setCreatePartnerName(newPartnerForm.name.trim());
         setShowPartnerRegister(false);
@@ -532,22 +532,15 @@ export function ExternalLeads({ isMobile: isMobileProp }: { isMobile?: boolean }
             const d: LeadDetail = res.data;
             setLeadDetail(d);
             setEditNotes(d.notes || '');
+            setEditName(d.name || '');
             setEditLifecycle(d.lifecycle_stage || 'NEW');
             setEditAgent(d.assigned_agent_id || '');
-            setEditBudgetMin(d.budget_min ? String(d.budget_min) : '');
-            setEditBudgetMax(d.budget_max ? String(d.budget_max) : '');
-            setEditBhk(d.demand_bhk ? String(d.demand_bhk) : '');
-            setEditCategoryId(d.category_id || '');
-            setEditSubCategoryId(d.sub_category_id || '');
-            setEditTypeId((d as any).type_id || '');
-            setEditIntent(d.intent || '');
+            // Phase 2 (2026-05-29): the inline edit form state vars are gone — all
+            // requirements now flow through <DemandRequirementsForm> which reads its
+            // initial values directly from leadDetail. Preferred lat/lng still need
+            // to round-trip through the canonical save handler.
             setEditPreferredLat(d.preferred_lat);
             setEditPreferredLng(d.preferred_lng);
-            setEditTimeline((d as any).timeline || '');
-            setEditAreaMin(d.area_min ? String(d.area_min) : '');
-            setEditAreaMax(d.area_max ? String(d.area_max) : '');
-            setEditAreaUnit(d.area_unit || 'sqft');
-            setEditAmenities(Array.isArray(d.demand_amenities) ? d.demand_amenities : []);
             setSessionAnswers(null);
         } catch (err: any) {
             setLeadDetail(null);
@@ -607,8 +600,7 @@ export function ExternalLeads({ isMobile: isMobileProp }: { isMobile?: boolean }
         setCreateStep(1);
         setCreateLeadType('DIRECT_OWNER');
         setCreateForm({ name: '', phone: '', email: '', source: 'manual', intent: '', notes: '', preferred_location: '' });
-        setCreateCategoryId(''); setCreateSubCategoryId(''); setCreatePreferredLat(null); setCreatePreferredLng(null); setCreateAssignedAgentId('');
-        setCreateBudgetMin(''); setCreateBudgetMax(''); setCreateBhk(''); setCreateTimeline('');
+        setCreateAssignedAgentId('');
         setCreatePartnerPhone(''); setCreatePartnerName('');
         setPartnerSearchQuery(''); setPartnerSearchResults([]); setPartnerSelected(null); setShowPartnerRegister(false); setPartnerSearchDone(false);
         setNewPartnerForm({ phone: '', name: '', email: '', city: '' });
@@ -664,7 +656,7 @@ export function ExternalLeads({ isMobile: isMobileProp }: { isMobile?: boolean }
 
     const handleSelectExistingClient = (contact: { phone_number: string; name: string | null }) => {
         setPreselectedContact(contact);
-        setCreateForm(p => ({ ...p, name: contact.name || '', phone: contact.phone_number.startsWith('TEMP_') ? '' : contact.phone_number }));
+        setCreateForm(p => ({ ...p, name: contact.name || '', phone: isPlaceholderPhone(contact.phone_number) ? '' : contact.phone_number }));
         setCreateStep(3);
     };
 
@@ -684,7 +676,7 @@ export function ExternalLeads({ isMobile: isMobileProp }: { isMobile?: boolean }
             await client.patch(`/api/leads/${encodeURIComponent(phone)}/status`, { lead_status: newStatus });
             setRecentLeads(prev => prev.map(l => l.phone_number === phone ? { ...l, lead_status: newStatus } : l));
         } catch (err: any) {
-            alert(err?.response?.data?.error || 'Failed to update status');
+            showToast(err?.response?.data?.error || 'Failed to update status', 'error');
         } finally {
             setUpdatingPhone(null);
         }
@@ -696,16 +688,25 @@ export function ExternalLeads({ isMobile: isMobileProp }: { isMobile?: boolean }
         try {
             await client.patch(`/api/leads/${encodeURIComponent(selectedPhone)}/requirements`, { lifecycle_stage: newStage });
             setRecentLeads(prev => prev.map(l => l.phone_number === selectedPhone ? { ...l, lifecycle_stage: newStage } : l));
-        } catch {}
+        } catch (err) { console.error('[ExternalLeads] Operation failed:', err); }
     };
 
     const handleAgentChange = async (agentId: string) => {
         if (!selectedPhone) return;
+        const prevAgent = editAgent;
         setEditAgent(agentId);
         try {
-            await client.patch(`/api/leads/${encodeURIComponent(selectedPhone)}/assign`, { agent_id: agentId || null });
+            if (agentId) {
+                await client.patch(`/api/leads/${encodeURIComponent(selectedPhone)}/reassign`, { agent_id: agentId });
+            } else {
+                await client.patch(`/api/leads/${encodeURIComponent(selectedPhone)}/assign`, { agent_id: null });
+            }
             setRecentLeads(prev => prev.map(l => l.phone_number === selectedPhone ? { ...l, assigned_agent_id: agentId || null } : l));
-        } catch {}
+        } catch (err: any) {
+            console.error('[ExternalLeads] Operation failed:', err);
+            setEditAgent(prevAgent);
+            alert(err?.response?.data?.error || 'Failed to reassign lead');
+        }
     };
 
     const handleSaveNotes = async () => {
@@ -714,39 +715,97 @@ export function ExternalLeads({ isMobile: isMobileProp }: { isMobile?: boolean }
         try {
             await client.patch(`/api/leads/${encodeURIComponent(selectedPhone)}/requirements`, { notes: editNotes });
             setRecentLeads(prev => prev.map(l => l.phone_number === selectedPhone ? { ...l, notes: editNotes } : l));
-        } catch {} finally { setSavingNotes(false); }
+        } catch (err) { console.error('[ExternalLeads] Operation failed:', err); } finally { setSavingNotes(false); }
     };
 
-    const handleSaveRequirements = async () => {
+    const handleSaveName = async () => {
+        if (!selectedPhone) return;
+        const trimmed = editName.trim();
+        setSavingName(true);
+        try {
+            await client.patch(`/api/leads/${encodeURIComponent(selectedPhone)}`, { name: trimmed });
+            setLeadDetail(prev => prev ? { ...prev, name: trimmed } : prev);
+            setRecentLeads(prev => prev.map(l => l.phone_number === selectedPhone ? { ...l, name: trimmed } : l));
+        } catch (err: any) {
+            alert(err?.response?.data?.error || 'Failed to update name');
+        } finally { setSavingName(false); }
+    };
+
+    // handleSaveRequirements (legacy inline-form save) removed Phase 2 demand-side
+    // unification (2026-05-29). Replaced by handleSaveDemandCanonical below.
+
+    // Phase 2 demand-side unification (2026-05-29). Canonical save handler used by
+    // the new <DemandRequirementsForm>. Sends demand_taxonomy_node_id + demand_schema_values
+    // alongside the legacy intent/budget/area/timeline/preferred_location fields. The
+    // backend (Phase 1) deep-merges schema_values onto whatever was already there.
+    const handleSaveDemandCanonical = async (payload: DemandPayload) => {
         if (!selectedPhone) return;
         setSavingReqs(true);
         try {
+            // Derive a single demand_bhk Int from canonical bhk for legacy mirror — keeps
+            // the deal-sync block + matching engine criteria builder working until Phase 3.
+            const bhkRaw = payload.demand_schema_values?.bhk;
+            let demandBhk: number | null = null;
+            if (typeof bhkRaw === 'string') {
+                const cleaned = bhkRaw.toLowerCase().replace('rk', '').replace('+', '').trim();
+                const n = parseInt(cleaned, 10);
+                if (!Number.isNaN(n)) demandBhk = n;
+            } else if (typeof bhkRaw === 'number') {
+                demandBhk = bhkRaw;
+            }
+            const amenities = Array.isArray(payload.demand_schema_values?.amenities)
+                ? payload.demand_schema_values.amenities as string[]
+                : undefined;
+
+            // Phase 5 (2026-05-29): Contact + Transaction legacy demand_bhk /
+            // demand_amenities columns dropped. POST canonical SoT only —
+            // including any legacy mirror keys causes the backend to attempt
+            // Unknown-argument writes → 500.
             await client.patch(`/api/leads/${encodeURIComponent(selectedPhone)}/requirements`, {
-                budget_min: editBudgetMin || null,
-                budget_max: editBudgetMax || null,
-                demand_bhk: editBhk || null,
-                preferred_lat: editPreferredLat,
-                preferred_lng: editPreferredLng,
-                preferred_location: leadDetail?.preferred_location || null,
-                category_id: editCategoryId || null,
-                sub_category_id: editSubCategoryId || null,
-                type_id: editTypeId || null,
-                intent: editIntent || null,
-                timeline: editTimeline || null,
-                area_min: editAreaMin || null,
-                area_max: editAreaMax || null,
-                area_unit: editAreaUnit || null,
-                demand_amenities: editAmenities.length > 0 ? editAmenities : null,
+                intent: payload.intent || null,
+                budget_min: payload.budget_min,
+                budget_max: payload.budget_max,
+                area_min: payload.area_min,
+                area_max: payload.area_max,
+                area_unit: payload.area_unit,
+                timeline: payload.timeline || null,
+                preferred_location: payload.preferred_location || null,
+                // DemandRequirementsForm now captures lat/lng via Google Places; prefer it,
+                // fall back to the slide-over's stored geo. (2026-06-01)
+                preferred_lat: payload.preferred_lat ?? editPreferredLat,
+                preferred_lng: payload.preferred_lng ?? editPreferredLng,
+                demand_taxonomy_node_id: payload.demand_taxonomy_node_id,
+                demand_schema_values: payload.demand_schema_values,
             });
             setRecentLeads(prev => prev.map(l => l.phone_number === selectedPhone ? {
                 ...l,
-                budget_min: editBudgetMin || null,
-                budget_max: editBudgetMax || null,
-                demand_bhk: editBhk ? Number(editBhk) : null,
-                category_id: editCategoryId || null,
-                sub_category_id: editSubCategoryId || null,
+                budget_min: payload.budget_min != null ? String(payload.budget_min) : null,
+                budget_max: payload.budget_max != null ? String(payload.budget_max) : null,
+                demand_bhk: demandBhk,
+                demand_taxonomy_node_id: payload.demand_taxonomy_node_id,
+                demand_schema_values: payload.demand_schema_values,
             } : l));
-        } catch {} finally { setSavingReqs(false); }
+            // Refresh leadDetail in-place so the form re-opens with fresh values next time.
+            setLeadDetail(prev => prev ? {
+                ...prev,
+                intent: payload.intent,
+                budget_min: payload.budget_min != null ? String(payload.budget_min) : null,
+                budget_max: payload.budget_max != null ? String(payload.budget_max) : null,
+                area_min: payload.area_min,
+                area_max: payload.area_max,
+                area_unit: payload.area_unit,
+                timeline: payload.timeline,
+                preferred_location: payload.preferred_location,
+                demand_bhk: demandBhk,
+                demand_amenities: amenities ?? null,
+                demand_taxonomy_node_id: payload.demand_taxonomy_node_id,
+                demand_schema_values: payload.demand_schema_values,
+            } : prev);
+        } catch (err) {
+            console.error('[ExternalLeads] canonical save failed:', err);
+        } finally {
+            setSavingReqs(false);
+        }
     };
 
     const handleFindMatches = async () => {
@@ -785,7 +844,7 @@ export function ExternalLeads({ isMobile: isMobileProp }: { isMobile?: boolean }
                 demand_budget_max: leadDetail.budget_max ? Number(leadDetail.budget_max) : undefined,
                 demand_bedrooms: leadDetail.demand_bhk ? String(leadDetail.demand_bhk) : undefined,
             });
-            alert('Deal created successfully! View it in the Deal Pipeline.');
+            showToast('Deal created successfully! View it in the Deal Pipeline.', 'success');
         } catch (err: any) {
             setDealError(err?.response?.data?.error || 'Failed to create deal');
         } finally {
@@ -811,28 +870,46 @@ export function ExternalLeads({ isMobile: isMobileProp }: { isMobile?: boolean }
         URL.revokeObjectURL(url);
     };
 
-    const handleCreateLead = async (e: React.FormEvent) => {
-        e.preventDefault();
+    // Submit handler — receives the canonical DemandPayload from <DemandRequirementsForm>
+    // (taxonomy node + schema_values + intent/budget/area/timeline/location) and merges it
+    // with the identity fields. Partner referrals: client name + phone are OPTIONAL (the
+    // partner often won't share them — backend creates a placeholder-keyed contact).
+    const handleCreateLead = async (demand: DemandPayload) => {
         if (createLeadType === 'PARTNER_REFERRAL') {
             if (!createPartnerPhone) { setCreateError('Please search and select a partner agent, or register a new one.'); return; }
-            if (!createForm.name.trim()) { setCreateError('Client name is required for partner referral leads.'); return; }
         } else {
-            if (!createForm.phone.trim()) { setCreateError('Phone number is required'); return; }
+            if (!createForm.phone.trim() && !preselectedContact) { setCreateError('Phone number is required'); return; }
+        }
+        // Reject junk in the phone field up front (mirrors backend) so we never POST a name/partial
+        // that would become a broken "+junk" contact. Blank is allowed only where checked above.
+        const phoneRaw = createForm.phone.trim();
+        if (phoneRaw && !isValidPhoneInput(phoneRaw)) {
+            setCreateError('Enter a valid phone number (10-digit mobile)' + (createLeadType === 'PARTNER_REFERRAL' ? ', or leave it blank to attribute to the partner.' : '.'));
+            return;
         }
         try {
             setCreating(true);
             setCreateError('');
             await client.post('/api/leads', {
-                ...createForm,
-                category_id: createCategoryId || undefined,
-                sub_category_id: createSubCategoryId || undefined,
-                preferred_lat: createPreferredLat,
-                preferred_lng: createPreferredLng,
-                budget_min: createBudgetMin || undefined,
-                budget_max: createBudgetMax || undefined,
-                demand_bhk: createBhk || undefined,
-                timeline: createTimeline || undefined,
+                name: createForm.name || undefined,
+                phone: createForm.phone || undefined,
+                email: createForm.email || undefined,
+                source: createForm.source,
+                notes: createForm.notes || undefined,
                 lead_type: createLeadType,
+                // Canonical requirement (taxonomy node + schema_values + universal fields)
+                intent: demand.intent || undefined,
+                budget_min: demand.budget_min ?? undefined,
+                budget_max: demand.budget_max ?? undefined,
+                area_min: demand.area_min ?? undefined,
+                area_max: demand.area_max ?? undefined,
+                area_unit: demand.area_unit || undefined,
+                timeline: demand.timeline || undefined,
+                preferred_location: demand.preferred_location || undefined,
+                preferred_lat: demand.preferred_lat ?? undefined,
+                preferred_lng: demand.preferred_lng ?? undefined,
+                demand_taxonomy_node_id: demand.demand_taxonomy_node_id ?? undefined,
+                demand_schema_values: demand.demand_schema_values ?? undefined,
                 ...(createLeadType === 'PARTNER_REFERRAL' && createPartnerPhone ? { referral_partner_phone: createPartnerPhone } : {}),
                 ...(createLeadType === 'PARTNER_REFERRAL' && createPartnerName ? { referral_partner_name: createPartnerName } : {}),
                 ...(isPrivileged && createAssignedAgentId ? { assigned_agent_id: createAssignedAgentId } : {}),
@@ -848,8 +925,6 @@ export function ExternalLeads({ isMobile: isMobileProp }: { isMobile?: boolean }
 
     // ─── Derived State ─────────────────────────────────────────────────────────
 
-    const totalAll = leadsBySource.reduce((sum, s) => sum + s._count, 0);
-
     const activeFilterCount = [
         statusFilter,
         sourceFilter,
@@ -857,23 +932,18 @@ export function ExternalLeads({ isMobile: isMobileProp }: { isMobile?: boolean }
         dateFrom,
         dateTo,
         intentFilter,
-        categorySelection.categoryId,
-        categorySelection.subCategoryId,
         locationSelection.lat !== null ? '1' : '',
         notContactedDays > 0 ? '1' : '',
         noShowcaseDays > 0 ? '1' : '',
-    ].filter(Boolean).length + (categorySelection.bhk.length > 0 ? 1 : 0);
+    ].filter(Boolean).length + (filterTaxonomy.nodeIds.length > 0 ? 1 : 0) + (filterTaxonomy.bhk.length > 0 ? 1 : 0);
 
+    // 2026-05-13: Server now handles search + status + source + agent + activeFilter.
+    // Client-side filtering retained only for date range (server doesn't filter by date yet)
+    // and the existing source/status/agent filters which the Filters sheet still touches
+    // locally (defensive). The phone-search bug was here: lead.phone_number stored as
+    // "+91XXXXXXXXXX" while user types "9958..." — `.includes()` mismatched. Server now
+    // handles phone variants via extractSearchDigits + phoneVariants.
     const filteredLeads = recentLeads.filter(lead => {
-        if (searchQuery) {
-            const q = searchQuery.toLowerCase();
-            const match = (lead.name || '').toLowerCase().includes(q) || lead.phone_number.includes(q) ||
-                (lead.email || '').toLowerCase().includes(q) || (lead.preferred_location || '').toLowerCase().includes(q);
-            if (!match) return false;
-        }
-        if (statusFilter && lead.lead_status !== statusFilter) return false;
-        if (sourceFilter && lead.source !== sourceFilter) return false;
-        if (agentFilter && lead.assigned_agent_id !== agentFilter) return false;
         if (dateFrom) {
             const leadDate = new Date(lead.created_at).toISOString().slice(0, 10);
             if (leadDate < dateFrom) return false;
@@ -885,11 +955,9 @@ export function ExternalLeads({ isMobile: isMobileProp }: { isMobile?: boolean }
         return true;
     });
 
-    // Cascading subcategories (create modal)
-    const createSubCategories = classificationTree.find(c => c.id === createCategoryId)?.subcategories || [];
 
-    // Cascading for slide-over edit
-    const editSubCategories = classificationTree.find(c => c.id === editCategoryId)?.subcategories || [];
+    // editSubCategories cascade removed Phase 2 demand-side unification (2026-05-29) —
+    // the taxonomy cascade now lives inside <DemandRequirementsForm>.
 
     // ─── Loading State ────────────────────────────────────────────────────────
 
@@ -917,7 +985,7 @@ export function ExternalLeads({ isMobile: isMobileProp }: { isMobile?: boolean }
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                         <h2 style={{ color: 'var(--text-primary)', margin: 0, fontSize: '17px' }}>Leads</h2>
-                        <span style={{ color: '#3b82f6', fontSize: '14px', fontWeight: 700 }}>{totalAll}</span>
+                        <span style={{ color: '#3b82f6', fontSize: '14px', fontWeight: 700 }}>{recentTotal.toLocaleString('en-IN')}</span>
                         {/* 99acres sync status — inline dot */}
                         {syncStatus && (
                             <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '11px', color: 'var(--text-secondary)' }}>
@@ -952,20 +1020,28 @@ export function ExternalLeads({ isMobile: isMobileProp }: { isMobile?: boolean }
                     </div>
                 )}
 
-                {/* Source Pills — compact horizontal row */}
-                <div style={{ display: 'flex', gap: '6px', marginBottom: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
-                    {leadsBySource.map(s => (
-                        <button type="button" key={s.source} onClick={() => setSourceFilter(p => p === s.source ? '' : s.source)}
-                            style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', padding: '4px 10px', borderRadius: '16px', fontSize: '11px', fontWeight: 600, border: sourceFilter === s.source ? '2px solid #3b82f6' : '1px solid var(--border-secondary)', backgroundColor: sourceFilter === s.source ? '#eff6ff' : 'var(--bg-secondary)', color: sourceColors[s.source] || '#6b7280', cursor: 'pointer' }}>
-                            <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: sourceColors[s.source] || '#6b7280' }} />
-                            {sourceLabels[s.source] || s.source} <span style={{ color: 'var(--text-primary)', fontWeight: 700 }}>{s._count}</span>
-                        </button>
-                    ))}
-                </div>
+                {/* 2026-05-13: Source filter chip row removed — team found the 12-source
+                    chip strip noisy and confusing. Source filter still available inside
+                    the Filters sheet for users who need it. */}
 
                 {/* ── Filters — mobile: minimalist bar; desktop: full rows ── */}
                 {isMobile ? (
                     <div style={{ padding: '4px 0 0', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        {/* 2026-05-13: Active/Archived/All toggle */}
+                        <div style={{ display: 'flex', gap: 0, border: '1px solid var(--border-secondary)', borderRadius: 10, overflow: 'hidden', alignSelf: 'flex-start' }}>
+                            {(['active', 'archived', 'all'] as const).map((opt) => (
+                                <button
+                                    key={opt}
+                                    type="button"
+                                    onClick={() => setActiveFilter(opt)}
+                                    style={{
+                                        padding: '6px 14px', fontSize: 12, fontWeight: 600, border: 'none', cursor: 'pointer',
+                                        backgroundColor: activeFilter === opt ? 'var(--accent-primary, #3b82f6)' : 'var(--bg-secondary)',
+                                        color: activeFilter === opt ? '#fff' : 'var(--text-secondary)',
+                                    }}
+                                >{opt === 'active' ? 'Active' : opt === 'archived' ? 'Closed/Lost' : 'All'}</button>
+                            ))}
+                        </div>
                         {/* Row 1: Search + Filters button */}
                         <div style={{ display: 'flex', gap: '8px' }}>
                             <input
@@ -994,6 +1070,14 @@ export function ExternalLeads({ isMobile: isMobileProp }: { isMobile?: boolean }
                             >
                                 <span>⚙</span>
                                 <span>Filters{activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}</span>
+                                {activeFilterCount > 0 && (
+                                    <span style={{
+                                        marginLeft: 2, padding: '1px 7px', borderRadius: 999,
+                                        backgroundColor: 'rgba(255,255,255,0.25)', fontWeight: 700, fontSize: '12px',
+                                    }}>
+                                        {recentTotal.toLocaleString('en-IN')} result{recentTotal !== 1 ? 's' : ''}
+                                    </span>
+                                )}
                             </button>
                         </div>
 
@@ -1030,14 +1114,9 @@ export function ExternalLeads({ isMobile: isMobileProp }: { isMobile?: boolean }
                                         {intentFilter === 'BUYER' ? 'Buy' : 'Rent'} ×
                                     </button>
                                 )}
-                                {categorySelection.categoryId && (
-                                    <button type="button" onClick={() => setCategorySelection({ categoryId: '', subCategoryId: '', typeId: '', bhk: [] })} className="chip chip-active" style={{ fontSize: '12px', padding: '4px 10px' }}>
-                                        {classificationTree.find(c => c.id === categorySelection.categoryId)?.name || 'Category'} ×
-                                    </button>
-                                )}
-                                {categorySelection.subCategoryId && (
-                                    <button type="button" onClick={() => setCategorySelection(prev => ({ ...prev, subCategoryId: '', typeId: '' }))} className="chip chip-active" style={{ fontSize: '12px', padding: '4px 10px' }}>
-                                        {classificationTree.flatMap(c => c.subcategories).find(s => s.id === categorySelection.subCategoryId)?.name || 'Sub-cat'} ×
+                                {(filterTaxonomy.nodeIds.length > 0 || filterTaxonomy.bhk.length > 0) && (
+                                    <button type="button" onClick={() => setFilterTaxonomy({ nodeIds: [], bhk: [] })} className="chip chip-active" style={{ fontSize: '12px', padding: '4px 10px' }}>
+                                        Property type{filterTaxonomy.bhk.length > 0 ? ` · ${filterTaxonomy.bhk.map(b => b === 5 ? '5+' : b).join('/')} BHK` : ''} ×
                                     </button>
                                 )}
                                 {locationSelection.lat !== null && (
@@ -1057,7 +1136,7 @@ export function ExternalLeads({ isMobile: isMobileProp }: { isMobile?: boolean }
                                 )}
                                 <button
                                     type="button"
-                                    onClick={() => { setStatusFilter(''); setSourceFilter(''); setAgentFilter(''); setDateFrom(''); setDateTo(''); setIntentFilter(''); setCategorySelection({ categoryId: '', subCategoryId: '', typeId: '', bhk: [] }); setLocationSelection({ label: '', lat: null, lng: null, radiusKm: 2 }); setNotContactedDays(0); setNoShowcaseDays(0); }}
+                                    onClick={() => { setStatusFilter(''); setSourceFilter(''); setAgentFilter(''); setDateFrom(''); setDateTo(''); setIntentFilter(''); setFilterTaxonomy({ nodeIds: [], bhk: [] }); setLocationSelection({ label: '', lat: null, lng: null, radiusKm: 2 }); setNotContactedDays(0); setNoShowcaseDays(0); }}
                                     style={{ padding: '4px 10px', borderRadius: '20px', fontSize: '12px', fontWeight: 600, backgroundColor: 'transparent', border: '1px solid var(--border-secondary)', color: 'var(--text-muted)', cursor: 'pointer' }}
                                 >
                                     Clear all
@@ -1067,31 +1146,44 @@ export function ExternalLeads({ isMobile: isMobileProp }: { isMobile?: boolean }
                     </div>
                 ) : (
                     <>
-                        {/* Desktop: Filters Row */}
-                        <div style={{ display: 'flex', gap: '6px', marginBottom: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+                        {/* 2026-05-13: Desktop filter row aligned with PWA pattern —
+                            Active/Archived/All toggle + search + Filters sheet button.
+                            All inline Status/Source/Agent/date dropdowns moved into the sheet. */}
+                        <div style={{ display: 'flex', gap: '8px', marginBottom: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
+                            <div style={{ display: 'flex', gap: 0, border: '1px solid var(--border-secondary)', borderRadius: 8, overflow: 'hidden' }}>
+                                {(['active', 'archived', 'all'] as const).map((opt) => (
+                                    <button
+                                        key={opt}
+                                        type="button"
+                                        onClick={() => setActiveFilter(opt)}
+                                        style={{
+                                            padding: '6px 14px', fontSize: 12, fontWeight: 600, border: 'none', cursor: 'pointer',
+                                            backgroundColor: activeFilter === opt ? 'var(--accent-primary, #3b82f6)' : 'var(--bg-secondary)',
+                                            color: activeFilter === opt ? '#fff' : 'var(--text-secondary)',
+                                            textTransform: 'capitalize',
+                                        }}
+                                    >{opt === 'active' ? 'Active' : opt === 'archived' ? 'Closed/Lost' : 'All'}</button>
+                                ))}
+                            </div>
                             <input type="text" placeholder="Search name, phone, email..." value={searchQuery}
-                                onChange={e => setSearchQuery(e.target.value)} style={{ flex: 1, minWidth: '160px', padding: '5px 10px', borderRadius: '6px', border: '1px solid var(--border-secondary)', backgroundColor: 'var(--bg-secondary)', color: 'var(--text-primary)', fontSize: '12px', boxSizing: 'border-box' }} />
-                            <select title="Filter by status" value={statusFilter} onChange={e => setStatusFilter(e.target.value)} style={filterSelectStyle}>
-                                <option value="">Status</option>
-                                {LEAD_STATUSES.map(s => <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
-                            </select>
-                            <select title="Filter by source" value={sourceFilter} onChange={e => setSourceFilter(e.target.value)} style={filterSelectStyle}>
-                                <option value="">Source</option>
-                                {SOURCES.map(s => <option key={s} value={s}>{sourceLabels[s] || s}</option>)}
-                            </select>
-                            {isPrivileged && (
-                                <select title="Filter by agent" value={agentFilter} onChange={e => setAgentFilter(e.target.value)} style={filterSelectStyle}>
-                                    <option value="">Agent</option>
-                                    {teamMembers.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-                                </select>
-                            )}
-                            <input type="date" title="From date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
-                                style={{ ...filterSelectStyle, width: '120px' }} />
-                            <input type="date" title="To date" value={dateTo} onChange={e => setDateTo(e.target.value)}
-                                style={{ ...filterSelectStyle, width: '120px' }} />
-                            {(searchQuery || statusFilter || sourceFilter || agentFilter || dateFrom || dateTo || intentFilter || categorySelection.categoryId || locationSelection.lat !== null || notContactedDays > 0 || noShowcaseDays > 0) && (
-                                <button type="button" onClick={() => { setSearchQuery(''); setStatusFilter(''); setSourceFilter(''); setAgentFilter(''); setDateFrom(''); setDateTo(''); setIntentFilter(''); setCategorySelection({ categoryId: '', subCategoryId: '', typeId: '', bhk: [] }); setLocationSelection({ label: '', lat: null, lng: null, radiusKm: 2 }); setNotContactedDays(0); setNoShowcaseDays(0); }}
-                                    style={{ padding: '4px 10px', borderRadius: '6px', border: '1px solid var(--border-secondary)', backgroundColor: 'var(--bg-secondary)', color: '#ef4444', cursor: 'pointer', fontSize: '11px', fontWeight: 600 }}>
+                                onChange={e => setSearchQuery(e.target.value)}
+                                style={{ flex: 1, minWidth: '200px', padding: '7px 12px', borderRadius: 8, border: '1px solid var(--border-secondary)', backgroundColor: 'var(--bg-secondary)', color: 'var(--text-primary)', fontSize: 13, boxSizing: 'border-box' }} />
+                            <button
+                                type="button"
+                                onClick={() => setShowFilterSheet(true)}
+                                style={{
+                                    padding: '7px 14px', borderRadius: 8, cursor: 'pointer', flexShrink: 0,
+                                    border: activeFilterCount > 0 ? '1.5px solid var(--text-link)' : '1px solid var(--border-secondary)',
+                                    backgroundColor: activeFilterCount > 0 ? 'var(--text-link)' : 'var(--bg-secondary)',
+                                    color: activeFilterCount > 0 ? '#fff' : 'var(--text-secondary)',
+                                    fontWeight: 600, fontSize: 13, display: 'flex', alignItems: 'center', gap: 6,
+                                }}
+                            >
+                                <span>⚙</span><span>Filters{activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}</span>
+                            </button>
+                            {(searchQuery || activeFilterCount > 0) && (
+                                <button type="button" onClick={() => { setSearchQuery(''); setStatusFilter(''); setSourceFilter(''); setAgentFilter(''); setDateFrom(''); setDateTo(''); setIntentFilter(''); setFilterTaxonomy({ nodeIds: [], bhk: [] }); setLocationSelection({ label: '', lat: null, lng: null, radiusKm: 2 }); setNotContactedDays(0); setNoShowcaseDays(0); }}
+                                    style={{ padding: '6px 12px', borderRadius: 8, border: '1px solid var(--border-secondary)', backgroundColor: 'transparent', color: '#ef4444', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>
                                     Clear
                                 </button>
                             )}
@@ -1100,11 +1192,47 @@ export function ExternalLeads({ isMobile: isMobileProp }: { isMobile?: boolean }
                     </>
                 )}
 
+                {/* Partner-claim approvals — a partner submitted a lead for one of our existing direct clients */}
+                {canApproveClaims && pendingClaims.length > 0 && (
+                    <div style={{ marginBottom: '12px', backgroundColor: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.4)', borderRadius: '8px', overflow: 'hidden' }}>
+                        <div style={{ padding: '8px 12px', fontSize: '13px', fontWeight: 700, color: '#b45309', borderBottom: '1px solid rgba(245,158,11,0.25)' }}>
+                            🤝 Partner Approvals ({pendingClaims.length}) — a partner referred an existing direct client
+                        </div>
+                        {pendingClaims.map((c: any) => (
+                            <div key={c.phone_number} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 12px', borderBottom: '1px solid rgba(245,158,11,0.15)', flexWrap: 'wrap' }}>
+                                <div style={{ flex: 1, minWidth: 180 }}>
+                                    <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>{c.name || 'Client'} · {isPlaceholderPhone(c.phone_number) ? 'No phone' : c.phone_number}</div>
+                                    <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                                        Partner: <strong>{c.partner?.name || 'Unknown'}</strong>
+                                        {c.requirement_type ? ` · wants to ${c.requirement_type === 'RENT' ? 'rent' : 'buy'}` : ''}
+                                        {c.preferred_location ? ` · ${c.preferred_location}` : ''}
+                                    </div>
+                                </div>
+                                <button type="button" disabled={claimBusy === c.phone_number} onClick={() => handleApproveClaim(c.phone_number)} style={{
+                                    fontSize: '12px', fontWeight: 700, color: '#fff', backgroundColor: '#16a34a', border: 'none',
+                                    borderRadius: '6px', padding: '5px 12px', cursor: claimBusy === c.phone_number ? 'wait' : 'pointer', opacity: claimBusy === c.phone_number ? 0.6 : 1,
+                                }}>✓ Approve (credit partner)</button>
+                                <button type="button" disabled={claimBusy === c.phone_number} onClick={() => handleRejectClaim(c.phone_number)} style={{
+                                    fontSize: '12px', fontWeight: 700, color: '#dc2626', backgroundColor: 'transparent', border: '1px solid #dc2626',
+                                    borderRadius: '6px', padding: '5px 12px', cursor: claimBusy === c.phone_number ? 'wait' : 'pointer', opacity: claimBusy === c.phone_number ? 0.6 : 1,
+                                }}>✕ Reject (keep direct)</button>
+                            </div>
+                        ))}
+                    </div>
+                )}
+
                 {/* Table */}
                 <div style={{ backgroundColor: 'var(--bg-secondary)', borderRadius: '8px', overflow: 'hidden', border: '1px solid var(--border-secondary)' }}>
                     <div style={{ padding: '8px 12px', borderBottom: isMobile ? 'none' : '1px solid var(--border-secondary)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span style={{ color: 'var(--text-primary)', fontSize: '13px', fontWeight: 600 }}>Showing {filteredLeads.length} leads</span>
-                        {!isMobile && selectedPhone && <span style={{ fontSize: '11px', color: '#3b82f6' }}>Click row for details</span>}
+                        <span style={{ color: 'var(--text-primary)', fontSize: '13px', fontWeight: 600 }}>
+                            Showing {filteredLeads.length.toLocaleString('en-IN')}{recentTotal > recentLeads.length ? ` of ${recentTotal.toLocaleString('en-IN')}` : ''} leads
+                        </span>
+                        {recentLeads.length < recentTotal ? (
+                            <button type="button" onClick={() => setPageLimit(l => l + 500)} disabled={loading} style={{
+                                fontSize: '11px', fontWeight: 700, color: '#3b82f6', background: 'none',
+                                border: '1px solid #3b82f6', borderRadius: '6px', padding: '3px 10px', cursor: loading ? 'wait' : 'pointer',
+                            }}>{loading ? 'Loading…' : `Load more (+${Math.min(500, recentTotal - recentLeads.length).toLocaleString('en-IN')})`}</button>
+                        ) : (!isMobile && selectedPhone && <span style={{ fontSize: '11px', color: '#3b82f6' }}>Click row for details</span>)}
                     </div>
 
                     {/* Mobile Card View */}
@@ -1124,8 +1252,10 @@ export function ExternalLeads({ isMobile: isMobileProp }: { isMobile?: boolean }
                                     formatBudget={formatBudget}
                                 />
                             )) : (
-                                <div style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '32px 16px', fontSize: '14px' }}>
-                                    {error ? 'Failed to load leads' : 'No leads found'}
+                                <div className="empty-state">
+                                    <span className="empty-state__icon">{error ? '⚠️' : '📥'}</span>
+                                    <p className="empty-state__title">{error ? 'Failed to load leads' : 'No leads yet'}</p>
+                                    <p className="empty-state__body">{error ? 'Please try refreshing the page.' : 'Leads from portals will appear here.'}</p>
                                 </div>
                             )}
                         </div>
@@ -1135,7 +1265,7 @@ export function ExternalLeads({ isMobile: isMobileProp }: { isMobile?: boolean }
                         <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '700px' }}>
                             <thead>
                                 <tr style={{ borderBottom: '1px solid var(--border-secondary)' }}>
-                                    {['Name', 'Phone', 'Source', 'Status', 'Budget', 'Score', 'Intent', 'Location', 'Date', ''].map(h => (
+                                    {['Name', 'Phone', 'Source', 'Status', 'Assigned to', 'Budget', 'Score', 'Intent', 'Location', 'Date', ''].map(h => (
                                         <th key={h} style={{ textAlign: 'left', padding: '6px 10px', color: 'var(--text-secondary)', fontSize: '10px', fontWeight: 600, textTransform: 'uppercase' }}>{h}</th>
                                     ))}
                                 </tr>
@@ -1158,7 +1288,7 @@ export function ExternalLeads({ isMobile: isMobileProp }: { isMobile?: boolean }
                                                     {lead.demand_bhk ? <span style={{ color: 'var(--text-muted)', fontSize: '10px', marginLeft: '4px' }}>{lead.demand_bhk}BHK</span> : null}
                                                 </div>
                                             </td>
-                                            <td style={{ ...compactCell, color: 'var(--text-secondary)', fontSize: '11px' }}>{lead.phone_number.startsWith('TEMP_') ? <span style={{ color: '#d97706', fontSize: '10px' }}>No phone</span> : lead.phone_number}</td>
+                                            <td style={{ ...compactCell, color: 'var(--text-secondary)', fontSize: '11px' }}>{isDialablePhone(lead.phone_number) ? lead.phone_number : <span style={{ color: '#d97706', fontSize: '10px' }}>No phone</span>}</td>
                                             <td style={compactCell}>
                                                 <span style={{ backgroundColor: (sourceColors[lead.source] || '#6b7280') + '20', color: sourceColors[lead.source] || '#6b7280', padding: '1px 6px', borderRadius: '8px', fontSize: '10px', fontWeight: 600 }}>
                                                     {sourceLabels[lead.source] || lead.source}
@@ -1170,6 +1300,11 @@ export function ExternalLeads({ isMobile: isMobileProp }: { isMobile?: boolean }
                                                     style={{ padding: '2px 4px', borderRadius: '4px', fontSize: '11px', fontWeight: 500, border: '1px solid var(--border-secondary)', cursor: 'pointer', backgroundColor: lead.lead_status === 'hot' ? '#fef2f2' : lead.lead_status === 'warm' ? '#fffbeb' : 'var(--bg-primary)', color: lead.lead_status === 'hot' ? '#ef4444' : lead.lead_status === 'warm' ? '#f59e0b' : 'var(--text-primary)' }}>
                                                     {LEAD_STATUSES.map(s => <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
                                                 </select>
+                                            </td>
+                                            <td style={{ ...compactCell, fontSize: '11px' }}>
+                                                {(lead as any).assigned_agent?.name
+                                                    ? <span style={{ color: 'var(--text-primary)' }}>{(lead as any).assigned_agent.name}</span>
+                                                    : <span style={{ color: 'var(--text-muted)' }}>—</span>}
                                             </td>
                                             <td style={{ ...compactCell, fontSize: '11px', whiteSpace: 'nowrap' }}>
                                                 {lead.budget_min || lead.budget_max ? `${formatBudget(lead.budget_min)}–${formatBudget(lead.budget_max)}` : <span style={{ color: 'var(--text-muted)' }}>—</span>}
@@ -1185,17 +1320,24 @@ export function ExternalLeads({ isMobile: isMobileProp }: { isMobile?: boolean }
                                             <td style={{ ...compactCell, fontSize: '11px', maxWidth: '120px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{lead.preferred_location || <span style={{ color: 'var(--text-muted)' }}>—</span>}</td>
                                             <td style={{ ...compactCell, color: 'var(--text-muted)', fontSize: '10px', whiteSpace: 'nowrap' }}>{new Date(lead.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}</td>
                                             <td style={compactCell} onClick={e => e.stopPropagation()}>
-                                                {!lead.phone_number.startsWith('TEMP_') && (
-                                                    <a href={`tel:${lead.phone_number}`}
-                                                        style={{ color: '#22c55e', fontSize: '15px', textDecoration: 'none', lineHeight: 1 }}
-                                                        title={`Call ${lead.phone_number}`}>📞</a>
-                                                )}
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                    {toDialablePhone(lead.phone_number) && (
+                                                        <a href={`tel:${toDialablePhone(lead.phone_number)}`}
+                                                            style={{ color: '#22c55e', fontSize: '15px', textDecoration: 'none', lineHeight: 1 }}
+                                                            title={`Call client ${toDialablePhone(lead.phone_number)}`}>📞</a>
+                                                    )}
+                                                    {lead.lead_type === 'PARTNER_REFERRAL' && toDialablePhone(lead.referral_partner_phone) && (
+                                                        <a href={`tel:${toDialablePhone(lead.referral_partner_phone)}`}
+                                                            style={{ color: '#7c3aed', fontSize: '13px', textDecoration: 'none', lineHeight: 1, whiteSpace: 'nowrap' }}
+                                                            title={`Call partner ${lead.referral_partner_name || ''} ${toDialablePhone(lead.referral_partner_phone)}`}>🤝📞</a>
+                                                    )}
+                                                </div>
                                             </td>
                                         </tr>
                                     );
                                 })}
                                 {filteredLeads.length === 0 && (
-                                    <tr><td colSpan={10} style={{ ...compactCell, textAlign: 'center', color: 'var(--text-muted)', padding: '20px 10px' }}>
+                                    <tr><td colSpan={11} style={{ ...compactCell, textAlign: 'center', color: 'var(--text-muted)', padding: '20px 10px' }}>
                                         {error ? 'Failed to load leads' : 'No leads found'}
                                     </td></tr>
                                 )}
@@ -1240,12 +1382,27 @@ export function ExternalLeads({ isMobile: isMobileProp }: { isMobile?: boolean }
                                             {leadDetail.lead_type === 'PARTNER_REFERRAL' && (
                                                 <span style={{ backgroundColor: '#ede9fe', color: '#7c3aed', padding: '2px 8px', borderRadius: '10px', fontSize: '11px', fontWeight: 700 }}>🤝 {leadDetail.referral_partner_name || 'Partner'}</span>
                                             )}
+                                            {leadDetail.lead_type === 'PARTNER_REFERRAL' && toDialablePhone(leadDetail.referral_partner_phone) && (
+                                                <a href={`tel:${toDialablePhone(leadDetail.referral_partner_phone)}`} title={`Call partner ${toDialablePhone(leadDetail.referral_partner_phone)}`}
+                                                    style={{ backgroundColor: '#7c3aed', color: '#fff', padding: '2px 8px', borderRadius: '10px', fontSize: '11px', fontWeight: 700, textDecoration: 'none' }}>📞 Call partner</a>
+                                            )}
                                         </div>
                                     </div>
                                     <button onClick={closeDetail} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '20px', padding: '4px 8px' }}>✕</button>
                                 </div>
 
                                 <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+
+                                    {/* Edit Name (privileged) */}
+                                    {isPrivileged && (
+                                        <div>
+                                            <label style={soLabel}>Name</label>
+                                            <input value={editName} onChange={e => setEditName(e.target.value)} placeholder="Contact name" style={soInput} />
+                                            <button onClick={handleSaveName} disabled={savingName} style={{ ...outlineBtn, fontSize: '12px', padding: '5px 12px', marginTop: '6px' }}>
+                                                {savingName ? 'Saving...' : 'Save Name'}
+                                            </button>
+                                        </div>
+                                    )}
 
                                     {/* Lifecycle + Agent */}
                                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
@@ -1255,13 +1412,16 @@ export function ExternalLeads({ isMobile: isMobileProp }: { isMobile?: boolean }
                                                 {LIFECYCLE_STAGES.map(s => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}
                                             </select>
                                         </div>
-                                        {isPrivileged && (
+                                        {(isPrivileged || (agent?.id && editAgent === agent.id)) && (
                                             <div>
                                                 <label style={soLabel}>Assigned Agent</label>
                                                 <select value={editAgent} onChange={e => handleAgentChange(e.target.value)} style={soInput}>
-                                                    <option value="">Unassigned</option>
+                                                    {isPrivileged && <option value="">Unassigned</option>}
                                                     {teamMembers.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
                                                 </select>
+                                                {!isPrivileged && (
+                                                    <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: '4px' }}>You can reassign this lead to another team member.</div>
+                                                )}
                                             </div>
                                         )}
                                     </div>
@@ -1281,143 +1441,36 @@ export function ExternalLeads({ isMobile: isMobileProp }: { isMobile?: boolean }
                                         </div>
                                     )}
 
-                                    {/* Requirements */}
+                                    {/* Phase 2 demand-side unification (2026-05-29): the legacy
+                                        inline form (Intent + Category/Sub-Category/Property Type cascade
+                                        + hardcoded BHK 1-6 dropdown + 12 hardcoded amenity chips +
+                                        area/budget/timeline/location) has been REPLACED by the shared
+                                        <DemandRequirementsForm> which renders a taxonomy picker + a
+                                        dynamic by-type panel driven from FieldDefinition rows. Labels
+                                        and options now match whatever the property type actually uses
+                                        (BHK for residential, Rooms for commercial, FAR/Side-Opens/
+                                        Road-Width for plots, etc.) — same shape as inventory.specs. */}
                                     <div>
                                         <label style={{ ...soLabel, marginBottom: '10px' }}>Buyer Requirements</label>
-
-                                        {/* Intent */}
-                                        <div style={{ marginBottom: '8px' }}>
-                                            <label style={{ ...soLabel, fontSize: '10px' }}>Intent (Buy / Rent)</label>
-                                            <select value={editIntent} onChange={e => setEditIntent(e.target.value)} style={soInput}>
-                                                <option value="">Not set</option>
-                                                <option value="buy">Buy</option>
-                                                <option value="rent">Rent / Lease</option>
-                                            </select>
-                                        </div>
-
-                                        {/* Property Classification */}
-                                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', marginBottom: '8px' }}>
-                                            <div>
-                                                <label style={{ ...soLabel, fontSize: '10px' }}>Category</label>
-                                                <select value={editCategoryId} onChange={e => { setEditCategoryId(e.target.value); setEditSubCategoryId(''); setEditTypeId(''); }} style={soInput}>
-                                                    <option value="">Any</option>
-                                                    {classificationTree.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                                                </select>
-                                            </div>
-                                            <div>
-                                                <label style={{ ...soLabel, fontSize: '10px' }}>Sub-Category</label>
-                                                <select value={editSubCategoryId} onChange={e => { setEditSubCategoryId(e.target.value); setEditTypeId(''); }} style={soInput} disabled={!editCategoryId}>
-                                                    <option value="">Any</option>
-                                                    {editSubCategories.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                                                </select>
-                                            </div>
-                                            <div>
-                                                <label style={{ ...soLabel, fontSize: '10px' }}>Property Type</label>
-                                                <select value={editTypeId} onChange={e => setEditTypeId(e.target.value)} style={soInput} disabled={!editSubCategoryId}>
-                                                    <option value="">Any</option>
-                                                    {(editSubCategories.find(s => s.id === editSubCategoryId) as any)?.types?.map((t: any) => (
-                                                        <option key={t.id} value={t.id}>{t.name}</option>
-                                                    ))}
-                                                </select>
-                                            </div>
-                                        </div>
-
-                                        {/* BHK */}
-                                        <div style={{ marginBottom: '8px' }}>
-                                            <label style={{ ...soLabel, fontSize: '10px' }}>BHK</label>
-                                            <select title="BHK configuration" value={editBhk} onChange={e => setEditBhk(e.target.value)} style={soInput}>
-                                                <option value="">Any</option>
-                                                {configurations.filter(c => BHK_SLUGS.includes(c.slug)).map(c => (
-                                                    <option key={c.id} value={c.slug === 'studio' ? '0' : c.name.replace(/[^0-9]/g, '') || c.slug}>{c.name}</option>
-                                                ))}
-                                            </select>
-                                        </div>
-
-                                        {/* Area Requirements */}
-                                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', marginBottom: '8px' }}>
-                                            <div>
-                                                <label style={{ ...soLabel, fontSize: '10px' }}>Area Min</label>
-                                                <input type="number" placeholder="500" value={editAreaMin} onChange={e => setEditAreaMin(e.target.value)} style={soInput} />
-                                            </div>
-                                            <div>
-                                                <label style={{ ...soLabel, fontSize: '10px' }}>Area Max</label>
-                                                <input type="number" placeholder="2000" value={editAreaMax} onChange={e => setEditAreaMax(e.target.value)} style={soInput} />
-                                            </div>
-                                            <div>
-                                                <label style={{ ...soLabel, fontSize: '10px' }}>Unit</label>
-                                                <select title="Area unit" value={editAreaUnit} onChange={e => setEditAreaUnit(e.target.value)} style={soInput}>
-                                                    <option value="sqft">sqft</option>
-                                                    <option value="sqmtr">sqmtr</option>
-                                                </select>
-                                            </div>
-                                        </div>
-
-                                        {/* Preferred Amenities */}
-                                        <div style={{ marginBottom: '8px' }}>
-                                            <label style={{ ...soLabel, fontSize: '10px' }}>Preferred Amenities</label>
-                                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '4px' }}>
-                                                {AMENITIES_LIST.map(a => {
-                                                    const selected = editAmenities.includes(a.value);
-                                                    return (
-                                                        <button key={a.value} type="button"
-                                                            onClick={() => setEditAmenities(prev =>
-                                                                selected ? prev.filter(x => x !== a.value) : [...prev, a.value]
-                                                            )}
-                                                            style={{
-                                                                padding: '4px 10px', borderRadius: '16px', fontSize: '11px',
-                                                                border: selected ? '1px solid #34d399' : '1px solid #d1d5db',
-                                                                background: selected ? '#ecfdf5' : 'transparent',
-                                                                color: selected ? '#059669' : '#6b7280',
-                                                                cursor: 'pointer',
-                                                            }}>
-                                                            {selected ? '✓ ' : ''}{a.label}
-                                                        </button>
-                                                    );
-                                                })}
-                                            </div>
-                                        </div>
-
-                                        {/* Budget */}
-                                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '8px' }}>
-                                            <div>
-                                                <label style={{ ...soLabel, fontSize: '10px' }}>Budget Min (₹)</label>
-                                                <input type="number" placeholder="5000000" value={editBudgetMin} onChange={e => setEditBudgetMin(e.target.value)} style={soInput} />
-                                            </div>
-                                            <div>
-                                                <label style={{ ...soLabel, fontSize: '10px' }}>Budget Max (₹)</label>
-                                                <input type="number" placeholder="8000000" value={editBudgetMax} onChange={e => setEditBudgetMax(e.target.value)} style={soInput} />
-                                            </div>
-                                        </div>
-
-                                        {/* Timeline */}
-                                        <div style={{ marginBottom: '8px' }}>
-                                            <label style={{ ...soLabel, fontSize: '10px' }}>Timeline</label>
-                                            <select title="Purchase timeline" value={editTimeline} onChange={e => setEditTimeline(e.target.value)} style={soInput}>
-                                                <option value="">Not set</option>
-                                                {TIMELINES.map(t => <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>)}
-                                            </select>
-                                        </div>
-
-                                        {/* Location with Maps autocomplete */}
-                                        <div style={{ marginBottom: '8px' }}>
-                                            <label style={{ ...soLabel, fontSize: '10px' }}>Preferred Location</label>
-                                            <input
-                                                ref={editLocationRef}
-                                                type="text"
-                                                placeholder="Search area on Google Maps..."
-                                                defaultValue={leadDetail.preferred_location || ''}
-                                                style={{ ...soInput, backgroundColor: editPreferredLat ? 'rgba(34,197,94,0.05)' : undefined }}
-                                            />
-                                            {editPreferredLat && (
-                                                <div style={{ fontSize: '10px', color: '#22c55e', marginTop: '2px' }}>
-                                                    📍 Geo-tagged: {editPreferredLat.toFixed(4)}, {editPreferredLng?.toFixed(4)}
-                                                </div>
-                                            )}
-                                        </div>
-
-                                        <button onClick={handleSaveRequirements} disabled={savingReqs} style={{ ...primaryBtn, fontSize: '12px', padding: '6px 14px' }}>
-                                            {savingReqs ? 'Saving...' : 'Save Requirements'}
-                                        </button>
+                                        <DemandRequirementsForm
+                                            initial={{
+                                                intent: leadDetail.intent ?? 'buy',
+                                                budget_min: leadDetail.budget_min != null ? Number(leadDetail.budget_min) : null,
+                                                budget_max: leadDetail.budget_max != null ? Number(leadDetail.budget_max) : null,
+                                                area_min: leadDetail.area_min ?? null,
+                                                area_max: leadDetail.area_max ?? null,
+                                                area_unit: leadDetail.area_unit ?? 'sqft',
+                                                timeline: leadDetail.timeline ?? '',
+                                                preferred_location: leadDetail.preferred_location ?? '',
+                                                preferred_lat: leadDetail.preferred_lat ?? null,
+                                                preferred_lng: leadDetail.preferred_lng ?? null,
+                                                demand_taxonomy_node_id: leadDetail.demand_taxonomy_node_id ?? null,
+                                                demand_schema_values: leadDetail.demand_schema_values ?? {},
+                                            }}
+                                            onSubmit={handleSaveDemandCanonical}
+                                            submitting={savingReqs}
+                                            submitLabel="Save Requirements"
+                                        />
                                     </div>
 
                                     {/* Find Matches + Multi-Select + WhatsApp Sharing */}
@@ -1428,6 +1481,7 @@ export function ExternalLeads({ isMobile: isMobileProp }: { isMobile?: boolean }
                                         onFindMatches={handleFindMatches}
                                         leadPhone={leadDetail.phone_number}
                                         leadName={leadDetail.name}
+                                        leadPartnerPhone={leadDetail.referral_partner_phone}
                                         scoreColor={scoreColor}
                                     />
 
@@ -1461,6 +1515,28 @@ export function ExternalLeads({ isMobile: isMobileProp }: { isMobile?: boolean }
                                             {savingNotes ? 'Saving...' : 'Save Notes'}
                                         </button>
                                     </div>
+
+                                    {/* Convert to Partner Agent */}
+                                    {leadDetail.contact_type !== 'PARTNER_AGENT' && (
+                                        <div>
+                                            <button type="button" onClick={() => setShowConvert(true)} style={{
+                                                padding: '7px 12px', fontSize: '12px', fontWeight: 700, borderRadius: 8, cursor: 'pointer',
+                                                border: 'none', backgroundColor: '#10b981', color: '#fff',
+                                            }}>🤝 Convert to Partner Agent</button>
+                                        </div>
+                                    )}
+
+                                    {showConvert && selectedPhone && (
+                                        <ConvertToPartnerModal
+                                            phone={selectedPhone}
+                                            defaultName={leadDetail?.name || ''}
+                                            onClose={() => setShowConvert(false)}
+                                            onConverted={() => {
+                                                setRecentLeads(prev => prev.map(l => l.phone_number === selectedPhone ? { ...l, contact_type: 'PARTNER_AGENT' } : l));
+                                                setShowConvert(false);
+                                            }}
+                                        />
+                                    )}
 
                                     {/* Lead Info */}
                                     <div style={{ backgroundColor: 'var(--bg-secondary)', borderRadius: '10px', padding: '14px', border: '1px solid var(--border-secondary)' }}>
@@ -1498,7 +1574,7 @@ export function ExternalLeads({ isMobile: isMobileProp }: { isMobile?: boolean }
                                                         <div style={{ gridColumn: '1 / -1' }}>
                                                             <div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '4px' }}>99acres Listing</div>
                                                             <a
-                                                                href={`https://www.99acres.com/search/property/buy/property-in-india?prop_id=${meta.property_code}`}
+                                                                href={`https://www.99acres.com/${meta.property_code}`}
                                                                 target="_blank"
                                                                 rel="noopener noreferrer"
                                                                 style={{
@@ -1528,11 +1604,11 @@ export function ExternalLeads({ isMobile: isMobileProp }: { isMobile?: boolean }
                                     {/* Timeline Tabs */}
                                     <div>
                                         <div style={{ display: 'flex', gap: '0', borderRadius: '8px', overflow: 'hidden', border: '1px solid var(--border-secondary)', marginBottom: '10px' }}>
-                                            {(['activity', 'visits'] as const).map(tab => (
+                                            {(['activity', 'chat', 'visits'] as const).map(tab => (
                                                 <button key={tab} type="button"
                                                     onClick={() => setSliderTab(tab)}
                                                     style={{ flex: 1, padding: '7px 12px', fontSize: '12px', fontWeight: 600, border: 'none', cursor: 'pointer', backgroundColor: sliderTab === tab ? '#3b82f6' : 'var(--bg-secondary)', color: sliderTab === tab ? '#fff' : 'var(--text-secondary)', transition: 'all 0.15s' }}>
-                                                    {tab === 'activity' ? '📋 Activity' : '🏠 Visits & Views'}
+                                                    {tab === 'activity' ? '📋 Activity' : tab === 'chat' ? '💬 WhatsApp' : '🏠 Visits & Views'}
                                                 </button>
                                             ))}
                                         </div>
@@ -1551,11 +1627,16 @@ export function ExternalLeads({ isMobile: isMobileProp }: { isMobile?: boolean }
                                                                 <span style={{ textTransform: 'capitalize' }}>{i.channel} · {i.direction} · {i.event_type}</span>
                                                                 <span style={{ color: 'var(--text-muted)', marginLeft: '8px' }}>{new Date(i.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}</span>
                                                             </div>
-                                                            {i.content && <div style={{ fontSize: '12px', color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{i.content}</div>}
+                                                            {i.content && <div style={{ fontSize: '12px', color: 'var(--text-primary)', whiteSpace: 'pre-wrap', wordBreak: 'break-word', lineHeight: 1.4 }}>{i.content}</div>}
                                                         </div>
                                                     </div>
                                                 ))}
                                             </div>
+                                        )}
+
+                                        {/* WhatsApp Chat Tab */}
+                                        {sliderTab === 'chat' && (
+                                            <WhatsAppChatTab phone={selectedPhone || ''} isMobile={effectiveIsMobile} />
                                         )}
 
                                         {/* Visits & Views Tab */}
@@ -1708,7 +1789,7 @@ export function ExternalLeads({ isMobile: isMobileProp }: { isMobile?: boolean }
                                 {clientSearchQuery.trim().length === 10 && !clientSearching && clientSearchResults.length > 0 && (
                                     <div style={{ marginTop: '8px', border: '1px solid var(--border-secondary)', borderRadius: '8px', overflow: 'hidden' }}>
                                         {clientSearchResults.map(r => {
-                                            const isTemp = r.phone_number.startsWith('TEMP_');
+                                            const isTemp = isPlaceholderPhone(r.phone_number);
                                             const statusColors: Record<string, string> = { cold: '#94a3b8', warm: '#f59e0b', hot: '#ef4444', closed: '#22c55e', lost: '#6b7280' };
                                             const sc = statusColors[r.lead_status || ''] || '#94a3b8';
                                             return (
@@ -1760,7 +1841,7 @@ export function ExternalLeads({ isMobile: isMobileProp }: { isMobile?: boolean }
 
                         {/* ── STEP 2 (PARTNER_REFERRAL) or STEP 3 (DIRECT_OWNER): Details form ── */}
                         {((createStep === 2 && createLeadType === 'PARTNER_REFERRAL') || createStep === 3) && (
-                        <form onSubmit={handleCreateLead}>
+                        <div>
                             <div style={{ display: 'grid', gap: '12px' }}>
 
                                 {/* Partner Agent Search — only for PARTNER_REFERRAL */}
@@ -1833,7 +1914,7 @@ export function ExternalLeads({ isMobile: isMobileProp }: { isMobile?: boolean }
                                 {/* Preselected contact banner */}
                                 {preselectedContact && (
                                     <div style={{ padding: '10px 14px', borderRadius: '8px', backgroundColor: 'rgba(59,130,246,0.08)', border: '1px solid rgba(59,130,246,0.3)', fontSize: '13px', color: 'var(--text-primary)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                        <span>Adding requirements for: <strong>{preselectedContact.name || 'Contact'}</strong> &nbsp;|&nbsp; {preselectedContact.phone_number.startsWith('TEMP_') ? 'No phone' : preselectedContact.phone_number}</span>
+                                        <span>Adding requirements for: <strong>{preselectedContact.name || 'Contact'}</strong> &nbsp;|&nbsp; {isPlaceholderPhone(preselectedContact.phone_number) ? 'No phone' : preselectedContact.phone_number}</span>
                                         <button type="button" onClick={() => { setPreselectedContact(null); setCreateForm(p => ({ ...p, name: '', phone: '' })); }} style={{ fontSize: '11px', color: '#3b82f6', background: 'none', border: 'none', cursor: 'pointer' }}>Change</button>
                                     </div>
                                 )}
@@ -1850,6 +1931,13 @@ export function ExternalLeads({ isMobile: isMobileProp }: { isMobile?: boolean }
                                     </div>
                                 </div>
 
+                                {/* Existing-client notice (partner referral) — backend attaches this as a new requirement */}
+                                {createLeadType === 'PARTNER_REFERRAL' && partnerClientMatch && (
+                                    <div style={{ padding: '8px 12px', borderRadius: '8px', backgroundColor: 'rgba(245,158,11,0.10)', border: '1px solid rgba(245,158,11,0.35)', fontSize: '12px', color: '#b45309' }}>
+                                        ✓ <strong>{partnerClientMatch.name || 'This client'}</strong> is already registered with us — this requirement will be <strong>added to their profile</strong> (Add as Direct Client).
+                                    </div>
+                                )}
+
                                 {/* Email + Source */}
                                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                                     <div>
@@ -1864,74 +1952,12 @@ export function ExternalLeads({ isMobile: isMobileProp }: { isMobile?: boolean }
                                     </div>
                                 </div>
 
-                                {/* Intent — Buy or Rent only */}
-                                <div>
-                                    <label style={labelStyle}>Intent</label>
-                                    <select title="Lead intent" value={createForm.intent} onChange={e => setCreateForm(p => ({ ...p, intent: e.target.value }))} style={inputStyle}>
-                                        <option value="">Select Intent</option>
-                                        <option value="buy">Buy</option>
-                                        <option value="rent">Rent</option>
-                                    </select>
-                                </div>
-
-                                {/* Property Classification — 3 cascading dropdowns */}
-                                <div>
-                                    <label style={labelStyle}>Property Type</label>
-                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px' }}>
-                                        <select title="Property category" value={createCategoryId} onChange={e => { setCreateCategoryId(e.target.value); setCreateSubCategoryId(''); }} style={inputStyle}>
-                                            <option value="">Category</option>
-                                            {classificationTree.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                                        </select>
-                                        <select title="Property sub-type" value={createSubCategoryId} onChange={e => setCreateSubCategoryId(e.target.value)} style={inputStyle} disabled={!createCategoryId}>
-                                            <option value="">Sub-type</option>
-                                            {createSubCategories.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                                        </select>
-                                        <select title="BHK configuration" value={createBhk} onChange={e => setCreateBhk(e.target.value)} style={inputStyle}>
-                                            <option value="">BHK</option>
-                                            {configurations.filter(c => BHK_SLUGS.includes(c.slug)).map(c => (
-                                                <option key={c.id} value={c.slug === 'studio' ? '0' : c.name.replace(/[^0-9]/g, '') || c.slug}>{c.name}</option>
-                                            ))}
-                                        </select>
-                                    </div>
-                                </div>
-
-                                {/* Budget Range */}
-                                <div>
-                                    <label style={labelStyle}>Budget (₹)</label>
-                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-                                        <input type="number" placeholder="Min budget" value={createBudgetMin}
-                                            onChange={e => setCreateBudgetMin(e.target.value)} style={inputStyle} />
-                                        <input type="number" placeholder="Max budget" value={createBudgetMax}
-                                            onChange={e => setCreateBudgetMax(e.target.value)} style={inputStyle} />
-                                    </div>
-                                </div>
-
-                                {/* Timeline */}
-                                <div>
-                                    <label style={labelStyle}>Timeline</label>
-                                    <select title="Purchase timeline" value={createTimeline} onChange={e => setCreateTimeline(e.target.value)} style={inputStyle}>
-                                        <option value="">Select Timeline</option>
-                                        {TIMELINES.map(t => <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>)}
-                                    </select>
-                                </div>
-
-                                {/* Location — Google Maps Autocomplete */}
-                                <div>
-                                    <label style={labelStyle}>Preferred Location</label>
-                                    <input
-                                        ref={createLocationRef}
-                                        type="text"
-                                        value={createForm.preferred_location}
-                                        onChange={e => setCreateForm(p => ({ ...p, preferred_location: e.target.value }))}
-                                        placeholder="Search area on Google Maps..."
-                                        style={{ ...inputStyle, backgroundColor: createPreferredLat ? 'rgba(34,197,94,0.05)' : undefined }}
-                                    />
-                                    {createPreferredLat && (
-                                        <div style={{ fontSize: '11px', color: '#22c55e', marginTop: '3px' }}>
-                                            📍 Geo-tagged: {createPreferredLat.toFixed(4)}, {createPreferredLng?.toFixed(4)}
-                                        </div>
-                                    )}
-                                </div>
+                                {/* Intent / Property-Type / Budget / Timeline / Location are now
+                                    captured by <DemandRequirementsForm> below (the same taxonomy
+                                    picker + dynamic per-type fields used in the lead-edit panel),
+                                    so the manual Add-Lead path stores the canonical
+                                    demand_taxonomy_node_id + demand_schema_values like every other
+                                    source. (2026-05-31) */}
 
                                 {/* Agent Assignment — only for privileged */}
                                 {isPrivileged && (
@@ -1951,16 +1977,31 @@ export function ExternalLeads({ isMobile: isMobileProp }: { isMobile?: boolean }
                                 </div>
                             </div>
 
-                            <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', marginTop: '20px' }}>
+                            {/* Wizard back nav */}
+                            <div style={{ marginTop: '16px', marginBottom: '8px' }}>
                                 <button type="button" onClick={() => setCreateStep(createLeadType === 'DIRECT_OWNER' ? 2 : 1)} style={{ ...outlineBtn, fontSize: '12px' }}>← Back</button>
-                                <div style={{ display: 'flex', gap: '8px' }}>
-                                    <button type="button" onClick={closeCreateModal} style={outlineBtn}>Cancel</button>
-                                    <button type="submit" disabled={creating} style={{ ...primaryBtn, opacity: creating ? 0.7 : 1 }}>
-                                        {creating ? 'Creating...' : 'Create Lead'}
-                                    </button>
-                                </div>
                             </div>
-                        </form>
+
+                            {/* Buyer Requirements — shared taxonomy picker + dynamic per-type fields.
+                                Its submit button IS "Create Lead"; onSubmit emits the canonical
+                                demand payload which handleCreateLead merges with the identity fields. */}
+                            <div>
+                                <label style={{ ...labelStyle, marginBottom: '10px', display: 'block' }}>Buyer Requirements</label>
+                                <DemandRequirementsForm
+                                    initial={{
+                                        intent: createForm.intent || 'buy',
+                                        budget_min: null, budget_max: null,
+                                        area_min: null, area_max: null, area_unit: 'sqft',
+                                        timeline: '', preferred_location: createForm.preferred_location || '',
+                                        demand_taxonomy_node_id: null, demand_schema_values: {},
+                                    }}
+                                    onSubmit={handleCreateLead}
+                                    onCancel={closeCreateModal}
+                                    submitting={creating}
+                                    submitLabel="Create Lead"
+                                />
+                            </div>
+                        </div>
                         )}
 
                     </div>
@@ -2001,7 +2042,7 @@ export function ExternalLeads({ isMobile: isMobileProp }: { isMobile?: boolean }
                                 setDateFrom('');
                                 setDateTo('');
                                 setIntentFilter('');
-                                setCategorySelection({ categoryId: '', subCategoryId: '', typeId: '', bhk: [] });
+                                setFilterTaxonomy({ nodeIds: [], bhk: [] });
                                 setLocationSelection({ label: '', lat: null, lng: null, radiusKm: 2 });
                                 setNotContactedDays(0);
                                 setNoShowcaseDays(0);
@@ -2025,7 +2066,7 @@ export function ExternalLeads({ isMobile: isMobileProp }: { isMobile?: boolean }
 
                         <FilterLocationSection value={locationSelection} onChange={setLocationSelection} />
 
-                        <FilterCategorySection tree={classificationTree} value={categorySelection} onChange={setCategorySelection} />
+                        <FilterTaxonomySection tree={taxonomyTree} value={filterTaxonomy} onChange={setFilterTaxonomy} />
 
                         {/* Source */}
                         <FilterSection title="Source" defaultOpen={false} badge={sourceFilter ? 1 : 0}>
@@ -2110,10 +2151,8 @@ export function ExternalLeads({ isMobile: isMobileProp }: { isMobile?: boolean }
 const compactCell: React.CSSProperties = {
     padding: '6px 10px', color: 'var(--text-bright)', fontSize: '12px',
 };
-const filterSelectStyle: React.CSSProperties = {
-    padding: '5px 8px', borderRadius: '6px', border: '1px solid var(--border-secondary)',
-    backgroundColor: 'var(--bg-secondary)', color: 'var(--text-primary)', fontSize: '12px', boxSizing: 'border-box',
-};
+// filterSelectStyle removed 2026-05-13 when desktop inline filter dropdowns
+// were replaced by the unified Filters sheet button.
 const labelStyle: React.CSSProperties = {
     display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)',
     marginBottom: '4px', textTransform: 'uppercase',

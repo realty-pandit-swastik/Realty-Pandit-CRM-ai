@@ -5,8 +5,7 @@
 
 import { useState, useEffect } from 'react';
 import { TrendingUp, Download, RefreshCw, BarChart3, PieChart, Activity, Target } from 'lucide-react';
-import { useAuth } from '../contexts/AuthContext';
-import { API_BASE_URL } from '../lib/api';
+import { API_BASE_URL, authedFetch } from '../lib/api';
 import {
   LineChart, Line, BarChart, Bar, PieChart as RechartsPie, Pie, Cell,
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
@@ -46,7 +45,6 @@ const DATE_RANGES = [
 ];
 
 export default function AdvancedAnalytics() {
-  const { token } = useAuth();
   const [data, setData] = useState<AnalyticsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -68,9 +66,7 @@ export default function AdvancedAnalytics() {
         params.append('end', customEnd);
       }
 
-      const response = await fetch(`${API_BASE_URL}/api/analytics/advanced?${params}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const response = await authedFetch(`${API_BASE_URL}/api/analytics/advanced?${params}`);
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));

@@ -21,6 +21,7 @@ interface Contact {
     phone_number: string;
     name?: string;
     contact_type: string;
+    lead_status?: string;
     lead_score?: LeadScore;
 }
 
@@ -28,6 +29,7 @@ interface Props {
     contact: Contact;
     interactions: Interaction[];
     onReportNoShow: () => void;
+    onMarkLeadLost?: () => void;
     onUpdateContactType?: (phone: string, type: string) => void;
 }
 
@@ -50,7 +52,7 @@ const formatDateSeparator = (dateStr: string) => {
     return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' });
 };
 
-export const ChatView: React.FC<Props> = ({ contact, interactions, onReportNoShow, onUpdateContactType }) => {
+export const ChatView: React.FC<Props> = ({ contact, interactions, onReportNoShow, onMarkLeadLost, onUpdateContactType }) => {
     const score = contact.lead_score;
     const displayName = contact.name || contact.phone_number;
 
@@ -107,19 +109,36 @@ export const ChatView: React.FC<Props> = ({ contact, interactions, onReportNoSho
                         </div>
                     )}
                 </div>
-                <button
-                    onClick={onReportNoShow}
-                    style={{
-                        padding: '7px 14px',
-                        backgroundColor: 'var(--error-bg)', color: 'var(--error-text)',
-                        border: '1px solid #ef4444', borderRadius: '8px',
-                        cursor: 'pointer', fontWeight: 600, fontSize: '12px',
-                        whiteSpace: 'nowrap',
-                    }}
-                    title="Reduces reliability score by 20"
-                >
-                    🚨 No-Show
-                </button>
+                <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                    <button
+                        onClick={onReportNoShow}
+                        style={{
+                            padding: '7px 14px',
+                            backgroundColor: 'var(--error-bg)', color: 'var(--error-text)',
+                            border: '1px solid #ef4444', borderRadius: '8px',
+                            cursor: 'pointer', fontWeight: 600, fontSize: '12px',
+                            whiteSpace: 'nowrap',
+                        }}
+                        title="Reduces reliability score by 20"
+                    >
+                        🚨 No-Show
+                    </button>
+                    {onMarkLeadLost && contact.lead_status !== 'lost' && (
+                        <button
+                            onClick={onMarkLeadLost}
+                            style={{
+                                padding: '7px 14px',
+                                backgroundColor: '#7f1d1d', color: '#fff',
+                                border: '1px solid #991b1b', borderRadius: '8px',
+                                cursor: 'pointer', fontWeight: 600, fontSize: '12px',
+                                whiteSpace: 'nowrap',
+                            }}
+                            title="Mark this lead as LOST. Also closes any open deals for this contact. Reversible."
+                        >
+                            ❌ Mark Lost
+                        </button>
+                    )}
+                </div>
             </div>
 
             {/* Messages */}

@@ -11,6 +11,11 @@ export const MainDashboard: React.FC = () => {
     hotLeads: 0,
     warmLeads: 0,
     coldLeads: 0,
+    // 2026-05-12 Bug D fix: dashboard pills previously summed to less than totalContacts
+    // because contacts with lead_status='lost' or other values were dropped silently.
+    // Now we surface lostLeads + an 'other' bucket so the math always reconciles.
+    lostLeads: 0,
+    otherLeads: 0,
     todayAppointments: 0,
     activeProperties: 0,
     recentContacts: [] as any[],
@@ -42,11 +47,19 @@ export const MainDashboard: React.FC = () => {
       // Load workflow stats
       getWorkflowStats().then(ws => setWorkflowStats(ws)).catch(() => {});
 
-      // Calculate stats
-      const totalContacts = contacts.length;
-      const hotLeads = contacts.filter((c: any) => c.lead_status === 'hot').length;
-      const warmLeads = contacts.filter((c: any) => c.lead_status === 'warm').length;
-      const coldLeads = contacts.filter((c: any) => c.lead_status === 'cold').length;
+      // 2026-05-12 (later): "Total Contacts" used to count all rows (1575) including partners
+      // landlords, internal management — which is misleading because team uses this to gauge
+      // their LEAD pipeline. Filter to demand-side types only.
+      const LEAD_TYPES = new Set(['BUYER', 'TENANT', 'UNKNOWN']);
+      const leads = contacts.filter((c: any) => !c.contact_type || LEAD_TYPES.has(c.contact_type));
+
+      const totalContacts = leads.length;
+      const hotLeads = leads.filter((c: any) => c.lead_status === 'hot').length;
+      const warmLeads = leads.filter((c: any) => c.lead_status === 'warm').length;
+      const coldLeads = leads.filter((c: any) => c.lead_status === 'cold').length;
+      const lostLeads = leads.filter((c: any) => c.lead_status === 'lost' || c.lead_status === 'closed').length;
+      // 'other' catches anything else (legacy 'NEW' rows, null, etc.) so the math reconciles.
+      const otherLeads = totalContacts - hotLeads - warmLeads - coldLeads - lostLeads;
       const todayAppointments = appointments?.length || 0;
       const activeProperties = inventory?.total || 0;
 
@@ -60,6 +73,8 @@ export const MainDashboard: React.FC = () => {
         hotLeads,
         warmLeads,
         coldLeads,
+        lostLeads,
+        otherLeads,
         todayAppointments,
         activeProperties,
         recentContacts,
@@ -134,7 +149,10 @@ export const MainDashboard: React.FC = () => {
             gridTemplateColumns: '1fr 1fr',
             gap: 'var(--bento-gap)',
           }}>
-            {/* Wide tile: Total Contacts — spans full width */}
+            {/* Wide tile: Total Leads — spans full width
+                2026-05-12: renamed from "Total Contacts" + filtered to BUYER/TENANT/UNKNOWN
+                because the team uses this to gauge their lead pipeline (not internal staff
+                or partners). */}
             <div style={{
               gridColumn: '1 / -1',
               backgroundColor: '#1e3a5f',
@@ -147,8 +165,9 @@ export const MainDashboard: React.FC = () => {
               border: '1px solid rgba(96,165,250,0.2)',
             }}>
               <div>
-                <div style={{ fontSize: '13px', color: '#93c5fd', fontWeight: 600, marginBottom: '4px' }}>Total Contacts</div>
+                <div style={{ fontSize: '13px', color: '#93c5fd', fontWeight: 600, marginBottom: '4px' }}>Total Leads</div>
                 <div style={{ fontSize: '40px', fontWeight: 800, color: '#60a5fa', lineHeight: 1 }}>{stats.totalContacts}</div>
+                <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>buyers + tenants</div>
               </div>
               <div style={{ fontSize: '40px', opacity: 0.4 }}>👥</div>
             </div>
@@ -172,6 +191,13 @@ export const MainDashboard: React.FC = () => {
               <div style={{ fontSize: isMobile ? '20px' : '24px' }}>❄️</div>
               <div style={{ fontSize: isMobile ? '28px' : '32px', fontWeight: 800, color: '#93c5fd', lineHeight: 1.1 }}>{stats.coldLeads}</div>
               <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '4px' }}>COLD Leads</div>
+            </div>
+
+            {/* LOST Leads — 2026-05-12 Bug D fix: surfaced so totals reconcile */}
+            <div style={{ backgroundColor: '#3b1f1f', borderRadius: 'var(--radius-clay)', padding: isMobile ? '12px' : '16px', boxShadow: 'var(--shadow-clay)', textAlign: 'center', border: '1px solid rgba(127,29,29,0.4)' }}>
+              <div style={{ fontSize: isMobile ? '20px' : '24px' }}>❌</div>
+              <div style={{ fontSize: isMobile ? '28px' : '32px', fontWeight: 800, color: '#fca5a5', lineHeight: 1.1 }}>{stats.lostLeads}</div>
+              <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '4px' }}>LOST</div>
             </div>
 
             {/* Today's Appointments */}
@@ -209,6 +235,11 @@ export const MainDashboard: React.FC = () => {
           </div>
           <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '4px', WebkitOverflowScrolling: 'touch' }}>
             {[
+              // 2026-05-12: HIGH-priority callback/visit requests come from WhatsApp
+              // button taps and free-text "call me back". Surfaced first because
+              // they have 15-30 min SLAs and auto-escalate to super_boss if missed.
+              { key: 'CALLBACK_REQUEST', icon: '📞', label: 'Callback NOW', color: '#ef4444' },
+              { key: 'VISIT_REQUEST',    icon: '🏃', label: 'Visit ASAP',   color: '#f43f5e' },
               { key: 'QUALIFY_LEAD',     icon: '📞', label: 'Qualify',   color: '#3b82f6' },
               { key: 'SHARE_PROPERTIES', icon: '📤', label: 'Share',     color: '#8b5cf6' },
               { key: 'SCHEDULE_VISIT',   icon: '📅', label: 'Visit',     color: '#f59e0b' },

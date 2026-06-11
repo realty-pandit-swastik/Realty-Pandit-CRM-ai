@@ -261,11 +261,14 @@ export function useWorkflow() {
         }
     }, [currentStep, answers, stepHistory]);
 
-    const submit = useCallback(async () => {
+    const submit = useCallback(async (extras?: Record<string, any>) => {
         setError('');
         setSubmitting(true);
         try {
-            const result = await commitWorkflow(answers, 'admin');
+            // `extras` lets callers inject fields that aren't part of the step-by-step wizard
+            // (e.g. source_partner_id / source_partner_phone for the middleman model).
+            const payload = extras ? { ...answers, ...extras } : answers;
+            const result = await commitWorkflow(payload, 'admin');
             setInventoryId(result.inventory_id);
             setDisplayId(result.display_id || '');
             setCompletionPct(result.completion_pct || 0);

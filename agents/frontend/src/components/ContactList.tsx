@@ -90,10 +90,10 @@ export const ContactList: React.FC<Props> = ({ contacts, selectedPhone, onSelect
                     value={search}
                     onChange={e => setSearch(e.target.value)}
                     style={{
-                        width: '100%', padding: '8px 10px',
+                        width: '100%', padding: '10px 14px',
                         backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-secondary)',
-                        borderRadius: '8px', color: 'var(--text-primary)', fontSize: '13px',
-                        outline: 'none', boxSizing: 'border-box',
+                        borderRadius: '8px', color: 'var(--text-primary)', fontSize: '16px',
+                        outline: 'none', boxSizing: 'border-box', minHeight: '44px',
                     }}
                 />
             </div>
