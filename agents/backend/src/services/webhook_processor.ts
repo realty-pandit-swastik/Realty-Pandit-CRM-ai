@@ -374,7 +374,49 @@ How can I help you find your perfect property today? 🏡`;
                 logger.info(`[WebhookProcessor] Conversational message from ${from} on deal ${activeDeal.id} — routing to message_router`);
                 // Fall through to step 6 (message router) — do NOT return here.
             } else {
-                // ── 3b.3 Generic message ("Hi", "yes") → qualify + auto-share property ──
+                // ── 3b.3 Generic / requirement message → (capture any new requirement) qualify + auto-share ──
+                // P1 (2026-06-11): a SHORT message on an active deal used to go straight to a blind
+                // next-card, silently dropping stated requirements like "1 bhk" / "Vaishali" / "rent"
+                // (audit: only 28% of requirement messages got a matching card). Now we extract the
+                // slots and persist them to the DEAL — the criteria source for shareNextProperty — so
+                // the auto-shared card reflects the NEW requirement. Pure chit-chat ("hi"/"ok"/"yes")
+                // yields no slots → unchanged behaviour.
+                const { extractReqSlots } = await import('../utils/requirement_slots');
+                const reqSlots = extractReqSlots(text || '');
+                if (Object.keys(reqSlots).length > 0) {
+                    const { foldLegacyDemand, mergeDemandSchemaValues } = await import('../utils/demand_canonical');
+                    const dealData: any = {};
+                    if (reqSlots.location) dealData.demand_location = reqSlots.location;
+                    if (reqSlots.intent) dealData.demand_intent = reqSlots.intent === 'rent' ? 'rent_lease' : 'buy';
+                    if (reqSlots.bhk) {
+                        // Re-read the deal's current schema fresh so we merge (not clobber) other keys
+                        // (amenities/furnishing/…) the in-scope activeDeal may not have loaded.
+                        const cur = await prisma.transaction.findUnique({
+                            where: { id: activeDeal.id }, select: { demand_schema_values: true },
+                        });
+                        const folded = foldLegacyDemand({ demand_bhk: reqSlots.bhk });
+                        dealData.demand_schema_values = mergeDemandSchemaValues(
+                            (cur?.demand_schema_values as any) ?? null, folded.demand_schema_values,
+                        );
+                    }
+                    if (Object.keys(dealData).length > 0) {
+                        try {
+                            await prisma.transaction.update({ where: { id: activeDeal.id }, data: dealData });
+                            // Mirror the scalar slots onto the contact (future turns + contact-fallback
+                            // in shareNextProperty). BHK lives on the deal (authoritative) — no JSON merge here.
+                            const cData: any = {};
+                            if (reqSlots.location) cData.preferred_location = reqSlots.location;
+                            if (reqSlots.intent) cData.intent = reqSlots.intent;
+                            if (Object.keys(cData).length > 0) {
+                                await prisma.contact.update({ where: { phone_number: from }, data: cData });
+                            }
+                            logger.info(`[WebhookProcessor] Captured requirement on deal ${activeDeal.id} from ${from}: ${JSON.stringify(reqSlots)} — re-matching`);
+                        } catch (err) {
+                            logger.error('[WebhookProcessor] Requirement capture update failed:', err);
+                        }
+                    }
+                }
+
                 if (activeDeal.status === 'NEW') {
                     const { transitionTransaction } = await import('./transaction_state_machine');
                     const { TransactionStatus } = await import('@prisma/client');
