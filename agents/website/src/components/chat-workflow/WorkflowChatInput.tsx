@@ -78,7 +78,7 @@ export default function WorkflowChatInput({
                     <button
                         onClick={onAttach}
                         disabled={disabled}
-                        className="w-10 h-10 rounded-xl flex items-center justify-center text-slate-400 hover:text-emerald-600 dark:hover:text-emerald-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors disabled:opacity-40"
+                        className="w-11 h-11 min-w-[44px] min-h-[44px] rounded-xl flex items-center justify-center text-slate-400 hover:text-emerald-600 dark:hover:text-emerald-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors disabled:opacity-40"
                         aria-label="Attach file"
                     >
                         <Paperclip className="w-5 h-5" />
@@ -112,7 +112,7 @@ export default function WorkflowChatInput({
                 <button
                     onClick={handleSend}
                     disabled={disabled || !text.trim()}
-                    className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all shadow-sm disabled:opacity-40 disabled:cursor-not-allowed ${
+                    className={`w-11 h-11 min-w-[44px] min-h-[44px] rounded-xl flex items-center justify-center transition-all shadow-sm disabled:opacity-40 disabled:cursor-not-allowed ${
                         text.trim() && !disabled
                             ? 'bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white shadow-lg'
                             : 'bg-slate-200 dark:bg-slate-700 text-slate-400 dark:text-slate-500'

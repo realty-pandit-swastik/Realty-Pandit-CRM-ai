@@ -15,12 +15,10 @@ import FilterChips from '@/components/properties/FilterChips';
 import ScheduleVisitModal from '@/components/properties/ScheduleVisitModal';
 import ShareWhatsAppModal from '@/components/properties/ShareWhatsAppModal';
 import { getProperties, getProjects, getMediaUrl, type Property, type Project } from '@/lib/api';
-import { useMasterData, type PropertySubCategory, type PropertyType } from '@/lib/useMasterData';
 
 function PropertiesContent() {
     const searchParams = useSearchParams();
     const router = useRouter();
-    const { categories, configurations } = useMasterData();
 
     const [activeTab, setActiveTab] = useState<'rent' | 'resale' | 'projects'>(() => {
         const tab = searchParams.get('tab');
@@ -39,53 +37,25 @@ function PropertiesContent() {
     const [scheduleVisitProperty, setScheduleVisitProperty] = useState<Property | null>(null);
     const [shareWhatsAppProperty, setShareWhatsAppProperty] = useState<Property | null>(null);
 
-    // Classification cascading state
-    const [subCategories, setSubCategories] = useState<PropertySubCategory[]>([]);
-    const [types, setTypes] = useState<PropertyType[]>([]);
-
-    // Filter state — furnishing, ownership_type, amenities are now in main filters
+    // Filter state — taxonomy-driven (taxonomy_node_id) + per-type specs filters.
     const [filters, setFilters] = useState({
         location: searchParams.get('location') || '',
-        category_id: searchParams.get('category_id') || '',
-        sub_category_id: searchParams.get('sub_category_id') || '',
-        type_id: searchParams.get('type_id') || '',
-        configuration_id: searchParams.get('configuration_id') || '',
-        usage_type_id: searchParams.get('usage_type_id') || '',
-        investment_type_id: searchParams.get('investment_type_id') || '',
+        // Clean city captured on place-select — used by the Projects tab's city filter (the granular
+        // `location` is for the Resale/Rent property search).
+        city: searchParams.get('city') || '',
+        taxonomy_node_id: searchParams.get('taxonomy_node_id') || '',
         intent: searchParams.get('intent') || '',
         price_min: searchParams.get('price_min') || '',
         price_max: searchParams.get('price_max') || '',
         furnishing: searchParams.get('furnishing') || '',
-        ownership_type: searchParams.get('ownership_type') || '',
         amenities: searchParams.get('amenities') || '',
+        bhk: searchParams.get('bhk') || '',
+        rooms: searchParams.get('rooms') || '',
+        facing: searchParams.get('facing') || '',
+        age: searchParams.get('age') || '',
         sort: searchParams.get('sort') || 'newest',
         page: parseInt(searchParams.get('page') || '1'),
     });
-
-    // Cascading filters
-    useEffect(() => {
-        if (filters.category_id) {
-            const cat = categories.find(c => c.id === filters.category_id);
-            setSubCategories(cat?.sub_categories || []);
-            if (filters.sub_category_id && !cat?.sub_categories.find(sc => sc.id === filters.sub_category_id)) {
-                setFilters(f => ({ ...f, sub_category_id: '', type_id: '' }));
-            }
-        } else {
-            setSubCategories([]);
-        }
-    }, [filters.category_id, categories]);
-
-    useEffect(() => {
-        if (filters.sub_category_id) {
-            const sub = subCategories.find(s => s.id === filters.sub_category_id);
-            setTypes(sub?.property_types || []);
-            if (filters.type_id && !sub?.property_types.find(t => t.id === filters.type_id)) {
-                setFilters(f => ({ ...f, type_id: '' }));
-            }
-        } else {
-            setTypes([]);
-        }
-    }, [filters.sub_category_id, subCategories]);
 
     const loadProperties = useCallback(async () => {
         setLoading(true);
@@ -93,17 +63,15 @@ function PropertiesContent() {
             if (activeTab !== 'projects') {
                 const params: any = {};
                 if (filters.location) params.location = filters.location;
-                if (filters.category_id) params.category_id = filters.category_id;
-                if (filters.sub_category_id) params.sub_category_id = filters.sub_category_id;
-                if (filters.type_id) params.type_id = filters.type_id;
-                if (filters.configuration_id) params.configuration_id = filters.configuration_id;
-                if (filters.usage_type_id) params.usage_type_id = filters.usage_type_id;
-                if (filters.investment_type_id) params.investment_type_id = filters.investment_type_id;
+                if (filters.taxonomy_node_id) params.taxonomy_node_id = filters.taxonomy_node_id;
                 if (filters.price_min) params.price_min = filters.price_min;
                 if (filters.price_max) params.price_max = filters.price_max;
                 if (filters.furnishing) params.furnishing = filters.furnishing;
-                if (filters.ownership_type) params.ownership_type = filters.ownership_type;
                 if (filters.amenities) params.amenities = filters.amenities;
+                if (filters.bhk) params.bhk = filters.bhk;
+                if (filters.rooms) params.rooms = filters.rooms;
+                if (filters.facing) params.facing = filters.facing;
+                if (filters.age) params.age = filters.age;
                 if (filters.sort) params.sort = filters.sort;
                 params.page = filters.page;
 
@@ -120,7 +88,10 @@ function PropertiesContent() {
                 setTotalCount(data.pagination.total);
             } else {
                 const params: any = {};
-                if (filters.location) params.city = filters.location;
+                // Projects filter by city — prefer the clean city captured on place-select; fall back to
+                // the granular location string (e.g. when the user typed without picking a suggestion).
+                const projectCity = filters.city || filters.location;
+                if (projectCity) params.city = projectCity;
                 if (filters.price_min) params.minPrice = filters.price_min;
                 if (filters.price_max) params.maxPrice = filters.price_max;
                 if (filters.sort) params.sort = filters.sort;
@@ -173,7 +144,9 @@ function PropertiesContent() {
             return;
         }
         if (key === 'location') {
-            updateFilter('location', '');
+            const next = { ...filters, location: '', city: '', page: 1 };
+            setFilters(next);
+            syncURL(next);
             return;
         }
         // For multi-select filters, remove just one value
@@ -200,10 +173,8 @@ function PropertiesContent() {
 
     const clearFilters = (tab?: 'rent' | 'resale' | 'projects') => {
         const cleared = {
-            location: '', category_id: '', sub_category_id: '', type_id: '',
-            configuration_id: '', usage_type_id: '', investment_type_id: '',
-            intent: '', price_min: '', price_max: '',
-            furnishing: '', ownership_type: '', amenities: '',
+            location: '', city: '', taxonomy_node_id: '', intent: '', price_min: '', price_max: '',
+            furnishing: '', amenities: '', bhk: '', rooms: '', facing: '', age: '',
             sort: 'newest', page: 1,
         };
         setFilters(cleared);
@@ -211,10 +182,9 @@ function PropertiesContent() {
     };
 
     const hasActiveFilters = !!(
-        filters.location || filters.category_id || filters.sub_category_id ||
-        filters.type_id || filters.configuration_id || filters.usage_type_id ||
-        filters.investment_type_id || filters.price_min || filters.price_max ||
-        filters.furnishing || filters.ownership_type || filters.amenities
+        filters.location || filters.taxonomy_node_id || filters.price_min || filters.price_max ||
+        filters.furnishing || filters.amenities || filters.bhk || filters.rooms ||
+        filters.facing || filters.age
     );
 
     const pageHeading = activeTab === 'rent' ? 'Properties for Rent' :
@@ -287,6 +257,11 @@ function PropertiesContent() {
                 <PropertyToolbar
                     location={filters.location}
                     onLocationChange={(v) => updateFilter('location', v)}
+                    onPlaceSelect={(loc, city) => {
+                        const next = { ...filters, location: loc, city, page: 1 };
+                        setFilters(next);
+                        syncURL(next);
+                    }}
                     sort={filters.sort}
                     onSortChange={(v) => updateFilter('sort', v)}
                     viewMode={viewMode}
@@ -301,8 +276,6 @@ function PropertiesContent() {
                 <FilterChips
                     filters={filters}
                     onRemoveFilter={removeFilter}
-                    categories={categories}
-                    configurations={configurations}
                 />
             </div>
 
@@ -315,10 +288,6 @@ function PropertiesContent() {
                         onFilterChange={updateFilter}
                         onToggleMultiFilter={toggleMultiFilter}
                         onClearFilters={() => clearFilters()}
-                        categories={categories}
-                        configurations={configurations}
-                        subCategories={subCategories}
-                        types={types}
                         hasActiveFilters={hasActiveFilters}
                         activeTab={activeTab}
                     />
@@ -400,10 +369,6 @@ function PropertiesContent() {
                     onFilterChange={updateFilter}
                     onToggleMultiFilter={toggleMultiFilter}
                     onClearFilters={() => clearFilters()}
-                    categories={categories}
-                    configurations={configurations}
-                    subCategories={subCategories}
-                    types={types}
                     hasActiveFilters={hasActiveFilters}
                     activeTab={activeTab}
                 />

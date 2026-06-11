@@ -8,6 +8,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Menu, X, Building2, ChevronDown, Phone, Home, Search, Briefcase, Users, BookOpen, Wrench, MessageCircle, Sun, Moon, LogIn, User as UserIcon } from 'lucide-react';
 import { useTheme } from '@/contexts/ThemeContext';
 import AIChatModal from './chat/AIChatModal';
+import api from '@/lib/api';
 
 const propertyDropdown = [
     { label: 'Buy Property', href: '/properties?intent=buy', desc: 'Find your dream home' },
@@ -51,8 +52,7 @@ export default function Navbar() {
 
     // Check authentication status on mount
     useEffect(() => {
-        const token = localStorage.getItem('user_token');
-        setIsAuthenticated(!!token);
+        api.get('/user/me').then(() => setIsAuthenticated(true)).catch(() => setIsAuthenticated(false));
     }, []);
 
     useEffect(() => {
@@ -169,7 +169,7 @@ export default function Navbar() {
                             <Link
                                 href="/"
                                 onClick={() => {
-                                    localStorage.removeItem('user_token');
+                                    api.post('/user/logout', {}).catch(() => {});
                                     setIsAuthenticated(false);
                                 }}
                                 className={`px-4 py-2.5 rounded-xl text-sm font-medium transition-colors flex items-center gap-2 ${isTransparent

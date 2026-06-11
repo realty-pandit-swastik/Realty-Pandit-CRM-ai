@@ -699,7 +699,7 @@ function StepConfirm({ form, photoCount, videoCount }: { form: FormData; photoCo
 
 // ─── Wizard ───────────────────────────────────────────────────────────────────
 
-function AddInventoryWizard({ token, onDone }: { token: string; onDone: () => void }) {
+function AddInventoryWizard({ onDone }: { onDone: () => void }) {
     const [step, setStep] = useState<WizardStep>('intent');
     const [form, setFormState] = useState<FormData>(INITIAL_FORM);
     const [photos, setPhotos] = useState<File[]>([]);
@@ -733,9 +733,8 @@ function AddInventoryWizard({ token, onDone }: { token: string; onDone: () => vo
             if (form.bathrooms) specs.bathrooms = parseInt(form.bathrooms);
             if (form.area) { specs.area = parseFloat(form.area); specs.area_unit = form.area_unit; }
 
-            const features: any = {};
-            form.amenities.forEach(a => { features[a] = true; });
-
+            // Backend folds `features` (an ARRAY of amenity labels) into specs.amenities. The old
+            // {slug:true} object shape silently failed the Array.isArray() check → amenities lost.
             const res = await api.post('/agent/inventory', {
                 intent: form.intent,
                 type: form.type,
@@ -755,14 +754,14 @@ function AddInventoryWizard({ token, onDone }: { token: string; onDone: () => vo
                 price: form.price ? parseFloat(form.price) : undefined,
                 price_unit: form.price_unit,
                 specs: Object.keys(specs).length > 0 ? specs : undefined,
-                features: Object.keys(features).length > 0 ? features : undefined,
+                features: form.amenities.length > 0 ? form.amenities : undefined,
                 furnishing: form.furnishing || undefined,
                 total_floors: form.total_floors ? parseInt(form.total_floors) : undefined,
                 facing: form.facing || undefined,
                 property_age: form.property_age || undefined,
                 description: form.description || undefined,
                 lead_reference: form.lead_reference || undefined,
-            }, { headers: { Authorization: `Bearer ${token}` } });
+            });
 
             const inventoryId = res.data.id;
             setDisplayId(res.data.display_id || inventoryId.slice(0, 8));
@@ -774,9 +773,7 @@ function AddInventoryWizard({ token, onDone }: { token: string; onDone: () => vo
                 const fd = new FormData();
                 allFiles.forEach(f => fd.append('files', f));
                 try {
-                    await api.post(`/agent/inventory/${inventoryId}/upload`, fd, {
-                        headers: { Authorization: `Bearer ${token}` }
-                    });
+                    await api.post(`/agent/inventory/${inventoryId}/upload`, fd);
                     setUploadedCount(allFiles.length);
                 } catch {
                     setUploadError('Photos/videos could not be saved. Your listing was created — you can add media later from the Edit button.');
@@ -916,7 +913,7 @@ const EDIT_TABS: { id: EditTab; label: string }[] = [
     { id: 'description', label: 'Description' },
 ];
 
-function InventoryCard({ item, token, onRefresh }: { item: InventoryItem; token: string; onRefresh: () => void }) {
+function InventoryCard({ item, onRefresh }: { item: InventoryItem; onRefresh: () => void }) {
     const typeLabel = PROPERTY_TYPES.find(t => t.value === item.type)?.label || item.type?.replace(/_/g, ' ');
     const specs = item.specs;
     const specsStr = specs ? [specs.bedrooms && `${specs.bedrooms} BHK`, specs.area && `${specs.area} ${specs.area_unit || 'sqft'}`].filter(Boolean).join(' · ') : null;
@@ -1005,7 +1002,7 @@ function InventoryCard({ item, token, onRefresh }: { item: InventoryItem; token:
             };
             if (Object.keys(specs).length > 0) payload.specs = specs;
 
-            await api.patch(`/agent/inventory/${item.id}`, payload, { headers: { Authorization: `Bearer ${token}` } });
+            await api.patch(`/agent/inventory/${item.id}`, payload);
             setEditing(false);
             onRefresh();
         } catch (err: any) {
@@ -1017,7 +1014,7 @@ function InventoryCard({ item, token, onRefresh }: { item: InventoryItem; token:
         const filename = url.split('/').pop() || '';
         if (!confirm('Delete this image?')) return;
         try {
-            await api.delete(`/agent/inventory/${item.id}/media/${filename}`, { headers: { Authorization: `Bearer ${token}` } });
+            await api.delete(`/agent/inventory/${item.id}/media/${filename}`);
             setEditMediaUrls(prev => prev.filter(u => u !== url));
         } catch (err: any) { alert(err.response?.data?.error || 'Failed to delete image'); }
     };
@@ -1026,7 +1023,7 @@ function InventoryCard({ item, token, onRefresh }: { item: InventoryItem; token:
         const filename = url.split('/').pop() || '';
         if (!confirm('Delete this video?')) return;
         try {
-            await api.delete(`/agent/inventory/${item.id}/media/${filename}`, { headers: { Authorization: `Bearer ${token}` } });
+            await api.delete(`/agent/inventory/${item.id}/media/${filename}`);
             setEditVideoUrls(prev => prev.filter(u => u !== url));
         } catch (err: any) { alert(err.response?.data?.error || 'Failed to delete video'); }
     };
@@ -1036,7 +1033,7 @@ function InventoryCard({ item, token, onRefresh }: { item: InventoryItem; token:
         try {
             const fd = new FormData();
             Array.from(files).forEach(f => fd.append('files', f));
-            const res = await api.post(`/agent/inventory/${item.id}/upload`, fd, { headers: { Authorization: `Bearer ${token}` } });
+            const res = await api.post(`/agent/inventory/${item.id}/upload`, fd);
             const updated = res.data?.inventory || res.data;
             if (type === 'image' && updated?.media_urls) setEditMediaUrls(updated.media_urls);
             if (type === 'video' && updated?.video_urls) setEditVideoUrls(updated.video_urls);
@@ -1052,7 +1049,7 @@ function InventoryCard({ item, token, onRefresh }: { item: InventoryItem; token:
         if (!confirm(msg)) return;
         setDeleting(true);
         try {
-            await api.delete(`/agent/inventory/${item.id}`, { headers: { Authorization: `Bearer ${token}` } });
+            await api.delete(`/agent/inventory/${item.id}`);
             onRefresh();
         } catch (err: any) {
             alert(err.response?.data?.error || 'Failed to delete');
@@ -1363,12 +1360,9 @@ export default function AgentInventory() {
     const [loading, setLoading] = useState(true);
     const [showWizard, setShowWizard] = useState(false);
 
-    const token = typeof window !== 'undefined' ? localStorage.getItem('agent_token') : null;
-
     const fetchInventory = () => {
-        if (!token) { setLoading(false); return; }
         setLoading(true);
-        api.get('/agent/inventory', { headers: { Authorization: `Bearer ${token}` } })
+        api.get('/agent/inventory')
             .then(res => setInventory(Array.isArray(res.data) ? res.data : []))
             .catch(() => setInventory([]))
             .finally(() => setLoading(false));
@@ -1380,7 +1374,7 @@ export default function AgentInventory() {
         return (
             <div className="max-w-2xl">
                 <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6">
-                    <AddInventoryWizard token={token || ''} onDone={() => { setShowWizard(false); fetchInventory(); }} />
+                    <AddInventoryWizard onDone={() => { setShowWizard(false); fetchInventory(); }} />
                 </div>
             </div>
         );
@@ -1400,6 +1394,22 @@ export default function AgentInventory() {
                     <Plus size={16} /> Add Property
                 </button>
             </div>
+
+            {/* Tab switcher: My Inventory vs. Browse (all partners, masked) */}
+            <nav className="flex gap-1 border-b border-slate-200">
+                <a
+                    href="/agent/inventory"
+                    className="px-4 py-2 text-sm font-semibold text-blue-700 border-b-2 border-blue-600"
+                >
+                    My inventory
+                </a>
+                <a
+                    href="/agent/inventory/browse"
+                    className="px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-900 hover:border-b-2 hover:border-slate-300"
+                >
+                    Browse all
+                </a>
+            </nav>
 
             {loading ? (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -1423,7 +1433,7 @@ export default function AgentInventory() {
                 </div>
             ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    {inventory.map(item => <InventoryCard key={item.id} item={item} token={token || ''} onRefresh={fetchInventory} />)}
+                    {inventory.map(item => <InventoryCard key={item.id} item={item} onRefresh={fetchInventory} />)}
                 </div>
             )}
         </div>

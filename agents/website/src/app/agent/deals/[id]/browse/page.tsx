@@ -58,12 +58,9 @@ export default function BrowseProperties() {
     const [skipped, setSkipped] = useState<Set<string>>(new Set());
     const [liked, setLiked] = useState<Set<string>>(new Set());
 
-    const token = typeof window !== 'undefined' ? localStorage.getItem('agent_token') : null;
-    const headers = { Authorization: `Bearer ${token}` };
-
     useEffect(() => {
-        if (!token || !dealId) return;
-        api.get(`/agent/deals/${dealId}/matches`, { headers })
+        if (!dealId) return;
+        api.get(`/agent/deals/${dealId}/matches`)
             .then(res => {
                 setMatches(res.data.matches || []);
             })
@@ -112,7 +109,7 @@ export default function BrowseProperties() {
                 preferred_date: scheduleDate || undefined,
                 preferred_time: scheduleTime || undefined,
                 notes: scheduleNotes || undefined,
-            }, { headers });
+            });
             setScheduleSuccess(res.data.message || 'Visit scheduled!');
             setShowSchedule(false);
             setScheduleDate('');

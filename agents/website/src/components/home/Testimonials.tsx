@@ -51,16 +51,23 @@ export default function Testimonials() {
                         </motion.div>
                     </AnimatePresence>
 
-                    <button onClick={() => setCurrent(c => (c - 1 + testimonials.length) % testimonials.length)} className="absolute left-0 top-1/2 -translate-y-1/2 w-8 h-8 md:w-10 md:h-10 bg-white dark:bg-slate-950 rounded-full shadow-lg dark:shadow-slate-900/30 border border-slate-200 dark:border-slate-700 flex items-center justify-center hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors z-10" aria-label="Previous testimonial">
+                    <button onClick={() => setCurrent(c => (c - 1 + testimonials.length) % testimonials.length)} className="absolute left-0 top-1/2 -translate-y-1/2 w-11 h-11 min-w-[44px] min-h-[44px] bg-white dark:bg-slate-950 rounded-full shadow-lg dark:shadow-slate-900/30 border border-slate-200 dark:border-slate-700 flex items-center justify-center hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors z-10" aria-label="Previous testimonial">
                         <ChevronLeft className="w-5 h-5 text-slate-600 dark:text-slate-300" />
                     </button>
-                    <button onClick={() => setCurrent(c => (c + 1) % testimonials.length)} className="absolute right-0 top-1/2 -translate-y-1/2 w-8 h-8 md:w-10 md:h-10 bg-white dark:bg-slate-950 rounded-full shadow-lg dark:shadow-slate-900/30 border border-slate-200 dark:border-slate-700 flex items-center justify-center hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors z-10" aria-label="Next testimonial">
+                    <button onClick={() => setCurrent(c => (c + 1) % testimonials.length)} className="absolute right-0 top-1/2 -translate-y-1/2 w-11 h-11 min-w-[44px] min-h-[44px] bg-white dark:bg-slate-950 rounded-full shadow-lg dark:shadow-slate-900/30 border border-slate-200 dark:border-slate-700 flex items-center justify-center hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors z-10" aria-label="Next testimonial">
                         <ChevronRight className="w-5 h-5 text-slate-600 dark:text-slate-300" />
                     </button>
 
-                    <div className="flex justify-center gap-2 mt-6">
+                    <div className="flex justify-center mt-6">
                         {testimonials.map((_, i) => (
-                            <button key={i} onClick={() => setCurrent(i)} className={`w-2.5 h-2.5 rounded-full transition-all ${i === current ? 'bg-blue-600 w-6' : 'bg-slate-300 dark:bg-slate-600'}`} aria-label={`Go to testimonial ${i + 1}`} />
+                            <button
+                                key={i}
+                                onClick={() => setCurrent(i)}
+                                aria-label={`Go to testimonial ${i + 1}`}
+                                className="min-w-[32px] min-h-[44px] flex items-center justify-center"
+                            >
+                                <span className={`block rounded-full transition-all ${i === current ? 'bg-blue-600 w-6 h-2.5' : 'bg-slate-300 dark:bg-slate-600 w-2.5 h-2.5'}`} />
+                            </button>
                         ))}
                     </div>
                 </div>

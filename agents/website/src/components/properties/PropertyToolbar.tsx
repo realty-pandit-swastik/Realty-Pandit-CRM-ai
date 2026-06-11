@@ -6,6 +6,9 @@ import { GooglePlacesInput, type PlaceResult } from '@/components/workflow/Googl
 interface PropertyToolbarProps {
     location: string;
     onLocationChange: (value: string) => void;
+    /** On Google-place select: granular location (for the property search) + the clean city (Projects tab).
+     *  Both set together so neither clobbers the other. */
+    onPlaceSelect?: (location: string, city: string) => void;
     sort: string;
     onSortChange: (value: string) => void;
     viewMode: 'grid' | 'list';
@@ -19,6 +22,7 @@ interface PropertyToolbarProps {
 export default function PropertyToolbar({
     location,
     onLocationChange,
+    onPlaceSelect,
     sort,
     onSortChange,
     viewMode,
@@ -39,7 +43,13 @@ export default function PropertyToolbar({
                         value={location}
                         onChange={onLocationChange}
                         onPlaceSelect={(place: PlaceResult) => {
-                            onLocationChange(place.locality || place.district || place.sub_locality || place.full_address);
+                            // Send the FULL granular address (Sector + locality + city) so the search narrows
+                            // to the area — not just the city. The API strips Google's pincode/", India" cruft.
+                            // City is kept separately for the Projects tab. Both set in one update.
+                            const granular = place.full_address || place.locality || place.district || place.sub_locality;
+                            const city = place.locality || place.district || '';
+                            if (onPlaceSelect) onPlaceSelect(granular, city);
+                            else onLocationChange(granular);
                         }}
                         placeholder="Search by location, city, locality..."
                         className="w-full pl-10 pr-4 py-2.5 text-sm border border-slate-200 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-900 text-slate-900 dark:text-white placeholder-slate-400 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-colors"

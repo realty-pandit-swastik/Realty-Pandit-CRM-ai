@@ -72,7 +72,6 @@ export default function AgentLogin() {
         try {
             const res = await api.post('/agent/verify-otp', { phone, otp });
             const data = res.data;
-            localStorage.setItem('agent_token', data.token);
             localStorage.setItem('agent_info', JSON.stringify(data.agent));
             router.push('/agent/dashboard');
         } catch (err: any) {
@@ -89,7 +88,6 @@ export default function AgentLogin() {
         try {
             const res = await api.post('/agent/login-password', { phone, password });
             const data = res.data;
-            localStorage.setItem('agent_token', data.token);
             localStorage.setItem('agent_info', JSON.stringify(data.agent));
             router.push('/agent/dashboard');
         } catch (err: any) {

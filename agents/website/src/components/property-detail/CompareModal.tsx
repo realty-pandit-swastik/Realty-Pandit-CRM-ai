@@ -5,6 +5,7 @@ import { motion } from 'framer-motion';
 import { X, ExternalLink } from 'lucide-react';
 import Link from 'next/link';
 import { getMediaUrl, formatPrice } from '@/lib/api';
+import { getRoomCount, getRoomLabel, getTypeLabel } from '@/lib/propertyUtils';
 import type { CompareItem } from './CompareButton';
 
 interface CompareModalProps {
@@ -19,7 +20,7 @@ interface CompareRow {
 }
 
 const ROWS: CompareRow[] = [
-    { label: 'Type', getValue: i => i.type ? i.type.replace(/_/g, ' ') : '-' },
+    { label: 'Type', getValue: i => getTypeLabel(i as any) },
     { label: 'Location', getValue: i => i.location || '-' },
     {
         label: 'Price',
@@ -29,8 +30,8 @@ const ROWS: CompareRow[] = [
     {
         label: 'Bedrooms',
         getValue: i => {
-            const specs = i.specs || {};
-            return specs.bedrooms ? `${specs.bedrooms} BHK` : '-';
+            const c = getRoomCount(i as any);
+            return c ? `${c} ${getRoomLabel(i as any)}` : '-';
         },
     },
     {

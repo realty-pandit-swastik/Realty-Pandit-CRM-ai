@@ -34,23 +34,16 @@ export default function AgentDashboard() {
     const [pwMessage, setPwMessage] = useState('');
     const [pwError, setPwError] = useState('');
 
-    const token = typeof window !== 'undefined' ? localStorage.getItem('agent_token') : null;
-    const headers = { Authorization: `Bearer ${token}` };
-
     useEffect(() => {
         try {
             const info = localStorage.getItem('agent_info');
             if (info) setAgentInfo(JSON.parse(info));
         } catch {}
 
-        if (token) {
-            api.get('/agent/dashboard', { headers })
-                .then(res => setStats(res.data))
-                .catch(() => {})
-                .finally(() => setLoading(false));
-        } else {
-            setLoading(false);
-        }
+        api.get('/agent/dashboard')
+            .then(res => setStats(res.data))
+            .catch(() => {})
+            .finally(() => setLoading(false));
     }, []);
 
     const handleSetPassword = async (e: React.FormEvent) => {
@@ -66,7 +59,7 @@ export default function AgentDashboard() {
             const body: any = { password: newPassword };
             if (agentInfo?.has_password) body.current_password = currentPassword;
 
-            const res = await api.post('/agent/set-password', body, { headers });
+            const res = await api.post('/agent/set-password', body);
             setPwMessage(res.data.message);
             setShowSetPassword(false);
             setNewPassword('');

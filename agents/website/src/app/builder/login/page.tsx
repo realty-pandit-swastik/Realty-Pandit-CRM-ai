@@ -44,7 +44,6 @@ export default function BuilderLogin() {
             const res = await api.post('/builder/verify-otp', { phone, otp });
             const data = res.data;
 
-            localStorage.setItem('builder_token', data.token);
             localStorage.setItem('builder_info', JSON.stringify(data.owner));
 
             router.push('/builder/dashboard');

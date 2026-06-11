@@ -104,9 +104,9 @@ export default function Footer() {
                                     key={social.label}
                                     href={social.href}
                                     aria-label={social.label}
-                                    className="w-10 h-10 bg-slate-800 hover:bg-blue-600 rounded-lg flex items-center justify-center transition-colors"
+                                    className="w-11 h-11 min-w-[44px] min-h-[44px] bg-slate-800 hover:bg-blue-600 rounded-lg flex items-center justify-center transition-colors"
                                 >
-                                    <social.icon className="w-4 h-4" />
+                                    <social.icon className="w-5 h-5" />
                                 </a>
                             ))}
                         </div>

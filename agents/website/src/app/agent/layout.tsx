@@ -3,7 +3,9 @@
 import { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
+import api from '@/lib/api';
 import { LayoutDashboard, Building2, Users, Calendar, CreditCard, LogOut, Menu, X, UserPlus, ChevronRight, Handshake } from 'lucide-react';
+import { ManagerContactBanner } from '@/components/agent/ManagerContactBanner';
 
 const PLAN_COLORS: Record<string, string> = {
     FREE: 'bg-slate-500/20 text-slate-300 border-slate-500/30',
@@ -40,14 +42,22 @@ export default function AgentLayout({ children }: { children: React.ReactNode })
     const [isCompanyOwner, setIsCompanyOwner] = useState(false);
 
     useEffect(() => {
-        const token = localStorage.getItem('agent_token');
         const isLoginPage = pathname === '/agent/login';
 
-        if (!token && !isLoginPage) {
-            router.push('/agent/login');
-        }
-        if (token && isLoginPage) {
-            router.push('/agent/dashboard');
+        // Skip auth probe entirely on login page — otherwise a 429/401 here triggers
+        // the api interceptor's redirect to /agent/login?expired=1 which flips pathname,
+        // re-runs this effect, refires the probe, and creates an infinite reload loop.
+        if (!isLoginPage) {
+            // Probe /agent/coordinator (which exists) instead of /agent/me (which doesn't).
+            // Only redirect on 401 (real auth failure). Treat 429/5xx as "unknown — don't
+            // bounce the user around" so rate-limit hiccups don't kick them to login.
+            api.get('/agent/coordinator').then(() => {
+                // OK — stay where we are
+            }).catch((err) => {
+                if (err?.response?.status === 401) {
+                    router.push('/agent/login');
+                }
+            });
         }
 
         try {
@@ -74,9 +84,11 @@ export default function AgentLayout({ children }: { children: React.ReactNode })
         { name: 'Subscription', href: '/agent/subscription', icon: CreditCard },
     ];
 
-    const handleLogout = () => {
-        localStorage.removeItem('agent_token');
+    const handleLogout = async () => {
         localStorage.removeItem('agent_info');
+        try {
+            await api.post('/auth/logout');
+        } catch {}
         router.push('/agent/login');
     };
 
@@ -211,6 +223,7 @@ export default function AgentLayout({ children }: { children: React.ReactNode })
                     </div>
                 </header>
 
+                <ManagerContactBanner />
                 <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
                     {children}
                 </main>

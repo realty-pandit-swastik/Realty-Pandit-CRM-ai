@@ -3,7 +3,7 @@ import { Suspense } from 'react';
 import { notFound } from 'next/navigation';
 import PropertyDetailClient from './PropertyDetailClient';
 import { propertyJsonLd, breadcrumbJsonLd } from '@/lib/seo';
-import { formatType, formatAddress } from '@/lib/propertyUtils';
+import { formatAddress, formatPropertyTitle, getTypeLabel, getRoomCount, getRoomLabel } from '@/lib/propertyUtils';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:7071';
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://www.realtypandit.in';
@@ -50,15 +50,16 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
     }
 
     const specs = property.specs || {};
-    const bhk = specs.bedrooms && Number(specs.bedrooms) > 0 ? `${specs.bedrooms} BHK ` : '';
-    const type = formatType(property.type);
-    const address = formatAddress(property) || property.location || '';
-    const intentLabel = property.intent === 'sell' || property.intent === 'buy' ? 'for Sale' : property.intent === 'rent' ? 'for Rent' : '';
     const price = formatPrice(property.price, property.price_unit);
 
-    const title = address
-        ? `${bhk}${type} ${intentLabel} in ${address} — ${price}`.trim()
-        : `${bhk}${type} ${intentLabel} — ${price}`.trim();
+    // Title mirrors the on-page H1 exactly (same readers) so the tab and heading never disagree.
+    const title = `${formatPropertyTitle(property, 'long')} — ${price}`.trim();
+
+    const type = getTypeLabel(property);
+    const rooms = getRoomCount(property);
+    const bhk = rooms && rooms > 0 ? `${rooms} ${getRoomLabel(property)} ` : '';
+    const address = formatAddress(property) || property.location || '';
+    const intentLabel = property.intent === 'sell' || property.intent === 'buy' ? 'for Sale' : property.intent === 'rent' ? 'for Rent' : '';
     const description = property.description
         ? property.description.slice(0, 160)
         : `${bhk}${type} ${intentLabel} in ${address}. ${price}. ${specs.area ? `Area: ${specs.area} ${specs.unit || 'sqft'}.` : ''} Browse on Realty Pandit.`;
@@ -118,7 +119,7 @@ export default async function PropertyDetailPage({ params }: { params: Promise<{
     const schemaData = property ? propertyJsonLd({
         id: property.id,
         slug: property.slug,
-        type: property.property_configuration?.name || property.type || 'Property',
+        type: property.type || 'Property',
         location: property.location,
         price: property.price,
         price_unit: property.price_unit,
@@ -126,6 +127,10 @@ export default async function PropertyDetailPage({ params }: { params: Promise<{
         media_urls: property.media_urls || [],
         intent: property.intent,
         description: property.description,
+        taxonomy_node: property.taxonomy_node,
+        property_type_link: property.property_type_link,
+        flat_property_type: property.flat_property_type,
+        needs_taxonomy_review: property.needs_taxonomy_review,
     }) : null;
 
     // Breadcrumb schema
@@ -133,7 +138,7 @@ export default async function PropertyDetailPage({ params }: { params: Promise<{
         { name: 'Home', url: SITE_URL },
         { name: 'Properties', url: `${SITE_URL}/properties` },
         ...(property?.location ? [{ name: property.location, url: `${SITE_URL}/properties?location=${encodeURIComponent(property.location)}` }] : []),
-        { name: property ? formatType(property.type) : 'Property', url: `${SITE_URL}/properties/${property?.slug || id}` },
+        { name: property ? getTypeLabel(property) : 'Property', url: `${SITE_URL}/properties/${property?.slug || id}` },
     ]);
 
     return (

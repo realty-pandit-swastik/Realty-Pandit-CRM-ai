@@ -132,14 +132,14 @@ export default function KenBurnsGallery({
                         <button
                             aria-label="Previous image"
                             onClick={prevImage}
-                            className="absolute left-3 top-1/2 -translate-y-1/2 w-10 h-10 bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm rounded-full shadow-lg flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-20 hover:bg-white dark:hover:bg-slate-700"
+                            className="absolute left-3 top-1/2 -translate-y-1/2 w-11 h-11 min-w-[44px] min-h-[44px] bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm rounded-full shadow-lg flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-20 hover:bg-white dark:hover:bg-slate-700"
                         >
                             <ChevronLeft className="w-5 h-5 text-slate-700 dark:text-slate-200" />
                         </button>
                         <button
                             aria-label="Next image"
                             onClick={nextImage}
-                            className="absolute right-3 top-1/2 -translate-y-1/2 w-10 h-10 bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm rounded-full shadow-lg flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-20 hover:bg-white dark:hover:bg-slate-700"
+                            className="absolute right-3 top-1/2 -translate-y-1/2 w-11 h-11 min-w-[44px] min-h-[44px] bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm rounded-full shadow-lg flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-20 hover:bg-white dark:hover:bg-slate-700"
                         >
                             <ChevronRight className="w-5 h-5 text-slate-700 dark:text-slate-200" />
                         </button>

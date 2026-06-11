@@ -58,7 +58,7 @@ export default function AgentDeals() {
     const [search, setSearch] = useState('');
     const [showForm, setShowForm] = useState(false);
     const [submitting, setSubmitting] = useState(false);
-    const [submitResult, setSubmitResult] = useState<{ message: string; matches: MatchedProperty[]; isError?: boolean } | null>(null);
+    const [submitResult, setSubmitResult] = useState<{ message: string; matches: MatchedProperty[]; isError?: boolean; pending?: boolean } | null>(null);
 
     const [form, setForm] = useState({
         customer_name: '', customer_phone: '', type: 'BUY' as 'BUY' | 'RENT',
@@ -66,14 +66,10 @@ export default function AgentDeals() {
         demand_property_type: '',
     });
 
-    const token = typeof window !== 'undefined' ? localStorage.getItem('agent_token') : null;
-    const headers = { Authorization: `Bearer ${token}` };
-
     const fetchDeals = () => {
-        if (!token) { setLoading(false); return; }
         const params: any = {};
         if (statusFilter) params.status = statusFilter;
-        api.get('/agent/deals', { headers, params })
+        api.get('/agent/deals', { params })
             .then(res => setDeals(res.data.deals || []))
             .catch(() => {})
             .finally(() => setLoading(false));
@@ -83,22 +79,20 @@ export default function AgentDeals() {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!form.customer_name) return;
+        // Name and phone are BOTH optional — partners often won't share their client's identity.
         setSubmitting(true);
         setSubmitResult(null);
         try {
-            const body: any = {
-                customer_name: form.customer_name,
-                type: form.type,
-            };
+            const body: any = { type: form.type };
+            if (form.customer_name) body.customer_name = form.customer_name;
             if (form.customer_phone) body.customer_phone = form.customer_phone;
             if (form.demand_location) body.demand_location = form.demand_location;
             if (form.demand_property_type) body.demand_property_type = form.demand_property_type;
             if (form.demand_budget_min) body.demand_budget_min = parseInt(form.demand_budget_min);
             if (form.demand_budget_max) body.demand_budget_max = parseInt(form.demand_budget_max);
 
-            const res = await api.post('/agent/deals', body, { headers });
-            setSubmitResult({ message: res.data.message, matches: res.data.matches || [] });
+            const res = await api.post('/agent/deals', body);
+            setSubmitResult({ message: res.data.message, matches: res.data.matches || [], pending: !!res.data.pending_approval });
             setForm({ customer_name: '', customer_phone: '', type: 'BUY', demand_location: '', demand_budget_min: '', demand_budget_max: '', demand_property_type: '' });
             fetchDeals();
         } catch (err: any) {
@@ -155,10 +149,13 @@ export default function AgentDeals() {
 
                         {submitResult ? (
                             <div className="p-5 space-y-4">
-                                <div className={`p-4 rounded-xl ${submitResult.isError ? 'bg-red-50 text-red-800 border border-red-200' : submitResult.matches.length > 0 ? 'bg-green-50 text-green-800' : 'bg-blue-50 text-blue-800'}`}>
+                                <div className={`p-4 rounded-xl ${submitResult.isError ? 'bg-red-50 text-red-800 border border-red-200' : submitResult.pending ? 'bg-amber-50 text-amber-800 border border-amber-200' : submitResult.matches.length > 0 ? 'bg-green-50 text-green-800' : 'bg-blue-50 text-blue-800'}`}>
                                     <div className="flex items-center gap-2 font-semibold">
                                         <Sparkles size={16} /> {submitResult.message}
                                     </div>
+                                    {submitResult.pending && (
+                                        <p className="mt-1 text-xs text-amber-700">This client is already registered with RealtyPandit. Our team will review and confirm your referral shortly.</p>
+                                    )}
                                     {submitResult.isError && (
                                         <button
                                             type="button"
@@ -197,16 +194,16 @@ export default function AgentDeals() {
                         ) : (
                             <form onSubmit={handleSubmit} className="p-5 space-y-4">
                                 <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-1">Customer Name *</label>
+                                    <label className="block text-sm font-medium text-slate-700 mb-1">Customer Name <span className="text-slate-400 font-normal">(optional)</span></label>
                                     <input
-                                        type="text" required value={form.customer_name}
+                                        type="text" value={form.customer_name}
                                         onChange={e => setForm({ ...form, customer_name: e.target.value })}
                                         className="w-full px-3 py-2.5 border border-slate-300 rounded-xl text-sm text-slate-900 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                        placeholder="Enter customer name"
+                                        placeholder="Enter customer name (optional)"
                                     />
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-medium text-slate-700 mb-1">Customer Phone</label>
+                                    <label className="block text-sm font-medium text-slate-700 mb-1">Customer Phone <span className="text-slate-400 font-normal">(optional)</span></label>
                                     <input
                                         type="tel" value={form.customer_phone}
                                         onChange={e => setForm({ ...form, customer_phone: e.target.value })}

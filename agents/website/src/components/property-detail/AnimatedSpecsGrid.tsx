@@ -12,15 +12,17 @@ interface AnimatedSpecsGridProps {
     };
     createdAt: string;
     bedroomsOverride?: number | null;
+    /** 'BHK' (residential) or 'Rooms' (commercial) — defaults to 'BHK'. */
+    roomLabel?: 'BHK' | 'Rooms';
 }
 
-export default function AnimatedSpecsGrid({ specs, createdAt, bedroomsOverride }: AnimatedSpecsGridProps) {
+export default function AnimatedSpecsGrid({ specs, createdAt, bedroomsOverride, roomLabel = 'BHK' }: AnimatedSpecsGridProps) {
     const bedrooms = bedroomsOverride ?? specs.bedrooms;
     const items = [
         bedrooms ? {
             icon: BedDouble,
-            value: `${bedrooms} BHK`,
-            label: 'Bedrooms',
+            value: `${bedrooms} ${roomLabel}`,
+            label: roomLabel === 'Rooms' ? 'Rooms' : 'Bedrooms',
         } : null,
         specs.bathrooms ? {
             icon: Bath,

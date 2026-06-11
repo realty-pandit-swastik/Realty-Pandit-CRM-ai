@@ -1,4 +1,5 @@
 import { getMediaUrl } from './api';
+import { getTypeLabel } from './propertyUtils';
 import { COMPANY_PHONE_DISPLAY } from './constants';
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://www.realtypandit.in';
@@ -36,10 +37,16 @@ export function propertyJsonLd(property: {
     media_urls: string[];
     intent: string;
     description?: string | null;
+    taxonomy_node?: { name?: string | null } | null;
+    property_type_link?: { name?: string | null } | null;
+    flat_property_type?: { name?: string | null } | null;
+    needs_taxonomy_review?: boolean | null;
 }) {
     const specs = property.specs || {};
-    const bhk = specs.bedrooms ? `${specs.bedrooms} BHK ` : '';
-    const name = `${bhk}${property.type}${property.location ? ` in ${property.location}` : ''}`;
+    const rooms = specs.bhk ?? specs.rooms ?? specs.bedrooms;
+    const bhk = rooms ? `${rooms} BHK ` : '';
+    const typeLabel = getTypeLabel(property as any);
+    const name = `${bhk}${typeLabel}${property.location ? ` in ${property.location}` : ''}`;
     const intentLabel = property.intent === 'sell' ? 'for Sale' : property.intent === 'rent' ? 'for Rent' : '';
 
     return {
@@ -56,8 +63,8 @@ export function propertyJsonLd(property: {
                 unitCode: specs.unit || 'sqft',
             },
         }),
-        ...(specs.bedrooms && {
-            numberOfRooms: specs.bedrooms,
+        ...(rooms && {
+            numberOfRooms: rooms,
         }),
         offers: property.price ? {
             '@type': 'Offer',

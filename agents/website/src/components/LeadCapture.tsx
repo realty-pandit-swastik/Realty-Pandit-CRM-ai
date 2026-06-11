@@ -86,41 +86,45 @@ export default function LeadCapture() {
                         initial={{ y: 100, opacity: 0 }}
                         animate={{ y: 0, opacity: 1 }}
                         exit={{ y: 100, opacity: 0 }}
-                        className="fixed bottom-0 left-0 right-0 z-[60] p-4"
+                        className="fixed bottom-0 left-0 right-0 z-[60] p-3 sm:p-4 pb-[max(0.75rem,env(safe-area-inset-bottom))]"
                     >
-                        <div className="max-w-5xl mx-auto bg-white rounded-2xl shadow-2xl border border-slate-200 p-6">
-                            <div className="flex items-start gap-4">
-                                <div className="w-10 h-10 bg-amber-100 rounded-xl flex items-center justify-center shrink-0">
+                        <div className="max-w-5xl mx-auto bg-white rounded-xl sm:rounded-2xl shadow-2xl border border-slate-200 p-3 sm:p-6">
+                            <div className="flex items-center sm:items-start gap-3 sm:gap-4">
+                                <div className="w-9 h-9 sm:w-10 sm:h-10 bg-amber-100 rounded-xl flex items-center justify-center shrink-0">
                                     <Cookie className="w-5 h-5 text-amber-600" />
                                 </div>
-                                <div className="flex-1">
-                                    <h4 className="font-semibold text-slate-900 mb-1">We value your privacy</h4>
-                                    <p className="text-slate-500 text-sm mb-3">
-                                        We use cookies to enhance your browsing experience, serve personalized content, and analyze our traffic.
-                                        By clicking &ldquo;Accept All&rdquo;, you consent to our use of cookies for analytics and marketing purposes.
+                                <div className="flex-1 min-w-0">
+                                    <h4 className="font-semibold text-slate-900 text-sm sm:text-base sm:mb-1">We value your privacy</h4>
+                                    {/* Concise on mobile, full copy on >= sm */}
+                                    <p className="text-slate-500 text-xs sm:text-sm mb-2 sm:mb-3">
+                                        <span className="sm:hidden">We use cookies to improve your experience.</span>
+                                        <span className="hidden sm:inline">
+                                            We use cookies to enhance your browsing experience, serve personalized content, and analyze our traffic.
+                                            By clicking &ldquo;Accept All&rdquo;, you consent to our use of cookies for analytics and marketing purposes.
+                                        </span>
                                     </p>
 
-                                    <button onClick={() => setCookieDetails(!cookieDetails)} className="text-blue-600 text-xs font-medium flex items-center gap-1 mb-3">
+                                    <button onClick={() => setCookieDetails(!cookieDetails)} className="hidden sm:flex text-blue-600 text-xs font-medium items-center gap-1 mb-3">
                                         {cookieDetails ? 'Hide' : 'Show'} details
                                         {cookieDetails ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
                                     </button>
 
                                     {cookieDetails && (
-                                        <div className="text-xs text-slate-500 space-y-2 mb-3 bg-slate-50 p-3 rounded-lg">
+                                        <div className="hidden sm:block text-xs text-slate-500 space-y-2 mb-3 bg-slate-50 p-3 rounded-lg">
                                             <p><strong className="text-slate-700">Essential:</strong> Required for the website to function. Cannot be disabled.</p>
                                             <p><strong className="text-slate-700">Analytics:</strong> Help us understand how visitors use our website (Google Analytics).</p>
                                             <p><strong className="text-slate-700">Marketing:</strong> Used to deliver relevant property listings and offers to you.</p>
                                         </div>
                                     )}
 
-                                    <div className="flex flex-wrap gap-3">
-                                        <button onClick={() => acceptCookies('all')} className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-lg text-sm font-medium transition-colors">
+                                    <div className="flex flex-nowrap items-center gap-2 sm:gap-3">
+                                        <button onClick={() => acceptCookies('all')} className="bg-blue-600 hover:bg-blue-700 text-white px-4 sm:px-5 py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors whitespace-nowrap">
                                             Accept All
                                         </button>
-                                        <button onClick={() => acceptCookies('essential')} className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-5 py-2 rounded-lg text-sm font-medium transition-colors">
-                                            Essential Only
+                                        <button onClick={() => acceptCookies('essential')} className="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 sm:px-5 py-2 rounded-lg text-xs sm:text-sm font-medium transition-colors whitespace-nowrap">
+                                            Essential
                                         </button>
-                                        <a href="/privacy" className="text-slate-500 hover:text-blue-600 px-3 py-2 text-sm transition-colors">
+                                        <a href="/privacy" className="hidden sm:inline text-slate-500 hover:text-blue-600 px-3 py-2 text-sm transition-colors">
                                             Privacy Policy
                                         </a>
                                     </div>

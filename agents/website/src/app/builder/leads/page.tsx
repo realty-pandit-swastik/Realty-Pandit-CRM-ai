@@ -29,16 +29,13 @@ export default function BuilderLeads() {
     const [loading, setLoading] = useState(true);
     const [filter, setFilter] = useState('');
 
-    const token = typeof window !== 'undefined' ? localStorage.getItem('builder_token') : null;
-    const headers = { Authorization: `Bearer ${token}` };
-
     useEffect(() => {
         const fetchLeads = async () => {
             try {
                 const params: any = { page: 1, limit: 50 };
                 if (filter) params.status = filter;
 
-                const res = await api.get('/builder/leads', { headers, params });
+                const res = await api.get('/builder/leads', { params });
                 setLeads(res.data.leads || res.data);
                 setTotal(res.data.total || (res.data.leads || res.data).length);
             } catch (err) {
@@ -52,7 +49,7 @@ export default function BuilderLeads() {
 
     const updateStatus = async (leadId: string, status: string) => {
         try {
-            await api.patch(`/builder/leads/${leadId}/status`, { status }, { headers });
+            await api.patch(`/builder/leads/${leadId}/status`, { status });
             setLeads(leads.map(l => l.id === leadId ? { ...l, status } : l));
         } catch (err: any) {
             alert(err.response?.data?.error || 'Failed to update status');

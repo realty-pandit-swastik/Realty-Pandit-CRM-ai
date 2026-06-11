@@ -84,13 +84,10 @@ export default function AgentDealDetail() {
     const [queryMessage, setQueryMessage] = useState('');
     const [querySubmitting, setQuerySubmitting] = useState(false);
 
-    const token = typeof window !== 'undefined' ? localStorage.getItem('agent_token') : null;
-    const headers = { Authorization: `Bearer ${token}` };
-
     const fetchDeal = () => {
-        if (!token || !dealId) return;
+        if (!dealId) return;
         setLoading(true);
-        api.get(`/agent/deals/${dealId}`, { headers })
+        api.get(`/agent/deals/${dealId}`)
             .then(res => setDeal(res.data))
             .catch(err => setError(err.response?.data?.error || 'Failed to load deal'))
             .finally(() => setLoading(false));
@@ -103,7 +100,7 @@ export default function AgentDealDetail() {
         if (!querySubject || !queryMessage) return;
         setQuerySubmitting(true);
         try {
-            await api.post(`/agent/deals/${dealId}/query`, { subject: querySubject, message: queryMessage }, { headers });
+            await api.post(`/agent/deals/${dealId}/query`, { subject: querySubject, message: queryMessage });
             setQuerySubject('');
             setQueryMessage('');
             setShowQueryForm(false);
@@ -178,11 +175,12 @@ export default function AgentDealDetail() {
                             )}
                         </div>
 
-                        {deal.customer_phone && (
-                            <a href={`tel:${deal.customer_phone}`} className="inline-flex items-center gap-1.5 text-sm text-blue-600 hover:text-blue-800 mt-2">
-                                <Phone size={14} /> {deal.customer_phone}
-                            </a>
-                        )}
+                        {/* Customer phone removed by design (middleman model, 2026-04-17).
+                            All coordination runs through the partner's assigned manager. */}
+                        <p className="text-xs text-slate-500 mt-2 inline-flex items-center gap-1.5">
+                            <Phone size={12} className="text-slate-400" />
+                            Customer contact handled by your manager — see banner above.
+                        </p>
                     </div>
 
                     <div className="text-xs text-slate-400 flex-shrink-0">

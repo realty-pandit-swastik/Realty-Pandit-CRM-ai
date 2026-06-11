@@ -59,13 +59,13 @@ export default function Carousel({
                 <>
                     <button
                         onClick={prev}
-                        className="absolute left-3 top-1/2 -translate-y-1/2 w-10 h-10 bg-white/90 hover:bg-white rounded-full shadow-lg flex items-center justify-center transition-all z-10"
+                        className="absolute left-3 top-1/2 -translate-y-1/2 w-11 h-11 min-w-[44px] min-h-[44px] bg-white/90 hover:bg-white rounded-full shadow-lg flex items-center justify-center transition-all z-10"
                     >
                         <ChevronLeft className="w-5 h-5 text-slate-700" />
                     </button>
                     <button
                         onClick={next}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 w-10 h-10 bg-white/90 hover:bg-white rounded-full shadow-lg flex items-center justify-center transition-all z-10"
+                        className="absolute right-3 top-1/2 -translate-y-1/2 w-11 h-11 min-w-[44px] min-h-[44px] bg-white/90 hover:bg-white rounded-full shadow-lg flex items-center justify-center transition-all z-10"
                     >
                         <ChevronRight className="w-5 h-5 text-slate-700" />
                     </button>

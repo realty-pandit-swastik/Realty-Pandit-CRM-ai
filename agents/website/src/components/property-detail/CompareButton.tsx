@@ -11,12 +11,17 @@ const MAX_COMPARE = 3;
 export interface CompareItem {
     id: string;
     type: string;
+    category?: string;
     location: string | null;
     price: number | null;
     price_unit: string | null;
     image: string | null;
     specs: any;
     slug?: string | null;
+    intent?: string;
+    status?: string;
+    floor_number?: number | null;
+    taxonomy_node?: { id: string; name: string; slug: string } | null;
 }
 
 export function getCompareList(): CompareItem[] {
@@ -36,12 +41,17 @@ export function propertyToCompareItem(p: Property): CompareItem {
     return {
         id: p.id,
         type: p.type,
+        category: p.category,
         location: p.location,
         price: p.price,
         price_unit: p.price_unit,
         image: p.media_urls?.[0] || null,
         specs: p.specs,
         slug: p.slug,
+        intent: p.intent,
+        status: p.status,
+        floor_number: p.floor_number ?? null,
+        taxonomy_node: p.taxonomy_node ?? null,
     };
 }
 

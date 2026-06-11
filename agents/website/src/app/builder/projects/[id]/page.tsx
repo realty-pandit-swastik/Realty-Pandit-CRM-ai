@@ -63,12 +63,9 @@ export default function ProjectDetailPage() {
     const [activeTab, setActiveTab] = useState<Tab>('overview');
     const [error, setError] = useState('');
 
-    const token = typeof window !== 'undefined' ? localStorage.getItem('builder_token') : null;
-    const headers = { Authorization: `Bearer ${token}` };
-
     const fetchProject = async () => {
         try {
-            const res = await api.get(`/builder/projects/${id}`, { headers });
+            const res = await api.get(`/builder/projects/${id}`);
             setProject(res.data);
         } catch (err: any) {
             setError(err.response?.data?.error || 'Failed to load project');
@@ -81,7 +78,7 @@ export default function ProjectDetailPage() {
 
     const handleActivate = async () => {
         try {
-            await api.patch(`/builder/projects/${id}/activate`, {}, { headers });
+            await api.patch(`/builder/projects/${id}/activate`, {});
             fetchProject();
         } catch (err: any) {
             alert(err.response?.data?.error || 'Activation failed');
@@ -90,7 +87,7 @@ export default function ProjectDetailPage() {
 
     const handlePause = async () => {
         try {
-            await api.patch(`/builder/projects/${id}/pause`, {}, { headers });
+            await api.patch(`/builder/projects/${id}/pause`, {});
             fetchProject();
         } catch (err: any) {
             alert(err.response?.data?.error || 'Pause failed');
@@ -149,8 +146,8 @@ export default function ProjectDetailPage() {
             </div>
 
             {activeTab === 'overview' && <OverviewTab project={project} />}
-            {activeTab === 'units' && <UnitsTab project={project} headers={headers} onRefresh={fetchProject} />}
-            {activeTab === 'media' && <MediaTab project={project} headers={headers} onRefresh={fetchProject} />}
+            {activeTab === 'units' && <UnitsTab project={project} onRefresh={fetchProject} />}
+            {activeTab === 'media' && <MediaTab project={project} onRefresh={fetchProject} />}
             {activeTab === 'leads' && <LeadsTab project={project} />}
         </div>
     );
@@ -181,7 +178,7 @@ function OverviewTab({ project }: { project: ProjectDetail }) {
     );
 }
 
-function UnitsTab({ project, headers, onRefresh }: { project: ProjectDetail; headers: any; onRefresh: () => void }) {
+function UnitsTab({ project, onRefresh }: { project: ProjectDetail; onRefresh: () => void }) {
     const [showForm, setShowForm] = useState(false);
     const [unitForm, setUnitForm] = useState({ configuration: '', area_min: '', area_max: '', price_min: '', price_max: '', total_units: '', available_units: '' });
     const [saving, setSaving] = useState(false);
@@ -198,7 +195,7 @@ function UnitsTab({ project, headers, onRefresh }: { project: ProjectDetail; hea
                 priceMax: unitForm.price_max ? Number(unitForm.price_max) : null,
                 totalUnits: unitForm.total_units ? Number(unitForm.total_units) : null,
                 availableUnits: unitForm.available_units ? Number(unitForm.available_units) : null,
-            }, { headers });
+            });
             setShowForm(false);
             setUnitForm({ configuration: '', area_min: '', area_max: '', price_min: '', price_max: '', total_units: '', available_units: '' });
             onRefresh();
@@ -212,7 +209,7 @@ function UnitsTab({ project, headers, onRefresh }: { project: ProjectDetail; hea
     const handleDeleteUnit = async (unitId: string) => {
         if (!confirm('Delete this unit configuration?')) return;
         try {
-            await api.delete(`/builder/units/${unitId}`, { headers });
+            await api.delete(`/builder/units/${unitId}`);
             onRefresh();
         } catch (err: any) {
             alert(err.response?.data?.error || 'Failed to delete');
@@ -302,7 +299,7 @@ function UnitsTab({ project, headers, onRefresh }: { project: ProjectDetail; hea
     );
 }
 
-function MediaTab({ project, headers, onRefresh }: { project: ProjectDetail; headers: any; onRefresh: () => void }) {
+function MediaTab({ project, onRefresh }: { project: ProjectDetail; onRefresh: () => void }) {
     const [uploading, setUploading] = useState(false);
 
     const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -314,9 +311,7 @@ function MediaTab({ project, headers, onRefresh }: { project: ProjectDetail; hea
             const formData = new FormData();
             Array.from(files).forEach(f => formData.append('files', f));
 
-            await api.post(`/builder/projects/${project.id}/media`, formData, {
-                headers: { ...headers, 'Content-Type': 'multipart/form-data' }
-            });
+            await api.post(`/builder/projects/${project.id}/media`, formData);
             onRefresh();
         } catch (err: any) {
             alert(err.response?.data?.error || 'Upload failed');
@@ -328,7 +323,7 @@ function MediaTab({ project, headers, onRefresh }: { project: ProjectDetail; hea
     const handleDelete = async (mediaId: string) => {
         if (!confirm('Delete this media?')) return;
         try {
-            await api.delete(`/builder/media/${mediaId}`, { headers });
+            await api.delete(`/builder/media/${mediaId}`);
             onRefresh();
         } catch (err: any) {
             alert(err.response?.data?.error || 'Delete failed');

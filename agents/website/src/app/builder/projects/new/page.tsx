@@ -33,10 +33,7 @@ export default function NewProject() {
         setError('');
 
         try {
-            const token = localStorage.getItem('builder_token');
-            const res = await api.post('/builder/projects', form, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
+            const res = await api.post('/builder/projects', form);
             router.push(`/builder/projects/${res.data.id}`);
         } catch (err: any) {
             setError(err.response?.data?.error || 'Failed to create project');

@@ -6,11 +6,13 @@ import { CheckCircle2, Loader2 } from 'lucide-react';
 import { scheduleVisit, type Property } from '@/lib/api';
 import { useToast } from '@/contexts/ToastContext';
 
+// Date + time are mandatory for every booking; no "flexible" slot so the
+// backend can derive a concrete appointment time.
+// See docs/plans/2026-05-17-website-visit-not-visible-in-crm.md
 const TIME_SLOTS = [
     { value: 'morning', label: 'Morning', sub: '9AM – 12PM' },
     { value: 'afternoon', label: 'Afternoon', sub: '12 – 4PM' },
     { value: 'evening', label: 'Evening', sub: '4 – 7PM' },
-    { value: 'flexible', label: 'Flexible', sub: 'Any time' },
 ];
 
 const todayStr = new Date().toISOString().split('T')[0];
@@ -30,7 +32,7 @@ export default function ScheduleVisitForm({ property }: Props) {
         name: '',
         phone: '',
         preferred_date: '',
-        preferred_time: 'flexible',
+        preferred_time: '',
         message: '',
     });
     const [showNote, setShowNote] = useState(false);
@@ -40,13 +42,21 @@ export default function ScheduleVisitForm({ property }: Props) {
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!form.name.trim() || !form.phone.trim()) return;
+        if (!form.preferred_date) {
+            toast.error('Please pick a preferred date.');
+            return;
+        }
+        if (!form.preferred_time) {
+            toast.error('Please pick a preferred time slot.');
+            return;
+        }
         setSubmitting(true);
         try {
             await scheduleVisit({
                 property_id: property.id,
                 name: form.name.trim(),
                 phone: form.phone.trim(),
-                preferred_date: form.preferred_date || undefined,
+                preferred_date: form.preferred_date,
                 preferred_time: form.preferred_time,
                 message: form.message.trim() || undefined,
             });
@@ -96,8 +106,10 @@ export default function ScheduleVisitForm({ property }: Props) {
             </div>
 
             {/* Preferred Date */}
+            <label className="block text-xs font-medium text-slate-500 dark:text-slate-400">Preferred Date *</label>
             <input
                 type="date"
+                required
                 min={todayStr}
                 max={maxDateStr}
                 value={form.preferred_date}
@@ -106,7 +118,8 @@ export default function ScheduleVisitForm({ property }: Props) {
             />
 
             {/* Time Slots */}
-            <div className="grid grid-cols-2 gap-2">
+            <label className="block text-xs font-medium text-slate-500 dark:text-slate-400">Preferred Time *</label>
+            <div className="grid grid-cols-3 gap-2">
                 {TIME_SLOTS.map(slot => (
                     <button
                         key={slot.value}

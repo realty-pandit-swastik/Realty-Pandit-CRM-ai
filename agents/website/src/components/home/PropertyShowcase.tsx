@@ -169,7 +169,7 @@ function PropertyCarousel({ properties }: { properties: Property[] }) {
                         type="button"
                         onClick={prev}
                         aria-label="Previous property"
-                        className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-1 w-10 h-10 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-full shadow-md flex items-center justify-center hover:bg-blue-50 dark:hover:bg-slate-700 transition-colors z-20"
+                        className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-1 w-11 h-11 min-w-[44px] min-h-[44px] bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-full shadow-md flex items-center justify-center hover:bg-blue-50 dark:hover:bg-slate-700 transition-colors z-20"
                     >
                         <ChevronLeft className="w-5 h-5 text-slate-600 dark:text-slate-300" />
                     </button>
@@ -177,7 +177,7 @@ function PropertyCarousel({ properties }: { properties: Property[] }) {
                         type="button"
                         onClick={next}
                         aria-label="Next property"
-                        className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-1 w-10 h-10 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-full shadow-md flex items-center justify-center hover:bg-blue-50 dark:hover:bg-slate-700 transition-colors z-20"
+                        className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-1 w-11 h-11 min-w-[44px] min-h-[44px] bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-full shadow-md flex items-center justify-center hover:bg-blue-50 dark:hover:bg-slate-700 transition-colors z-20"
                     >
                         <ChevronRight className="w-5 h-5 text-slate-600 dark:text-slate-300" />
                     </button>

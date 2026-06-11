@@ -28,10 +28,7 @@ export default function BuilderDashboard() {
     useEffect(() => {
         const fetchStats = async () => {
             try {
-                const token = localStorage.getItem('builder_token');
-                const res = await api.get('/builder/dashboard/stats', {
-                    headers: { Authorization: `Bearer ${token}` }
-                });
+                const res = await api.get('/builder/dashboard/stats');
                 setStats(res.data);
             } catch (err: any) {
                 setError(err.response?.data?.error || 'Failed to load dashboard');

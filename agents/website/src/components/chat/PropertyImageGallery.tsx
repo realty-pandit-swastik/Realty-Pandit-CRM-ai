@@ -83,14 +83,14 @@ export default function PropertyImageGallery({ images, title }: PropertyImageGal
                 <>
                     <button
                         onClick={goPrevious}
-                        className="absolute left-3 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-white/90 dark:bg-slate-800/90 shadow-lg flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:scale-110"
+                        className="absolute left-3 top-1/2 -translate-y-1/2 w-11 h-11 min-w-[44px] min-h-[44px] rounded-full bg-white/90 dark:bg-slate-800/90 shadow-lg flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:scale-110"
                         aria-label="Previous image"
                     >
                         <ChevronLeft className="w-6 h-6 text-slate-900 dark:text-white" />
                     </button>
                     <button
                         onClick={goNext}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-white/90 dark:bg-slate-800/90 shadow-lg flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:scale-110"
+                        className="absolute right-3 top-1/2 -translate-y-1/2 w-11 h-11 min-w-[44px] min-h-[44px] rounded-full bg-white/90 dark:bg-slate-800/90 shadow-lg flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:scale-110"
                         aria-label="Next image"
                     >
                         <ChevronRight className="w-6 h-6 text-slate-900 dark:text-white" />
@@ -100,7 +100,7 @@ export default function PropertyImageGallery({ images, title }: PropertyImageGal
 
             {/* Dot indicators */}
             {images.length > 1 && images.length <= 10 && (
-                <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-1.5">
+                <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex">
                     {images.map((_, i) => (
                         <button
                             key={i}
@@ -109,13 +109,15 @@ export default function PropertyImageGallery({ images, title }: PropertyImageGal
                                 e.stopPropagation();
                                 setCurrentIndex(i);
                             }}
-                            className={`w-2 h-2 rounded-full transition-all ${
-                                i === currentIndex
-                                    ? 'bg-white w-5'
-                                    : 'bg-white/50 hover:bg-white/80'
-                            }`}
+                            className="min-w-[28px] min-h-[44px] flex items-center justify-center"
                             aria-label={`Go to image ${i + 1}`}
-                        />
+                        >
+                            <span className={`block rounded-full transition-all ${
+                                i === currentIndex
+                                    ? 'bg-white w-5 h-2'
+                                    : 'bg-white/50 hover:bg-white/80 w-2 h-2'
+                            }`} />
+                        </button>
                     ))}
                 </div>
             )}

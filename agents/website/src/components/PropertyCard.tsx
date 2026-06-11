@@ -4,12 +4,14 @@ import { motion } from 'framer-motion';
 import Link from 'next/link';
 import { MapPin, BedDouble, Bath, Maximize, ArrowRight, Home } from 'lucide-react';
 import { formatPrice, getMediaUrl, getImageUrls, type Property } from '@/lib/api';
-import { formatPropertyTitle, formatAddress } from '@/lib/propertyUtils';
+import { formatPropertyTitle, formatAddress, getRoomCount, getRoomLabel } from '@/lib/propertyUtils';
 import CompareButton from '@/components/property-detail/CompareButton';
 
 export default function PropertyCard({ property, index = 0 }: { property: Property; index?: number }) {
     const specs = property.specs || {};
     const imageUrls = getImageUrls(property.media_urls);
+    const roomCount = getRoomCount(property);
+    const roomLabel = getRoomLabel(property);
 
     return (
         <motion.div
@@ -43,11 +45,24 @@ export default function PropertyCard({ property, index = 0 }: { property: Proper
                                 {property.category}
                             </span>
                         </div>
-                        {property.renovated && (
-                            <div className="absolute bottom-3 left-3">
-                                <span className="rounded-full px-3 py-1 text-xs font-semibold bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 shadow-sm">
-                                    Newly Renovated
-                                </span>
+                        {(property.renovated || property.pre_rented) && (
+                            <div className="absolute bottom-3 left-3 flex flex-wrap gap-1.5">
+                                {property.renovated && (
+                                    <span className="rounded-full px-3 py-1 text-xs font-semibold bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 shadow-sm">
+                                        Newly Renovated
+                                    </span>
+                                )}
+                                {property.pre_rented && (() => {
+                                    const rent = Number(property.pre_rented_monthly_rent) || 0;
+                                    const absPrice = (property.price || 0) * (property.price_unit === 'Cr' ? 10000000 : property.price_unit === 'Lakh' ? 100000 : 1);
+                                    const yld = rent > 0 && absPrice > 0 ? (rent * 12 / absPrice) * 100 : 0;
+                                    const suffix = yld > 0 ? ` · ${yld.toFixed(1)}% yield` : rent > 0 ? ` · ₹${rent.toLocaleString('en-IN')}/mo` : '';
+                                    return (
+                                        <span className="rounded-full px-3 py-1 text-xs font-semibold bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400 border border-blue-200 dark:border-blue-800 shadow-sm">
+                                            Pre-rented{suffix}
+                                        </span>
+                                    );
+                                })()}
                             </div>
                         )}
                         <div className="absolute bottom-3 right-3">
@@ -69,8 +84,8 @@ export default function PropertyCard({ property, index = 0 }: { property: Proper
                             </div>
                         )}
                         <div className="flex items-center gap-4 text-slate-500 dark:text-slate-400 text-sm border-t border-slate-100 dark:border-slate-800 pt-4">
-                            {specs.bedrooms && (
-                                <span className="flex items-center gap-1"><BedDouble className="w-4 h-4" /> {specs.bedrooms} BHK</span>
+                            {roomCount != null && roomCount > 0 && (
+                                <span className="flex items-center gap-1"><BedDouble className="w-4 h-4" /> {roomCount} {roomLabel}</span>
                             )}
                             {specs.bathrooms && (
                                 <span className="flex items-center gap-1"><Bath className="w-4 h-4" /> {specs.bathrooms} Bath</span>

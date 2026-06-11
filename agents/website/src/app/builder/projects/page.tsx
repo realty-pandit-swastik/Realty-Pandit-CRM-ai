@@ -36,14 +36,10 @@ export default function BuilderProjects() {
     useEffect(() => {
         const fetchProjects = async () => {
             try {
-                const token = localStorage.getItem('builder_token');
                 const params: any = { page: 1, limit: 20 };
                 if (filter) params.status = filter;
 
-                const res = await api.get('/builder/projects', {
-                    headers: { Authorization: `Bearer ${token}` },
-                    params,
-                });
+                const res = await api.get('/builder/projects', { params });
                 setProjects(res.data.projects);
                 setTotal(res.data.total);
             } catch (err) {

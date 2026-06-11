@@ -1,4 +1,5 @@
 import { Property, getMediaUrl, getImageUrls } from '@/lib/api';
+import { getRoomCount, getRoomLabel, getTypeLabel, getAmenities, getTotalFloors } from '@/lib/propertyUtils';
 import { PropertyMatchData } from './PropertyMatchCard';
 
 export interface NormalizedProperty {
@@ -35,21 +36,25 @@ export function formatPrice(price: number | null): string {
 }
 
 export function normalizeFromAI(property: Property): NormalizedProperty {
-    const bhk = property.property_configuration?.name || '';
-    const area = property.specs?.area_sqft || property.specs?.built_area || property.specs?.super_built_up_area || '';
+    // Read from the taxonomy SoT (specs / taxonomy_node), not the dropped columns or legacy configuration.
+    const rooms = getRoomCount(property);
+    const bhk = rooms != null && rooms > 0 ? `${rooms} ${getRoomLabel(property)}` : '';
+    const typeLabel = getTypeLabel(property);
+    const area = property.specs?.area ?? property.specs?.area_sqft ?? property.specs?.built_area ?? '';
+    const totalFloors = getTotalFloors(property);
 
     return {
         id: property.id,
-        title: [bhk, property.type].filter(Boolean).join(' ') || 'Property',
-        type: property.type || '',
+        title: [bhk, typeLabel].filter(Boolean).join(' ') || 'Property',
+        type: typeLabel,
         bhk,
         location: property.location || '',
         price: property.price,
         priceFormatted: formatPrice(property.price),
-        area: area ? `${area} sqft` : '',
-        furnishing: property.specs?.furnishing || '',
-        floor: property.specs?.floor ? `${property.specs.floor}${property.specs.total_floors ? `/${property.specs.total_floors}` : ''}` : '',
-        amenities: [],
+        area: area ? `${area} ${property.specs?.unit || 'sqft'}` : '',
+        furnishing: (property.specs?.furnishing as string) || '',
+        floor: property.floor_number != null ? `${property.floor_number}${totalFloors != null ? `/${totalFloors}` : ''}` : '',
+        amenities: getAmenities(property),
         images: getImageUrls(property.media_urls).map(u => getMediaUrl(u)),
         videos: (property.video_urls || []).map(u => getMediaUrl(u)),
         intent: property.intent || '',

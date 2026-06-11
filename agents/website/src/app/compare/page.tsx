@@ -3,98 +3,56 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
-import { ChevronRight, Plus, X, Scale, MapPin, BedDouble, Bath, Maximize, IndianRupee } from 'lucide-react';
-import { type Property, formatPrice, getMediaUrl } from '@/lib/api';
-
-const SAMPLE_PROPERTIES: Property[] = [
-    {
-        id: 'sample-1',
-        category: 'residential',
-        type: 'flat',
-        specs: { bedrooms: 3, bathrooms: 2, area: 1450, unit: 'sqft' },
-        features: { parking: true, lift: true },
-        location: 'Sector 150, Noida',
-        price: 8500000,
-        price_unit: null,
-        status: 'available',
-        intent: 'sell',
-        media_urls: [],
-        created_at: new Date().toISOString(),
-    },
-    {
-        id: 'sample-2',
-        category: 'residential',
-        type: 'flat',
-        specs: { bedrooms: 2, bathrooms: 2, area: 1100, unit: 'sqft' },
-        features: { parking: true, gym: true },
-        location: 'Crossing Republik, Ghaziabad',
-        price: 4500000,
-        price_unit: null,
-        status: 'available',
-        intent: 'sell',
-        media_urls: [],
-        created_at: new Date().toISOString(),
-    },
-];
+import { ChevronRight, Plus, X, Scale, MapPin, Maximize } from 'lucide-react';
+import { formatPrice, getMediaUrl } from '@/lib/api';
+import { getCompareList, setCompareList, type CompareItem } from '@/components/property-detail/CompareButton';
+import { getRoomCount, getRoomLabel, getTypeLabel, getFurnishing, getFacing, getConstructionAge, getTotalFloors, getAmenities } from '@/lib/propertyUtils';
 
 const MAX_SLOTS = 3;
 
-const COMPARISON_ROWS: { label: string; key: string; render: (p: Property) => string }[] = [
+const cap = (s?: string | null) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : 'N/A');
+
+const COMPARISON_ROWS: { label: string; key: string; render: (p: CompareItem) => string }[] = [
     { label: 'Price', key: 'price', render: p => formatPrice(p.price, p.price_unit) },
     { label: 'Price/sqft', key: 'price_sqft', render: p => {
-        if (!p.specs?.area || !p.price) return 'N/A';
-        const totalPrice = p.price * (p.price_unit === 'Cr' ? 10000000 : p.price_unit === 'Lakh' ? 100000 : 1);
-        return `₹${Math.round(totalPrice / p.specs.area).toLocaleString('en-IN')}`;
+        const area = Number(p.specs?.area);
+        if (!area || !p.price) return 'N/A';
+        const totalPrice = p.price * (p.price_unit === 'Cr' || p.price_unit === 'Crore' ? 10000000 : p.price_unit === 'Lakh' ? 100000 : 1);
+        return `₹${Math.round(totalPrice / area).toLocaleString('en-IN')}`;
     }},
     { label: 'Location', key: 'location', render: p => p.location || 'N/A' },
-    { label: 'Type', key: 'type', render: p => p.type ? p.type.charAt(0).toUpperCase() + p.type.slice(1) : 'N/A' },
-    { label: 'Category', key: 'category', render: p => p.category ? p.category.charAt(0).toUpperCase() + p.category.slice(1) : 'N/A' },
-    { label: 'BHK', key: 'bhk', render: p => p.specs?.bedrooms ? `${p.specs.bedrooms} BHK` : 'N/A' },
+    { label: 'Type', key: 'type', render: p => getTypeLabel(p as any) },
+    { label: 'Category', key: 'category', render: p => cap(p.category) },
+    { label: 'Configuration', key: 'bhk', render: p => { const c = getRoomCount(p as any); return c ? `${c} ${getRoomLabel(p as any)}` : 'N/A'; } },
     { label: 'Bathrooms', key: 'bathrooms', render: p => p.specs?.bathrooms ? `${p.specs.bathrooms}` : 'N/A' },
     { label: 'Area', key: 'area', render: p => p.specs?.area ? `${p.specs.area} ${p.specs.unit || 'sqft'}` : 'N/A' },
-    { label: 'Furnishing', key: 'furnishing', render: p => p.furnishing ? p.furnishing.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()) : 'N/A' },
-    { label: 'Facing', key: 'facing', render: p => p.facing ? p.facing.charAt(0).toUpperCase() + p.facing.slice(1) : 'N/A' },
-    { label: 'Floor', key: 'floor', render: p => p.floor_number ? `${p.floor_number}${p.total_floors ? ` of ${p.total_floors}` : ''}` : 'N/A' },
-    { label: 'Property Age', key: 'age', render: p => p.property_age || 'N/A' },
-    { label: 'Intent', key: 'intent', render: p => p.intent === 'sell' ? 'For Sale' : p.intent === 'rent' ? 'For Rent' : p.intent || 'N/A' },
-    { label: 'Features', key: 'features', render: p => {
-        const f = p.features || {};
-        const active = Object.entries(f).filter(([, v]) => v).map(([k]) => k.replace(/_/g, ' '));
-        return active.length > 0 ? active.slice(0, 5).join(', ') : 'N/A';
-    }},
-    { label: 'Status', key: 'status', render: p => p.status ? p.status.charAt(0).toUpperCase() + p.status.slice(1) : 'N/A' },
+    { label: 'Furnishing', key: 'furnishing', render: p => getFurnishing(p as any) || 'N/A' },
+    { label: 'Facing', key: 'facing', render: p => getFacing(p as any) || 'N/A' },
+    { label: 'Floor', key: 'floor', render: p => { const tf = getTotalFloors(p as any); return p.floor_number ? `${p.floor_number}${tf ? ` of ${tf}` : ''}` : 'N/A'; } },
+    { label: 'Age', key: 'age', render: p => getConstructionAge(p as any) || 'N/A' },
+    { label: 'Intent', key: 'intent', render: p => p.intent === 'sell' ? 'For Sale' : p.intent === 'rent' ? 'For Rent' : (p.intent || 'N/A') },
+    { label: 'Amenities', key: 'amenities', render: p => { const a = getAmenities(p as any); return a.length > 0 ? a.slice(0, 5).join(', ') : 'N/A'; } },
+    { label: 'Status', key: 'status', render: p => cap(p.status) },
 ];
 
 export default function ComparePage() {
-    const [properties, setProperties] = useState<Property[]>([]);
+    const [properties, setProperties] = useState<CompareItem[]>([]);
 
     useEffect(() => {
-        try {
-            const stored = localStorage.getItem('compare_properties');
-            if (stored) {
-                const parsed = JSON.parse(stored);
-                if (Array.isArray(parsed) && parsed.length > 0) {
-                    setProperties(parsed.slice(0, MAX_SLOTS));
-                    return;
-                }
-            }
-        } catch { /* ignore */ }
-        // Pre-populate with sample properties for demo
-        setProperties(SAMPLE_PROPERTIES);
+        // Single source of truth: the same list the "Add to Compare" button writes.
+        const refresh = () => setProperties(getCompareList().slice(0, MAX_SLOTS));
+        refresh();
+        window.addEventListener('compare-list-changed', refresh);
+        window.addEventListener('storage', refresh);
+        return () => {
+            window.removeEventListener('compare-list-changed', refresh);
+            window.removeEventListener('storage', refresh);
+        };
     }, []);
 
-    useEffect(() => {
-        if (properties.length > 0) {
-            localStorage.setItem('compare_properties', JSON.stringify(properties));
-        }
-    }, [properties]);
-
     const removeProperty = (id: string) => {
-        const updated = properties.filter(p => p.id !== id);
-        setProperties(updated);
-        if (updated.length === 0) {
-            localStorage.removeItem('compare_properties');
-        }
+        const updated = getCompareList().filter(p => p.id !== id);
+        setCompareList(updated); // fires 'compare-list-changed' → refresh
     };
 
     const emptySlots = MAX_SLOTS - properties.length;
@@ -152,8 +110,8 @@ export default function ComparePage() {
                                     <X className="w-4 h-4" />
                                 </button>
                                 <div className="h-36 bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-800 dark:to-slate-700 flex items-center justify-center overflow-hidden">
-                                    {property.media_urls?.[0] ? (
-                                        <img src={getMediaUrl(property.media_urls[0])} alt={property.type} className="w-full h-full object-cover" />
+                                    {property.image ? (
+                                        <img src={getMediaUrl(property.image)} alt={getTypeLabel(property as any)} className="w-full h-full object-cover" />
                                     ) : (
                                         <Maximize className="w-10 h-10 text-slate-300 dark:text-slate-500" />
                                     )}
@@ -162,8 +120,8 @@ export default function ComparePage() {
                                     <p className="text-lg font-bold text-slate-900 dark:text-white mb-1">
                                         {formatPrice(property.price, property.price_unit)}
                                     </p>
-                                    <p className="text-sm text-slate-600 dark:text-slate-300 font-medium capitalize mb-2">
-                                        {property.specs?.bedrooms ? `${property.specs.bedrooms} BHK ` : ''}{property.type}
+                                    <p className="text-sm text-slate-600 dark:text-slate-300 font-medium mb-2">
+                                        {(() => { const c = getRoomCount(property as any); return c ? `${c} ${getRoomLabel(property as any)} ` : ''; })()}{getTypeLabel(property as any)}
                                     </p>
                                     {property.location && (
                                         <p className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1">
@@ -209,8 +167,8 @@ export default function ComparePage() {
                                     <tr className="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-200 dark:border-slate-700">
                                         <th className="text-left py-3 px-4 text-slate-600 dark:text-slate-300 font-semibold w-36">Feature</th>
                                         {properties.map(p => (
-                                            <th key={p.id} className="text-left py-3 px-4 text-slate-600 dark:text-slate-300 font-semibold capitalize">
-                                                {p.specs?.bedrooms ? `${p.specs.bedrooms} BHK ` : ''}{p.type}
+                                            <th key={p.id} className="text-left py-3 px-4 text-slate-600 dark:text-slate-300 font-semibold">
+                                                {(() => { const c = getRoomCount(p as any); return c ? `${c} ${getRoomLabel(p as any)} ` : ''; })()}{getTypeLabel(p as any)}
                                             </th>
                                         ))}
                                     </tr>

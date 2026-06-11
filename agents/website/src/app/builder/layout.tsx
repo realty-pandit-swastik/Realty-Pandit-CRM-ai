@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { LayoutDashboard, FolderKanban, Users, Calendar, CreditCard, LogOut, Menu, X } from 'lucide-react';
+import api from '@/lib/api';
 
 export default function BuilderLayout({
     children,
@@ -15,16 +16,12 @@ export default function BuilderLayout({
     const [isSidebarOpen, setIsSidebarOpen] = useState(true);
 
     useEffect(() => {
-        const token = localStorage.getItem('builder_token');
         const isLoginPage = pathname === '/builder/login';
-
-        if (!token && !isLoginPage) {
-            router.push('/builder/login');
-        }
-
-        if (token && isLoginPage) {
-            router.push('/builder/dashboard');
-        }
+        api.get('/builder/me').then(() => {
+            if (isLoginPage) router.push('/builder/dashboard');
+        }).catch(() => {
+            if (!isLoginPage) router.push('/builder/login');
+        });
     }, [pathname, router]);
 
     if (pathname === '/builder/login') {
@@ -39,9 +36,11 @@ export default function BuilderLayout({
         { name: 'Subscription', href: '/builder/subscription', icon: CreditCard },
     ];
 
-    const handleLogout = () => {
-        localStorage.removeItem('builder_token');
+    const handleLogout = async () => {
         localStorage.removeItem('builder_info');
+        try {
+            await api.post('/auth/logout');
+        } catch {}
         router.push('/builder/login');
     };
 

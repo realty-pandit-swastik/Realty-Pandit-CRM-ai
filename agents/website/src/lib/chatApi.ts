@@ -36,6 +36,7 @@ export interface ChatMessage {
         progress?: { current: number; total: number; group: string };
         address_config?: any;
         document_types?: Array<{ value: string; label: string }>;
+        schema_fields?: Array<{ key: string; label: string; input_type: string; required: boolean; options: string[] | null; unit: string | null }>;
     };
 }
 
@@ -103,11 +104,9 @@ export async function chatConfirm(
     sessionId: string,
     confirmed: boolean,
 ): Promise<ChatMessageResponse> {
-    const token = typeof window !== 'undefined' ? localStorage.getItem('agent_token') : null;
     const { data } = await api.post(
         '/api/chat/confirm',
         { session_id: sessionId, confirmed },
-        token ? { headers: { Authorization: `Bearer ${token}` } } : undefined,
     );
     return data;
 }

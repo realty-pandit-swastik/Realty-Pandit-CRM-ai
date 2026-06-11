@@ -23,9 +23,6 @@ export default function AgentTeam() {
     const [formLoading, setFormLoading] = useState(false);
     const [formError, setFormError] = useState('');
 
-    const token = typeof window !== 'undefined' ? localStorage.getItem('agent_token') : null;
-    const headers = { Authorization: `Bearer ${token}` };
-
     useEffect(() => {
         // Guard: only company owners can access
         try {
@@ -46,7 +43,7 @@ export default function AgentTeam() {
 
     const fetchTeam = async () => {
         try {
-            const res = await api.get('/agent/team', { headers });
+            const res = await api.get('/agent/team');
             setSubAgents(res.data);
         } catch (err) {
             console.error('Failed to fetch team', err);
@@ -60,7 +57,7 @@ export default function AgentTeam() {
         setFormError('');
         setFormLoading(true);
         try {
-            await api.post('/agent/team', formData, { headers });
+            await api.post('/agent/team', formData);
             setShowForm(false);
             setFormData({ name: '', phone: '', email: '' });
             await fetchTeam();

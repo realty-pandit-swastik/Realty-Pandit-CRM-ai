@@ -1,27 +1,29 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { ChevronRight, Building2, Home, MapPin, ArrowRight, Building, LandPlot, Store, Phone, MessageCircle } from 'lucide-react';
+import { ChevronRight, Building2, Home, MapPin, ArrowRight, Store, Phone, MessageCircle } from 'lucide-react';
 import Link from 'next/link';
 import InternalLinks from '@/components/InternalLinks';
+import PropertyCard from '@/components/PropertyCard';
+import { getProperties, type Property } from '@/lib/api';
 
-const cityData: Record<string, { localities: string[]; avgPrice: string; propertyCount: number }> = {
-    'noida': { localities: ['Sector 150', 'Sector 137', 'Sector 62', 'Sector 75', 'Sector 44', 'Greater Noida West'], avgPrice: '85 Lakh', propertyCount: 250 },
-    'gurgaon': { localities: ['DLF Phase 1', 'DLF Phase 3', 'Sohna Road', 'Golf Course Road', 'Sector 49', 'MG Road'], avgPrice: '1.2 Cr', propertyCount: 380 },
-    'delhi': { localities: ['Dwarka', 'Rohini', 'Vasant Kunj', 'Saket', 'Janakpuri', 'Lajpat Nagar'], avgPrice: '1.5 Cr', propertyCount: 520 },
-    'mumbai': { localities: ['Andheri', 'Powai', 'Bandra', 'Thane', 'Navi Mumbai', 'Goregaon'], avgPrice: '2.1 Cr', propertyCount: 680 },
-    'bangalore': { localities: ['Whitefield', 'Indiranagar', 'Koramangala', 'HSR Layout', 'Electronic City', 'Marathahalli'], avgPrice: '95 Lakh', propertyCount: 420 },
-    'pune': { localities: ['Hinjewadi', 'Kharadi', 'Wakad', 'Baner', 'Viman Nagar', 'Hadapsar'], avgPrice: '72 Lakh', propertyCount: 310 },
-    'hyderabad': { localities: ['Gachibowli', 'HITEC City', 'Madhapur', 'Kondapur', 'Jubilee Hills', 'Banjara Hills'], avgPrice: '80 Lakh', propertyCount: 290 },
-    'chennai': { localities: ['OMR', 'Adyar', 'T Nagar', 'Velachery', 'Anna Nagar', 'Porur'], avgPrice: '70 Lakh', propertyCount: 260 },
+// Curated locality lists per city (used only for the "nearby localities" SEO links).
+const cityLocalities: Record<string, string[]> = {
+    'noida': ['Sector 150', 'Sector 137', 'Sector 62', 'Sector 75', 'Sector 44', 'Greater Noida West'],
+    'gurgaon': ['DLF Phase 1', 'DLF Phase 3', 'Sohna Road', 'Golf Course Road', 'Sector 49', 'MG Road'],
+    'delhi': ['Dwarka', 'Rohini', 'Vasant Kunj', 'Saket', 'Janakpuri', 'Lajpat Nagar'],
+    'ghaziabad': ['Vaishali', 'Indirapuram', 'Vasundhara', 'Kaushambi', 'Raj Nagar Extension', 'Crossing Republik'],
+    'mumbai': ['Andheri', 'Powai', 'Bandra', 'Thane', 'Navi Mumbai', 'Goregaon'],
+    'bangalore': ['Whitefield', 'Indiranagar', 'Koramangala', 'HSR Layout', 'Electronic City', 'Marathahalli'],
+    'pune': ['Hinjewadi', 'Kharadi', 'Wakad', 'Baner', 'Viman Nagar', 'Hadapsar'],
+    'hyderabad': ['Gachibowli', 'HITEC City', 'Madhapur', 'Kondapur', 'Jubilee Hills', 'Banjara Hills'],
+    'chennai': ['OMR', 'Adyar', 'T Nagar', 'Velachery', 'Anna Nagar', 'Porur'],
 };
 
 const propertyTypes = [
     { key: 'all', label: 'All', icon: Building2 },
-    { key: 'flats', label: 'Flats', icon: Building },
-    { key: 'houses', label: 'Houses', icon: Home },
-    { key: 'plots', label: 'Plots', icon: LandPlot },
+    { key: 'residential', label: 'Residential', icon: Home },
     { key: 'commercial', label: 'Commercial', icon: Store },
 ];
 
@@ -50,14 +52,35 @@ function toSlug(name: string): string {
 
 export default function LocalityPageClient({ city, locality }: { city: string; locality: string }) {
     const [activeType, setActiveType] = useState('all');
+    const [properties, setProperties] = useState<Property[]>([]);
+    const [total, setTotal] = useState<number | null>(null);
+    const [loading, setLoading] = useState(true);
 
     const cityName = formatCityName(city);
     const localityName = formatLocalityName(locality);
-    const data = cityData[city.toLowerCase()];
 
-    const nearbyLocalities = data
-        ? data.localities.filter(l => toSlug(l) !== locality.toLowerCase())
-        : [];
+    const nearbyLocalities = (cityLocalities[city.toLowerCase()] || [])
+        .filter(l => toSlug(l) !== locality.toLowerCase());
+
+    const load = useCallback(async () => {
+        setLoading(true);
+        try {
+            const data = await getProperties({
+                location: localityName,
+                category: activeType === 'all' ? undefined : activeType,
+                limit: 6,
+            });
+            setProperties(data.properties);
+            setTotal(data.pagination.total);
+        } catch {
+            setProperties([]);
+            setTotal(0);
+        } finally {
+            setLoading(false);
+        }
+    }, [localityName, activeType]);
+
+    useEffect(() => { load(); }, [load]);
 
     return (
         <div className="min-h-screen bg-slate-50 dark:bg-slate-950 pt-20">
@@ -123,51 +146,52 @@ export default function LocalityPageClient({ city, locality }: { city: string; l
                     </div>
                 </motion.div>
 
-                {/* Placeholder Section */}
-                <motion.div
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.4, delay: 0.3 }}
-                    className="mb-16"
-                >
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
-                        {[...Array(3)].map((_, i) => (
-                            <div key={i} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl overflow-hidden">
-                                <div className="h-48 bg-slate-100 dark:bg-slate-800 animate-pulse" />
-                                <div className="p-5 space-y-3">
-                                    <div className="h-4 bg-slate-100 dark:bg-slate-800 rounded animate-pulse w-3/4" />
-                                    <div className="h-3 bg-slate-100 dark:bg-slate-800 rounded animate-pulse w-1/2" />
-                                    <div className="h-3 bg-slate-100 dark:bg-slate-800 rounded animate-pulse w-2/3" />
+                {/* Real listings */}
+                <div className="mb-16">
+                    {loading ? (
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                            {[...Array(3)].map((_, i) => (
+                                <div key={i} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl overflow-hidden">
+                                    <div className="h-48 bg-slate-100 dark:bg-slate-800 animate-pulse" />
+                                    <div className="p-5 space-y-3">
+                                        <div className="h-4 bg-slate-100 dark:bg-slate-800 rounded animate-pulse w-3/4" />
+                                        <div className="h-3 bg-slate-100 dark:bg-slate-800 rounded animate-pulse w-1/2" />
+                                    </div>
                                 </div>
+                            ))}
+                        </div>
+                    ) : properties.length > 0 ? (
+                        <>
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+                                {properties.map((p, i) => <PropertyCard key={p.id} property={p} index={i} />)}
                             </div>
-                        ))}
-                    </div>
-                    <div className="text-center py-6">
-                        <div className="mx-auto w-20 h-20 bg-slate-100 dark:bg-slate-800 rounded-full flex items-center justify-center mb-5">
-                            <Building2 className="w-10 h-10 text-slate-300 dark:text-slate-600" />
+                            <div className="text-center">
+                                <Link
+                                    href={`/properties?location=${encodeURIComponent(localityName)}`}
+                                    className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 transition-colors"
+                                >
+                                    View all {total ?? ''} properties in {localityName} <ArrowRight className="w-4 h-4" />
+                                </Link>
+                            </div>
+                        </>
+                    ) : (
+                        <div className="text-center py-6">
+                            <div className="mx-auto w-20 h-20 bg-slate-100 dark:bg-slate-800 rounded-full flex items-center justify-center mb-5">
+                                <Building2 className="w-10 h-10 text-slate-300 dark:text-slate-600" />
+                            </div>
+                            <p className="text-slate-600 dark:text-slate-300 text-lg font-medium mb-2">No listings in {localityName} yet.</p>
+                            <p className="text-slate-500 dark:text-slate-400 mb-6">Meanwhile, browse properties in {cityName}.</p>
+                            <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+                                <Link href={`/properties/in/${city}`} className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 transition-colors">
+                                    Browse {cityName} Properties <ArrowRight className="w-4 h-4" />
+                                </Link>
+                                <Link href="/properties" className="inline-flex items-center gap-2 px-6 py-3 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 rounded-xl font-medium hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
+                                    All Properties
+                                </Link>
+                            </div>
                         </div>
-                        <p className="text-slate-600 dark:text-slate-300 text-lg font-medium mb-2">
-                            Properties coming soon in {localityName}, {cityName}.
-                        </p>
-                        <p className="text-slate-500 dark:text-slate-400 mb-6">
-                            Meanwhile, browse properties in {cityName}.
-                        </p>
-                        <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
-                            <Link
-                                href={`/properties/in/${city}`}
-                                className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 transition-colors"
-                            >
-                                Browse {cityName} Properties <ArrowRight className="w-4 h-4" />
-                            </Link>
-                            <Link
-                                href="/properties"
-                                className="inline-flex items-center gap-2 px-6 py-3 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 rounded-xl font-medium hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
-                            >
-                                All Properties
-                            </Link>
-                        </div>
-                    </div>
-                </motion.div>
+                    )}
+                </div>
 
                 {/* CTA: Contact Panditji */}
                 <motion.div
@@ -192,7 +216,7 @@ export default function LocalityPageClient({ city, locality }: { city: string; l
                                 <Phone className="w-4 h-4" /> Contact Us
                             </Link>
                             <Link
-                                href="https://wa.me/919999999999?text=Hi%20Panditji%2C%20I%20am%20looking%20for%20property%20in%20{localityName}"
+                                href={`https://wa.me/919999999999?text=${encodeURIComponent(`Hi Panditji, I am looking for property in ${localityName}, ${cityName}`)}`}
                                 target="_blank"
                                 className="inline-flex items-center gap-2 px-6 py-3 bg-emerald-500 text-white rounded-xl font-medium hover:bg-emerald-600 transition-colors"
                             >

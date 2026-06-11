@@ -6,6 +6,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { MapPin, BedDouble, Ruler, ArrowRight, ChevronLeft, ChevronRight as ChevronRightIcon } from 'lucide-react';
 import { Property, getMediaUrl, getImageUrls } from '@/lib/api';
+import { getRoomCount, getRoomLabel, getTypeLabel } from '@/lib/propertyUtils';
 
 interface PropertyChatCardProps {
     property: Property;
@@ -14,12 +15,14 @@ interface PropertyChatCardProps {
 export default function PropertyChatCard({ property }: PropertyChatCardProps) {
     const [currentImageIndex, setCurrentImageIndex] = useState(0);
     const photos = getImageUrls(property.media_urls).map(u => getMediaUrl(u));
+    const typeLabel = getTypeLabel(property);
 
-    // Extract BHK from configuration
-    const bhk = property.property_configuration?.name || '';
+    // Extract BHK/Rooms from the specs SoT (configuration is legacy + usually null)
+    const _rooms = getRoomCount(property);
+    const bhk = _rooms != null && _rooms > 0 ? `${_rooms} ${getRoomLabel(property)}` : (property.property_configuration?.name || '');
 
-    // Extract area from specs
-    const area = property.specs?.area_sqft || property.specs?.built_area || property.specs?.super_built_up_area;
+    // Extract area from specs (canonical key first)
+    const area = property.specs?.area ?? property.specs?.area_sqft ?? property.specs?.built_area ?? property.specs?.super_built_up_area;
 
     // Format price
     const formatPrice = (price: number | null) => {
@@ -72,7 +75,7 @@ export default function PropertyChatCard({ property }: PropertyChatCardProps) {
                             {photos.length > 0 ? (
                                 <Image
                                     src={photos[currentImageIndex]}
-                                    alt={`${bhk} ${property.type}`}
+                                    alt={`${bhk} ${typeLabel}`}
                                     fill
                                     className="object-cover cursor-pointer hover:scale-105 transition-transform duration-300"
                                     sizes="(max-width: 768px) 100vw, 800px"
@@ -103,14 +106,14 @@ export default function PropertyChatCard({ property }: PropertyChatCardProps) {
                         <>
                             <button
                                 onClick={prevImage}
-                                className="absolute left-2 md:left-3 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-white/90 dark:bg-slate-800/90 shadow-lg flex items-center justify-center hover:scale-110 transition-transform opacity-0 md:opacity-100 group-hover:opacity-100"
+                                className="absolute left-2 md:left-3 top-1/2 -translate-y-1/2 w-11 h-11 min-w-[44px] min-h-[44px] rounded-full bg-white/90 dark:bg-slate-800/90 shadow-lg flex items-center justify-center hover:scale-110 transition-transform opacity-0 md:opacity-100 group-hover:opacity-100"
                                 aria-label="Previous image"
                             >
                                 <ChevronLeft className="w-6 h-6 text-slate-900 dark:text-white" />
                             </button>
                             <button
                                 onClick={nextImage}
-                                className="absolute right-2 md:right-3 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full bg-white/90 dark:bg-slate-800/90 shadow-lg flex items-center justify-center hover:scale-110 transition-transform opacity-0 md:opacity-100 group-hover:opacity-100"
+                                className="absolute right-2 md:right-3 top-1/2 -translate-y-1/2 w-11 h-11 min-w-[44px] min-h-[44px] rounded-full bg-white/90 dark:bg-slate-800/90 shadow-lg flex items-center justify-center hover:scale-110 transition-transform opacity-0 md:opacity-100 group-hover:opacity-100"
                                 aria-label="Next image"
                             >
                                 <ChevronRightIcon className="w-6 h-6 text-slate-900 dark:text-white" />
@@ -157,7 +160,7 @@ export default function PropertyChatCard({ property }: PropertyChatCardProps) {
                 <div className="p-4">
                     {/* Title & Location */}
                     <h4 className="font-bold text-lg text-slate-900 dark:text-white mb-2 line-clamp-1">
-                        {`${bhk} ${property.type}`}
+                        {`${bhk} ${typeLabel}`}
                     </h4>
                     <div className="flex items-center gap-2 text-slate-600 dark:text-slate-400 mb-3">
                         <MapPin className="w-4 h-4 flex-shrink-0" />

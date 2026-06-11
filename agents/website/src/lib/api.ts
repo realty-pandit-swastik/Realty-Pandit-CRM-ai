@@ -1,7 +1,31 @@
 import axios from 'axios';
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL;
+if (!API_URL) throw new Error('NEXT_PUBLIC_API_URL is not set — add it to .env.local');
+const baseURL = API_URL;
+
 const api = axios.create({
-    baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:7071',
+    baseURL,
+    withCredentials: true,
+});
+
+function getCsrfToken(): string | null {
+    if (typeof document === 'undefined') return null;
+    const match = document.cookie.match(/(?:^|;\s*)rp_csrf=([^;]+)/);
+    return match ? decodeURIComponent(match[1]) : null;
+}
+
+const CSRF_SAFE = new Set(['get', 'head', 'options']);
+api.interceptors.request.use((config) => {
+    const method = (config.method ?? 'get').toLowerCase();
+    if (!CSRF_SAFE.has(method)) {
+        const csrf = getCsrfToken();
+        if (csrf) {
+            config.headers = config.headers ?? {};
+            config.headers['X-CSRF-Token'] = csrf;
+        }
+    }
+    return config;
 });
 
 /** Returns true if the JWT stored in token string is expired or malformed */
@@ -15,16 +39,30 @@ export function isTokenExpired(token: string | null): boolean {
     }
 }
 
-// Redirect to login with ?expired=1 when backend returns 401
+// Redirect to login with ?expired=1 when backend returns 401.
+// Guards:
+//   1. Never redirect from the login page itself (would thrash ?expired=1 in a loop).
+//   2. Only treat the 401 as auth-failure if the FAILING request targets the same auth
+//      system as the current page. A /user/me 401 from an agent-portal page should NOT
+//      kick the partner to /agent/login — that endpoint uses a different JWT (user_token)
+//      and its failures are independent of partner auth.
 if (typeof window !== 'undefined') {
     api.interceptors.response.use(
         (response) => response,
         (error) => {
             if (error.response?.status === 401) {
                 const path = window.location.pathname;
-                if (path.startsWith('/agent')) {
+                // Extract the failing request URL (relative to baseURL)
+                const failedUrl: string = error.config?.url || '';
+                const agentAuthScope = /^\/?(agent|api|auth)\b/;
+                const builderAuthScope = /^\/?(builder|api|auth)\b/;
+
+                const onAgentLogin = path === '/agent/login';
+                const onBuilderLogin = path === '/builder/login';
+
+                if (path.startsWith('/agent') && !onAgentLogin && agentAuthScope.test(failedUrl)) {
                     window.location.href = `/agent/login?expired=1`;
-                } else if (path.startsWith('/builder')) {
+                } else if (path.startsWith('/builder') && !onBuilderLogin && builderAuthScope.test(failedUrl)) {
                     window.location.href = `/builder/login?expired=1`;
                 }
             }
@@ -37,9 +75,8 @@ if (typeof window !== 'undefined') {
 export function getMediaUrl(path: string | undefined | null): string {
     if (!path) return '';
     if (path.startsWith('http://') || path.startsWith('https://')) return path;
-    const base = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:7071';
     const clean = path.startsWith('/') ? path : `/${path}`;
-    return `${base}${clean}`;
+    return `${baseURL}${clean}`;
 }
 
 /** Check if a media URL is a video file */
@@ -115,6 +152,8 @@ export interface Property {
     apartment_name?: string | null;
     is_enriched?: boolean;
     renovated?: boolean;
+    pre_rented?: boolean;
+    pre_rented_monthly_rent?: number | string | null;
     district?: string | null;
     ownership_type?: string | null;
     save_count?: number;
@@ -125,6 +164,10 @@ export interface Property {
     property_configuration?: { name: string; slug: string } | null;
     usage_type?: { name: string; slug: string } | null;
     investment_type?: { name: string; slug: string } | null;
+    // Canonical taxonomy (2026-06-04) — the SoT for the property's type label.
+    taxonomy_node?: { id: string; name: string; slug: string } | null;
+    needs_taxonomy_review?: boolean;
+    flat_property_type?: { name: string; main_category?: string } | null;
     // New fields added in Phase 1
     sub_locality?: string | null;
     listed_by?: string | null;
@@ -266,6 +309,33 @@ export const getSubCategoryDetail = async (id: string): Promise<ClassificationIt
     return res.data;
 };
 
+// Canonical taxonomy (Phase 1a) — used by the post-property chat type picker (Phase 1d v2)
+export interface TaxonomyTreeNode {
+    id: string;
+    name: string;
+    slug: string;
+    node_kind: string;
+    children: TaxonomyTreeNode[];
+}
+export const getTaxonomyTree = async (): Promise<TaxonomyTreeNode[]> => {
+    const res = await api.get('/public/taxonomy/tree');
+    return res.data?.tree ?? [];
+};
+
+// Per-type field schema (drives the dynamic sidebar filters for a selected taxonomy node).
+export interface TaxonomyNodeField {
+    key: string;
+    label: string;
+    input_type: string; // 'select' | 'multiselect' | 'number' | 'text' | 'parking_list' | ...
+    required: boolean;
+    options: string[] | null;
+    unit: string | null;
+}
+export const getNodeFields = async (nodeId: string): Promise<TaxonomyNodeField[]> => {
+    const res = await api.get(`/public/taxonomy/nodes/${nodeId}/fields`);
+    return res.data?.fields ?? [];
+};
+
 // Properties
 export const getProperties = async (params?: {
     location?: string;
@@ -276,6 +346,7 @@ export const getProperties = async (params?: {
     sub_category_id?: string;
     type_id?: string;
     configuration_id?: string;
+    taxonomy_node_id?: string;
     usage_type_id?: string;
     investment_type_id?: string;
     price_min?: number;
@@ -286,6 +357,10 @@ export const getProperties = async (params?: {
     furnishing?: string;
     ownership_type?: string;
     amenities?: string;
+    bhk?: string;
+    rooms?: string;
+    facing?: string;
+    age?: string;
 }) => {
     const res = await api.get('/public/properties', { params });
     return res.data;
@@ -448,9 +523,7 @@ export interface PostPropertyData {
 }
 
 export const submitProperty = async (data: PostPropertyData) => {
-    const token = typeof window !== 'undefined' ? localStorage.getItem('agent_token') : null;
-    const headers = token ? { Authorization: `Bearer ${token}` } : {};
-    const res = await api.post('/public/post-property', data, { headers });
+    const res = await api.post('/public/post-property', data);
     return res.data;
 };
 
@@ -629,23 +702,15 @@ export const verifyUserOTP = async (data: UserVerifyOTPRequest): Promise<UserAut
     return res.data;
 };
 
-// Get current user profile (requires authentication)
-export const getUserProfile = async (token: string): Promise<UserProfileResponse> => {
-    const res = await api.get('/user/me', {
-        headers: {
-            Authorization: `Bearer ${token}`,
-        },
-    });
+// Get current user profile (requires authentication — uses HttpOnly cookie)
+export const getUserProfile = async (): Promise<UserProfileResponse> => {
+    const res = await api.get('/user/me');
     return res.data;
 };
 
-// Logout user
-export const logoutUser = async (token: string) => {
-    const res = await api.post('/user/logout', {}, {
-        headers: {
-            Authorization: `Bearer ${token}`,
-        },
-    });
+// Logout user — clears server-side session and cookies
+export const logoutUser = async () => {
+    const res = await api.post('/user/logout', {});
     return res.data;
 };
 
@@ -800,9 +865,7 @@ export const commitWorkflow = async (answers: Record<string, any>, source: strin
     success: boolean;
     inventory_id: string;
 }> => {
-    const token = typeof window !== 'undefined' ? localStorage.getItem('agent_token') : null;
-    const headers = token ? { Authorization: `Bearer ${token}` } : {};
-    const res = await api.post('/api/workflow/commit', { answers, source }, { headers });
+    const res = await api.post('/api/workflow/commit', { answers, source });
     return res.data;
 };
 

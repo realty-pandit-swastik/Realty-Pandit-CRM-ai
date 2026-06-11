@@ -1,7 +1,6 @@
 'use client';
 
 import { X } from 'lucide-react';
-import type { PropertyCategory, PropertyConfiguration } from '@/lib/useMasterData';
 
 const FURNISHING_LABELS: Record<string, string> = {
     fully_furnished: 'Furnished',
@@ -9,62 +8,30 @@ const FURNISHING_LABELS: Record<string, string> = {
     unfurnished: 'Unfurnished',
 };
 
-const OWNERSHIP_LABELS: Record<string, string> = {
-    OWNER: 'Owner',
-    EXTERNAL_AGENT: 'Agent',
-    AGENT_OWNER: 'Builder',
-};
-
-const AMENITY_LABELS: Record<string, string> = {
-    parking: 'Parking',
-    lift: 'Lift',
-    garden: 'Garden',
-    pool: 'Pool',
-    gym: 'Gym',
-    security: 'Security',
-    power_backup: 'Power Backup',
-    water_supply: '24x7 Water',
-    club_house: 'Club House',
-    gas_pipeline: 'Gas Pipeline',
-    park: 'Park',
-};
-
 interface FilterState {
     location: string;
-    category_id: string;
-    sub_category_id: string;
-    type_id: string;
-    configuration_id: string;
-    usage_type_id: string;
-    investment_type_id: string;
+    taxonomy_node_id: string;
     intent: string;
     price_min: string;
     price_max: string;
     furnishing: string;
-    ownership_type: string;
     amenities: string;
+    bhk: string;
+    rooms: string;
+    facing: string;
+    age: string;
     sort: string;
     page: number;
+    [k: string]: string | number;
 }
 
 interface FilterChipsProps {
     filters: FilterState;
     onRemoveFilter: (key: string, value: string) => void;
-    categories: PropertyCategory[];
-    configurations: PropertyConfiguration[];
 }
 
-function findLabel(categories: PropertyCategory[], filterId: string, level: 'category' | 'sub_category' | 'type'): string {
-    for (const cat of categories) {
-        if (level === 'category' && cat.id === filterId) return cat.name;
-        for (const sub of cat.sub_categories) {
-            if (level === 'sub_category' && sub.id === filterId) return sub.name;
-            for (const t of sub.property_types) {
-                if (level === 'type' && t.id === filterId) return t.name;
-            }
-        }
-    }
-    return filterId;
+function humanize(v: string): string {
+    return v.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 }
 
 function Chip({ label, onRemove }: { label: string; onRemove: () => void }) {
@@ -83,37 +50,11 @@ function Chip({ label, onRemove }: { label: string; onRemove: () => void }) {
     );
 }
 
-export default function FilterChips({ filters, onRemoveFilter, categories, configurations }: FilterChipsProps) {
+export default function FilterChips({ filters, onRemoveFilter }: FilterChipsProps) {
     const chips: { key: string; value: string; label: string }[] = [];
 
-    if (filters.location) {
-        chips.push({ key: 'location', value: filters.location, label: filters.location });
-    }
-
-    if (filters.category_id) {
-        filters.category_id.split(',').filter(Boolean).forEach(v => {
-            chips.push({ key: 'category_id', value: v, label: findLabel(categories, v, 'category') });
-        });
-    }
-
-    if (filters.sub_category_id) {
-        filters.sub_category_id.split(',').filter(Boolean).forEach(v => {
-            chips.push({ key: 'sub_category_id', value: v, label: findLabel(categories, v, 'sub_category') });
-        });
-    }
-
-    if (filters.type_id) {
-        filters.type_id.split(',').filter(Boolean).forEach(v => {
-            chips.push({ key: 'type_id', value: v, label: findLabel(categories, v, 'type') });
-        });
-    }
-
-    if (filters.configuration_id) {
-        filters.configuration_id.split(',').filter(Boolean).forEach(v => {
-            const cfg = configurations.find(c => c.id === v);
-            chips.push({ key: 'configuration_id', value: v, label: cfg?.name || v });
-        });
-    }
+    if (filters.location) chips.push({ key: 'location', value: filters.location, label: filters.location });
+    if (filters.taxonomy_node_id) chips.push({ key: 'taxonomy_node_id', value: filters.taxonomy_node_id, label: 'Property type' });
 
     if (filters.price_min || filters.price_max) {
         const min = filters.price_min ? `₹${filters.price_min}` : '₹0';
@@ -121,22 +62,18 @@ export default function FilterChips({ filters, onRemoveFilter, categories, confi
         chips.push({ key: 'budget', value: 'budget', label: `${min} - ${max}` });
     }
 
-    if (filters.furnishing) {
-        filters.furnishing.split(',').filter(Boolean).forEach(v => {
-            chips.push({ key: 'furnishing', value: v, label: FURNISHING_LABELS[v] || v });
-        });
-    }
-
-    if (filters.ownership_type) {
-        filters.ownership_type.split(',').filter(Boolean).forEach(v => {
-            chips.push({ key: 'ownership_type', value: v, label: OWNERSHIP_LABELS[v] || v });
-        });
-    }
-
-    if (filters.amenities) {
-        filters.amenities.split(',').filter(Boolean).forEach(v => {
-            chips.push({ key: 'amenities', value: v, label: AMENITY_LABELS[v] || v });
-        });
+    // Multi-value spec filters — one chip per selected value.
+    const multi: Array<[keyof FilterState, (v: string) => string]> = [
+        ['bhk', (v) => `${v} BHK`],
+        ['rooms', (v) => `${v} Rooms`],
+        ['furnishing', (v) => FURNISHING_LABELS[v] || humanize(v)],
+        ['facing', (v) => humanize(v)],
+        ['age', (v) => humanize(v)],
+        ['amenities', (v) => humanize(v)],
+    ];
+    for (const [key, label] of multi) {
+        const raw = String(filters[key] ?? '');
+        raw.split(',').filter(Boolean).forEach(v => chips.push({ key: String(key), value: v, label: label(v) }));
     }
 
     if (chips.length === 0) return null;

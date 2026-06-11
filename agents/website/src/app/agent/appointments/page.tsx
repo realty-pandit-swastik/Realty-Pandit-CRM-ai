@@ -20,12 +20,8 @@ export default function AgentAppointments() {
     const [appointments, setAppointments] = useState<Appointment[]>([]);
     const [loading, setLoading] = useState(true);
 
-    const token = typeof window !== 'undefined' ? localStorage.getItem('agent_token') : null;
-    const headers = { Authorization: `Bearer ${token}` };
-
     useEffect(() => {
-        if (!token) { setLoading(false); return; }
-        api.get('/agent/appointments', { headers })
+        api.get('/agent/appointments')
             .then(res => setAppointments(res.data))
             .catch(() => {})
             .finally(() => setLoading(false));

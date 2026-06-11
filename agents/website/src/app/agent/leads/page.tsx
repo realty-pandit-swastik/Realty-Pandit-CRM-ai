@@ -61,12 +61,8 @@ export default function AgentLeads() {
     const [expandedPhone, setExpandedPhone] = useState<string | null>(null);
     const [activeTab, setActiveTab] = useState<'active' | 'done'>('active');
 
-    const token = typeof window !== 'undefined' ? localStorage.getItem('agent_token') : null;
-    const headers = { Authorization: `Bearer ${token}` };
-
     const loadLeads = () => {
-        if (!token) { setLoading(false); return; }
-        api.get('/agent/referred-leads', { headers })
+        api.get('/agent/referred-leads')
             .then(res => setLeads(res.data || []))
             .catch(() => {})
             .finally(() => setLoading(false));
@@ -96,7 +92,7 @@ export default function AgentLeads() {
         setSaving(true);
         setSaveError('');
         try {
-            await api.patch(`/agent/referred-leads/${encodeURIComponent(editingLead.phone_number)}`, editForm, { headers });
+            await api.patch(`/agent/referred-leads/${encodeURIComponent(editingLead.phone_number)}`, editForm);
             setEditingLead(null);
             loadLeads();
         } catch (err: any) {
@@ -110,7 +106,7 @@ export default function AgentLeads() {
         if (!donePhone) return;
         setMarkingDone(true);
         try {
-            await api.post(`/agent/referred-leads/${encodeURIComponent(donePhone)}/done`, {}, { headers });
+            await api.post(`/agent/referred-leads/${encodeURIComponent(donePhone)}/done`, {});
             setDonePhone(null);
             loadLeads();
         } catch (err: any) {

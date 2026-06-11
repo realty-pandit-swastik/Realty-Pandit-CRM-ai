@@ -5,7 +5,7 @@ import { motion } from 'framer-motion';
 import { MapPin, MessageCircle, Tag, Share2, Heart, Check, Calculator, IndianRupee, GraduationCap, Hospital, Train, ShoppingBag, Trees, Copy, Flag, Home } from 'lucide-react';
 import Link from 'next/link';
 import { getPropertyById, getSimilarProperties, getNearbyLandmarks, formatPrice, getMediaUrl, getImageUrls, isVideoUrl, type Property, type Landmark } from '@/lib/api';
-import { formatPropertyTitle, formatAddress, formatPropertyAge, resolveBedroomCount } from '@/lib/propertyUtils';
+import { formatPropertyTitle, formatAddress, resolveBedroomCount, getAmenities, getTypeLabel, getDisplaySpecs, getRoomLabel } from '@/lib/propertyUtils';
 import { COMPANY_WHATSAPP } from '@/lib/constants';
 import PropertyCard from '@/components/PropertyCard';
 import InternalLinks from '@/components/InternalLinks';
@@ -32,10 +32,10 @@ function calculatePanditjiScore(property: Property): number {
     if (property.price) score += 1.0;
     if (property.location) score += 0.5;
     if (property.media_urls?.length > 0) score += 0.5;
-    const featureCount = property.features ? Object.values(property.features).filter(Boolean).length : 0;
+    const featureCount = getAmenities(property).length;
     if (featureCount >= 3) score += 1.0;
     const specs = property.specs || {};
-    if (specs.bedrooms || specs.area || specs.bathrooms) score += 1.0;
+    if (specs.bhk || specs.rooms || specs.bedrooms || specs.area || specs.bathrooms) score += 1.0;
     return Math.min(score, 10.0);
 }
 
@@ -186,7 +186,7 @@ export default function PropertyDetailClient({ id }: { id: string }) {
         if (!property) return '';
         const bedrooms = resolveBedroomCount(property);
         const bhk = bedrooms ? `${bedrooms} BHK ` : '';
-        const type = property.type || 'Property';
+        const type = getTypeLabel(property);
         const loc = property.location || '';
         const price = formatPrice(property.price || null, property.price_unit || null);
         const intent = property.intent === 'sell' ? 'Sale' : 'Rent';
@@ -251,14 +251,15 @@ export default function PropertyDetailClient({ id }: { id: string }) {
 
     const specs = property.specs || {};
     const resolvedBedrooms = resolveBedroomCount(property);
-    const features = property.features || {};
+    const amenities = getAmenities(property);
+    const displaySpecs = getDisplaySpecs(property);
     const panditjiScore = calculatePanditjiScore(property);
 
     return (
         <div className="min-h-screen bg-slate-50 dark:bg-slate-950 pt-20">
             <div className="max-w-6xl mx-auto px-4 py-8">
                 {/* Smart Breadcrumb */}
-                <SmartBreadcrumb propertyType={property.type} location={property.location || ''} />
+                <SmartBreadcrumb propertyType={getTypeLabel(property)} location={property.location || ''} />
 
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                     {/* Left: Images + Details */}
@@ -288,6 +289,22 @@ export default function PropertyDetailClient({ id }: { id: string }) {
                                         For {property.intent === 'sell' ? 'Sale' : property.intent}
                                     </span>
                                     <span className="px-3 py-1 rounded-full text-xs font-medium bg-slate-100 text-slate-600 border border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700 capitalize">{property.category}</span>
+                                    {property.renovated && (
+                                        <span className="px-3 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-700 border border-emerald-200 dark:bg-emerald-900/40 dark:text-emerald-300 dark:border-emerald-700">
+                                            Newly Renovated
+                                        </span>
+                                    )}
+                                    {property.pre_rented && (() => {
+                                        const rent = Number(property.pre_rented_monthly_rent) || 0;
+                                        const absPrice = (property.price || 0) * (property.price_unit === 'Cr' ? 10000000 : property.price_unit === 'Lakh' ? 100000 : 1);
+                                        const yld = rent > 0 && absPrice > 0 ? (rent * 12 / absPrice) * 100 : 0;
+                                        const suffix = yld > 0 ? ` · ${yld.toFixed(1)}% yield` : rent > 0 ? ` · ₹${rent.toLocaleString('en-IN')}/mo` : '';
+                                        return (
+                                            <span className="px-3 py-1 rounded-full text-xs font-semibold bg-blue-100 text-blue-700 border border-blue-200 dark:bg-blue-900/40 dark:text-blue-300 dark:border-blue-700">
+                                                Pre-rented{suffix}
+                                            </span>
+                                        );
+                                    })()}
                                     {/* Panditji Score Badge */}
                                     <motion.span
                                         initial={{ scale: 0 }}
@@ -354,22 +371,20 @@ export default function PropertyDetailClient({ id }: { id: string }) {
                             </motion.div>
 
                             {/* Animated Specs Grid */}
-                            <AnimatedSpecsGrid specs={specs} createdAt={property.created_at} bedroomsOverride={resolvedBedrooms} />
+                            <AnimatedSpecsGrid specs={specs} createdAt={property.created_at} bedroomsOverride={resolvedBedrooms} roomLabel={getRoomLabel(property)} />
 
-                            {/* Features */}
-                            {Object.keys(features).length > 0 && (
+                            {/* Features & Amenities — from specs.amenities (array of labels) */}
+                            {amenities.length > 0 && (
                                 <div className="mb-8">
                                     <h3 className="text-slate-900 dark:text-white font-semibold text-lg mb-4 flex items-center gap-2">
                                         <Tag className="w-5 h-5" /> Features & Amenities
                                     </h3>
                                     <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                                        {Object.entries(features).map(([key, val]) => (
-                                            val && (
-                                                <div key={key} className="flex items-center gap-2 px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-700 dark:text-slate-300">
-                                                    <Check className="w-4 h-4 text-green-500 dark:text-green-400 flex-shrink-0" />
-                                                    <span className="capitalize">{key.replace(/_/g, ' ')}</span>
-                                                </div>
-                                            )
+                                        {amenities.map((label) => (
+                                            <div key={label} className="flex items-center gap-2 px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-sm text-slate-700 dark:text-slate-300">
+                                                <Check className="w-4 h-4 text-green-500 dark:text-green-400 flex-shrink-0" />
+                                                <span>{label}</span>
+                                            </div>
                                         ))}
                                     </div>
                                 </div>
@@ -381,35 +396,24 @@ export default function PropertyDetailClient({ id }: { id: string }) {
                             {/* Original Description (only if no AI description will show — AIDescription handles both) */}
                             {/* Kept as fallback in case AI description fails to load */}
 
-                            {/* Property Details Grid */}
-                            {(property.furnishing || property.facing || property.property_age || property.floor_number || property.apartment_name) && (
+                            {/* Property Details Grid — driven by the type's taxonomy specs (furnishing,
+                                facing, age, floors, plot-area, road-facing, ownership, etc. per type) */}
+                            {(displaySpecs.length > 0 || property.floor_number != null || property.apartment_name) && (
                                 <div className="mb-8">
                                     <h3 className="text-slate-900 dark:text-white font-semibold text-lg mb-4">Property Details</h3>
                                     <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                                        {property.furnishing && (
-                                            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-4 py-3">
-                                                <div className="text-slate-500 dark:text-slate-400 text-xs uppercase mb-1">Furnishing</div>
-                                                <div className="text-slate-900 dark:text-white font-medium text-sm capitalize">{property.furnishing.replace(/_/g, ' ')}</div>
-                                            </div>
-                                        )}
-                                        {property.facing && (
-                                            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-4 py-3">
-                                                <div className="text-slate-500 dark:text-slate-400 text-xs uppercase mb-1">Facing</div>
-                                                <div className="text-slate-900 dark:text-white font-medium text-sm capitalize">{property.facing.replace(/_/g, ' ')}</div>
-                                            </div>
-                                        )}
-                                        {property.property_age && (
-                                            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-4 py-3">
-                                                <div className="text-slate-500 dark:text-slate-400 text-xs uppercase mb-1">Property Age</div>
-                                                <div className="text-slate-900 dark:text-white font-medium text-sm">{formatPropertyAge(property.property_age)}</div>
-                                            </div>
-                                        )}
-                                        {property.floor_number && (
+                                        {property.floor_number != null && (
                                             <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-4 py-3">
                                                 <div className="text-slate-500 dark:text-slate-400 text-xs uppercase mb-1">Floor</div>
-                                                <div className="text-slate-900 dark:text-white font-medium text-sm">{property.floor_number}{property.total_floors ? ` of ${property.total_floors}` : ''}</div>
+                                                <div className="text-slate-900 dark:text-white font-medium text-sm">{property.floor_number}{specs.floors ? ` of ${specs.floors}` : ''}</div>
                                             </div>
                                         )}
+                                        {displaySpecs.map(({ key, label, value }) => (
+                                            <div key={key} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-4 py-3">
+                                                <div className="text-slate-500 dark:text-slate-400 text-xs uppercase mb-1">{label}</div>
+                                                <div className="text-slate-900 dark:text-white font-medium text-sm">{value}</div>
+                                            </div>
+                                        ))}
                                         {property.apartment_name && (
                                             <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-4 py-3 col-span-2">
                                                 <div className="text-slate-500 dark:text-slate-400 text-xs uppercase mb-1">Society / Project</div>
@@ -502,12 +506,7 @@ export default function PropertyDetailClient({ id }: { id: string }) {
                     <div className="lg:col-span-1">
                         <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.2 }} className="sticky top-24 space-y-4">
                             <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl p-6 shadow-lg dark:shadow-slate-900/50">
-                                <h3 className="text-slate-900 dark:text-white font-semibold text-lg mb-1">Schedule a Visit</h3>
-                                {(property.listed_by || property.owner_name) && (
-                                    <p className="text-slate-400 dark:text-slate-500 text-xs mb-3">
-                                        Listed by <span className="font-medium text-slate-600 dark:text-slate-300">{property.listed_by || property.owner_name}</span>
-                                    </p>
-                                )}
+                                <h3 className="text-slate-900 dark:text-white font-semibold text-lg mb-3">Schedule a Visit</h3>
                                 <div className="mb-4">
                                     <ScheduleVisitForm property={property} />
                                 </div>
@@ -528,7 +527,28 @@ export default function PropertyDetailClient({ id }: { id: string }) {
                                     <div className="flex justify-between"><span className="text-slate-500 dark:text-slate-400">Asking Price</span><span className="font-semibold text-slate-900 dark:text-white">{formatPrice(property.price, property.price_unit)}</span></div>
                                     {property.intent === 'sell' && specs.area && <div className="flex justify-between"><span className="text-slate-500 dark:text-slate-400">Price/sqft</span><span className="font-semibold text-slate-900 dark:text-white">₹{Math.round((property.price || 0) * (property.price_unit === 'Cr' ? 10000000 : property.price_unit === 'Lakh' ? 100000 : 1) / specs.area).toLocaleString('en-IN')}</span></div>}
                                     {property.intent === 'sell' && <div className="flex justify-between"><span className="text-slate-500 dark:text-slate-400">Est. EMI</span><span className="font-semibold text-blue-600 dark:text-blue-400">₹{emi.toLocaleString('en-IN')}/mo</span></div>}
+                                    {property.pre_rented && Number(property.pre_rented_monthly_rent) > 0 && (() => {
+                                        const monthlyRent = Number(property.pre_rented_monthly_rent);
+                                        const absPrice = (property.price || 0) * (property.price_unit === 'Cr' ? 10000000 : property.price_unit === 'Lakh' ? 100000 : 1);
+                                        const annualIncome = monthlyRent * 12;
+                                        const grossYield = absPrice > 0 ? (annualIncome / absPrice) * 100 : 0;
+                                        const paybackYears = annualIncome > 0 ? absPrice / annualIncome : 0;
+                                        const fmtAbs = (n: number) => n >= 10000000 ? `₹${(n / 10000000).toFixed(2)} Cr` : n >= 100000 ? `₹${(n / 100000).toFixed(1)} L` : `₹${Math.round(n).toLocaleString('en-IN')}`;
+                                        return (
+                                            <div className="border-t border-slate-100 dark:border-slate-800 pt-3 mt-1 space-y-2.5">
+                                                <div className="flex justify-between"><span className="text-blue-600 dark:text-blue-400 font-medium">Already rented · Monthly rent</span><span className="font-semibold text-blue-600 dark:text-blue-400">₹{monthlyRent.toLocaleString('en-IN')}/mo</span></div>
+                                                <div className="flex justify-between"><span className="text-slate-500 dark:text-slate-400">Annual rental income</span><span className="font-semibold text-slate-900 dark:text-white">{fmtAbs(annualIncome)}/yr</span></div>
+                                                {grossYield > 0 && <div className="flex justify-between"><span className="text-slate-500 dark:text-slate-400">Gross rental yield</span><span className="font-semibold text-emerald-600 dark:text-emerald-400">{grossYield.toFixed(1)}% p.a.</span></div>}
+                                                {paybackYears > 0 && <div className="flex justify-between"><span className="text-slate-500 dark:text-slate-400">Rent payback</span><span className="font-semibold text-slate-900 dark:text-white">~{paybackYears.toFixed(1)} yrs</span></div>}
+                                            </div>
+                                        );
+                                    })()}
                                 </div>
+                                {property.pre_rented && (
+                                    <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">
+                                        Sold with a sitting tenant — you earn rental income from day one.
+                                    </p>
+                                )}
                             </div>
 
                             {/* Panditji Score Card */}

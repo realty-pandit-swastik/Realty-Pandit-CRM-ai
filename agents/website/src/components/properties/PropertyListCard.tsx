@@ -4,7 +4,7 @@ import { motion } from 'framer-motion';
 import Link from 'next/link';
 import { MapPin, BedDouble, Bath, Maximize, Building2, Camera, CalendarPlus, MessageCircle, CheckCircle, Car, ArrowUpDown, Trees, Waves, Dumbbell, Shield, Zap, Droplets, Flame, Home } from 'lucide-react';
 import { formatPrice, getMediaUrl, getImageUrls, timeAgo, type Property } from '@/lib/api';
-import { formatPropertyTitle, formatAddress } from '@/lib/propertyUtils';
+import { formatPropertyTitle, formatAddress, getAmenities, getRoomCount, getRoomLabel, getFurnishing, getTotalFloors, amenitySlug } from '@/lib/propertyUtils';
 
 const AMENITY_MAP: Record<string, { icon: typeof Car; label: string }> = {
     parking: { icon: Car, label: 'Parking' },
@@ -43,11 +43,17 @@ export default function PropertyListCard({ property, index = 0, onScheduleVisit,
     const title = formatPropertyTitle(property, 'short');
     const locationText = formatAddress(property) || property.location || '';
 
-    // Extract truthy amenities from features JSON
-    const features = property.features || {};
-    const activeAmenities = Object.entries(features)
-        .filter(([key, val]) => val === true && AMENITY_MAP[key])
-        .map(([key]) => ({ key, ...AMENITY_MAP[key] }));
+    // Taxonomy-aware specs (inventory.specs is the SoT; furnishing/floors/features cols dropped).
+    const roomCount = getRoomCount(property);
+    const roomLabel = getRoomLabel(property);
+    const totalFloors = getTotalFloors(property);
+    const furnishing = getFurnishing(property);
+
+    // Amenities from specs.amenities (array of labels); map each to an icon, generic fallback.
+    const activeAmenities = getAmenities(property).map((label) => {
+        const m = AMENITY_MAP[amenitySlug(label)];
+        return { key: amenitySlug(label), icon: m?.icon ?? CheckCircle, label: m?.label ?? label };
+    });
     const shownAmenities = activeAmenities.slice(0, 4);
     const extraCount = activeAmenities.length - shownAmenities.length;
 
@@ -129,9 +135,9 @@ export default function PropertyListCard({ property, index = 0, onScheduleVisit,
 
                     {/* Specs row */}
                     <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-slate-600 dark:text-slate-400 mb-3">
-                        {specs.bedrooms && (
+                        {roomCount != null && roomCount > 0 && (
                             <span className="flex items-center gap-1">
-                                <BedDouble className="w-3.5 h-3.5" /> {specs.bedrooms} BHK
+                                <BedDouble className="w-3.5 h-3.5" /> {roomCount} {roomLabel}
                             </span>
                         )}
                         {specs.bathrooms && (
@@ -144,9 +150,9 @@ export default function PropertyListCard({ property, index = 0, onScheduleVisit,
                                 <Maximize className="w-3.5 h-3.5" /> {specs.area} {specs.unit || 'sqft'}
                             </span>
                         )}
-                        {property.floor_number != null && property.total_floors != null && (
+                        {property.floor_number != null && (
                             <span className="flex items-center gap-1">
-                                <Building2 className="w-3.5 h-3.5" /> Floor {property.floor_number}/{property.total_floors}
+                                <Building2 className="w-3.5 h-3.5" /> Floor {property.floor_number}{totalFloors != null ? `/${totalFloors}` : ''}
                             </span>
                         )}
                     </div>
@@ -167,15 +173,12 @@ export default function PropertyListCard({ property, index = 0, onScheduleVisit,
                         </div>
                     )}
 
-                    {/* Meta row: furnishing, posted by, posted date */}
+                    {/* Meta row: furnishing, posted date (team member name intentionally hidden — privacy) */}
                     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-400 dark:text-slate-500 mb-3">
-                        {property.furnishing && (
+                        {furnishing && (
                             <span className="bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded">
-                                {formatFurnishing(property.furnishing)}
+                                {formatFurnishing(furnishing)}
                             </span>
-                        )}
-                        {(property.listed_by || property.uploader_name) && (
-                            <span>Posted by <strong className="text-slate-600 dark:text-slate-300">{property.listed_by || property.uploader_name}</strong></span>
                         )}
                         {property.created_at && (
                             <span>{timeAgo(property.created_at)}</span>

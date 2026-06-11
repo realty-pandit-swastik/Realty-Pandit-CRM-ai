@@ -13,6 +13,8 @@ import ChatLocationPicker from './ChatLocationPicker';
 import ChatSummaryCard from './ChatSummaryCard';
 import MultiSelectGrid from './MultiSelectGrid';
 import InlineContactForm from './InlineContactForm';
+import ChatTaxonomyPicker from './ChatTaxonomyPicker';
+import ChatSchemaFields from './ChatSchemaFields';
 
 interface ChatWorkflowProps {
     chat: ChatWorkflowState;
@@ -97,7 +99,8 @@ function isWidgetOnlyStep(inputType: string | null): boolean {
     // These input types have their own inline widget and don't need the text input
     return inputType === 'media_upload' || inputType === 'video_upload' || inputType === 'document_upload' ||
            inputType === 'address_block' || inputType === 'confirm' ||
-           inputType === 'owner_block' || inputType === 'uploader_block';
+           inputType === 'owner_block' || inputType === 'uploader_block' ||
+           inputType === 'taxonomy' || inputType === 'schema_fields';
 }
 
 function renderInlineWidget(
@@ -183,6 +186,16 @@ function renderInlineWidget(
                 sending={chat.sending}
             />
         );
+    }
+
+    // Taxonomy tree picker — submits the leaf node id as a plain string
+    if (inputType === 'taxonomy') {
+        return <ChatTaxonomyPicker onSubmit={chat.sendQuickReply} sending={chat.sending} />;
+    }
+
+    // Per-type dynamic schema fields — submits a JSON object
+    if (inputType === 'schema_fields') {
+        return <ChatSchemaFields fields={msg.metadata?.schema_fields || []} onSubmit={chat.sendQuickReply} sending={chat.sending} />;
     }
 
     return null;

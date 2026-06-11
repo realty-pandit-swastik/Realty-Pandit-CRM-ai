@@ -60,9 +60,6 @@ export default function UserLoginModal({ isOpen, onClose }: UserLoginModalProps)
             const response = await verifyUserOTP({ phone, otp });
 
             if (response.success && response.token) {
-                // Store token in localStorage
-                localStorage.setItem('user_token', response.token);
-
                 setStep('success');
 
                 // Redirect after 2 seconds

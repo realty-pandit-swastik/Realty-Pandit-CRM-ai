@@ -27,13 +27,10 @@ export default function BuilderAppointments() {
     const [appointments, setAppointments] = useState<Appointment[]>([]);
     const [loading, setLoading] = useState(true);
 
-    const token = typeof window !== 'undefined' ? localStorage.getItem('builder_token') : null;
-    const headers = { Authorization: `Bearer ${token}` };
-
     useEffect(() => {
         const fetchAppointments = async () => {
             try {
-                const res = await api.get('/builder/appointments', { headers, params: { page: 1, limit: 50 } });
+                const res = await api.get('/builder/appointments', { params: { page: 1, limit: 50 } });
                 setAppointments(res.data.appointments || res.data);
             } catch (err) {
                 console.error('Failed to fetch appointments', err);
@@ -46,7 +43,7 @@ export default function BuilderAppointments() {
 
     const updateStatus = async (id: string, status: string) => {
         try {
-            await api.patch(`/builder/appointments/${id}/status`, { status }, { headers });
+            await api.patch(`/builder/appointments/${id}/status`, { status });
             setAppointments(appointments.map(a => a.id === id ? { ...a, status } : a));
         } catch (err: any) {
             alert(err.response?.data?.error || 'Failed to update');
