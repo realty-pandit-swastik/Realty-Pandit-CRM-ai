@@ -892,7 +892,14 @@ export class MatchingEngine {
     }
 
     /**
-     * Format matched properties into a WhatsApp-friendly message.
+     * Format matched properties into a WhatsApp-friendly TEXT message.
+     *
+     * ⚠️ NOT the customer/deal path anymore (2026-06-11). Deal & conversational property
+     * suggestions now send category-correct v5 template CARDS via shareNextProperty()
+     * (services/property_sharing.ts) — one at a time, with Call Back / Schedule Visit /
+     * Next Option buttons and 24h-window-safe UTILITY delivery. This free-form text builder
+     * remains only for non-customer surfaces (admin search command, voice-bot internal tools,
+     * WhatsApp catalog fallback). Do NOT reintroduce it into the deal/AI buyer path.
      */
     formatMatchesForWhatsApp(matches: MatchedProperty[], maskOwner: boolean = false): string {
         if (matches.length === 0) {

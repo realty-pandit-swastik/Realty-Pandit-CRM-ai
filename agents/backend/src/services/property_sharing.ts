@@ -90,7 +90,15 @@ export async function shareNextProperty(dealId: string): Promise<string | null> 
     });
     const matches = await engine.findMatches(criteria, 20);
 
-    const next = matches.find((m: any) => !sharedIds.has(m.id));
+    // 2026-06-11: AI auto-share relevance floor. The engine already hard-filters by type, intent,
+    // budget (±30% band — kept), geo radius and BHK, but returns top-N with NO score floor — so a
+    // weak-but-passing property could be sent. For customer-facing auto-share we skip matches below
+    // MIN_MATCH_SCORE and treat that as "no more good matches" (→ rp_all_properties_shared) rather
+    // than sending a low-relevance card. Applies to all shareNextProperty callers (QUALIFIED auto,
+    // conversational AI, Next Option button). Manual deal-workspace share (shareSpecificProperty)
+    // intentionally bypasses this — an agent picking a property is an explicit override.
+    const MIN_MATCH_SCORE = 50;
+    const next = matches.find((m: any) => !sharedIds.has(m.id) && (m.match_score ?? 0) >= MIN_MATCH_SCORE);
     if (!next) {
         // Dedup: if we already sent an exhausted notification for this deal in last 5 minutes,
         // skip silently (race condition between cron broadcast + manual share + inventory verify).
