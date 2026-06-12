@@ -275,6 +275,13 @@ export async function startScheduledWorker(): Promise<void> {
 async function dispatchJob(job: Job): Promise<void> {
     const jobName = job.name;
     switch (jobName) {
+        case 'lead-recycler': {
+            // Daily Lead Recycler — drain un-worked stock (10 oldest un-converted leads/agent → fresh deal + card, once each).
+            const { runDailyRecycle } = await import('../../services/lead_recycler');
+            const r = await runDailyRecycle({});
+            logger.info(`[ScheduledWorker] lead-recycler: ${JSON.stringify(r)}`);
+            break;
+        }
         case 'pending-actions': {
             const prisma = (await import('../../db')).default;
             const { DecisionEngine } = await import('../../services/decision_engine');

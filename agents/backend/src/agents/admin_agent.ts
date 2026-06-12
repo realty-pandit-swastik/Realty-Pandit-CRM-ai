@@ -271,7 +271,7 @@ export class AdminAgent implements BaseAgent {
     private async getOwnerDigest(senderName: string): Promise<AgentResponse> {
         const { start, end } = getISTDayRange(0);
         try {
-            const [newLeads, hotLeads, appts, newDeals, qualifiedDeals, activeInv] = await Promise.all([
+            const [newLeads, hotLeads, appts, newDeals, qualifiedDeals, activeInv, recycledToday, recycledEver] = await Promise.all([
                 prisma.contact.count({ where: { created_at: { gte: start, lt: end }, contact_type: { in: ['BUYER', 'TENANT', 'UNKNOWN'] } } }),
                 prisma.contact.count({ where: { lead_status: 'hot' } }),
                 prisma.appointment.findMany({
@@ -282,6 +282,8 @@ export class AdminAgent implements BaseAgent {
                 prisma.transaction.count({ where: { status: 'NEW', ai_paused: false } }),
                 prisma.transaction.count({ where: { status: 'QUALIFIED' } }),
                 prisma.inventory.count({ where: { status: 'active' } }),
+                prisma.interaction.count({ where: { event_type: 'lead_recycled', created_at: { gte: start, lt: end } } }),
+                prisma.interaction.count({ where: { event_type: 'lead_recycled' } }),
             ]);
 
             const apptLines = appts.length
@@ -300,7 +302,8 @@ export class AdminAgent implements BaseAgent {
                 `🔥 *Hot leads:* ${hotLeads}\n\n` +
                 `📅 *Today's visits (${appts.length}):*\n${apptLines}\n\n` +
                 `🤝 *Deals needing action:* ${newDeals} new · ${qualifiedDeals} qualified\n` +
-                `🏠 *Active inventory:* ${activeInv}\n\n` +
+                `🏠 *Active inventory:* ${activeInv}\n` +
+                `♻️ *Recycled stock leads:* ${recycledToday} today · ${recycledEver} total\n\n` +
                 `_Reply "leads", "appointments", "report" or "team" for details._`;
 
             return { action: 'reply', reply_script: script, quality_hint: 'confident', metadata: { command: 'owner_digest', newLeads, hotLeads, appts: appts.length, newDeals, qualifiedDeals } };
