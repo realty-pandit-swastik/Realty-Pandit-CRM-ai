@@ -19,7 +19,7 @@ import { BUYER_WORKFLOW_STEPS } from './buyer_workflow_definition';
 import { MatchCriteria, MatchedProperty } from '../services/matching_engine';
 import { normalizePhone } from '../utils/phone';
 import { geocodeAddress } from '../utils/geocode';
-import { foldLegacyDemand } from '../utils/demand_canonical';
+import { foldLegacyDemand, mergeDemandSchemaValues } from '../utils/demand_canonical';
 import { resolveDemandTaxonomy } from '../utils/demand_taxonomy';
 
 // ─── Property Card (sanitized for end-user consumption) ─────────────────────
@@ -285,6 +285,7 @@ export class BuyerWorkflowEngine extends WorkflowEngine {
 
         // Create Deal via deal service (Phase 7 - 3-role structure with auto-coordinator + notifications)
         let transactionId: string | undefined;
+        let wasDuplicate = false;
         try {
             const { createDeal } = await import('../services/deal_service');
             const { identifyContact } = await import('../services/contact_identifier');
@@ -336,6 +337,7 @@ export class BuyerWorkflowEngine extends WorkflowEngine {
             transactionId = result.deal.id;
 
             if (result.isDuplicate) {
+                wasDuplicate = true;
                 logger.info(`[BuyerWorkflowEngine] Duplicate deal detected, using existing: ${transactionId}`);
             }
         } catch (txErr) {
@@ -366,6 +368,40 @@ export class BuyerWorkflowEngine extends WorkflowEngine {
         }
 
         logger.info(`[BuyerWorkflowEngine] Buyer committed: ${buyerPhone}, tx: ${transactionId}`);
+
+        // FIX A (2026-06-12): a completed WhatsApp intake used to dead-end with no inventory — the
+        // bot just acked. Now send a matching v5 card. On a DUPLICATE deal, refresh its criteria
+        // first so the card reflects what the buyer just stated (observed bug: new criteria landed
+        // on the contact but the deduped deal kept stale values). WhatsApp source only — website/
+        // admin intakes have their own in-channel match flow.
+        if (source === 'whatsapp' && transactionId) {
+            try {
+                if (wasDuplicate) {
+                    const folded: any = foldLegacyDemand({
+                        demand_bhk: answers.buyer_bhk ? parseInt(answers.buyer_bhk as string, 10) : null,
+                        demand_amenities: amenities?.length ? amenities : null,
+                    });
+                    const existing = await prisma.transaction.findUnique({
+                        where: { id: transactionId }, select: { demand_schema_values: true },
+                    });
+                    const refreshData: any = {
+                        demand_intent: (answers.buyer_intent as string) || undefined,
+                        demand_location: (answers.buyer_location as string) || undefined,
+                        demand_budget_min: budget ? budget.min : undefined,
+                        demand_budget_max: budget ? budget.max : undefined,
+                        demand_schema_values: mergeDemandSchemaValues(existing?.demand_schema_values as any, folded.demand_schema_values),
+                    };
+                    await prisma.transaction.update({ where: { id: transactionId }, data: refreshData });
+                    logger.info(`[BuyerWorkflowEngine] Refreshed duplicate deal ${transactionId} with fresh intake criteria`);
+                }
+                const { shareNextProperty } = await import('../services/property_sharing');
+                await shareNextProperty(transactionId);
+                logger.info(`[BuyerWorkflowEngine] Intake complete → shared matching card for deal ${transactionId}`);
+            } catch (shareErr) {
+                logger.error('[BuyerWorkflowEngine] Post-intake card share failed:', shareErr);
+            }
+        }
+
         return { contact_phone: buyerPhone, transaction_id: transactionId };
     }
 
