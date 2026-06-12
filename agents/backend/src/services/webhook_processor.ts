@@ -253,6 +253,51 @@ How can I help you find your perfect property today? 🏡`;
         logger.warn('[WebhookProcessor] Calendar check failed (table may not exist):', calendarError);
     }
 
+    // ─── 3a-bis. FRUSTRATION / HUMAN HAND-OFF (Fix C, 2026-06-12) ─────────────────
+    // Audit: "call karo" / "bolte rehte ho par call nahi karte" / venting were ignored —
+    // the bot kept auto-replying and no human picked it up. Detect those and hand off to
+    // the assigned agent (createLeadActionTask notifies them) with a reassuring holding
+    // line, instead of letting an agent fumble the turn. De-duped to one escalation per
+    // contact per 30 min so the agent isn't spammed.
+    try {
+        const { detectFrustration } = await import('../utils/frustration');
+        const fr = detectFrustration(text || '');
+        if (fr.escalate) {
+            const recent = await prisma.interaction.findFirst({
+                where: {
+                    phone_number: from,
+                    event_type: 'frustration_escalation',
+                    created_at: { gte: new Date(Date.now() - 30 * 60 * 1000) },
+                },
+                select: { id: true },
+            });
+            if (!recent) {
+                const { createLeadActionTask } = await import('./workflow_task_service');
+                await createLeadActionTask({
+                    phone: from,
+                    action: 'CALLBACK_REQUEST',
+                    tenantId: contact.tenant_id,
+                    sourceChannel: 'whatsapp-text',
+                    rawNote: `Customer frustration/hand-off (${fr.kind}): "${(text || '').slice(0, 140)}". Please call them.`,
+                }).catch((e) => logger.error('[WebhookProcessor] frustration escalation task failed:', e));
+            }
+            try {
+                await whatsappService.sendText(from, '🙏 Main aapko hamari team se connect kar raha hoon — woh aapko jaldi call karenge. Bas thodi der.');
+            } catch (e) { logger.warn('[WebhookProcessor] frustration holding line failed:', e); }
+            await prisma.interaction.create({
+                data: {
+                    tenant_id: contact.tenant_id, phone_number: from, channel: 'whatsapp',
+                    direction: 'inbound', event_type: 'frustration_escalation',
+                    content: text || '[media]', metadata: { kind: fr.kind },
+                },
+            });
+            logger.info(`[WebhookProcessor] Frustration (${fr.kind}) from ${from} → escalated to assigned agent`);
+            return;
+        }
+    } catch (frErr) {
+        logger.warn('[WebhookProcessor] Frustration check failed:', frErr);
+    }
+
     // ─── 3b. PIPELINE DEAL: Active NEW/QUALIFIED deal → qualify + send property card ────
     // Per KRA Stage 1 Area 6: any positive WhatsApp reply qualifies the lead.
     // Per KRA Stage 2 Area 1: on QUALIFIED entry, send first property card immediately.
