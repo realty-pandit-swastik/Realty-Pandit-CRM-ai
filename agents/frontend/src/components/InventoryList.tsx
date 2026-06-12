@@ -7,6 +7,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { useConfirm } from '../contexts/ConfirmContext';
 import { InventoryModal } from './InventoryModal';
+import { InventoryDetailView } from './InventoryDetailView';
 import ParkingListField from './ParkingListField';
 import TaxonomyCascade from './TaxonomyCascade';
 import AddressFields, { inferAddressLayout } from './AddressFields';
@@ -186,6 +187,8 @@ export const InventoryList: React.FC = () => {
     // Add Property form view
     const [showAddForm, setShowAddForm] = useState(false);
 
+    // View state (read-first detail panel — opens on card click before any edit)
+    const [viewingId, setViewingId] = useState<string | null>(null);
     // Edit state
     const [editingId, setEditingId] = useState<string | null>(null);
     // Original (unmodified) row, captured at handleEdit time. handleSaveEdit reads
@@ -982,7 +985,11 @@ export const InventoryList: React.FC = () => {
             ) : (
                 <div>
                     {inventory.map((item) => (
-                        <div key={item.id} style={s.card}>
+                        <div
+                            key={item.id}
+                            style={{ ...s.card, cursor: selectionMode ? 'default' : 'pointer' }}
+                            onClick={() => { if (!selectionMode) setViewingId(item.id); }}
+                        >
                             {false ? (
                                 /* ── Edit Mode (now in overlay modal) ── */
                                 <div>
@@ -1494,7 +1501,7 @@ export const InventoryList: React.FC = () => {
                                             </div>
 
                                             {/* Row 5: Action Buttons */}
-                                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'center' }}>
+                                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'center' }} onClick={e => e.stopPropagation()}>
                                                 {/* Call Button */}
                                                 {(item.uploader_phone || item.owner_phone || item.key_holder_phone) && (
                                                     <div style={{ position: 'relative', display: 'inline-block' }}>
@@ -2626,6 +2633,19 @@ export const InventoryList: React.FC = () => {
                         )}
                     </div>
                 </div>
+            )}
+
+            {/* Read-first detail view (opens on card click; Edit button inside → existing edit flow) */}
+            {viewingId && (
+                <InventoryDetailView
+                    inventoryId={viewingId}
+                    onClose={() => setViewingId(null)}
+                    onEdit={() => {
+                        const it = inventory.find((i: any) => i.id === viewingId);
+                        setViewingId(null);
+                        if (it) handleEdit(it);
+                    }}
+                />
             )}
 
             {/* Add Inventory Modal */}
