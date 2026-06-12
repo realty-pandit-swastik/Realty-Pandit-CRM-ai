@@ -7,6 +7,7 @@ import { useToast } from '../../contexts/ToastContext';
 import { useConfirm } from '../../contexts/ConfirmContext';
 import ShareToClientModal from '../ShareToClientModal';
 import BookVisitModal from '../BookVisitModal';
+import { InventoryDetailView } from '../InventoryDetailView';
 import { toDialablePhone } from '../../lib/phone';
 import { pickSpecChips } from '../../lib/specChips';
 import {
@@ -71,6 +72,7 @@ export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryLis
     // Multi-select / batch-share state (ported from desktop InventoryList)
     const [selectionMode, setSelectionMode] = useState(false);
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+    const [viewItem, setViewItem] = useState<any>(null);
     const [showBatchShareModal, setShowBatchShareModal] = useState(false);
     const [batchShareContact, setBatchShareContact] = useState<{ phone_number: string; name: string | null } | null>(null);
     const [batchShareLoading, setBatchShareLoading] = useState(false);
@@ -445,6 +447,13 @@ export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryLis
             {bookVisitItem && (
                 <BookVisitModal item={bookVisitItem} onClose={() => setBookVisitItem(null)} onBooked={() => setBookVisitItem(null)} />
             )}
+            {viewItem && (
+                <InventoryDetailView
+                    inventoryId={viewItem.id}
+                    onClose={() => setViewItem(null)}
+                    onEdit={() => { const it = viewItem; setViewItem(null); onEditItem(it); }}
+                />
+            )}
 
             {/* Floating action bar — appears when items are selected */}
             {selectionMode && selectedIds.size > 0 && (
@@ -596,8 +605,9 @@ export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryLis
                             </div>
                         </div>
 
-                        {/* Call Owner — shown only if phone numbers exist */}
-                        {(toDialablePhone(activeSheetItem.uploader_phone) || toDialablePhone(activeSheetItem.owner_phone) || toDialablePhone(activeSheetItem.key_holder_phone)) && (
+                        {/* Call Owner/Key Holder — privacy-gated: only super_boss + manager see direct
+                            owner/key-holder contact; others coordinate through their inventory manager. */}
+                        {(agent?.role === 'super_boss' || agent?.role === 'manager') && (toDialablePhone(activeSheetItem.uploader_phone) || toDialablePhone(activeSheetItem.owner_phone) || toDialablePhone(activeSheetItem.key_holder_phone)) && (
                             <>
                                 {toDialablePhone(activeSheetItem.uploader_phone) && (
                                     <a
@@ -628,6 +638,15 @@ export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryLis
                                 )}
                             </>
                         )}
+
+                        {/* View Details (read-first) */}
+                        <button
+                            type="button"
+                            onClick={() => { setViewItem(activeSheetItem); setActiveSheetItem(null); }}
+                            style={{ display: 'block', width: '100%', padding: '16px 24px', backgroundColor: 'transparent', border: 'none', borderBottom: '1px solid var(--border-primary)', color: 'var(--text-primary)', fontSize: '15px', textAlign: 'left', cursor: 'pointer', fontWeight: 500 }}
+                        >
+                            👁 View Details
+                        </button>
 
                         {/* Share Listing */}
                         <button
