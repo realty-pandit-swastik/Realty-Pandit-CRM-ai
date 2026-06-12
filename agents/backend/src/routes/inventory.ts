@@ -1771,18 +1771,25 @@ router.get('/:id/contacts', authMiddleware, async (req, res) => {
         });
         if (!inv) return res.status(404).json({ success: false, error: 'Inventory not found' });
 
+        // Privacy (2026-06-12, owner-confirmed): only super_boss + manager get the OWNER /
+        // KEY-HOLDER direct contact. Everyone else coordinates through their inventory manager,
+        // so we null those out server-side (the UI also hides them — defense in depth).
+        const role = req.agent?.role;
+        const fullAccess = role === 'super_boss' || role === 'manager';
+
         res.json({
             success: true,
             data: {
-                owner: {
+                owner: fullAccess ? {
                     name: inv.contact?.name ?? null,
                     phone: inv.owner_phone,
-                },
-                key_holder: {
+                } : null,
+                key_holder: fullAccess ? {
                     name: inv.key_holder_name ?? inv.key_holder_contact?.name ?? null,
                     phone: inv.key_holder_phone ?? inv.key_holder_contact?.phone_number ?? null,
-                },
+                } : null,
                 assigned_agent: inv.assigned_agent ?? null,
+                contact_private: !fullAccess,
             },
         });
     } catch (error: any) {
