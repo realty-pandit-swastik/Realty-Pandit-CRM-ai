@@ -308,10 +308,13 @@ export class MatchingEngine {
         // "Commercial" deal can't match residential inventory.
         else if (criteria.taxonomy_node_id_list?.length) where.taxonomy_node_id = { in: criteria.taxonomy_node_id_list };
         // BHK is a scoring factor by default. budget tolerance is ±30% UNLESS budget_hard.
+        // Fix D (2026-06-12): never surface ₹0 / missing-price inventory as a customer card — it
+        // renders as "₹0" and looks broken (audit found ₹0 sends). Require price>0 ALWAYS; the
+        // budget band (when present) layers on top of it.
+        where.price = { gt: 0 };
         if (criteria.budget_min || criteria.budget_max) {
             const loF = criteria.budget_hard ? 1 : 0.7;
             const hiF = criteria.budget_hard ? 1 : 1.3;
-            where.price = {};
             if (criteria.budget_min) where.price.gte = criteria.budget_min * loF;
             if (criteria.budget_max) where.price.lte = criteria.budget_max * hiF;
         }
