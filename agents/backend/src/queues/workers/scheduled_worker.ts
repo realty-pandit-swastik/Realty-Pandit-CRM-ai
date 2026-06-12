@@ -223,12 +223,15 @@ export async function startScheduledWorker(): Promise<void> {
         { name: 'google-reconcile-sync' },
     );
 
-    // Daily Lead Recycler (9 AM IST = 3:30 UTC) — drains the un-worked lead stock: 10 oldest
-    // un-converted leads per active SALES agent → fresh deal + customer card (if matchable), once
-    // each. Excludes super_boss/owner/developer numbers. See docs/plans/2026-06-12-daily-lead-recycler.md
+    // Daily Lead Recycler — 9:00 AM IST. ⚠️ TZ GOTCHA: this server runs in Asia/Calcutta (TZ unset
+    // → system local) and BullMQ/cron-parser uses LOCAL time, so these patterns are IST hours, NOT
+    // UTC (the older "= X UTC" comments in this file are mislabeled — they actually fire at the IST
+    // hour shown). So 9 AM IST = '0 9 * * *'. Drains the un-worked lead stock: 10 oldest un-converted
+    // leads per active SALES agent → fresh deal + customer card (if matchable), once each. Excludes
+    // super_boss/owner/developer numbers. See docs/plans/2026-06-12-daily-lead-recycler.md
     await scheduledJobsQueue.upsertJobScheduler(
         'lead-recycler',
-        { pattern: '30 3 * * *' },
+        { pattern: '0 9 * * *' },
         { name: 'lead-recycler' },
     );
 
