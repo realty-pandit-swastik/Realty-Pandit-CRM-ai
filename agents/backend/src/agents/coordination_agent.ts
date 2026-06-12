@@ -22,6 +22,9 @@ import prisma from '../db';
 import logger from '../utils/logger';
 import { parseMenuChoice } from '../utils/menu_choice';
 import { lastOutboundWasSameMenu, escalateStuckMenu } from '../utils/menu_loop_guard';
+import { parseVisitAvailability } from '../utils/visit_availability';
+import { slotToScheduledAt } from '../utils/visit_schedule';
+import { WhatsAppService } from '../services/whatsapp';
 
 interface CoordinationRequest {
     appointment_id: string;
@@ -40,6 +43,7 @@ interface CoordinationResult {
 export class CoordinationAgent implements BaseAgent {
     readonly name = 'coordination' as const;
     private notificationAgent: NotificationAgent;
+    private whatsapp = new WhatsAppService();
 
     constructor() {
         this.notificationAgent = new NotificationAgent();
@@ -73,6 +77,20 @@ export class CoordinationAgent implements BaseAgent {
                 reply_script: "We're still finding the right property for you. Once we match you with a property, we'll help schedule a visit. Is there anything specific about your requirements you'd like to update?",
                 quality_hint: 'confident',
             };
+        }
+
+        // Fix B (2026-06-12): a deal can be VISIT_SCHEDULED with NO Appointment row — the old flow
+        // set the status + asked availability via rp_visit_availability but never booked anything.
+        // That made the menu below contradict itself ("you have a visit" → "no visit to cancel").
+        // If there's no Appointment yet, treat THIS message as the availability reply and book it.
+        if (currentTransaction.status === 'VISIT_SCHEDULED') {
+            const existingAppt = await prisma.appointment.findFirst({
+                where: { transaction_id: currentTransaction.id },
+                orderBy: { created_at: 'desc' }, select: { id: true },
+            });
+            if (!existingAppt) {
+                return this.handleVisitAvailabilityReply(context);
+            }
         }
 
         // 2026-05-19 CRITICAL loop fix: the VISIT_SCHEDULED prompt instructs
@@ -164,6 +182,76 @@ export class CoordinationAgent implements BaseAgent {
             reply_script: 'I can help you with your property visit. Please let me know if you want to schedule, confirm, reschedule, or cancel a visit.',
             quality_hint: 'confident',
         };
+    }
+
+    /**
+     * Fix B (2026-06-12): the buyer's free-text reply to rp_visit_availability. Parse a date/time
+     * and book a real Appointment — CalendarService.createPropertyVisitAppointment handles the
+     * Appointment row, the Google Calendar event, and buyer/seller/super-boss/lead-agent
+     * notifications; we add the inventory UPLOADER alert on top. If the reply isn't parseable,
+     * ask once more, then escalate (loop-guarded).
+     */
+    private async handleVisitAvailabilityReply(context: AgentContext): Promise<AgentResponse> {
+        const { contact, message, currentTransaction } = context;
+        const deal = currentTransaction!;
+        const parsed = parseVisitAvailability(message, new Date());
+        if (!parsed) {
+            const ask = 'Visit book karne ke liye please ek *din aur time* bhejein — jaise "Kal shaam" ya "Saturday 11 AM". 🙏';
+            if (await lastOutboundWasSameMenu(contact.phone_number, ask)) {
+                return escalateStuckMenu(context, ask);
+            }
+            return { action: 'reply', reply_script: ask, quality_hint: 'confident' };
+        }
+        const propertyId = (deal as any).inventory_id as string | undefined;
+        if (!propertyId) {
+            return { action: 'reply', reply_script: 'Aapki visit request mil gayi 🙏 — hamari team property confirm karke time set karegi.', quality_hint: 'confident' };
+        }
+        try {
+            const scheduled_at = slotToScheduledAt(parsed.dateISO, parsed.slot);
+            const { CalendarService } = await import('../services/calendar');
+            const appt = await new CalendarService().createPropertyVisitAppointment({
+                contact_id: contact.phone_number,
+                property_id: propertyId,
+                scheduled_at,
+                source: 'whatsapp_ai',
+                assigned_to_agent_id: (contact as any).assigned_agent_id ?? undefined,
+            });
+            // Link the appointment to the deal — createPropertyVisitAppointment links property +
+            // contact but NOT the transaction, and Confirm/Reschedule/Cancel query by transaction_id.
+            if (appt?.id) {
+                await prisma.appointment.update({ where: { id: appt.id }, data: { transaction_id: deal.id } })
+                    .catch((e) => logger.warn('[CoordinationAgent] link appt->deal failed:', e));
+            }
+            await this.notifyUploader(propertyId, contact, parsed).catch((e) => logger.warn('[CoordinationAgent] uploader notify failed:', e));
+            logger.info(`[CoordinationAgent] Booked visit for deal ${deal.id} at ${scheduled_at.toISOString()} (${parsed.dateISO} ${parsed.slot})`);
+            return {
+                action: 'reply',
+                reply_script: `✅ Visit booked for *${parsed.dateISO} (${parsed.slot})*! Aapko aur hamari team ko reminder milega, address details bhi share karenge. 🙏`,
+                quality_hint: 'confident',
+                metadata: { visit_booked: true, deal_id: deal.id, scheduled_at: scheduled_at.toISOString() },
+            };
+        } catch (err) {
+            logger.error('[CoordinationAgent] Visit booking failed:', err);
+            return { action: 'reply', reply_script: 'Aapki visit request note kar li 🙏 — hamari team time confirm karke aapko WhatsApp karegi.', quality_hint: 'confident' };
+        }
+    }
+
+    /** Fix B: alert the agent who UPLOADED the inventory (separate from the lead/property agent). */
+    private async notifyUploader(propertyId: string, contact: any, parsed: { dateISO: string; slot: string }): Promise<void> {
+        const inv = await prisma.inventory.findUnique({
+            where: { id: propertyId },
+            select: { uploaded_by_agent_id: true, apartment_name: true, locality: true, display_id: true },
+        });
+        if (!inv?.uploaded_by_agent_id) return;
+        const agent = await prisma.agent.findUnique({
+            where: { id: inv.uploaded_by_agent_id }, select: { phone: true, name: true },
+        });
+        if (!agent?.phone) return;
+        const label = inv.display_id || inv.apartment_name || inv.locality || propertyId.slice(0, 8);
+        await this.whatsapp.sendText(
+            agent.phone,
+            `🏠 *Visit booked on your listing* (${label})\nBuyer: ${contact.name || contact.phone_number}\nWhen: ${parsed.dateISO} (${parsed.slot})\nPlease keep the property accessible. — Realty Pandit`,
+        );
     }
 
     private async handleConfirmMessage(context: AgentContext): Promise<AgentResponse> {
