@@ -1741,6 +1741,47 @@ router.get('/:id/media', async (req, res) => {
     }
 });
 
+// GET /inventory/:id/brochure.pdf?variant=brandless&token=...&pn=&pp=
+// PUBLIC, token-gated. The share recipient (or a dealer's forwarded buyer) opens
+// this directly — no admin login. The HMAC token binds inventory id + variant +
+// expiry, so a leaked link can't be re-pointed to another listing or variant.
+router.get('/:id/brochure.pdf', async (req: any, res) => {
+    try {
+        const id = req.params.id as string;
+        const variant: 'branded' | 'brandless' = req.query.variant === 'branded' ? 'branded' : 'brandless';
+        const { verifyPdfToken } = await import('../utils/pdf_token');
+        if (!verifyPdfToken(id, variant, String(req.query.token || ''))) {
+            return res.status(403).send('Invalid or expired link');
+        }
+        const inv = await prisma.inventory.findUnique({
+            where: { id },
+            select: {
+                id: true, display_id: true, type: true, category: true, intent: true,
+                specs: true, floor_number: true,
+                flat_no: true, plot_no: true, apartment_name: true, full_address: true,
+                location: true, locality: true, sub_locality: true, city: true,
+                district: true, state: true, price: true, display_price: true,
+                customer_price: true, price_unit: true, description: true,
+                media_urls: true, owner_phone: true,
+            },
+        });
+        if (!inv) return res.status(404).send('Property not found');
+
+        const { generateInventoryPdfStream, brochureFilename } = await import('../services/pdf_generator');
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `inline; filename="${brochureFilename(inv as any)}"`);
+        generateInventoryPdfStream([inv as any], {
+            variant,
+            partnerName: req.query.pn ? String(req.query.pn) : undefined,
+            partnerPhone: req.query.pp ? String(req.query.pp) : undefined,
+        }).pipe(res);
+    } catch (err) {
+        captureRouteError(err, req, { route: 'inventory#brochure-pdf' });
+        logger.error('[BrochurePdf] Error:', err);
+        if (!res.headersSent) res.status(500).send('Could not generate brochure');
+    }
+});
+
 // ================================================================
 // ENRICHMENT ENDPOINTS (v3 - Post-save optional details)
 // ================================================================
