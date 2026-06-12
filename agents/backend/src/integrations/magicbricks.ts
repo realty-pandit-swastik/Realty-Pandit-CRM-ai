@@ -183,6 +183,15 @@ async function handleMagicBricksPush(req: any, res: any) {
             : budget ? parseFloat(String(budget).replace(/[^\d.]/g, '')) : null;
         const budgetMin = min_budget ? parseFloat(String(min_budget).replace(/[^\d.]/g, '')) : null;
 
+        // Budget-aware intent guard (2026-06-12): MagicBricks defaults ambiguous enquiries to "buy"
+        // (above), but a residential lead with a budget in the monthly-rent band (₹3k–₹2L) is almost
+        // certainly a RENTAL — buying a flat for ₹16–35k is impossible, so it matches nothing and
+        // dead-ends. Correct it so matching works (this was mislabeling ~118 rental leads as
+        // un-matchable "buy at ₹16k"). See docs follow-up 2026-06-12.
+        if (intent === 'buy' && budgetMax && budgetMax >= 3000 && budgetMax <= 200000 && (bhkInt != null || demandMainCategory === 'residential')) {
+            intent = 'rent';
+        }
+
         // Stage 3 (2026-05-31): resolve the requirement into the canonical taxonomy node.
         const demandTax = await resolveDemandTaxonomy({ main_category: demandMainCategory || undefined, property_type: demandTypeSlug || mappedPropertyType || undefined, bhk: bhkInt ?? null });
 
