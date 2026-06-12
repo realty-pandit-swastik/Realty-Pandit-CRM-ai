@@ -14,6 +14,10 @@ import logger from '../utils/logger';
 
 const RECYCLED_EVENT = 'lead_recycled';
 
+// Never recycle TO or message these numbers — developer / owner test numbers, not sales agents.
+// (super_boss role is also excluded below; this catches the number even if the role changes.)
+const EXCLUDED_NUMBERS = new Set(['+919958860411', '919958860411', '9958860411']);
+
 /** Junk / placeholder phones never get recycled (would spam wrong numbers). */
 export function isJunkPhone(ph: string): boolean {
     return !/^\+\d{10,15}$/.test(ph || '') || /TEMP|PENDING/i.test(ph || '');
@@ -101,15 +105,19 @@ export async function runDailyRecycle(opts: { dryRun?: boolean; perAgent?: numbe
     const recycled = new Set<string>();
     for (const c of chunk(phones, 1000)) (await prisma.interaction.findMany({ where: { phone_number: { in: c }, event_type: RECYCLED_EVENT }, select: { phone_number: true }, distinct: ['phone_number'] })).forEach((x) => recycled.add(x.phone_number));
 
-    const activeAgents = new Set((await prisma.agent.findMany({ where: { status: 'active' }, select: { id: true } })).map((a) => a.id));
+    // Recycle only to working SALES agents (employees/managers) — never to super_boss / owner /
+    // developer numbers (they don't work leads; e.g. +919958860411 is the developer's own number).
+    const agentRows = await prisma.agent.findMany({ where: { status: 'active', role: { notIn: ['super_boss'] } }, select: { id: true, phone: true } });
+    const activeAgents = new Set(agentRows.filter((a) => !EXCLUDED_NUMBERS.has(a.phone || '')).map((a) => a.id));
 
     const byAgent: Record<string, any[]> = {};
     for (const l of leads) {
         if (!l.assigned_agent_id || !activeAgents.has(l.assigned_agent_id)) continue;
+        if (EXCLUDED_NUMBERS.has(l.phone_number)) continue; // never recycle the dev/owner's own contact
         (byAgent[l.assigned_agent_id] ||= []).push(l);
     }
 
-    const eligibleTotal = leads.filter((l) => l.assigned_agent_id && activeAgents.has(l.assigned_agent_id) && !hasDeal.has(l.phone_number) && !recycled.has(l.phone_number) && !isJunkPhone(l.phone_number)).length;
+    const eligibleTotal = leads.filter((l) => l.assigned_agent_id && activeAgents.has(l.assigned_agent_id) && !EXCLUDED_NUMBERS.has(l.phone_number) && !hasDeal.has(l.phone_number) && !recycled.has(l.phone_number) && !isJunkPhone(l.phone_number)).length;
 
     let recycledCount = 0, cardsSent = 0, agentsTouched = 0;
     for (const list of Object.values(byAgent)) {
