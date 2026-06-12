@@ -15,6 +15,7 @@ import prisma from '../db';
 import logger from '../utils/logger';
 import { WhatsAppService } from './whatsapp';
 import { MatchingEngine, buildMatchCriteriaFromLead } from './matching_engine';
+import { checkBudgetSanity, budgetReaskPrompt } from '../utils/budget_sanity';
 
 const whatsapp = new WhatsAppService();
 const EVT_PROPERTY_SHARED = 'property_shared';
@@ -43,6 +44,48 @@ export async function shareNextProperty(dealId: string): Promise<string | null> 
     if (!deal || !deal.demand_contact?.phone_number) {
         logger.warn(`[PropShare] Deal ${dealId} missing or has no contact phone`);
         return null;
+    }
+
+    // ── Fix D (2026-06-12): implausible-budget re-ask-once-then-flag ──────────────
+    // 17/40 active deals had intent=buy with a rent-sized budget (₹16k) → the engine
+    // hunts to BUY at ₹16k → 0 matches → dead end. Re-ask the buyer ONCE to clarify
+    // (their "rent"/"buy" reply is captured by webhook_processor 3b → fixes intent);
+    // if it's still implausible on a later share, flag the assigned agent instead of looping.
+    const sanity = checkBudgetSanity(
+        (deal as any).demand_intent,
+        deal.demand_budget_max != null ? Number(deal.demand_budget_max) : null,
+    );
+    if (sanity.implausible) {
+        const phone = deal.demand_contact.phone_number;
+        const tenantId = (deal as any).tenant_id ?? 'default';
+        const priorReasks = await prisma.interaction.count({
+            where: { event_type: 'budget_reask', metadata: { path: ['deal_id'], equals: dealId } },
+        });
+        if (priorReasks === 0) {
+            const prompt = budgetReaskPrompt(sanity.issue, Number(deal.demand_budget_max));
+            if (prompt) {
+                try { await whatsapp.sendText(phone, prompt); } catch (e) { logger.error('[PropShare] budget re-ask send failed', e); }
+                await prisma.interaction.create({
+                    data: {
+                        tenant_id: tenantId, phone_number: phone, channel: 'whatsapp',
+                        direction: 'outbound', event_type: 'budget_reask', content: prompt,
+                        metadata: { deal_id: dealId, issue: sanity.issue, budget_max: Number(deal.demand_budget_max) },
+                    },
+                });
+                logger.info(`[PropShare] Implausible budget on deal ${dealId} (${sanity.issue}) — re-asked buyer once`);
+                return null;
+            }
+        } else {
+            try {
+                const { createLeadActionTask } = await import('./workflow_task_service');
+                await createLeadActionTask({
+                    phone, action: 'CALLBACK_REQUEST', tenantId, dealId, sourceChannel: 'whatsapp-text',
+                    rawNote: `Budget unclear (${sanity.issue}): deal ${dealId} intent=${(deal as any).demand_intent} but budget_max=₹${Number(deal.demand_budget_max).toLocaleString('en-IN')}. Buyer did not clarify rent vs buy — please confirm + correct the budget.`,
+                });
+                logger.info(`[PropShare] Implausible budget on deal ${dealId} persists after re-ask — flagged assigned agent`);
+            } catch (e) { logger.error('[PropShare] budget flag task failed', e); }
+            return null;
+        }
     }
 
     // Already-shared inventory IDs (oldest first ordering doesn't matter — we use a Set).
