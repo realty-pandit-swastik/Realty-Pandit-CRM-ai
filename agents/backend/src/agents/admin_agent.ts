@@ -74,6 +74,13 @@ export class AdminAgent implements BaseAgent {
         const senderName = senderProfile?.name || contact.name || 'Team Member';
         const senderRole = senderProfile?.role || 'employee';
 
+        // Owner/management greeting → daily digest (2026-06-12). admin_agent is only reached by
+        // management/owner senders, so a short greeting here means "give me today's snapshot"
+        // instead of a bare "good morning to you too".
+        if (/^(good\s*(morning|afternoon|evening|day)|morning|gm|namaste|namaskar|hello+|hi+|hey|subah|shubh)\b/i.test(msg) && msg.length < 28) {
+            return this.getOwnerDigest(senderName);
+        }
+
         // Command: Appointments
         if (msg.includes('appointment') || msg.includes('booking') || msg.includes('visit') || msg.includes('schedule')) {
             return this.getAppointmentsSummary(msg);
@@ -258,6 +265,49 @@ export class AdminAgent implements BaseAgent {
             quality_hint: 'confident',
             metadata: { command: 'report', interactions, newContacts, activeInventory },
         };
+    }
+
+    /** Owner/management daily digest — today's leads, hot, visits, deals needing action, inventory. */
+    private async getOwnerDigest(senderName: string): Promise<AgentResponse> {
+        const { start, end } = getISTDayRange(0);
+        try {
+            const [newLeads, hotLeads, appts, newDeals, qualifiedDeals, activeInv] = await Promise.all([
+                prisma.contact.count({ where: { created_at: { gte: start, lt: end }, contact_type: { in: ['BUYER', 'TENANT', 'UNKNOWN'] } } }),
+                prisma.contact.count({ where: { lead_status: 'hot' } }),
+                prisma.appointment.findMany({
+                    where: { scheduled_at: { gte: start, lt: end } },
+                    select: { title: true, type: true, status: true, scheduled_at: true, contact_id: true },
+                    orderBy: { scheduled_at: 'asc' }, take: 10,
+                }),
+                prisma.transaction.count({ where: { status: 'NEW', ai_paused: false } }),
+                prisma.transaction.count({ where: { status: 'QUALIFIED' } }),
+                prisma.inventory.count({ where: { status: 'active' } }),
+            ]);
+
+            const apptLines = appts.length
+                ? appts.map((a, i) => {
+                    const t = new Date(a.scheduled_at.getTime() + 5.5 * 60 * 60 * 1000);
+                    const h = t.getUTCHours() % 12 || 12;
+                    const m = t.getUTCMinutes().toString().padStart(2, '0');
+                    const ap = t.getUTCHours() >= 12 ? 'PM' : 'AM';
+                    return `   ${i + 1}. ${a.title || a.type} — ${h}:${m} ${ap} (${a.status})`;
+                }).join('\n')
+                : '   None today';
+
+            const script =
+                `🌅 *Good morning, ${senderName}!* Aaj ka snapshot:\n\n` +
+                `📥 *New leads today:* ${newLeads}\n` +
+                `🔥 *Hot leads:* ${hotLeads}\n\n` +
+                `📅 *Today's visits (${appts.length}):*\n${apptLines}\n\n` +
+                `🤝 *Deals needing action:* ${newDeals} new · ${qualifiedDeals} qualified\n` +
+                `🏠 *Active inventory:* ${activeInv}\n\n` +
+                `_Reply "leads", "appointments", "report" or "team" for details._`;
+
+            return { action: 'reply', reply_script: script, quality_hint: 'confident', metadata: { command: 'owner_digest', newLeads, hotLeads, appts: appts.length, newDeals, qualifiedDeals } };
+        } catch (err) {
+            logger.error('[AdminAgent] Owner digest failed:', err);
+            return { action: 'reply', reply_script: `Good morning, ${senderName}! 🙏 (Digest abhi unavailable — "report" type karein stats ke liye.)`, quality_hint: 'confident' };
+        }
     }
 
     private async getTeamStatus(): Promise<AgentResponse> {
