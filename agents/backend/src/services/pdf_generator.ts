@@ -98,23 +98,41 @@ function resolveMediaPath(mediaUrl: string): string | null {
 
 /**
  * Build the brandless redacted view of an inventory record.
+ * Partner-share privacy rule: the building + locality + city stay VISIBLE (the
+ * buyer must know roughly where it is), but the exact unit (flat_no / plot_no),
+ * the literal full-address line, and the owner contact are hidden.
  */
-function redactForBrandless(inv: InventoryForPdf): InventoryForPdf {
+export function redactForBrandless(inv: InventoryForPdf): InventoryForPdf {
     return {
         ...inv,
         owner_phone: null,
         owner_name: null,
-        full_address: null,
-        flat_no: null,
-        plot_no: null,
-        apartment_name: null,
-        sub_locality: null,
-        // Keep: locality, city, district, state, specs, features, price, images, type
+        flat_no: null,        // exact unit — hidden
+        plot_no: null,        // exact unit — hidden
+        full_address: null,   // literal line may embed the unit number — hidden
+        sub_locality: null,   // too granular
+        // KEEP: apartment_name (building), locality, city, district, state, specs, features, price, images, type
     };
 }
 
+const TITLECASE = (s: string) => s.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+
+/**
+ * Human-readable, brand-free PDF filename tied to the inventory.
+ * e.g. "3BHK-Flat-Whitefield-RP-GZB-RES-20471.pdf"
+ */
+export function brochureFilename(inv: InventoryForPdf): string {
+    const s = (inv.specs || {}) as Record<string, any>;
+    const room = s.bhk ?? s.rooms ?? s.bedrooms ?? s.bhk_count;
+    const bhk = room ? `${room}BHK-` : '';
+    const type = TITLECASE(inv.type || 'Property').replace(/\s+/g, '');
+    const loc = (inv.locality || inv.city || '').replace(/\s+/g, '');
+    const id = inv.display_id || inv.id;
+    return `${bhk}${type}${loc ? '-' + loc : ''}-${id}.pdf`.replace(/[^\w.-]/g, '');
+}
+
 function locationLine(inv: InventoryForPdf): string {
-    const parts = [inv.locality, inv.city || inv.district, inv.state].filter(Boolean);
+    const parts = [inv.apartment_name, inv.locality, inv.city || inv.district].filter(Boolean);
     return parts.join(', ') || inv.location || 'Location available on request';
 }
 
@@ -137,14 +155,27 @@ function renderOneProperty(doc: typeof PDFDocument.prototype, raw: InventoryForP
 
     let cursorY = 90;
 
-    // Hero image (first media)
-    const heroPath = inv.media_urls && inv.media_urls.length > 0 ? resolveMediaPath(inv.media_urls[0]) : null;
+    // Hero image (first media) + a thumbnail strip of up to 3 more photos
+    const mediaPaths = (inv.media_urls || []).map((u) => resolveMediaPath(u)).filter(Boolean) as string[];
+    const heroPath = mediaPaths[0] || null;
     if (heroPath) {
         try {
             doc.image(heroPath, 40, cursorY, { fit: [515, 240], align: 'center' });
             cursorY += 250;
         } catch (err) {
             logger.warn(`[PdfGen] image embed failed: ${(err as Error).message}`);
+        }
+        const thumbs = mediaPaths.slice(1, 4);
+        if (thumbs.length) {
+            const tw = (515 - (thumbs.length - 1) * 8) / thumbs.length;
+            thumbs.forEach((tp, ti) => {
+                try {
+                    doc.image(tp, 40 + ti * (tw + 8), cursorY, { fit: [tw, 90], align: 'center' });
+                } catch (err) {
+                    logger.warn(`[PdfGen] thumb embed failed: ${(err as Error).message}`);
+                }
+            });
+            cursorY += 100;
         }
     } else {
         doc.rect(40, cursorY, 515, 120).fill('#f3f4f6');
@@ -237,6 +268,11 @@ function renderOneProperty(doc: typeof PDFDocument.prototype, raw: InventoryForP
             }
         } else {
             doc.text('Contact your agent for more details', 40, footerY + 20, { width: doc.page.width - 80, align: 'center' });
+        }
+        // Inventory ID in the corner — lets us identify which listing a forwarded brochure is.
+        if (inv.display_id) {
+            doc.fillColor(MUTED).fontSize(7).font('Helvetica')
+                .text(inv.display_id, doc.page.width - 120, footerY + 34, { width: 100, align: 'right' });
         }
     } else {
         // Branded footer
