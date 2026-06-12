@@ -223,6 +223,15 @@ export async function startScheduledWorker(): Promise<void> {
         { name: 'google-reconcile-sync' },
     );
 
+    // Daily Lead Recycler (9 AM IST = 3:30 UTC) — drains the un-worked lead stock: 10 oldest
+    // un-converted leads per active SALES agent → fresh deal + customer card (if matchable), once
+    // each. Excludes super_boss/owner/developer numbers. See docs/plans/2026-06-12-daily-lead-recycler.md
+    await scheduledJobsQueue.upsertJobScheduler(
+        'lead-recycler',
+        { pattern: '30 3 * * *' },
+        { name: 'lead-recycler' },
+    );
+
     logger.info('[ScheduledWorker] All repeatable jobs registered');
 
     // ─── Start Worker ────────────────────────────────────────────────────────
