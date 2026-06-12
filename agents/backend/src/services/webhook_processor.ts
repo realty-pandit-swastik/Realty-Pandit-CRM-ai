@@ -91,6 +91,19 @@ async function processInboundMessageInner(data: InboundMessageData): Promise<voi
         logger.warn('[WebhookProcessor] property_card_reply_handler error:', err);
     }
 
+    // P2 (2026-06-12): central template-button router — Open Portal / Upload Now / Talk to
+    // Coordinator / engagement (Haan dikhao…) / bare Reply. Runs after the property-card handler
+    // (card trio) and before the deal/workflow pipeline; engagement/Reply defer to active sessions.
+    try {
+        const { handleTemplateButton } = await import('./template_button_router');
+        if (await handleTemplateButton(msg, from)) {
+            logger.info(`[WebhookProcessor] Template button handled for ${from}; skipping normal pipeline`);
+            return;
+        }
+    } catch (err) {
+        logger.warn('[WebhookProcessor] template_button_router error:', err);
+    }
+
     // ─── 1. SSOT: Check or Create Contact ─────────────────────────────────────
     let contact = await prisma.contact.findUnique({ where: { phone_number: from } });
 
