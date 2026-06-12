@@ -423,7 +423,7 @@ export class NinetyNineAcresPoller {
             if (already) return 'updated';
         }
 
-        const intent = this.extractIntent(lead.propertyLabel, lead.queryInfo);
+        let intent = this.extractIntent(lead.propertyLabel, lead.queryInfo);
         // Prefer "society, city" when 99acres gives a project/society (more granular than the bare city);
         // else the regex-extracted label location; else the bare city. (99acres does NOT send the
         // sector/locality of the customer's requirement, so city-only leads stay city-only.)
@@ -468,6 +468,13 @@ export class NinetyNineAcresPoller {
         const budgetMax = lead.price
             ? parseFloat(lead.price.replace(/[^0-9.]/g, '')) || null
             : null;
+
+        // Budget-aware intent guard (2026-06-12): 99acres labels often omit "rent"/"sale" so intent
+        // comes back null and the deal defaults to buy. A residential lead with a budget in the
+        // monthly-rent band (₹3k–₹2L) is almost certainly a RENTAL — correct it so matching works.
+        if ((intent === 'buy' || !intent) && budgetMax && budgetMax >= 3000 && budgetMax <= 200000 && bhk != null) {
+            intent = 'rent';
+        }
 
         // ── Derive classification slugs from extracted property type ───────────
         const SLUG_MAP: Record<string, { mainCat: string; subCat: string; typeSlug: string }> = {
