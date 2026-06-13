@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { brochureFilename, redactForBrandless, generateInventoryPdfStream } from '../services/pdf_generator';
+import { brochureFilename, redactForBrandless, generateInventoryPdfStream, buildSpecRows } from '../services/pdf_generator';
 import { signPdfToken, verifyPdfToken } from '../utils/pdf_token';
 
 const inv: any = {
@@ -33,6 +33,30 @@ describe('brochureFilename', () => {
         expect(f.toLowerCase()).not.toContain('realtypandit');
         expect(f).toMatch(/^[\w.-]+$/); // safe charset only
         expect(f).toContain('3BHK');
+    });
+});
+
+describe('buildSpecRows — type-aware', () => {
+    it('residential shows Bedrooms + Bathrooms, not Washrooms', () => {
+        const rows = buildSpecRows({ category: 'residential', type: 'flat', specs: { bhk: 3, bathrooms: 2, area: 1200 }, floor_number: 2 } as any);
+        const labels = rows.map((r) => r[0]);
+        expect(labels).toContain('Bedrooms');
+        expect(labels).toContain('Bathrooms');
+        expect(labels).not.toContain('Washrooms');
+    });
+    it('commercial shows Floors/Washrooms, NOT Bedrooms', () => {
+        const rows = buildSpecRows({ category: 'commercial', type: 'office', specs: { area: 1050, area_unit: 'sqft', floors: 2, washrooms: 1 } } as any);
+        const labels = rows.map((r) => r[0]);
+        expect(labels).not.toContain('Bedrooms');
+        expect(labels).toContain('Washrooms');
+        expect(labels).toContain('Floors');
+    });
+    it('plot shows Plot Area + Facing, no BHK/bath', () => {
+        const rows = buildSpecRows({ category: 'residential', type: 'residential_plot', specs: { area: 200, area_unit: 'Sq Yard', facing: 'East' } } as any);
+        const labels = rows.map((r) => r[0]);
+        expect(labels).toContain('Plot Area');
+        expect(labels).toContain('Facing');
+        expect(labels).not.toContain('Bedrooms');
     });
 });
 
