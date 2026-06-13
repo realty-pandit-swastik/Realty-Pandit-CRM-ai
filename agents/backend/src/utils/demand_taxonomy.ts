@@ -16,6 +16,7 @@ import prisma from '../db';
 import { foldLegacyDemand } from './demand_canonical';
 
 export interface DemandTaxonomyInput {
+    demand_taxonomy_node_id?: string | null; // precise canonical node id — fast-path via byNodeId (resolver L202)
     main_category?: string | null;          // 'residential' | 'commercial' | 'agricultural'
     property_type?: string | null;          // legacy type string/slug: 'flat','apartment','villa','plot','office','shop',…
     category_id?: string | null;            // legacy master_categories id (optional)
