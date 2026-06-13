@@ -71,6 +71,16 @@ export interface TemplatePayload {
     components: any[];
 }
 
+/**
+ * Dealer/partner brochure template — DOCUMENT header (a single-property PDF as a
+ * chat attachment). Sent via WhatsAppService.sendDocumentTemplate (NOT
+ * buildTemplatePayload), so it lives here as a name constant rather than a
+ * TEMPLATE_REGISTRY entry (the registry's TemplateDefinition only models
+ * TEXT/IMAGE headers). Body params: {{1}} = property summary, {{2}} = "1 of N".
+ * Submitted via scripts/submit_brochure_template.js (UTILITY).
+ */
+export const BROCHURE_TEMPLATE_NAME = 'rp_property_brochure_v1';
+
 // ─── Template Registry ──────────────────────────────────────────
 
 export const TEMPLATE_REGISTRY: Record<string, TemplateDefinition> = {

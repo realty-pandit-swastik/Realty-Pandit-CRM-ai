@@ -217,6 +217,38 @@ export class WhatsAppService {
     }
 
     /**
+     * Send a Meta DOCUMENT-header template — delivers a PDF as a real attachment
+     * card in the chat (the MakeMyTrip-style "direct PDF"). Meta fetches the file
+     * from `pdfUrl` at send time and labels the card with `filename`. Body params
+     * fill {{1}}, {{2}}, … in order. Throws strictly on failure (like sendTemplate),
+     * so callers get an accurate sent/not-sent result.
+     */
+    public async sendDocumentTemplate(
+        to: string,
+        templateName: string,
+        opts: { pdfUrl: string; filename: string; bodyParams: string[] },
+    ): Promise<void> {
+        logger.info(`[WhatsAppService] Sending document template "${templateName}" to ${to} (${opts.filename})`);
+
+        if (process.env.NODE_ENV === 'development') {
+            logger.info(`[WhatsAppService] Mock document template sent: ${templateName} to ${to}`, opts);
+            return;
+        }
+
+        const components = [
+            { type: 'header', parameters: [{ type: 'document', document: { link: opts.pdfUrl, filename: opts.filename } }] },
+            { type: 'body', parameters: opts.bodyParams.map((t) => ({ type: 'text', text: t })) },
+        ];
+
+        await this.callWhatsAppAPIStrict({
+            messaging_product: 'whatsapp',
+            to,
+            type: 'template',
+            template: { name: templateName, language: { code: 'en' }, components },
+        });
+    }
+
+    /**
      * Try to send a Meta template. If the template send fails (commonly: template
      * not yet approved by Meta), fall back to a plaintext message. Plaintext only
      * works inside the 24h customer-initiated session window — outside that window
