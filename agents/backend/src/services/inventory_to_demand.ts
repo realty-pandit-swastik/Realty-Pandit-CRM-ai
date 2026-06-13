@@ -34,8 +34,8 @@ export function buildDemandFromInventory(inv: any): DemandFromInventory {
         demand_taxonomy_node_id: inv.taxonomy_node_id ?? inv.demand_taxonomy_node_id ?? null,
         demand_bhk: room != null ? String(room) : null,
         preferred_location: loc,
-        preferred_lat: inv.preferred_lat ?? inv.lat ?? null,
-        preferred_lng: inv.preferred_lng ?? inv.lng ?? null,
+        preferred_lat: inv.latitude ?? inv.preferred_lat ?? null,
+        preferred_lng: inv.longitude ?? inv.preferred_lng ?? null,
         budget_min: price ? Math.round(price * 0.85) : null,
         budget_max: price ? Math.round(price * 1.15) : null,
     };
