@@ -69,6 +69,30 @@ const ACCENT = '#0ea5e9';
 const TEXT = '#1f2937';
 const MUTED = '#6b7280';
 
+// ── Fonts ───────────────────────────────────────────────────────────────────
+// pdfkit's built-in Helvetica is WinAnsi-encoded and CANNOT render ₹ (U+20B9) or
+// emoji — they mojibake (₹→"¹", 📍→"Ø=ÜÍ"). Embed DejaVu Sans (bundled in
+// assets/fonts, includes ₹). Emoji are dropped entirely (no color-emoji support).
+function resolveFontPath(file: string): string | null {
+    const candidates = [
+        path.resolve(process.cwd(), 'assets/fonts', file),
+        path.resolve('/var/www/realty-pandit/backend/assets/fonts', file),
+        path.resolve(__dirname, '../../assets/fonts', file),
+        path.resolve('/usr/share/fonts/truetype/dejavu', file), // system fallback (prod has it)
+    ];
+    for (const c of candidates) { if (fs.existsSync(c)) return c; }
+    return null;
+}
+const BODY_TTF = resolveFontPath('DejaVuSans.ttf');
+const BOLD_TTF = resolveFontPath('DejaVuSans-Bold.ttf');
+const FONT = BODY_TTF ? 'RP' : 'Helvetica';
+const FONT_BOLD = BOLD_TTF ? 'RP-Bold' : 'Helvetica-Bold';
+
+function registerFonts(doc: typeof PDFDocument.prototype) {
+    if (BODY_TTF) doc.registerFont('RP', BODY_TTF);
+    if (BOLD_TTF) doc.registerFont('RP-Bold', BOLD_TTF);
+}
+
 function formatPrice(p: number | null | undefined): string {
     if (!p) return 'Price on request';
     const n = Number(p);
@@ -136,163 +160,164 @@ function locationLine(inv: InventoryForPdf): string {
     return parts.join(', ') || inv.location || 'Location available on request';
 }
 
-function renderOneProperty(doc: typeof PDFDocument.prototype, raw: InventoryForPdf, options: PdfOptions, index: number, total: number) {
-    const inv = options.variant === 'brandless' ? redactForBrandless(raw) : raw;
+/**
+ * Type-aware spec rows for the details page. Residential shows BHK/Bath/Floor;
+ * commercial shows Floors/Washrooms (no BHK); plot/land shows Plot Area/Facing.
+ */
+export function buildSpecRows(inv: InventoryForPdf): [string, string][] {
+    const s = (inv.specs || {}) as Record<string, any>;
+    const cat = (inv.category || '').toLowerCase();
+    const type = (inv.type || '').toLowerCase();
+    const isPlot = /plot|land/.test(type);
+    const isCommercial = cat === 'commercial';
+    const area = s.area ? `${s.area} ${s.area_unit || 'sqft'}` : null;
+    const age = s['age-of-construction'] ? String(s['age-of-construction']).replace(/_/g, ' ') : null;
+    const rows: [string, string][] = [];
 
-    // Always addPage at the top — we created the doc with autoFirstPage:false so
-    // doc.page is null until we call addPage(). Without this, doc.page.width
-    // crashes on the very first property.
-    doc.addPage();
+    if (isPlot) {
+        if (area) rows.push(['Plot Area', area]);
+        if (s.facing) rows.push(['Facing', s.facing]);
+        if (s.ownership) rows.push(['Ownership', String(s.ownership)]);
+        if (inv.category) rows.push(['Category', inv.category]);
+        return rows;
+    }
+    if (isCommercial) {
+        if (area) rows.push(['Carpet / Built-up Area', area]);
+        if (s.floors) rows.push(['Floors', String(s.floors)]);
+        if (s.washrooms ?? s.bathrooms) rows.push(['Washrooms', String(s.washrooms ?? s.bathrooms)]);
+        if (s.furnishing) rows.push(['Furnishing', s.furnishing]);
+        if (age) rows.push(['Property Age', age]);
+        return rows;
+    }
+    // residential
+    const room = s.bhk ?? s.rooms ?? s.bedrooms ?? s.bhk_count;
+    if (room) rows.push(['Bedrooms', `${room} BHK`]);
+    if (s.bathrooms) rows.push(['Bathrooms', String(s.bathrooms)]);
+    if (area) rows.push(['Carpet Area', area]);
+    if (s.furnishing) rows.push(['Furnishing', s.furnishing]);
+    if (inv.floor_number != null) rows.push(['Floor', s.floors ? `${inv.floor_number} of ${s.floors}` : `${inv.floor_number}`]);
+    if (s.facing) rows.push(['Facing', s.facing]);
+    if (age) rows.push(['Property Age', age]);
+    return rows;
+}
 
-    // Header bar
+/** Draw the top header bar on the current page. */
+function drawHeaderBar(doc: typeof PDFDocument.prototype, options: PdfOptions) {
     doc.rect(0, 0, doc.page.width, 70).fill(options.variant === 'brandless' ? '#334155' : PRIMARY);
-    doc.fillColor('#ffffff').fontSize(20).font('Helvetica-Bold')
+    doc.fillColor('#ffffff').fontSize(20).font(FONT_BOLD)
         .text(options.variant === 'brandless' ? 'Property Details' : 'Realty Pandit', 40, 24);
-    doc.fontSize(10).font('Helvetica').fillColor('#dbeafe')
-        .text(`${index + 1} of ${total}`, doc.page.width - 100, 32, { align: 'right', width: 60 });
+    doc.fillColor(TEXT).font(FONT);
+}
 
-    doc.fillColor(TEXT).font('Helvetica');
-
-    let cursorY = 90;
-
-    // Hero image (first media) + a thumbnail strip of up to 3 more photos
-    const mediaPaths = (inv.media_urls || []).map((u) => resolveMediaPath(u)).filter(Boolean) as string[];
-    const heroPath = mediaPaths[0] || null;
-    if (heroPath) {
-        try {
-            doc.image(heroPath, 40, cursorY, { fit: [515, 240], align: 'center' });
-            cursorY += 250;
-        } catch (err) {
-            logger.warn(`[PdfGen] image embed failed: ${(err as Error).message}`);
-        }
-        const thumbs = mediaPaths.slice(1, 4);
-        if (thumbs.length) {
-            const tw = (515 - (thumbs.length - 1) * 8) / thumbs.length;
-            thumbs.forEach((tp, ti) => {
-                try {
-                    doc.image(tp, 40 + ti * (tw + 8), cursorY, { fit: [tw, 90], align: 'center' });
-                } catch (err) {
-                    logger.warn(`[PdfGen] thumb embed failed: ${(err as Error).message}`);
-                }
-            });
-            cursorY += 100;
-        }
-    } else {
-        doc.rect(40, cursorY, 515, 120).fill('#f3f4f6');
-        doc.fillColor(MUTED).fontSize(11).text('No photo available', 40, cursorY + 50, { width: 515, align: 'center' });
-        doc.fillColor(TEXT);
-        cursorY += 130;
-    }
-
-    // Title — read room count from canonical taxonomy keys first (bhk for residential,
-    // rooms for commercial), fall back to legacy specs.bedrooms / specs.bhk_count.
-    const specs = inv.specs || {};
-    const roomCount = specs.bhk ?? specs.rooms ?? specs.bedrooms ?? specs.bhk_count;
-    const bhk = roomCount ? `${roomCount} BHK ` : '';
-    const typeName = (inv.type || 'Property').replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase());
-    const intentLabel = inv.intent === 'sell' ? 'for Sale' : inv.intent === 'rent' ? 'for Rent' : '';
-
-    doc.fontSize(18).font('Helvetica-Bold').fillColor(PRIMARY)
-        .text(`${bhk}${typeName} ${intentLabel}`.trim(), 40, cursorY);
-    cursorY += 24;
-
-    // Location
-    doc.fontSize(12).font('Helvetica').fillColor(TEXT)
-        .text(`📍 ${locationLine(inv)}`, 40, cursorY);
-    cursorY += 24;
-
-    // Price band — large
-    const price = inv.display_price || inv.customer_price || inv.price;
-    doc.fontSize(22).font('Helvetica-Bold').fillColor(ACCENT)
-        .text(formatPrice(price), 40, cursorY);
-    cursorY += 30;
-
-    // Spec grid — specs.* is SOLE SoT (Phase 3 dedup, 2026-05-28); column fallbacks dropped.
-    const specs2col: [string, string][] = [];
-    if (roomCount) specs2col.push(['Bedrooms', `${roomCount}`]);
-    if (specs.bathrooms) specs2col.push(['Bathrooms', `${specs.bathrooms}`]);
-    if (specs.area) specs2col.push(['Carpet area', `${specs.area} ${specs.area_unit || 'sqft'}`]);
-    if (specs.furnishing) specs2col.push(['Furnishing', specs.furnishing]);
-    if (inv.floor_number != null) specs2col.push(['Floor', specs.floors ? `${inv.floor_number} of ${specs.floors}` : `${inv.floor_number}`]);
-    if (specs.facing) specs2col.push(['Facing', specs.facing]);
-    if (specs['age-of-construction']) specs2col.push(['Property age', String(specs['age-of-construction']).replace(/_/g, ' ')]);
-    if (inv.category) specs2col.push(['Category', inv.category]);
-
-    doc.fontSize(11).font('Helvetica').fillColor(TEXT);
-    const colWidth = 250;
-    let row = 0;
-    for (let i = 0; i < specs2col.length; i++) {
-        const [label, value] = specs2col[i];
-        const col = i % 2;
-        const x = 40 + col * (colWidth + 15);
-        const y = cursorY + row * 24;
-        doc.fillColor(MUTED).fontSize(9).text(label.toUpperCase(), x, y);
-        doc.fillColor(TEXT).fontSize(12).text(value, x, y + 10, { width: colWidth });
-        if (col === 1) row++;
-    }
-    cursorY += (Math.ceil(specs2col.length / 2)) * 24 + 12;
-
-    // Amenities chips — specs.amenities is SOLE SoT (Phase 3 dedup, 2026-05-28).
-    const enabledFeatures: string[] = Array.isArray(specs.amenities)
-        ? specs.amenities.map((s: string) => String(s).replace(/_/g, ' '))
-        : [];
-    if (enabledFeatures.length > 0 && cursorY < 700) {
-        doc.fontSize(10).font('Helvetica-Bold').fillColor(MUTED).text('AMENITIES', 40, cursorY);
-        cursorY += 16;
-        doc.fontSize(11).font('Helvetica').fillColor(TEXT);
-        const text = enabledFeatures.slice(0, 14).join(' · ');
-        doc.text(text, 40, cursorY, { width: 515 });
-        cursorY = doc.y + 8;
-    }
-
-    // Description
-    if (inv.description && cursorY < 720) {
-        doc.fontSize(10).font('Helvetica-Bold').fillColor(MUTED).text('DESCRIPTION', 40, cursorY);
-        cursorY += 14;
-        doc.fontSize(11).font('Helvetica').fillColor(TEXT).text(inv.description.substring(0, 600), 40, cursorY, { width: 515 });
-        cursorY = doc.y + 6;
-    }
-
-    // Footer
+/** Footer with inventory ID in the corner; partner watermark (brandless) or RP/agent (branded). */
+function drawFooter(doc: typeof PDFDocument.prototype, inv: InventoryForPdf, options: PdfOptions) {
     const footerY = doc.page.height - 50;
     doc.rect(0, footerY, doc.page.width, 50).fill('#f9fafb');
-    doc.fillColor(MUTED).fontSize(9).font('Helvetica');
+    doc.fillColor(MUTED).fontSize(9).font(FONT);
 
     if (options.variant === 'brandless') {
         if (options.partnerName) {
-            doc.fillColor(TEXT).fontSize(11).font('Helvetica-Bold')
-                .text(options.partnerName, 40, footerY + 12);
+            doc.fillColor(TEXT).fontSize(11).font(FONT_BOLD).text(options.partnerName, 40, footerY + 12);
             if (options.partnerPhone) {
-                doc.fillColor(MUTED).fontSize(10).font('Helvetica')
-                    .text(`📞 ${options.partnerPhone}`, 40, footerY + 28);
+                doc.fillColor(MUTED).fontSize(10).font(FONT).text(`Tel: ${options.partnerPhone}`, 40, footerY + 28);
             }
         } else {
             doc.text('Contact your agent for more details', 40, footerY + 20, { width: doc.page.width - 80, align: 'center' });
         }
-        // Inventory ID in the corner — lets us identify which listing a forwarded brochure is.
-        if (inv.display_id) {
-            doc.fillColor(MUTED).fontSize(7).font('Helvetica')
-                .text(inv.display_id, doc.page.width - 120, footerY + 34, { width: 100, align: 'right' });
-        }
     } else {
-        // Branded footer
-        doc.fillColor(PRIMARY).fontSize(11).font('Helvetica-Bold')
-            .text('Realty Pandit', 40, footerY + 10);
-        doc.fillColor(MUTED).fontSize(9).font('Helvetica')
-            .text('realtypandit.in', 40, footerY + 26);
+        doc.fillColor(PRIMARY).fontSize(11).font(FONT_BOLD).text('Realty Pandit', 40, footerY + 10);
+        doc.fillColor(MUTED).fontSize(9).font(FONT).text('realtypandit.in', 40, footerY + 26);
         if (options.agentName) {
-            doc.fillColor(TEXT).fontSize(10).font('Helvetica-Bold')
-                .text(options.agentName, doc.page.width - 240, footerY + 12, { align: 'right', width: 200 });
+            doc.fillColor(TEXT).fontSize(10).font(FONT_BOLD).text(options.agentName, doc.page.width - 240, footerY + 12, { align: 'right', width: 200 });
             if (options.agentPhone) {
-                doc.fillColor(MUTED).fontSize(9).font('Helvetica')
-                    .text(`📞 ${options.agentPhone}`, doc.page.width - 240, footerY + 28, { align: 'right', width: 200 });
+                doc.fillColor(MUTED).fontSize(9).font(FONT).text(`Tel: ${options.agentPhone}`, doc.page.width - 240, footerY + 28, { align: 'right', width: 200 });
             }
         }
-        if (inv.display_id) {
-            doc.fillColor(MUTED).fontSize(8)
-                .text(inv.display_id, doc.page.width / 2 - 50, footerY + 30, { width: 100, align: 'center' });
-        }
     }
+    // Inventory ID in the corner — identifies which listing a forwarded brochure is.
+    if (inv.display_id) {
+        doc.fillColor(MUTED).fontSize(7).font(FONT).text(inv.display_id, doc.page.width - 130, footerY + 36, { width: 110, align: 'right' });
+    }
+}
+
+function renderOneProperty(doc: typeof PDFDocument.prototype, raw: InventoryForPdf, options: PdfOptions) {
+    const inv = options.variant === 'brandless' ? redactForBrandless(raw) : raw;
+    const specs = inv.specs || {};
+
+    // ── DETAILS PAGE (no photo — keeps it clean; photos get their own pages) ────
+    doc.addPage();
+    drawHeaderBar(doc, options);
+    let cursorY = 92;
+
+    // Title
+    const roomCount = specs.bhk ?? specs.rooms ?? specs.bedrooms ?? specs.bhk_count;
+    const bhk = roomCount ? `${roomCount} BHK ` : '';
+    const typeName = (inv.type || 'Property').replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase());
+    const intentLabel = inv.intent === 'sell' ? 'for Sale' : inv.intent === 'rent' ? 'for Rent' : '';
+    doc.fontSize(20).font(FONT_BOLD).fillColor(PRIMARY)
+        .text(`${bhk}${typeName} ${intentLabel}`.trim(), 40, cursorY, { width: 515 });
+    cursorY = doc.y + 6;
+
+    // Location (no emoji)
+    doc.fontSize(12).font(FONT).fillColor(TEXT).text(locationLine(inv), 40, cursorY, { width: 515 });
+    cursorY = doc.y + 12;
+
+    // Price band — large (₹ renders via DejaVu)
+    const price = inv.display_price || inv.customer_price || inv.price;
+    doc.fontSize(24).font(FONT_BOLD).fillColor(ACCENT).text(formatPrice(price), 40, cursorY);
+    cursorY = doc.y + 18;
+
+    // Spec grid — type-aware (residential / commercial / plot)
+    const rows = buildSpecRows(inv);
+    const colWidth = 250;
+    let gridRow = 0;
+    for (let i = 0; i < rows.length; i++) {
+        const [label, value] = rows[i];
+        const col = i % 2;
+        const x = 40 + col * (colWidth + 15);
+        const y = cursorY + gridRow * 38;
+        doc.fillColor(MUTED).font(FONT).fontSize(9).text(label.toUpperCase(), x, y, { width: colWidth });
+        doc.fillColor(TEXT).font(FONT_BOLD).fontSize(13).text(value, x, y + 13, { width: colWidth });
+        if (col === 1) gridRow++;
+    }
+    cursorY += Math.ceil(rows.length / 2) * 38 + 16;
+
+    // Amenities
+    const amenities: string[] = Array.isArray(specs.amenities)
+        ? specs.amenities.map((s: string) => String(s).replace(/_/g, ' ')) : [];
+    if (amenities.length > 0 && cursorY < 680) {
+        doc.fontSize(10).font(FONT_BOLD).fillColor(MUTED).text('AMENITIES', 40, cursorY);
+        cursorY += 16;
+        doc.fontSize(11).font(FONT).fillColor(TEXT).text(amenities.slice(0, 16).join('   ·   '), 40, cursorY, { width: 515 });
+        cursorY = doc.y + 12;
+    }
+
+    // Description
+    if (inv.description && cursorY < 700) {
+        doc.fontSize(10).font(FONT_BOLD).fillColor(MUTED).text('DESCRIPTION', 40, cursorY);
+        cursorY += 14;
+        doc.fontSize(11).font(FONT).fillColor(TEXT).text(inv.description.substring(0, 700), 40, cursorY, { width: 515 });
+    }
+
+    drawFooter(doc, inv, options);
+
+    // ── PHOTO PAGES — one photo per near-full page, uniform size ────────────────
+    const mediaPaths = (inv.media_urls || []).map((u) => resolveMediaPath(u)).filter(Boolean) as string[];
+    mediaPaths.forEach((p, i) => {
+        doc.addPage();
+        drawHeaderBar(doc, options);
+        try {
+            doc.image(p, 40, 90, { fit: [doc.page.width - 80, doc.page.height - 180], align: 'center', valign: 'center' });
+        } catch (err) {
+            logger.warn(`[PdfGen] photo embed failed: ${(err as Error).message}`);
+        }
+        const fY = doc.page.height - 50;
+        doc.rect(0, fY, doc.page.width, 50).fill('#f9fafb');
+        doc.fillColor(MUTED).font(FONT).fontSize(9).text(`Photo ${i + 1} of ${mediaPaths.length}`, 40, fY + 18);
+        if (inv.display_id) {
+            doc.fillColor(MUTED).fontSize(7).font(FONT).text(inv.display_id, doc.page.width - 130, fY + 20, { width: 110, align: 'right' });
+        }
+    });
 }
 
 /**
@@ -304,11 +329,12 @@ export function generateInventoryPdfStream(
     options: PdfOptions,
 ): NodeJS.ReadableStream {
     const doc = new PDFDocument({ size: 'A4', margin: 0, autoFirstPage: false });
+    registerFonts(doc);
     const stream = doc as unknown as NodeJS.ReadableStream;
 
     if (inventories.length === 0) {
         doc.addPage();
-        doc.fontSize(14).text('No properties selected', 40, 100);
+        doc.font(FONT).fontSize(14).text('No properties selected', 40, 100);
         doc.end();
         return stream;
     }
@@ -317,7 +343,7 @@ export function generateInventoryPdfStream(
         logger.error('[PdfGen] PDFDocument error:', err);
     });
 
-    inventories.forEach((inv, i) => renderOneProperty(doc, inv, options, i, inventories.length));
+    inventories.forEach((inv) => renderOneProperty(doc, inv, options));
 
     doc.end();
     return stream;
