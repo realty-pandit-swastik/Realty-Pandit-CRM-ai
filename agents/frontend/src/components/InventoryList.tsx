@@ -14,6 +14,7 @@ import AddressFields, { inferAddressLayout } from './AddressFields';
 import { toDialablePhone } from '../lib/phone';
 import { GooglePlacesInput } from './GooglePlacesInput';
 import ShareToClientModal from './ShareToClientModal';
+import { buildWhatsAppShareText } from '../lib/buildWhatsAppShareText';
 import SharePropertyOptions from './SharePropertyOptions';
 import { pickSpecChips } from '../lib/specChips';
 import BookVisitModal from './BookVisitModal';
@@ -240,7 +241,8 @@ export const InventoryList: React.FC = () => {
     const [showBatchShareModal, setShowBatchShareModal] = useState(false);
     const [batchShareContact, setBatchShareContact] = useState<{ phone_number: string; name: string | null } | null>(null);
     const [batchShareLoading, setBatchShareLoading] = useState(false);
-    const [batchShareResults, setBatchShareResults] = useState<{ id: string; title: string; status: 'sent' | 'already_shared' | 'error'; message: string }[]>([]);
+    const [batchShareResults, setBatchShareResults] = useState<{ id: string; title: string; status: 'sent' | 'already_shared' | 'error'; message: string; link?: string }[]>([]);
+    const [batchShareMode, setBatchShareMode] = useState<'direct' | 'dealer' | null>(null);
     const [batchContactSearch, setBatchContactSearch] = useState('');
     const [batchContactResults, setBatchContactResults] = useState<{ phone_number: string; name: string | null }[]>([]);
     const [batchContactSearching, setBatchContactSearching] = useState(false);
@@ -367,35 +369,59 @@ export const InventoryList: React.FC = () => {
         }, 400);
     }, [batchContactSearch]);
 
+    const titleFor = (invId: string) => {
+        const inv = inventory.find(i => i.id === invId);
+        return [inv?.apartment_name, inv?.locality || inv?.full_address].filter(Boolean).join(', ') || invId;
+    };
+
     const handleBatchShare = async () => {
         if (!batchShareContact || selectedIds.size === 0) return;
         setBatchShareLoading(true);
         setBatchShareResults([]);
-        const results: { id: string; title: string; status: 'sent' | 'already_shared' | 'error'; message: string }[] = [];
-        for (const invId of Array.from(selectedIds)) {
-            const inv = inventory.find(i => i.id === invId);
-            const title = [inv?.apartment_name, inv?.locality || inv?.full_address].filter(Boolean).join(', ') || invId;
-            try {
-                const res = await client.post(
-                    `/api/inventory/${invId}/share-to-client`,
-                    { client_phone: batchShareContact.phone_number }
-                );
-                // Re-sending is allowed (never blocked). Judge by the REAL delivery outcome; when the
-                // property was shared to this client before, append an informational notice — but it IS sent.
-                if (res.data.whatsapp_sent === false) {
-                    results.push({ id: invId, title, status: 'error', message: 'Not delivered — WhatsApp send failed (try again)' });
-                } else {
-                    const note = res.data.already_shared && res.data.previously_shared_at
-                        ? ` (previously shared on ${new Date(res.data.previously_shared_at).toLocaleDateString('en-IN')} — re-sent)`
-                        : '';
-                    results.push({ id: invId, title, status: 'sent', message: `Sent via WhatsApp${note}` });
-                }
-            } catch (err: any) {
-                results.push({ id: invId, title, status: 'error', message: err?.response?.data?.error || 'Failed to share' });
-            }
+        setBatchShareMode(null);
+        const ids = Array.from(selectedIds);
+        try {
+            // One recipient-aware call: the server detects dealer vs direct, sends the brand-free
+            // brochure (partner) or the v5 card (direct), tags each share with deal_id, and returns
+            // a per-property link (brochure PDF link for dealers, website link for direct customers).
+            const res = await client.post('/api/inventory/share-batch-to-client', {
+                inventory_ids: ids,
+                client_phone: batchShareContact.phone_number,
+                client_name: batchShareContact.name || undefined,
+            });
+            const mode = (res.data.mode === 'dealer' ? 'dealer' : 'direct') as 'direct' | 'dealer';
+            setBatchShareMode(mode);
+            const results = (res.data.results || []).map((r: any) => ({
+                id: r.inventory_id,
+                title: titleFor(r.inventory_id),
+                status: (r.whatsapp_sent ? 'sent' : 'error') as 'sent' | 'error',
+                message: r.whatsapp_sent
+                    ? (mode === 'dealer' ? 'Sent as brand-free brochure (partner)' : 'Sent via WhatsApp')
+                    : 'Not delivered — WhatsApp send failed (try again)',
+                link: r.property_link,
+            }));
+            setBatchShareResults(results);
+        } catch (err: any) {
+            setBatchShareResults(ids.map(id => ({
+                id, title: titleFor(id), status: 'error' as const,
+                message: err?.response?.data?.error || 'Failed to share',
+            })));
+        } finally {
+            setBatchShareLoading(false);
         }
-        setBatchShareResults(results);
-        setBatchShareLoading(false);
+    };
+
+    // After the company-WhatsApp send: open the team member's OWN WhatsApp at the client's
+    // chat with the numbered property text + links pre-filled (they just tap send).
+    const handleOwnWhatsAppShare = () => {
+        if (!batchShareContact) return;
+        const items = batchShareResults
+            .filter(r => r.link)
+            .map(r => ({ inv: inventory.find(i => i.id === r.id), link: r.link as string }));
+        if (items.length === 0) return;
+        const text = buildWhatsAppShareText(items, batchShareMode || 'direct');
+        const tel = batchShareContact.phone_number.replace(/^\+/, '');
+        window.open(`https://wa.me/${tel}?text=${encodeURIComponent(text)}`, '_blank');
     };
 
     const clearFilters = () => {
@@ -2576,8 +2602,21 @@ export const InventoryList: React.FC = () => {
                                         </div>
                                     </div>
                                 ))}
+                                {/* Sequential suggestion: also share from the team member's OWN WhatsApp,
+                                    landing directly in the client's chat with the numbered text + links. */}
+                                {batchShareResults.some(r => r.link) && (
+                                    <div style={{ marginTop: '16px', padding: '12px', borderRadius: '10px', backgroundColor: 'rgba(37,211,102,0.08)', border: '1px solid rgba(37,211,102,0.3)' }}>
+                                        <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '8px' }}>
+                                            Want to follow up personally? Send the same {batchShareMode === 'dealer' ? 'brochure links' : 'details'} from your own WhatsApp too.
+                                        </div>
+                                        <button
+                                            onClick={handleOwnWhatsAppShare}
+                                            style={{ width: '100%', padding: '10px', borderRadius: '8px', fontWeight: 700, fontSize: '13px', backgroundColor: '#128c7e', color: '#fff', border: 'none', cursor: 'pointer' }}
+                                        >📱 Also share from my WhatsApp</button>
+                                    </div>
+                                )}
                                 <button
-                                    onClick={() => { setShowBatchShareModal(false); setSelectionMode(false); setSelectedIds(new Set()); setBatchShareResults([]); }}
+                                    onClick={() => { setShowBatchShareModal(false); setSelectionMode(false); setSelectedIds(new Set()); setBatchShareResults([]); setBatchShareMode(null); }}
                                     style={{ marginTop: '16px', width: '100%', padding: '10px', borderRadius: '8px', fontWeight: 700, backgroundColor: '#3b82f6', color: '#fff', border: 'none', cursor: 'pointer' }}
                                 >Done</button>
                             </div>
