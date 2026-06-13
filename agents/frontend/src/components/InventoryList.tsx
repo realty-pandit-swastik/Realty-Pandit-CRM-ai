@@ -246,6 +246,10 @@ export const InventoryList: React.FC = () => {
     const [batchContactSearch, setBatchContactSearch] = useState('');
     const [batchContactResults, setBatchContactResults] = useState<{ phone_number: string; name: string | null }[]>([]);
     const [batchContactSearching, setBatchContactSearching] = useState(false);
+    const [addLeadRole, setAddLeadRole] = useState<'direct' | 'partner'>('direct');
+    const [addLeadName, setAddLeadName] = useState('');
+    const [addLeadInvId, setAddLeadInvId] = useState('');
+    const [addLeadLoading, setAddLeadLoading] = useState(false);
     const batchSearchTimer = useRef<any>(null);
 
     // Bulk upload state
@@ -408,6 +412,32 @@ export const InventoryList: React.FC = () => {
             })));
         } finally {
             setBatchShareLoading(false);
+        }
+    };
+
+    const isPhoneish = (q: string) => q.replace(/\D/g, '').length >= 10;
+
+    // Unknown number on the share screen → create a lead (direct or partner) seeded from the
+    // chosen inventory's requirement, then drop straight into the normal share with that contact.
+    const handleAddLead = async () => {
+        const invId = addLeadInvId || Array.from(selectedIds)[0];
+        if (!invId) return;
+        setAddLeadLoading(true);
+        try {
+            const res = await client.post('/api/inventory/share/add-lead', {
+                phone: batchContactSearch.trim(),
+                name: addLeadName.trim() || undefined,
+                role: addLeadRole,
+                inventory_id: invId,
+            });
+            setBatchShareContact({ phone_number: res.data.contact_phone, name: addLeadName.trim() || null });
+            setBatchContactSearch('');
+            setBatchContactResults([]);
+            setAddLeadName('');
+        } catch (err: any) {
+            alert(err?.response?.data?.error || 'Failed to add lead');
+        } finally {
+            setAddLeadLoading(false);
         }
     };
 
@@ -2649,6 +2679,34 @@ export const InventoryList: React.FC = () => {
                                                 </div>
                                             </div>
                                         ))}
+                                        {!batchContactSearching && batchContactResults.length === 0 && isPhoneish(batchContactSearch) && (
+                                            <div style={{ marginTop: '12px', padding: '12px', borderRadius: '10px', backgroundColor: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.35)' }}>
+                                                <div style={{ fontSize: '12px', color: '#b45309', fontWeight: 600, marginBottom: '8px' }}>📵 Not in our database — add as a new lead?</div>
+                                                <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
+                                                    {(['direct', 'partner'] as const).map(r => (
+                                                        <button key={r} type="button" onClick={() => setAddLeadRole(r)}
+                                                            style={{ flex: 1, padding: '8px', borderRadius: '8px', fontSize: '12px', fontWeight: 700, cursor: 'pointer', border: addLeadRole === r ? '2px solid #3b82f6' : '1px solid var(--border-secondary)', backgroundColor: addLeadRole === r ? 'rgba(59,130,246,0.1)' : 'transparent', color: 'var(--text-primary)' }}>
+                                                            {r === 'direct' ? 'Direct client' : 'Partner agent'}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                                <input type="text" placeholder="Name (optional)" value={addLeadName} onChange={e => setAddLeadName(e.target.value)}
+                                                    style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', fontSize: '12px', border: '1px solid var(--border-secondary)', backgroundColor: 'var(--bg-secondary)', color: 'var(--text-primary)', boxSizing: 'border-box', marginBottom: '8px' }} />
+                                                <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '4px' }}>Requirement from:</div>
+                                                <select value={addLeadInvId || Array.from(selectedIds)[0] || ''} onChange={e => setAddLeadInvId(e.target.value)}
+                                                    style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', fontSize: '12px', border: '1px solid var(--border-secondary)', backgroundColor: 'var(--bg-secondary)', color: 'var(--text-primary)', boxSizing: 'border-box', marginBottom: '10px' }}>
+                                                    {Array.from(selectedIds).map(id => {
+                                                        const it = inventory.find(i => i.id === id);
+                                                        const label = it ? ([it.apartment_name, it.locality || it.full_address].filter(Boolean).join(', ') || id) : id;
+                                                        return <option key={id} value={id}>{label}</option>;
+                                                    })}
+                                                </select>
+                                                <button type="button" onClick={handleAddLead} disabled={addLeadLoading}
+                                                    style={{ width: '100%', padding: '10px', borderRadius: '8px', fontWeight: 700, fontSize: '13px', backgroundColor: '#f59e0b', color: '#fff', border: 'none', cursor: addLeadLoading ? 'not-allowed' : 'pointer', opacity: addLeadLoading ? 0.7 : 1 }}>
+                                                    {addLeadLoading ? 'Adding…' : `➕ Add as ${addLeadRole === 'direct' ? 'direct client' : 'partner agent'} & continue`}
+                                                </button>
+                                            </div>
+                                        )}
                                     </div>
                                 ) : (
                                     <div>
