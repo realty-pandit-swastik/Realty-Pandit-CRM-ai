@@ -1240,7 +1240,7 @@ router.post('/share/add-lead', authMiddleware, async (req: any, res) => {
             select: {
                 id: true, intent: true, type: true, category_id: true, sub_category_id: true, type_id: true,
                 taxonomy_node_id: true, specs: true, locality: true, city: true, location: true,
-                display_price: true, price: true, customer_price: true, preferred_lat: true, preferred_lng: true,
+                display_price: true, price: true, customer_price: true, latitude: true, longitude: true,
             } as any,
         });
         if (!inv) return res.status(404).json({ error: 'Inventory not found' });
