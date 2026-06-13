@@ -114,8 +114,14 @@ export async function resolveDemandTaxonomy(input: DemandTaxonomyInput): Promise
     let node: NodeRow | null = null;
     let ambiguous = false;
 
+    // 0. Precise canonical node id (website taxonomy picker / inventory) — authoritative,
+    //    skip the lossy legacy-id / slug matching below.
+    if (input.demand_taxonomy_node_id && maps.byNodeId.has(input.demand_taxonomy_node_id)) {
+        node = maps.byNodeId.get(input.demand_taxonomy_node_id)!;
+    }
+
     // 1. Legacy classification ids (most precise — set by manual form / feed slug-map)
-    if (input.sub_category_id && maps.bySub.has(input.sub_category_id)) {
+    if (!node && input.sub_category_id && maps.bySub.has(input.sub_category_id)) {
         let cands = maps.bySub.get(input.sub_category_id)!;
         if (input.type_id) { const exact = cands.filter(n => n.legacy_type_id === input.type_id); if (exact.length) cands = exact; }
         node = cands.length === 1 ? cands[0] : pickGeneric(cands);
