@@ -78,8 +78,10 @@ export const scheduleVisitSchema = z.object({
 // PHASE 7: Standardized lead capture — intent → category → type → budget → location
 export const leadRequirementsSchema = z.object({
     intent: z.enum(['buy', 'rent_lease'], { required_error: 'Intent is required (buy or rent_lease)' }),
-    category: z.enum(['residential', 'commercial', 'agricultural'], { required_error: 'Category is required' }),
-    type_slug: z.string().min(1, 'Property type is required').max(100),
+    // Canonical taxonomy node (preferred). Legacy category/type_slug kept as optional fallback.
+    taxonomy_node_id: z.string().max(60).optional(),
+    category: z.enum(['residential', 'commercial', 'agricultural']).optional(),
+    type_slug: z.string().max(100).optional(),
     budget_min: z.number({ coerce: true }).nonnegative().optional(),
     budget_max: z.number({ coerce: true }).positive('Budget max must be positive').optional(),
     budget_type: z.enum(['one_time', 'per_month']).optional(),
@@ -89,7 +91,7 @@ export const leadRequirementsSchema = z.object({
     email: z.string().email().optional().or(z.literal('')),
     amenities: z.array(z.string()).optional(),
     source: z.string().max(100).optional(),
-});
+}).refine((d) => !!(d.taxonomy_node_id || d.type_slug), { message: 'Select a property type', path: ['type_slug'] });
 
 export const postPropertySchema = z.object({
     intent: z.string().min(1, 'Intent is required'),

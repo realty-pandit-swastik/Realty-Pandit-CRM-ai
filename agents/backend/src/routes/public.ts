@@ -577,7 +577,7 @@ router.post('/lead', validate(leadSchema), async (req, res) => {
 // Flow: intent → category → type → budget → location → show matching properties
 router.post('/lead-requirements', validate(leadRequirementsSchema), async (req, res) => {
     const {
-        intent, category, type_slug, budget_min, budget_max, budget_type,
+        intent, category, type_slug, taxonomy_node_id, budget_min, budget_max, budget_type,
         location, name, phone, email, amenities, source
     } = req.body;
 
@@ -590,7 +590,12 @@ router.post('/lead-requirements', validate(leadRequirementsSchema), async (req, 
         // Resolve the requirement into the canonical taxonomy node up-front so BOTH the no-phone
         // and main branches can pass it to the matching engine (previously resolved only after
         // the no-phone early-return, so instant matches ignored the taxonomy node entirely).
-        const demandTax = await resolveDemandTaxonomy({ main_category: category || undefined, property_type: type_slug || category || undefined, amenities: amenities || undefined });
+        const demandTax = await resolveDemandTaxonomy({
+            demand_taxonomy_node_id: taxonomy_node_id || undefined,  // precise node-id fast-path (byNodeId)
+            main_category: category || undefined,
+            property_type: type_slug || category || undefined,        // legacy fallback when no node id
+            amenities: amenities || undefined,
+        });
 
         // Determine contact phone — required for SSOT
         if (!phone) {
