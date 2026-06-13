@@ -204,8 +204,9 @@ export interface LeadData {
 // PHASE 7: Lead Requirements (standardized capture)
 export interface LeadRequirementsData {
     intent: 'buy' | 'rent_lease';
-    category: 'residential' | 'commercial' | 'agricultural';
-    type_slug: string;
+    taxonomy_node_id?: string;                                  // canonical node (preferred)
+    category?: 'residential' | 'commercial' | 'agricultural';   // legacy fallback
+    type_slug?: string;                                         // legacy fallback
     budget_min?: number;
     budget_max?: number;
     budget_type?: 'one_time' | 'per_month';

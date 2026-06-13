@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { submitLeadRequirements, getFlatPropertyTypes, type LeadRequirementsData, type FlatPropertyType } from '@/lib/api';
+import { submitLeadRequirements, getTaxonomyTree, type LeadRequirementsData, type TaxonomyTreeNode } from '@/lib/api';
 import { CheckCircle, Loader2, ArrowLeft, ArrowRight, Home, Building2, Landmark, Search } from 'lucide-react';
 
 interface RequirementCaptureProps {
@@ -15,11 +15,14 @@ interface RequirementCaptureProps {
 
 type Step = 1 | 2 | 3;
 
-const CATEGORIES = [
-    { value: 'residential', label: 'Residential', icon: Home, description: 'Flats, Houses, Villas' },
-    { value: 'commercial', label: 'Commercial', icon: Building2, description: 'Shops, Offices, Warehouses' },
-    { value: 'agricultural', label: 'Agricultural', icon: Landmark, description: 'Farm Land, Plots' },
-] as const;
+// Category icon keyed by the taxonomy top-level node slug (best-effort; defaults to Home).
+const CATEGORY_ICON: Record<string, typeof Home> = {
+    residential: Home, commercial: Building2,
+    agricultural: Landmark, agriculture: Landmark, land: Landmark,
+};
+// Flatten a taxonomy node to its selectable leaf types (nodes with no children).
+const leavesUnder = (n: TaxonomyTreeNode): TaxonomyTreeNode[] =>
+    n.children?.length ? n.children.flatMap(leavesUnder) : [n];
 
 export default function RequirementCapture({
     onComplete,
@@ -32,14 +35,15 @@ export default function RequirementCapture({
     const [step, setStep] = useState<Step>(1);
     const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
     const [errorMsg, setErrorMsg] = useState('');
-    const [propertyTypes, setPropertyTypes] = useState<FlatPropertyType[]>([]);
-    const [loadingTypes, setLoadingTypes] = useState(false);
+    const [tree, setTree] = useState<TaxonomyTreeNode[]>([]);
+    const [loadingTree, setLoadingTree] = useState(false);
+    const [catNodeId, setCatNodeId] = useState('');
     const [matches, setMatches] = useState<any[]>([]);
 
     // Form state
     const [form, setForm] = useState<LeadRequirementsData>({
         intent: defaultIntent || 'buy',
-        category: 'residential',
+        taxonomy_node_id: '',
         type_slug: '',
         budget_min: undefined,
         budget_max: undefined,
@@ -50,22 +54,14 @@ export default function RequirementCapture({
         source,
     });
 
-    // Load property types when category changes
+    // Load the canonical taxonomy tree once (SoT — same as inventory + post-property flow).
     useEffect(() => {
-        const loadTypes = async () => {
-            setLoadingTypes(true);
-            try {
-                const types = await getFlatPropertyTypes(form.category);
-                setPropertyTypes(types);
-                // Reset type selection when category changes
-                setForm(prev => ({ ...prev, type_slug: types.length > 0 ? types[0].slug : '' }));
-            } catch {
-                setPropertyTypes([]);
-            }
-            setLoadingTypes(false);
-        };
-        loadTypes();
-    }, [form.category]);
+        setLoadingTree(true);
+        getTaxonomyTree().then(setTree).catch(() => setTree([])).finally(() => setLoadingTree(false));
+    }, []);
+
+    const catNode = tree.find((n) => n.id === catNodeId) || null;
+    const typeLeaves = catNode ? leavesUnder(catNode) : [];
 
     // Auto-set budget_type based on intent
     useEffect(() => {
@@ -75,8 +71,8 @@ export default function RequirementCapture({
         }));
     }, [form.intent]);
 
-    const canProceedStep1 = form.intent && form.category;
-    const canProceedStep2 = form.type_slug && form.location;
+    const canProceedStep1 = form.intent && catNodeId;
+    const canProceedStep2 = form.taxonomy_node_id && form.location;
 
     const handleSubmit = async () => {
         setStatus('loading');
@@ -164,26 +160,33 @@ export default function RequirementCapture({
                     <div>
                         <p className={labelClass}>Property Category</p>
                         <div className="grid grid-cols-1 gap-2">
-                            {CATEGORIES.map(({ value, label, icon: Icon, description }) => (
-                                <button
-                                    key={value}
-                                    type="button"
-                                    onClick={() => setForm({ ...form, category: value })}
-                                    className={`flex items-center gap-3 py-3 px-4 rounded-xl text-left border-2 transition-all ${
-                                        form.category === value
-                                            ? 'border-blue-600 bg-blue-50'
-                                            : dark
-                                                ? 'border-white/20 bg-white/5 hover:border-white/40'
-                                                : 'border-slate-200 bg-white hover:border-slate-300'
-                                    }`}
-                                >
-                                    <Icon className={`w-5 h-5 ${form.category === value ? 'text-blue-600' : dark ? 'text-slate-400' : 'text-slate-500'}`} />
-                                    <div>
-                                        <span className={`text-sm font-medium ${form.category === value ? 'text-blue-700' : dark ? 'text-white' : 'text-slate-900'}`}>{label}</span>
-                                        <span className={`text-xs block ${dark ? 'text-slate-500' : 'text-slate-400'}`}>{description}</span>
-                                    </div>
-                                </button>
-                            ))}
+                            {loadingTree ? (
+                                <div className="flex items-center gap-2 py-3 text-sm text-slate-400"><Loader2 className="w-4 h-4 animate-spin" /> Loading categories...</div>
+                            ) : tree.map((node) => {
+                                const Icon = CATEGORY_ICON[node.slug] || Home;
+                                const active = catNodeId === node.id;
+                                const sample = leavesUnder(node).slice(0, 3).map((l) => l.name).join(', ');
+                                return (
+                                    <button
+                                        key={node.id}
+                                        type="button"
+                                        onClick={() => { setCatNodeId(node.id); setForm({ ...form, category: node.slug as any, taxonomy_node_id: '', type_slug: '' }); }}
+                                        className={`flex items-center gap-3 py-3 px-4 rounded-xl text-left border-2 transition-all ${
+                                            active
+                                                ? 'border-blue-600 bg-blue-50'
+                                                : dark
+                                                    ? 'border-white/20 bg-white/5 hover:border-white/40'
+                                                    : 'border-slate-200 bg-white hover:border-slate-300'
+                                        }`}
+                                    >
+                                        <Icon className={`w-5 h-5 ${active ? 'text-blue-600' : dark ? 'text-slate-400' : 'text-slate-500'}`} />
+                                        <div>
+                                            <span className={`text-sm font-medium ${active ? 'text-blue-700' : dark ? 'text-white' : 'text-slate-900'}`}>{node.name}</span>
+                                            {sample && <span className={`text-xs block ${dark ? 'text-slate-500' : 'text-slate-400'}`}>{sample}</span>}
+                                        </div>
+                                    </button>
+                                );
+                            })}
                         </div>
                     </div>
 
@@ -203,19 +206,19 @@ export default function RequirementCapture({
                 <div className="space-y-4">
                     <div>
                         <p className={labelClass}>Property Type</p>
-                        {loadingTypes ? (
+                        {loadingTree ? (
                             <div className="flex items-center gap-2 py-3 text-sm text-slate-400">
                                 <Loader2 className="w-4 h-4 animate-spin" /> Loading types...
                             </div>
                         ) : (
                             <select
-                                value={form.type_slug}
-                                onChange={(e) => setForm({ ...form, type_slug: e.target.value })}
+                                value={form.taxonomy_node_id}
+                                onChange={(e) => { const leaf = typeLeaves.find((l) => l.id === e.target.value); setForm({ ...form, taxonomy_node_id: e.target.value, type_slug: leaf?.slug || '' }); }}
                                 className={inputClass}
                             >
                                 <option value="">Select type...</option>
-                                {propertyTypes.map((pt) => (
-                                    <option key={pt.slug} value={pt.slug}>{pt.name}</option>
+                                {typeLeaves.map((l) => (
+                                    <option key={l.id} value={l.id}>{l.name}</option>
                                 ))}
                             </select>
                         )}
