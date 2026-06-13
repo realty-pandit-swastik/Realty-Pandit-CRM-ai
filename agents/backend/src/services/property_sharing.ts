@@ -16,9 +16,69 @@ import logger from '../utils/logger';
 import { WhatsAppService } from './whatsapp';
 import { MatchingEngine, buildMatchCriteriaFromLead } from './matching_engine';
 import { checkBudgetSanity, budgetReaskPrompt } from '../utils/budget_sanity';
+import { phoneVariants } from '../utils/phone';
+import { BROCHURE_TEMPLATE_NAME } from '../config/whatsapp_templates';
 
 const whatsapp = new WhatsAppService();
 const EVT_PROPERTY_SHARED = 'property_shared';
+
+const PUBLIC_API_BASE = process.env.PUBLIC_API_BASE || 'https://realtypandit.in/api';
+const BROCHURE_LINK_TTL_SEC = 30 * 24 * 3600; // 30-day signed brochure link
+
+/** Short human summary for the {{1}} template param. e.g. "3 BHK Flat in Whitefield, Bengaluru". */
+function buildPropertySummary(inv: any): string {
+    const s = (inv.specs || {}) as Record<string, any>;
+    const room = s.bhk ?? s.rooms ?? s.bedrooms ?? s.bhk_count;
+    const bhk = room ? `${room} BHK ` : '';
+    const typeName = inv.flat_property_type?.name || (inv.type ? String(inv.type).replace(/_/g, ' ') : 'Property');
+    const loc = [inv.locality, inv.city].filter(Boolean).join(', ');
+    return `${bhk}${typeName}${loc ? ' in ' + loc : ''}`.trim();
+}
+
+/**
+ * Most-recent deal (Transaction) for a recipient phone, so a share can be tagged
+ * with deal_id and surface in that deal's pipeline timeline + already-shared set.
+ * Returns null if the recipient has no deal yet.
+ */
+export async function resolveActiveDealId(phone: string): Promise<string | null> {
+    const variants = phoneVariants(phone);
+    const deal = await prisma.transaction.findFirst({
+        where: { demand_contact_id: { in: variants } },
+        orderBy: { created_at: 'desc' },
+        select: { id: true },
+    });
+    return deal?.id ?? null;
+}
+
+/**
+ * Dealer/partner brochure send: a brand-free single-property PDF delivered as a
+ * WhatsApp document attachment (rp_property_brochure_v1, DOCUMENT header). One
+ * call = one property. The PDF is served from the public token-signed brochure
+ * endpoint, optionally watermarked with the partner's name/phone. Returns the
+ * signed pdfUrl so the caller can record it + reuse it for the own-WhatsApp share.
+ * Throws strictly on Meta failure (via sendDocumentTemplate).
+ */
+export async function shareInventoryBrochure(
+    phone: string,
+    inv: any,
+    seq: { index: number; total: number },
+    partner?: { name?: string | null; phone_number?: string | null } | null,
+): Promise<{ sent: boolean; pdfUrl: string }> {
+    const { signPdfToken } = await import('../utils/pdf_token');
+    const { brochureFilename } = await import('./pdf_generator');
+    const exp = Math.floor(Date.now() / 1000) + BROCHURE_LINK_TTL_SEC;
+    const token = signPdfToken(inv.id, 'brandless', exp);
+    let pdfUrl = `${PUBLIC_API_BASE}/inventory/${inv.id}/brochure.pdf?variant=brandless&token=${token}`;
+    if (partner?.name) {
+        pdfUrl += `&pn=${encodeURIComponent(partner.name)}&pp=${encodeURIComponent(partner.phone_number || '')}`;
+    }
+    await whatsapp.sendDocumentTemplate(phone, BROCHURE_TEMPLATE_NAME, {
+        pdfUrl,
+        filename: brochureFilename(inv),
+        bodyParams: [buildPropertySummary(inv), `${seq.index + 1} of ${seq.total}`],
+    });
+    return { sent: true, pdfUrl };
+}
 
 /**
  * Share the next un-shared matching property for a deal via WhatsApp.

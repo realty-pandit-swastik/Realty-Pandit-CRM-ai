@@ -1118,6 +1118,111 @@ router.post('/:id/share-to-client', authMiddleware, async (req, res) => {
     }
 });
 
+// POST /inventory/share-batch-to-client — recipient-aware multi-property share.
+// Detects the recipient: an ACTIVE PartnerAgent (dealer) → a brand-free single-property
+// PDF brochure per property (document template, "k of N"); anyone else (direct customer)
+// → the existing v5 property card per property (UNCHANGED path). Every share is tagged
+// with the recipient's deal_id so it surfaces in the deal pipeline timeline + already-shared set.
+router.post('/share-batch-to-client', authMiddleware, async (req: any, res) => {
+    try {
+        const { inventory_ids, client_phone, client_name } = req.body || {};
+        if (!Array.isArray(inventory_ids) || inventory_ids.length === 0) {
+            return res.status(400).json({ error: 'inventory_ids[] required' });
+        }
+        if (!client_phone) return res.status(400).json({ error: 'client_phone required' });
+        const normalized = normalizePhone(client_phone);
+        if (!normalized || isPlaceholderPhone(client_phone)) {
+            return res.status(400).json({ error: 'No valid client phone to share to' });
+        }
+        const agent = req.agent!;
+
+        // Upsert contact as BUYER (mirrors /:id/share-to-client)
+        const existingContact = await prisma.contact.findUnique({ where: { phone_number: normalized } });
+        await prisma.contact.upsert({
+            where: { phone_number: normalized },
+            update: { name: client_name || undefined, last_channel: 'whatsapp', last_interaction: new Date() },
+            create: {
+                phone_number: normalized, name: client_name || null, source: 'manual',
+                contact_type: 'BUYER', tenant_id: agent.tenant_id, last_channel: 'whatsapp',
+                last_interaction: new Date(), created_by: req.agent?.id || null,
+            },
+        });
+
+        const { resolveShareMode } = await import('../services/share_recognition');
+        const { mode, partner } = await resolveShareMode(normalized);
+        const { shareInventoryCard, shareInventoryBrochure, resolveActiveDealId } = await import('../services/property_sharing');
+        const dealId = await resolveActiveDealId(normalized);
+
+        const inventories = await prisma.inventory.findMany({
+            where: { id: { in: inventory_ids } },
+            include: { flat_property_type: { select: { name: true, main_category: true } } },
+        });
+        if (inventories.length === 0) return res.status(404).json({ error: 'No inventories found' });
+
+        // Per-inventory authorization (mirrors share-pdf): super_boss bypass; manager → team-owned; else direct match.
+        let teamIds: string[] = [];
+        if (agent.role === 'manager') {
+            const team = await prisma.agent.findMany({ where: { reports_to_id: agent.id }, select: { id: true } });
+            teamIds = team.map((t: { id: string }) => t.id);
+        }
+        const canShare = (inv: any) => agent.role === 'super_boss'
+            || inv.uploaded_by_agent_id === agent.id || inv.assigned_agent_id === agent.id
+            || inv.reference_agent_id === agent.id || (inv.shared_with_ids || []).includes(agent.id)
+            || (agent.role === 'manager' && (teamIds.includes(inv.uploaded_by_agent_id || '') || teamIds.includes(inv.assigned_agent_id || '')));
+
+        // Preserve the caller's order; drop any the agent can't share.
+        const ordered = (inventory_ids as string[])
+            .map((id) => inventories.find((i: any) => i.id === id))
+            .filter((i): i is any => !!i && canShare(i));
+        if (ordered.length === 0) return res.status(403).json({ error: 'Not authorized to share the selected properties' });
+
+        const total = ordered.length;
+        const results: any[] = [];
+        for (let i = 0; i < ordered.length; i++) {
+            const inv = ordered[i];
+            let whatsappSent = false;
+            let propertyLink = inv.display_id
+                ? `https://www.realtypandit.in/properties/${inv.display_id}`
+                : `https://www.realtypandit.in/properties/${inv.id}`;
+            try {
+                if (mode === 'dealer') {
+                    const r = await shareInventoryBrochure(normalized, inv, { index: i, total }, partner);
+                    whatsappSent = r.sent;
+                    propertyLink = r.pdfUrl;
+                } else {
+                    whatsappSent = await shareInventoryCard(normalized, inv);
+                }
+            } catch (err) {
+                logger.error(`[ShareBatch] send failed for ${inv.id} (${mode}):`, err);
+            }
+
+            const share = await prisma.propertyShare.create({
+                data: {
+                    tenant_id: agent.tenant_id, inventory_id: inv.id, agent_id: agent.id,
+                    client_phone: normalized, channel: mode === 'dealer' ? 'whatsapp_brochure' : 'whatsapp_api',
+                    property_link: propertyLink, whatsapp_sent: whatsappSent,
+                },
+            });
+            await prisma.interaction.create({
+                data: {
+                    tenant_id: agent.tenant_id, phone_number: normalized, channel: 'whatsapp',
+                    direction: 'outbound', event_type: 'property_shared',
+                    content: `Property shared (${mode}): ${inv.flat_property_type?.name || inv.type || 'Property'} in ${inv.locality || inv.location || 'N/A'}`,
+                    metadata: { inventory_id: inv.id, share_id: share.id, property_link: propertyLink, deal_id: dealId, variant: mode },
+                },
+            });
+            results.push({ inventory_id: inv.id, whatsapp_sent: whatsappSent, property_link: propertyLink });
+        }
+
+        logger.info(`[ShareBatch] Agent ${agent.id} shared ${results.length} props with ${normalized} as ${mode} (deal=${dealId || 'none'})`);
+        res.json({ success: true, mode, deal_id: dealId, results, contact_created: !existingContact });
+    } catch (error) {
+        captureRouteError(error, req, { route: 'inventory#share-batch' });
+        logger.error('[ShareBatch] Error:', error);
+        res.status(500).json({ error: 'Failed to share properties' });
+    }
+});
+
 // POST /inventory/:id/transfer — Transfer inventory to another team member
 router.post('/:id/transfer', authMiddleware, checkPermission('transfer_inventory'), async (req, res) => {
     try {
