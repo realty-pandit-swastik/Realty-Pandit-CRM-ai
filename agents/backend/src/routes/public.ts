@@ -640,8 +640,10 @@ router.post('/lead-requirements', validate(leadRequirementsSchema), async (req, 
                 sub_category_id: demandTax.sub_category_id ?? undefined,
                 category_id: demandTax.category_id ?? undefined,
                 type_id: demandTax.type_id ?? undefined,
-                // Phase 1 dual-write — canonical demand SoT.
-                ...(foldLegacyDemand({ demand_amenities: amenities ?? null }) as any),
+                // Phase 1 dual-write — canonical demand SoT. Feed the resolved node id so the
+                // fold spread writes it back instead of clobbering it with null (it emits
+                // demand_taxonomy_node_id: input ?? null, and this spread sits after the explicit set).
+                ...(foldLegacyDemand({ demand_taxonomy_node_id: demandTax.demand_taxonomy_node_id, demand_amenities: amenities ?? null }) as any),
                 budget_min: budget_min || undefined,
                 budget_max: budget_max || undefined,
                 preferred_location: location,
@@ -663,8 +665,10 @@ router.post('/lead-requirements', validate(leadRequirementsSchema), async (req, 
                 sub_category_id: demandTax.sub_category_id ?? undefined,
                 category_id: demandTax.category_id ?? undefined,
                 type_id: demandTax.type_id ?? undefined,
-                // Phase 1 dual-write — canonical demand SoT.
-                ...(foldLegacyDemand({ demand_amenities: amenities ?? null }) as any),
+                // Phase 1 dual-write — canonical demand SoT. Feed the resolved node id so the
+                // fold spread writes it back instead of clobbering it with null (it emits
+                // demand_taxonomy_node_id: input ?? null, and this spread sits after the explicit set).
+                ...(foldLegacyDemand({ demand_taxonomy_node_id: demandTax.demand_taxonomy_node_id, demand_amenities: amenities ?? null }) as any),
                 budget_min: budget_min || undefined,
                 budget_max: budget_max || undefined,
                 preferred_location: location,

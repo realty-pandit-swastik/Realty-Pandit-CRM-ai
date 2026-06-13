@@ -238,8 +238,10 @@ export class BuyerWorkflowEngine extends WorkflowEngine {
                 area_unit: areaParsed.unit,
                 demand_taxonomy_node_id: demandTax.demand_taxonomy_node_id ?? undefined,
                 needs_taxonomy_review: demandTax.needs_review || undefined,
-                // Phase 1 dual-write — canonical demand SoT (2026-05-29).
+                // Phase 1 dual-write — canonical demand SoT (2026-05-29). Feed the resolved node id
+                // so the fold spread re-writes it rather than clobbering it with null.
                 ...(foldLegacyDemand({
+                    demand_taxonomy_node_id: demandTax.demand_taxonomy_node_id,
                     demand_bhk: answers.buyer_bhk ? parseInt(answers.buyer_bhk as string, 10) : null,
                     demand_amenities: amenities?.length ? amenities : null,
                 }) as any),
@@ -270,8 +272,10 @@ export class BuyerWorkflowEngine extends WorkflowEngine {
                 area_unit: areaParsed.unit,
                 demand_taxonomy_node_id: demandTax.demand_taxonomy_node_id ?? undefined,
                 needs_taxonomy_review: demandTax.needs_review || undefined,
-                // Phase 1 dual-write — canonical demand SoT (2026-05-29).
+                // Phase 1 dual-write — canonical demand SoT (2026-05-29). Feed the resolved node id
+                // so the fold spread re-writes it rather than clobbering it with null.
                 ...(foldLegacyDemand({
+                    demand_taxonomy_node_id: demandTax.demand_taxonomy_node_id,
                     demand_bhk: answers.buyer_bhk ? parseInt(answers.buyer_bhk as string, 10) : null,
                     demand_amenities: amenities?.length ? amenities : null,
                 }) as any),
