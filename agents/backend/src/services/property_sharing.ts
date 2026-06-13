@@ -22,8 +22,10 @@ import { BROCHURE_TEMPLATE_NAME } from '../config/whatsapp_templates';
 const whatsapp = new WhatsAppService();
 const EVT_PROPERTY_SHARED = 'property_shared';
 
-// Reuse the SAME public host the v5 card's image header uses (proven Meta-fetchable);
-// the brochure endpoint is mounted at /api/inventory/:id/brochure.pdf (app.ts).
+// Reuse the SAME public host the v5 card's image header uses (proven Meta-fetchable).
+// NOTE: use the /inventory mount (NOT /api/inventory) — the /api prefix is auth-gated
+// by an earlier router, so /api/inventory/:id/brochure.pdf returns 401. The bare
+// /inventory mount (app.ts) is public and serves the token-checked brochure.
 const BROCHURE_API_BASE = process.env.API_BASE_URL || 'https://api.realtypandit.in';
 const BROCHURE_LINK_TTL_SEC = 30 * 24 * 3600; // 30-day signed brochure link
 
@@ -70,7 +72,7 @@ export async function shareInventoryBrochure(
     const { brochureFilename } = await import('./pdf_generator');
     const exp = Math.floor(Date.now() / 1000) + BROCHURE_LINK_TTL_SEC;
     const token = signPdfToken(inv.id, 'brandless', exp);
-    let pdfUrl = `${BROCHURE_API_BASE}/api/inventory/${inv.id}/brochure.pdf?variant=brandless&token=${token}`;
+    let pdfUrl = `${BROCHURE_API_BASE}/inventory/${inv.id}/brochure.pdf?variant=brandless&token=${token}`;
     if (partner?.name) {
         pdfUrl += `&pn=${encodeURIComponent(partner.name)}&pp=${encodeURIComponent(partner.phone_number || '')}`;
     }
