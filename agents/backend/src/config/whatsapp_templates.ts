@@ -79,7 +79,7 @@ export interface TemplatePayload {
  * TEXT/IMAGE headers). Body params: {{1}} = property summary, {{2}} = "1 of N".
  * Submitted via scripts/submit_brochure_template.js (UTILITY).
  */
-export const BROCHURE_TEMPLATE_NAME = 'rp_property_brochure_v1';
+export const BROCHURE_TEMPLATE_NAME = 'rp_property_brochure_v2';
 
 // ─── Template Registry ──────────────────────────────────────────
 
