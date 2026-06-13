@@ -1223,6 +1223,92 @@ router.post('/share-batch-to-client', authMiddleware, async (req: any, res) => {
     }
 });
 
+// POST /inventory/share/add-lead — when a shared-to number isn't in our DB, add it as a lead
+// from the inventory being shared. role='direct' → BUYER contact + pipeline deal; role='partner'
+// → PartnerAgent + welcome + an ON-BEHALF lead/deal (PENDING- buyer, PARTNER_INTERNAL). Assigned
+// to the uploader. Reuses the lead-page primitives WITHOUT touching routes/leads.ts.
+router.post('/share/add-lead', authMiddleware, async (req: any, res) => {
+    try {
+        const { phone, name, role, inventory_id } = req.body || {};
+        const agent = req.agent!;
+        const normalized = normalizePhone(phone);
+        if (!normalized || isPlaceholderPhone(phone)) return res.status(400).json({ error: 'Enter a valid phone number' });
+        if (!['direct', 'partner'].includes(role)) return res.status(400).json({ error: 'role must be direct or partner' });
+
+        const inv = await prisma.inventory.findUnique({
+            where: { id: inventory_id },
+            select: {
+                id: true, intent: true, type: true, category_id: true, sub_category_id: true, type_id: true,
+                taxonomy_node_id: true, specs: true, locality: true, city: true, location: true,
+                display_price: true, price: true, customer_price: true, preferred_lat: true, preferred_lng: true,
+            } as any,
+        });
+        if (!inv) return res.status(404).json({ error: 'Inventory not found' });
+
+        const { buildDemandFromInventory } = await import('../services/inventory_to_demand');
+        const { ensureDealForLead } = await import('../services/ensure_deal');
+        const d = buildDemandFromInventory(inv);
+        const demandSchema = d.demand_bhk ? { bhk: d.demand_bhk } : undefined;
+
+        if (role === 'partner') {
+            const { ensurePartnerAgent } = await import('../services/partner_auto_create');
+            const { sendPartnerWelcomeWhatsApp } = await import('../services/partner_notifications');
+            const pa = await ensurePartnerAgent(normalized, name || 'Partner Agent', agent.tenant_id, agent.id);
+            if (pa.wasCreated) {
+                sendPartnerWelcomeWhatsApp(pa.partnerPhone, name || 'Partner Agent', 'INDIVIDUAL', agent.name)
+                    .catch((e: any) => logger.warn(`[ShareAddLead] partner welcome failed: ${e.message}`));
+            }
+            const owningManagerId = (await prisma.partnerAgent.findUnique({ where: { id: pa.partnerId }, select: { managing_agent_id: true } }))?.managing_agent_id ?? agent.id;
+            // On-behalf buyer = PENDING- placeholder (partner's client name/phone optional, added later).
+            const pendingKey = `PENDING-${normalized.replace(/\D/g, '').slice(-10)}-${Date.now().toString(36)}`;
+            await prisma.contact.create({
+                data: {
+                    phone_number: pendingKey, tenant_id: agent.tenant_id, name: null, source: 'inventory_share',
+                    contact_type: 'BUYER', intent: d.intent, lead_type: 'PARTNER_REFERRAL',
+                    referral_partner_id: pa.partnerId, owning_manager_id: owningManagerId,
+                    preferred_location: d.preferred_location, preferred_lat: d.preferred_lat, preferred_lng: d.preferred_lng,
+                    budget_min: d.budget_min, budget_max: d.budget_max,
+                    category_id: d.category_id, sub_category_id: d.sub_category_id, type_id: d.type_id,
+                    demand_taxonomy_node_id: d.demand_taxonomy_node_id, demand_schema_values: demandSchema,
+                } as any,
+            });
+            const deal = await ensureDealForLead({ contactPhone: pendingKey, source: 'inventory_share', createdByAgentId: agent.id, assignedAgentId: agent.id, isPartnerReferral: true });
+            await prisma.transaction.update({
+                where: { id: deal.dealId },
+                data: { deal_scenario: 'PARTNER_INTERNAL', demand_handler_type: 'PARTNER', demand_handler_id: pa.partnerId, owning_manager_id: owningManagerId } as any,
+            });
+            logger.info(`[ShareAddLead] Partner ${normalized} (created=${pa.wasCreated}) + on-behalf deal ${deal.dealId} by ${agent.id}`);
+            return res.json({ success: true, role, partner_id: pa.partnerId, partner_created: pa.wasCreated, deal_id: deal.dealId, contact_phone: normalized });
+        }
+
+        // direct client
+        const existing = await prisma.contact.findUnique({ where: { phone_number: normalized } });
+        await prisma.contact.upsert({
+            where: { phone_number: normalized },
+            update: {
+                name: name || undefined, intent: d.intent, preferred_location: d.preferred_location,
+                budget_min: d.budget_min, budget_max: d.budget_max, category_id: d.category_id,
+                sub_category_id: d.sub_category_id, type_id: d.type_id, demand_taxonomy_node_id: d.demand_taxonomy_node_id,
+                demand_schema_values: demandSchema,
+            } as any,
+            create: {
+                phone_number: normalized, tenant_id: agent.tenant_id, name: name || null, source: 'inventory_share',
+                contact_type: 'BUYER', intent: d.intent, preferred_location: d.preferred_location,
+                preferred_lat: d.preferred_lat, preferred_lng: d.preferred_lng, budget_min: d.budget_min, budget_max: d.budget_max,
+                category_id: d.category_id, sub_category_id: d.sub_category_id, type_id: d.type_id,
+                demand_taxonomy_node_id: d.demand_taxonomy_node_id, demand_schema_values: demandSchema, created_by: agent.id,
+            } as any,
+        });
+        const deal = await ensureDealForLead({ contactPhone: normalized, source: 'inventory_share', createdByAgentId: agent.id, assignedAgentId: agent.id });
+        logger.info(`[ShareAddLead] Direct ${normalized} + deal ${deal.dealId} by ${agent.id}`);
+        res.json({ success: true, role, deal_id: deal.dealId, contact_created: !existing, contact_phone: normalized });
+    } catch (error) {
+        captureRouteError(error, req, { route: 'inventory#share-add-lead' });
+        logger.error('[ShareAddLead] Error:', error);
+        res.status(500).json({ error: 'Failed to add lead' });
+    }
+});
+
 // POST /inventory/:id/transfer — Transfer inventory to another team member
 router.post('/:id/transfer', authMiddleware, checkPermission('transfer_inventory'), async (req, res) => {
     try {
