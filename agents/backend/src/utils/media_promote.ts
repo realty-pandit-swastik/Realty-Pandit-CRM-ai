@@ -11,8 +11,9 @@
  * Idempotent + defensive:
  *  - only touches URLs under /uploads/pending/ (permanent ones pass through unchanged)
  *  - if the source file is already moved, returns the permanent URL
- *  - if the source file is gone (already cleaned up), returns the original URL untouched
- *    (unrecoverable — caller can detect via the unchanged /uploads/pending/ prefix)
+ *  - if the source file is gone (already cleaned up), the URL is DROPPED (not returned)
+ *    so a dead /uploads/pending/ URL is never persisted on the inventory → no 404.
+ *    `missing` counts how many were dropped.
  */
 import fs from 'fs';
 import path from 'path';
@@ -73,12 +74,11 @@ export function promotePendingMedia(urls: unknown, inventoryId: string): Promote
                 result.urls.push(permanentUrl);
                 result.moved++;
             } else {
-                // source gone (cleaned up) — keep original url, flag unrecoverable
-                result.urls.push(raw);
+                // source gone (cleaned up) — DROP the dead URL so it's never persisted as a 404.
                 result.missing++;
             }
         } catch {
-            result.urls.push(raw);
+            // unexpected FS error on a pending file — drop it rather than persist a likely-404 URL.
             result.missing++;
         }
     }
