@@ -25,8 +25,11 @@ const BASE = `https://graph.facebook.com/${V}`;
 
 if (!TOKEN) { console.error('Missing WHATSAPP_TOKEN'); process.exit(1); }
 
+// v2: request-fulfillment framing ("As requested … you enquired about") mirrors the
+// approved-UTILITY v5 property cards. v1 was auto-reclassified MARKETING (its name is
+// now category-locked ~4 weeks); v2 uses the proven UTILITY wording.
 const TEMPLATE = {
-    name: 'rp_property_brochure_v1',
+    name: 'rp_property_brochure_v2',
     language: 'en',
     category: 'UTILITY',
     components: [
@@ -34,9 +37,9 @@ const TEMPLATE = {
         {
             type: 'BODY',
             text:
-                'Namaste 🙏 Here are the complete details of the {{1}} (Property {{2}}).\n\n' +
+                'Namaste 🙏 As requested, here are the complete details of the {{1}} (Property {{2}}) you enquired about.\n\n' +
                 'Please find the attached brochure with photos, specifications & pricing.\n\n' +
-                'Reply here or call us to schedule a visit.',
+                'Reply here or tap below to schedule a visit. 🙏',
             example: { body_text: [['2 BHK Flat in Vaishali, Ghaziabad', '1 of 3']] },
         },
         { type: 'BUTTONS', buttons: [{ type: 'QUICK_REPLY', text: 'Schedule Visit' }] },
