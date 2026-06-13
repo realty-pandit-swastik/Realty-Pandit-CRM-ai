@@ -22,7 +22,9 @@ import { BROCHURE_TEMPLATE_NAME } from '../config/whatsapp_templates';
 const whatsapp = new WhatsAppService();
 const EVT_PROPERTY_SHARED = 'property_shared';
 
-const PUBLIC_API_BASE = process.env.PUBLIC_API_BASE || 'https://realtypandit.in/api';
+// Reuse the SAME public host the v5 card's image header uses (proven Meta-fetchable);
+// the brochure endpoint is mounted at /api/inventory/:id/brochure.pdf (app.ts).
+const BROCHURE_API_BASE = process.env.API_BASE_URL || 'https://api.realtypandit.in';
 const BROCHURE_LINK_TTL_SEC = 30 * 24 * 3600; // 30-day signed brochure link
 
 /** Short human summary for the {{1}} template param. e.g. "3 BHK Flat in Whitefield, Bengaluru". */
@@ -68,7 +70,7 @@ export async function shareInventoryBrochure(
     const { brochureFilename } = await import('./pdf_generator');
     const exp = Math.floor(Date.now() / 1000) + BROCHURE_LINK_TTL_SEC;
     const token = signPdfToken(inv.id, 'brandless', exp);
-    let pdfUrl = `${PUBLIC_API_BASE}/inventory/${inv.id}/brochure.pdf?variant=brandless&token=${token}`;
+    let pdfUrl = `${BROCHURE_API_BASE}/api/inventory/${inv.id}/brochure.pdf?variant=brandless&token=${token}`;
     if (partner?.name) {
         pdfUrl += `&pn=${encodeURIComponent(partner.name)}&pp=${encodeURIComponent(partner.phone_number || '')}`;
     }
