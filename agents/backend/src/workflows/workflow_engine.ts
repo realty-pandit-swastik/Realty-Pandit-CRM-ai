@@ -934,7 +934,9 @@ export class WorkflowEngine {
         try {
             const photos = promotePendingMedia(inventory.media_urls, inventory.id);
             const videos = promotePendingMedia(inventory.video_urls, inventory.id);
-            if (photos.moved > 0 || videos.moved > 0) {
+            // Persist when anything was moved OR dropped (a dead /uploads/pending/ URL removed),
+            // so an all-dead commit doesn't keep the 404 URLs.
+            if (photos.moved > 0 || videos.moved > 0 || photos.missing > 0 || videos.missing > 0) {
                 await prisma.inventory.update({
                     where: { id: inventory.id },
                     data: { media_urls: photos.urls, video_urls: videos.urls },

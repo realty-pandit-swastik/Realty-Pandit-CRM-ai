@@ -12,6 +12,7 @@ import { ensureOwner } from '../services/ensure_owner';
 import { ensurePartnerAgent } from '../services/partner_auto_create';
 import { authMiddleware, checkPermission } from '../middleware/auth';
 import logger from '../utils/logger';
+import { absurdPriceError } from '../utils/price_sanity';
 import { normalizePhone, isPlaceholderPhone } from '../utils/phone';
 import { findInventoryIdsByAddress } from '../utils/inventory_search';
 import { expandTaxonomyNodeIds, bhkSpecsFilter } from '../utils/taxonomy_filter';
@@ -186,6 +187,10 @@ router.post('/', authMiddleware, checkPermission('edit_inventory'), async (req, 
                 }
             }
         }
+
+        // Guard: reject fat-fingered demand prices (e.g. ₹782 Cr on a flat); land/plots exempt.
+        const createPriceErr = absurdPriceError(price ? parseFloat(String(price)) : null, legacyType);
+        if (createPriceErr) return res.status(400).json({ error: createPriceErr });
 
         // Create inventory
         const inventory = await prisma.inventory.create({
@@ -699,6 +704,13 @@ router.patch('/:id', authMiddleware, checkPermission('edit_inventory'), async (r
             if (updateData[f] === '') updateData[f] = null;
         }
         // Optional string fields: keep empty strings as-is (Prisma handles them fine)
+
+        // Guard: reject fat-fingered demand prices on edit (e.g. ₹782 Cr on a flat); land/plots exempt.
+        const editType = updateData.type ?? existing.type;
+        for (const pf of ['price', 'customer_price', 'display_price']) {
+            const e = absurdPriceError(updateData[pf], editType);
+            if (e) return res.status(400).json({ error: e });
+        }
 
         // Taxonomy (Phase 2 — 2026-05-27): the Edit Classification cascade sends taxonomy_node_id.
         // Persist it AND derive the legacy classification the rest of the app still reads
