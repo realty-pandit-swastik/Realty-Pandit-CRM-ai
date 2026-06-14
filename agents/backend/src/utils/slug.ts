@@ -49,28 +49,38 @@ function extractAddressParts(fullAddress: string, city?: string | null): string[
 const GEO_KEYWORD = /^(sector|sec|phase|block|pocket|gali|ward|zone|extn|extension|colony|nagar|vihar|enclave|garden|greens?|city|road|marg|chowk|khand|mohalla)\b/i;
 // Explicit unit identifiers anywhere in a segment: "Plot No 11", "H.No 42", "Flat 5", "Shop 3".
 const UNIT_LABEL = /\b(flat|plot|unit|shop|house|h|gala|khasra|kh)\.?\s*(no\.?)?\s*[-:]?\s*\w*\d/i;
-// A bare unit token like "FF1", "G4", "102", "325/4", "4/498", "16a".
-const BARE_UNIT = /^[a-z]{0,4}[-\s/]?\d+([-/]\d+)?[a-z]?$/i;
+// A bare unit token like "FF1", "G4", "102", "325/4", "4/498", "16a", "626 B", "D-1601".
+const BARE_UNIT = /^[a-z]{0,4}[-\s/]?\d+([\s\-/]+\d+)*([\s\-/]*[a-z]{1,4})?$/i;
+// A letter-prefixed unit embedded inside a longer segment: "D-1601", "B-204", "FF 325".
+const EMBEDDED_UNIT = /\b[a-z]{1,3}[-\s]?\d{2,}[a-z]?\b/gi;
 
 /**
  * Privacy: remove flat/plot/unit identifiers from address parts so they never reach the
- * public SEO slug, while keeping sector/locality/society (good for SEO). Drops a part when:
- *  1. it exactly equals the structured flat_no/plot_no (part-level — "Sector 6" survives plot_no "6");
- *  2. it is an explicit unit label ("Plot No 11", "H.No 42");
- *  3. it's a leading (first two) bare unit token ("FF1","325/4","102") and not a geo term —
- *     this catches legacy rows where flat_no/plot_no columns are empty but full_address embeds the unit.
+ * public SEO slug, while keeping sector/locality/society (good for SEO). For each part:
+ *  1. drop it if it exactly equals the structured flat_no/plot_no (part-level — "Sector 6" survives plot_no "6");
+ *  2. drop it if it is an explicit unit label ("Plot No 11", "H.No 42");
+ *  3. drop it if it's a leading (first two) bare unit token ("FF1","325/4","102","626 B") and not a geo term;
+ *  4. otherwise scrub an embedded unit out of an otherwise-keepable segment ("Apex Valley D-1601" → "Apex Valley"),
+ *     including the exact flat/plot value when it's a pure number of >=3 digits (short ones like "3"/"6" are
+ *     left alone so we never mangle "Sector 3"/"Sector 6"). Parts that scrub to empty are dropped.
  * If everything would be stripped, returns [] (an address-less slug beats leaking the unit).
  */
 function stripUnitParts(parts: string[], flatNo?: string | null, plotNo?: string | null): string[] {
-    const priv = new Set([flatNo, plotNo].filter(Boolean).map(v => toSlug(String(v))).filter(Boolean));
-    return parts.filter((p, i) => {
-        const ps = toSlug(p);
-        if (!ps) return false;
-        if (priv.has(ps)) return false;                                        // 1
-        if (UNIT_LABEL.test(p)) return false;                                  // 2
-        if (i < 2 && BARE_UNIT.test(p.trim()) && !GEO_KEYWORD.test(p.trim())) return false; // 3
-        return true;
-    });
+    const privExact = new Set([flatNo, plotNo].filter(Boolean).map(v => toSlug(String(v))).filter(Boolean));
+    const privNums = [flatNo, plotNo].filter(Boolean).map(v => String(v).trim()).filter(n => /^\d{3,}$/.test(n));
+    const out: string[] = [];
+    for (let i = 0; i < parts.length; i++) {
+        const raw = parts[i].trim();
+        if (!toSlug(raw)) continue;
+        if (privExact.has(toSlug(raw))) continue;                                   // 1
+        if (UNIT_LABEL.test(raw)) continue;                                         // 2
+        if (i < 2 && BARE_UNIT.test(raw) && !GEO_KEYWORD.test(raw)) continue;       // 3
+        let scrubbed = raw.replace(EMBEDDED_UNIT, ' ');                             // 4
+        for (const n of privNums) scrubbed = scrubbed.replace(new RegExp(`\\b${n}\\b`, 'g'), ' ');
+        scrubbed = scrubbed.replace(/\s+/g, ' ').trim();
+        if (scrubbed && toSlug(scrubbed)) out.push(scrubbed);
+    }
+    return out;
 }
 
 interface SlugInput {
