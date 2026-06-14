@@ -1,6 +1,6 @@
 import { Metadata } from 'next';
 import { Suspense } from 'react';
-import { notFound, permanentRedirect } from 'next/navigation';
+import { notFound } from 'next/navigation';
 import PropertyDetailClient from './PropertyDetailClient';
 import { propertyJsonLd, breadcrumbJsonLd } from '@/lib/seo';
 import { formatAddress, formatPropertyTitle, getTypeLabel, getRoomCount, getRoomLabel } from '@/lib/propertyUtils';
@@ -114,13 +114,6 @@ export default async function PropertyDetailPage({ params }: { params: Promise<{
     const property = await fetchProperty(id);
 
     if (!property) notFound();
-
-    // Privacy/SEO: any old, shared, or indexed URL (old slug that leaked the unit number,
-    // a UUID, or an RP-* display_id) is 308-redirected to the clean canonical slug. The
-    // backend resolver still matches by the trailing id, so this never loops.
-    if (property.slug && id !== property.slug) {
-        permanentRedirect(`/properties/${property.slug}`);
-    }
 
     // Schema JSON-LD for this property
     const schemaData = property ? propertyJsonLd({
