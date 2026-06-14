@@ -969,6 +969,8 @@ export class WorkflowEngine {
                 sub_locality: addrSubLocality,
                 apartment_name: apartmentName,
                 full_address: fullAddress || undefined,
+                flat_no: flatNo,   // stripped from the public slug (privacy)
+                plot_no: plotNo,   // stripped from the public slug (privacy)
                 configuration_name: configName,
             });
             await prisma.inventory.update({ where: { id: inventory.id }, data: { slug } });

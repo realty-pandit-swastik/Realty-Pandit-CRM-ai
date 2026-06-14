@@ -29,6 +29,8 @@ async function backfillSlugs() {
             sub_locality: true,
             apartment_name: true,
             full_address: true,
+            flat_no: true,
+            plot_no: true,
             property_configuration: { select: { name: true } },
         },
     });
@@ -52,6 +54,8 @@ async function backfillSlugs() {
                 sub_locality: property.sub_locality,
                 apartment_name: property.apartment_name,
                 full_address: property.full_address,
+                flat_no: property.flat_no,
+                plot_no: property.plot_no,
                 configuration_name: property.property_configuration?.name,
             });
 
