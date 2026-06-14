@@ -44,6 +44,35 @@ function extractAddressParts(fullAddress: string, city?: string | null): string[
     return parts;
 }
 
+// A leading address segment that starts with one of these is a real geo term, never a unit
+// (so "Sector 4" / "Phase 1" are always kept even though they end in a number).
+const GEO_KEYWORD = /^(sector|sec|phase|block|pocket|gali|ward|zone|extn|extension|colony|nagar|vihar|enclave|garden|greens?|city|road|marg|chowk|khand|mohalla)\b/i;
+// Explicit unit identifiers anywhere in a segment: "Plot No 11", "H.No 42", "Flat 5", "Shop 3".
+const UNIT_LABEL = /\b(flat|plot|unit|shop|house|h|gala|khasra|kh)\.?\s*(no\.?)?\s*[-:]?\s*\w*\d/i;
+// A bare unit token like "FF1", "G4", "102", "325/4", "4/498", "16a".
+const BARE_UNIT = /^[a-z]{0,4}[-\s/]?\d+([-/]\d+)?[a-z]?$/i;
+
+/**
+ * Privacy: remove flat/plot/unit identifiers from address parts so they never reach the
+ * public SEO slug, while keeping sector/locality/society (good for SEO). Drops a part when:
+ *  1. it exactly equals the structured flat_no/plot_no (part-level — "Sector 6" survives plot_no "6");
+ *  2. it is an explicit unit label ("Plot No 11", "H.No 42");
+ *  3. it's a leading (first two) bare unit token ("FF1","325/4","102") and not a geo term —
+ *     this catches legacy rows where flat_no/plot_no columns are empty but full_address embeds the unit.
+ * If everything would be stripped, returns [] (an address-less slug beats leaking the unit).
+ */
+function stripUnitParts(parts: string[], flatNo?: string | null, plotNo?: string | null): string[] {
+    const priv = new Set([flatNo, plotNo].filter(Boolean).map(v => toSlug(String(v))).filter(Boolean));
+    return parts.filter((p, i) => {
+        const ps = toSlug(p);
+        if (!ps) return false;
+        if (priv.has(ps)) return false;                                        // 1
+        if (UNIT_LABEL.test(p)) return false;                                  // 2
+        if (i < 2 && BARE_UNIT.test(p.trim()) && !GEO_KEYWORD.test(p.trim())) return false; // 3
+        return true;
+    });
+}
+
 interface SlugInput {
     type?: string;
     category?: string;
@@ -55,6 +84,8 @@ interface SlugInput {
     sub_locality?: string | null;
     apartment_name?: string | null;
     full_address?: string | null;
+    flat_no?: string | null;   // private — never in the public slug
+    plot_no?: string | null;   // private — never in the public slug
     configuration_name?: string | null; // e.g. "3 BHK", "2 BHK"
     id: string;
 }
@@ -118,6 +149,9 @@ export function generateSlugBase(property: SlugInput): string {
             addressParts.push(property.city);
         }
     }
+
+    // Privacy: never expose the flat/plot/unit number in the public URL.
+    addressParts = stripUnitParts(addressParts, property.flat_no, property.plot_no);
 
     if (addressParts.length > 0) {
         parts.push('in');
