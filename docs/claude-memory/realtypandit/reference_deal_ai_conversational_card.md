@@ -1,0 +1,20 @@
+---
+name: Deal/conversational AI now sends v5 property CARDS (not text) — completes the v5 migration
+description: 2026-06-11 — the WhatsApp AI chat/deal path (matching_agent) sent a free-form "Properties Found" text list with no buttons; now routes deal-context matches through shareNextProperty (one v5 card at a time, with Call Back/Schedule Visit/Next Option) + a 50% match-score floor.
+metadata:
+  type: reference
+---
+
+The v5 template migration ([[reference_inventory_share_template_fix]], 2026-06-10) wired 4 surfaces (Inventory page, External-Lead, Deal "Company WhatsApp" `shareSpecificProperty`, Deal auto-share `shareNextProperty`) to category-correct v5 cards — but the **conversational/AI chat path was left on raw text**. This was the "AI bot sends the wrong inventory format in the deal" report (Puneet, 2026-06-11).
+
+**Root cause:** `agents/matching_agent.ts` rendered matches via `matching_engine.formatMatchesForWhatsApp()` → a free-form `*🏠 N Properties Found:*` text blob (`*TYPE*` bullets) sent via `sendText` — NO Meta template, NO buttons, silently droppable outside Meta's 24h window. Reached via `sales_agent` (QUALIFICATION auto-match) and the webhook deal branch. Note `webhook_processor` step **3b** already carded GENERIC msgs ("Hi"/"yes" → 3b.3 → `shareNextProperty`); only CONVERSATIONAL msgs (>20 chars or question-like, 3b.2) fell through to the text path. `formatMatchesForWhatsApp` also exists 3× more (admin_agent search cmd, routes/webhooks catalog fallback, internal_tools voice) — those are non-customer surfaces, left as-is.
+
+**Fix (deployed 2026-06-11 — commits 1b3ec2f + a848b04, merged 89fec47):**
+1. `matching_agent.handle()`: if `context.currentTransaction?.id` (a deal) → `await shareNextProperty(dealId)` (one v5 card, deal's richer criteria, buttons) and return `{action:'reply', metadata:{card_sent:true}}` — **no `reply_script`**. `message_router` populates `context.currentTransaction` (message_router.ts:248). Any error → falls through to legacy text (safe). Non-deal contexts (website chat) unchanged.
+2. `webhook_processor.ts:671`: the empty-reply fallback ("Namaste! How can I help?") is now `else if (!result.metadata?.card_sent)` — a card-only turn sends ONLY the card, not a stray greeting. (`if (result.reply_script)` at :637 already guarded empty text.)
+3. `services/property_sharing.ts shareNextProperty`: **50% `MIN_MATCH_SCORE` floor** after `findMatches` (Puneet chose 50%; budget kept at engine default **±30%**). The engine hard-filters type/intent/budget/geo/BHK but returned top-N with NO floor — now weak-but-passing matches are skipped (→ exhausted / `rp_all_properties_shared`) instead of sent. Applies to ALL `shareNextProperty` callers (QUALIFIED auto, conversational AI, Next Option button); the manual `shareSpecificProperty` (Deal Workspace pick) intentionally bypasses it. The `50` is a one-line tune if "no close matches" fires too often.
+4. `services/property_card_reply_handler.ts`: typed "schedule visit"/"call back"/"next" (**EXACT-phrase**, not substring, so "next week"/"I visited" don't misfire) now route like button taps. The tap handler was already wired ([[reference_callback_routing]]) at `webhook_processor.ts:85` and runs before the normal pipeline.
+
+**No double-send:** `shareNextProperty` triggers per inbound message are mutually exclusive (button taps short-circuit at :85; 3b.1/3b.2/3b.3 are if-else) and `shareNextProperty`'s `sharedIds` Set dedups the same property across the omnidim/manual/AI triggers.
+
+So the v5 card path now covers all **5** surfaces. `formatMatchesForWhatsApp` is doc-guarded as non-customer-only — do NOT reintroduce it into the buyer path. Buttons (Next Option → next card; Schedule Visit → VISIT_SCHEDULED + `rp_visit_availability` + coordinator alert + CRM task; Call Back → `rp_callback_manager_alert` + CRM task) all run via the existing handler once a real card is sent. Backend deploy verified `pm2 realty-backend` online + `/health` 200; **live customer button test still owner-side** (no live token/test-deal in the dev box).

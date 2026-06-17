@@ -1,0 +1,20 @@
+---
+name: reference_website_lead_routing
+description: Website Schedule-Visit + Contact-Agent now route leads (new→inventory manager, existing→their agent), capture a requirement mirroring the enquired inventory, create a callback task; + pre-rented investment returns + public name privacy
+metadata:
+  type: reference
+---
+
+**2026-06-11 SHIPPED + live-verified (API + DB readback).** Three things on the public website + backend.
+
+**1. Lead routing (the core).** Shared helper [`utils/website_lead.ts`](clients/sunny-sharma/projects/reality-pandit/agents/backend/src/utils/website_lead.ts): `resolveWebsiteLeadHandler(phone, property)` → **EXISTING contact → their `assigned_agent_id`** (never reassign); **NEW → the inventory manager** = `property.assigned_agent_id` (the team member the inventory is assigned to) → `owning_manager_id` → `uploaded_by_agent_id` → super_boss. A NEW contact is created **owned** by the handler (`assigned_agent_id` + `owning_manager_id` both set) so it's visible in CRM/PWA (fixes the old null-assignment hidden-lead bug). Applied in BOTH `/public/schedule-visit` (ScheduledVisit.internal_handler_id + Appointment.assigned_to_agent_id = handler — `createPropertyVisitAppointment` got an optional `assigned_to_agent_id` override) and `/public/properties/:id/verify-otp`.
+
+**2. Requirement capture from the enquired inventory.** `buildDemandFromInventory(inv)` copies the inventory's canonical attrs onto the new Contact's demand (the schema calls demand "a mirror of inventory.specs + taxonomy_node_id"): `intent` (sell→buy/BUYER, rent→rent/TENANT), `demand_taxonomy_node_id` = inv.taxonomy_node_id, `demand_schema_values` = `{bhk}` from specs, `preferred_location` = locality+city, `area_min`. **Budget intentionally omitted** (price-scale ambiguity). Only NEW contacts get it; EXISTING requirements are preserved (never clobbered). → the lead is instantly matchable. Verified: a new visit on the 3BHK Vaishali flat created a contact assigned to Happy Bhai with demand node + `{bhk:"3"}` + "Sector 4, Ghaziabad".
+
+**3. Contact Agent (OTP reveal) now captures.** `verify-otp` was a dead-end for new buyers (no lead). Now it upserts+owns the contact (same rule), creates a **`CALLBACK_REQUEST` lead-action task** via the EXISTING `createLeadActionTask` (workflow_task_service — push + 15-min SLA auto-escalation; added a `'website'` sourceChannel), and **reveals the resolved handler's** phone (existing→their agent, new→inventory manager). The task/appointment/assigned-contact land in the right person's **PWA** (Tasks/Visits/Leads) + push.
+
+**Also shipped same change:**
+- **Pre-rented investment returns** (website detail [PropertyDetailClient] + card [PropertyCard]): from price + monthly rent compute **annual income (rent×12), gross yield % (income÷price), payback yrs (price÷income)**. Badge leads with "Pre-rented · X% yield". NB: inventory `price` is stored ABSOLUTE with `price_unit` often `''` (multiplier 1) — reuse the existing `× (Cr→1e7|Lakh→1e5|1)` math. Live: ₹1.65 Cr @ ₹1L/mo → 7.3% p.a. · ₹12.0 L/yr · ~13.8 yrs.
+- **Privacy — never expose a team member's name publicly.** Removed "Posted by"/"Listed by" from [PropertyListCard] + [PropertyDetailClient], AND neutralized the public API ([public.ts]) so the wire doesn't leak it: list+detail `listed_by:'Realty Pandit'`, `owner_name` null/'Owner', and **`listed_by_phone: null`** (the detail used to leak the agent's phone, defeating the OTP gate). The OTP "Contact Agent" reveal is the only path to a real contact.
+
+**Pre-existing schedule-visit facts that still hold:** date+time mandatory → `slotToScheduledAt` ([[feedback_visit_models_split]]); the visit creates BOTH ScheduledVisit + the canonical Appointment (CRM reads Appointment). No schema change. Verify website privacy via `curl …/public/properties` (not just the UI). Related: [[reference_callback_routing]] (the lead-action task + SLA infra), [[reference_pre_rented_feature]] (the pre_rented columns), [[feedback_data_corrections_owned_by_lead_owner]] (test data cleaned up after live tests).
