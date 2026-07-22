@@ -44,8 +44,11 @@ export function presetRange(preset: PresetKey, customFrom?: string, customTo?: s
 }
 
 export function defaultRange(): DateRange {
-  const { from, to } = presetRange('30d');
-  return { preset: '30d', from, to };
+  // 2026-07-22: default range changed 30d -> today (owner request). All five dashboard
+  // tabs (Main, Lead Intelligence, User Performance, Team Performance, Property Analytics)
+  // import this one helper, so the default lives in exactly one place.
+  const { from, to } = presetRange('today');
+  return { preset: 'today', from, to };
 }
 
 interface MultiSelectProps {
