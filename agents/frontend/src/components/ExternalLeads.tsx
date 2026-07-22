@@ -180,6 +180,11 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
     // the list is capped at `pageLimit`. recentTotal = the real filtered count; Load-more raises pageLimit.
     const [recentTotal, setRecentTotal] = useState(0);
     const [pageLimit, setPageLimit] = useState(500);
+    // Column sorting (2026-07-22). Server-side — the list is capped at pageLimit, so sorting
+    // client-side would only reorder the rows already loaded. Deliberately NOT persisted:
+    // a refresh returns to the default "latest on top".
+    const [leadSortKey, setLeadSortKey] = useState<string>('date');
+    const [leadSortDir, setLeadSortDir] = useState<'asc' | 'desc'>('desc');
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
@@ -357,6 +362,8 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
                         budget_min: budgetMinFilter.trim() || undefined,
                         budget_max: budgetMaxFilter.trim() || undefined,
                         limit: String(pageLimit),
+                        sort: leadSortKey,
+                        direction: leadSortDir,
                     },
                 });
             // Support both new format { leads, total } and legacy flat array
@@ -370,7 +377,7 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
         } finally {
             setLoading(false);
         }
-    }, [sourceFilter, statusFilter, agentFilter, intentFilter, filterTaxonomy, locationSelection, notContactedDays, noShowcaseDays, budgetMinFilter, budgetMaxFilter, debouncedSearch, activeFilter, pageLimit]);
+    }, [sourceFilter, statusFilter, agentFilter, intentFilter, filterTaxonomy, locationSelection, notContactedDays, noShowcaseDays, budgetMinFilter, budgetMaxFilter, debouncedSearch, activeFilter, pageLimit, leadSortKey, leadSortDir]);
 
     useEffect(() => { loadData(); }, [loadData]);
     useEffect(() => {
@@ -1346,9 +1353,28 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
                             <thead>
                                 <tr style={{ borderBottom: '1px solid var(--border-secondary)' }}>
                                     {leadSelectMode && <th style={{ padding: '6px 10px', width: '34px' }} />}
-                                    {['Name', 'Phone', 'Source', 'Status', 'Assigned to', 'Budget', 'Score', 'Intent', 'Location', 'Date', ''].map(h => (
-                                        <th key={h} style={{ textAlign: 'left', padding: '6px 10px', color: 'var(--text-secondary)', fontSize: '10px', fontWeight: 600, textTransform: 'uppercase' }}>{h}</th>
-                                    ))}
+                                    {([['Name', 'name'], ['Phone', 'phone'], ['Source', 'source'], ['Status', 'status'], ['Assigned to', 'assigned_to'], ['Budget', 'budget'], ['Score', 'score'], ['Intent', 'intent'], ['Location', 'location'], ['Date', 'date'], ['', '']] as Array<[string, string]>).map(([h, key]) => {
+                                        const active = !!key && leadSortKey === key;
+                                        return (
+                                            <th
+                                                key={h || '__actions'}
+                                                onClick={key ? () => {
+                                                    if (leadSortKey === key) setLeadSortDir(d => (d === 'asc' ? 'desc' : 'asc'));
+                                                    else { setLeadSortKey(key); setLeadSortDir(key === 'date' || key === 'score' || key === 'budget' ? 'desc' : 'asc'); }
+                                                } : undefined}
+                                                title={key ? `Sort by ${h}` : undefined}
+                                                style={{
+                                                    textAlign: 'left', padding: '6px 10px', fontSize: '10px', fontWeight: 600,
+                                                    textTransform: 'uppercase', whiteSpace: 'nowrap', userSelect: 'none',
+                                                    color: active ? 'var(--text-link)' : 'var(--text-secondary)',
+                                                    cursor: key ? 'pointer' : 'default',
+                                                }}
+                                            >
+                                                {h}
+                                                {key && <span style={{ marginLeft: 3, opacity: active ? 1 : 0.35 }}>{active ? (leadSortDir === 'asc' ? '\u25B2' : '\u25BC') : '\u21C5'}</span>}
+                                            </th>
+                                        );
+                                    })}
                                 </tr>
                             </thead>
                             <tbody>

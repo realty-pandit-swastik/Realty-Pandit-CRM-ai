@@ -301,10 +301,30 @@ router.get('/recent-external', async (req: any, res) => {
             }
         }
 
+        // Sorting (2026-07-22): this list is paginated (500 of ~4,900), so ordering MUST run
+        // server-side — re-sorting the loaded page would only rank an arbitrary slice.
+        // Default stays created_at desc ("latest on top"); the UI does not persist a choice,
+        // so a refresh always returns here.
+        const LEAD_SORTS: Record<string, (d: 'asc' | 'desc') => any> = {
+            name:        d => ({ name: { sort: d, nulls: 'last' } }),
+            phone:       d => ({ phone_number: d }),
+            source:      d => ({ source: d }),
+            status:      d => ({ lead_status: d }),
+            assigned_to: d => ({ assigned_agent: { name: d } }),
+            budget:      d => ({ budget_max: { sort: d, nulls: 'last' } }),
+            score:       d => ({ lead_score: { total_score: d } }),
+            intent:      d => ({ intent: { sort: d, nulls: 'last' } }),
+            location:    d => ({ preferred_location: { sort: d, nulls: 'last' } }),
+            date:        d => ({ created_at: d }),
+        };
+        const sortKey = String(req.query.sort || 'date');
+        const sortDir: 'asc' | 'desc' = String(req.query.direction || 'desc') === 'asc' ? 'asc' : 'desc';
+        const leadOrderBy = (LEAD_SORTS[sortKey] || LEAD_SORTS.date)(sortDir);
+
         const [leads, total] = await Promise.all([
             prisma.contact.findMany({
                 where,
-                orderBy: { created_at: 'desc' },
+                orderBy: leadOrderBy,
                 take: limit,
                 skip: (page - 1) * limit,
                 select: {
