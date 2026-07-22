@@ -82,3 +82,26 @@ export function pickSpecChips(item: any): SpecChip[] {
     }
     return chips;
 }
+
+/**
+ * Canonical readers (2026-07-22). The 2026-05-28 Specs Unification moved type-specific fields
+ * into `inventory.specs` under taxonomy keys. `specs.bhk_count`, `specs.society_name` and
+ * `specs.floor` are LEGACY keys present on ZERO of 775 inventory rows — reading them rendered
+ * the deal Share tab and the timeline property popup effectively blank. Read through these.
+ */
+export function bhkOf(specs: any): string | null {
+    const raw = specs?.bhk ?? specs?.rooms ?? specs?.bedrooms ?? specs?.bhk_count;
+    if (raw == null || raw === '') return null;
+    const n = parseInt(String(raw), 10);
+    return Number.isNaN(n) ? String(raw) : String(n);
+}
+
+/** Society / building. Canonical field is inventory.apartment_name (specs.society_name is dead). */
+export function societyOf(inv: any): string {
+    return inv?.apartment_name || inv?.specs?.society_name || inv?.locality || inv?.location || '';
+}
+
+/** Human property-type label — the taxonomy node name beats the raw enum slug ("builder_floor"). */
+export function propertyTypeLabel(inv: any): string {
+    return inv?.taxonomy_node?.name || inv?.flat_property_type?.name || inv?.type || 'Property';
+}

@@ -8,6 +8,7 @@ import { Calendar, List, LayoutGrid, Plus, X, Save } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { API_BASE_URL, authedFetch } from '../lib/api';
 import { useConfirm } from '../contexts/ConfirmContext';
+import { defaultReminderDate } from '../lib/defaultReminder';
 
 interface Project {
   id: string;
@@ -72,7 +73,7 @@ export default function TaskBoard() {
     title: '',
     description: '',
     assigned_to: agent?.id || '',
-    due_date: new Date().toISOString().split('T')[0],
+    due_date: defaultReminderDate(),
     priority: 'MEDIUM',
     status: 'TODO',
     tags: [],
@@ -613,7 +614,7 @@ export default function TaskBoard() {
                 title: '',
                 description: '',
                 assigned_to: agent?.id || '',
-                due_date: new Date().toISOString().split('T')[0],
+                due_date: defaultReminderDate(),
                 priority: 'MEDIUM',
                 status: 'TODO',
                 tags: [],

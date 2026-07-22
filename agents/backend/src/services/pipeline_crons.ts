@@ -39,8 +39,8 @@ export function initPipelineCrons(): void {
     });
 
     cron.schedule('45 3 * * *', async () => {
-        try { await runNegotiationInactivitySweep(); }
-        catch (err) { logger.error('[PipelineCron] NEGOTIATION inactivity sweep error:', err); captureCronError('negotiation_inactivity', err); }
+        try { await runInactivitySweep(); }
+        catch (err) { logger.error('[PipelineCron] Inactivity sweep error:', err); captureCronError('inactivity_sweep', err); }
     });
 
     // Stage 2 KRA cold-lead cadence — runs daily 10:20 IST (04:50 UTC); per-deal logic decides
@@ -70,7 +70,14 @@ export function initPipelineCrons(): void {
         catch (err) { logger.error('[PipelineCron] Manager 24hr briefing error:', err); captureCronError('manager_24hr_briefing', err); }
     });
 
-    logger.info('[PipelineCron] Pipeline crons started (appt 30min, neg-nudge+inactivity 9AM IST, cold 10:20 IST, visit reminders 30min, mgr 8AM schedule, mgr 24hr briefing)');
+    // VS-1 / VS-2: post-visit follow-up (after the visit time passes) + stale-'requested' re-ask.
+    // Every 30 min, offset to :05/:35 so it doesn't collide with the reminder cron at :00/:30.
+    cron.schedule('5,35 * * * *', async () => {
+        try { await runPostVisitFollowup(); }
+        catch (err) { logger.error('[PipelineCron] Post-visit follow-up error:', err); captureCronError('post_visit_followup', err); }
+    });
+
+    logger.info('[PipelineCron] Pipeline crons started (appt 30min, neg-nudge+inactivity 9AM IST, cold 10:20 IST, visit reminders 30min, mgr 8AM schedule, mgr 24hr briefing, post-visit 30min)');
 }
 
 // ─── 1. NEGOTIATION 48hr nudge ───────────────────────────────────────────────
@@ -78,7 +85,7 @@ export function initPipelineCrons(): void {
 // Deals in NEGOTIATION for >48hr without any Appointment recorded.
 // Send `rp_negotiation_nudge` to coordinator. Once per deal — dedup via Interaction.
 
-async function runNegotiationNudge(): Promise<void> {
+export async function runNegotiationNudge(): Promise<void> {
     const fortyEightHoursAgo = new Date(Date.now() - 48 * 60 * 60 * 1000);
 
     const candidates = await prisma.transaction.findMany({
@@ -100,13 +107,16 @@ async function runNegotiationNudge(): Promise<void> {
         // Skip if team logged an update in the last 48 hours (meeting/call/note)
         if (teamActedRecently(deal, 48 * 60 * 60 * 1000)) continue;
 
-        const alreadyNudged = await prisma.interaction.findFirst({
+        // (NEG-4) Recurring (was once-ever): only skip if nudged in the last 48h, so a stalled
+        // negotiation keeps getting pushed every ~2 days instead of a single lifetime ping.
+        const recentNudge = await prisma.interaction.findFirst({
             where: {
                 event_type: EVT_NEGOTIATION_NUDGE,
                 metadata: { path: ['deal_id'], equals: deal.id },
+                created_at: { gte: fortyEightHoursAgo },
             },
         });
-        if (alreadyNudged) continue;
+        if (recentNudge) continue;
 
         const customerName = deal.demand_contact?.name || 'Customer';
         await whatsapp.sendTemplate(deal.coordinator.phone, 'rp_negotiation_nudge', {
@@ -124,25 +134,44 @@ async function runNegotiationNudge(): Promise<void> {
             },
         });
         logger.info(`[PipelineCron] Negotiation 48hr nudge sent for deal ${deal.id}`);
+
+        // (NEG-4) Value-based escalation: a high-value deal (≥ ₹1 Cr) stuck for 3+ nudge cycles gets a
+        // super_boss ping, not just repeated coordinator pings (a ₹5 Cr deal ≠ a ₹15k rental).
+        if (Number(deal.demand_budget_max ?? 0) >= 10000000) {
+            const priorNudges = await prisma.interaction.count({
+                where: { event_type: EVT_NEGOTIATION_NUDGE, metadata: { path: ['deal_id'], equals: deal.id } },
+            });
+            if (priorNudges >= 3) {
+                const boss = await prisma.agent.findFirst({ where: { role: 'super_boss', status: 'active' }, select: { phone: true } });
+                if (boss?.phone) {
+                    const cr = (Number(deal.demand_budget_max) / 10000000).toFixed(2);
+                    await whatsapp.sendTemplate(boss.phone, 'rp_negotiation_nudge', {
+                        customer_name: `${customerName} — ₹${cr}Cr deal, ${priorNudges}x nudged, please step in`,
+                    }).catch(() => {});
+                    logger.info(`[PipelineCron] High-value negotiation escalated to super_boss for deal ${deal.id}`);
+                }
+            }
+        }
     }
 }
 
-// ─── 3. NEGOTIATION 14-day inactivity → ON_HOLD ─────────────────────────────
+// ─── 3. NEGOTIATION / VISITED 14-day inactivity → ON_HOLD ───────────────────
 //
-// Deals in NEGOTIATION with no Interaction in last 14 days → move to ON_HOLD.
-// The status_changed wiring then fires `rp_deal_onhold` to coordinator (per
-// updated `deal_notifications.ts`).
+// Deals stalled in NEGOTIATION or VISITED with no Interaction in last 14 days → move to ON_HOLD.
+// (VS4-3, 2026-06-22) Extended to VISITED: Phase 1 made VISITED a transient pass-through, so a deal
+// left resting there for 14 days (a manual drag that was forgotten) is effectively dead — this is the
+// VISITED stall backstop. The status_changed wiring then fires `rp_deal_onhold` to the coordinator.
 
-async function runNegotiationInactivitySweep(): Promise<void> {
+export async function runInactivitySweep(): Promise<void> {
     const fourteenDaysAgo = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000);
 
     const candidates = await prisma.transaction.findMany({
         where: {
-            status: 'NEGOTIATION',
+            status: { in: ['NEGOTIATION', 'VISITED'] },
             updated_at: { lt: fourteenDaysAgo },
             ai_paused: false,
         },
-        select: { id: true, tenant_id: true, demand_contact_id: true, last_team_action_at: true },
+        select: { id: true, status: true, tenant_id: true, demand_contact_id: true, last_team_action_at: true },
     });
 
     for (const deal of candidates) {
@@ -166,7 +195,7 @@ async function runNegotiationInactivitySweep(): Promise<void> {
                 'ON_HOLD' as any,
                 'system-cron',
                 'system',
-                { reason: '14 days inactivity in NEGOTIATION' },
+                { reason: `14 days inactivity in ${deal.status}` },
             );
             await notifyDealEvent({
                 dealId: deal.id,
@@ -174,9 +203,49 @@ async function runNegotiationInactivitySweep(): Promise<void> {
                 newStatus: 'ON_HOLD',
                 reason: '14 din se koi progress nahi',
             });
-            logger.info(`[PipelineCron] Moved deal ${deal.id} to ON_HOLD (14d inactivity)`);
+            logger.info(`[PipelineCron] Moved deal ${deal.id} to ON_HOLD (14d inactivity in ${deal.status})`);
         } catch (err) {
             logger.error(`[PipelineCron] Failed to move deal ${deal.id} to ON_HOLD:`, err);
+        }
+    }
+
+    // (NEG-4, 2026-06-23) Paused-and-abandoned backstop. The sweep above filters `ai_paused:false`, so a
+    // human-paused deal never auto-moves — it can sit forever. After 21 days idle, escalate to the
+    // coordinator to review (resume / close); we don't auto-ON_HOLD a deliberately-paused deal.
+    const twentyOneDaysAgo = new Date(Date.now() - 21 * 24 * 60 * 60 * 1000);
+    const stalePaused = await prisma.transaction.findMany({
+        where: {
+            status: { in: ['QUALIFIED', 'VISIT_SCHEDULED', 'VISITED', 'NEGOTIATION'] },
+            ai_paused: true,
+            updated_at: { lt: twentyOneDaysAgo },
+        },
+        select: { id: true, tenant_id: true, status: true, demand_contact_id: true, coordinator: { select: { id: true } } },
+        take: 100,
+    });
+    for (const deal of stalePaused) {
+        if (!deal.coordinator?.id) continue;
+        const already = await prisma.interaction.findFirst({
+            where: { event_type: 'paused_deal_escalation', metadata: { path: ['deal_id'], equals: deal.id }, created_at: { gte: twentyOneDaysAgo } },
+            select: { id: true },
+        });
+        if (already) continue;
+        try {
+            await prisma.task.create({ data: {
+                title: `⏸️ Paused deal idle 21+ days — review: ${deal.demand_contact_id}`,
+                description: `This ${deal.status} deal has AI paused + no activity for 21+ days. Resume the AI, close it, or move it forward. Deal ${deal.id}.`,
+                contact_phone: deal.demand_contact_id, deal_id: deal.id, assigned_to: deal.coordinator.id,
+                priority: 'HIGH', status: 'TODO', task_type: 'GENERAL',
+                due_date: new Date(Date.now() + 24 * 60 * 60 * 1000),
+            } });
+            await prisma.interaction.create({ data: {
+                tenant_id: deal.tenant_id, phone_number: deal.demand_contact_id, channel: 'system',
+                direction: 'outbound', event_type: 'paused_deal_escalation',
+                content: `Paused ${deal.status} deal idle 21d — escalated to coordinator`,
+                metadata: { deal_id: deal.id },
+            } });
+            logger.info(`[PipelineCron] Escalated paused-idle deal ${deal.id} (${deal.status}) to coordinator`);
+        } catch (err) {
+            logger.warn(`[PipelineCron] Paused-deal escalation failed for ${deal.id}: ${(err as Error).message}`);
         }
     }
 }
@@ -189,7 +258,15 @@ async function runNegotiationInactivitySweep(): Promise<void> {
 //   - BUY:  weekly for first 4 weeks, then monthly
 // Dedup: track last nudge in Interaction(event_type='pipeline_cold_nudge').
 
-async function runColdLeadNudge(): Promise<void> {
+export async function runColdLeadNudge(): Promise<void> {
+    // 2026-07-19: DISABLED — Meta restricted the WABA (error 131031 "Business Account locked")
+    // for ToS-non-compliant outreach. These cold nudges to unengaged QUALIFIED deals are the
+    // flagged activity. Re-enable ONLY after Meta's review is approved AND with opt-in:
+    // set COLD_NUDGE_ENABLED=true in .env (no code change needed to flip back on).
+    if (process.env.COLD_NUDGE_ENABLED !== 'true') {
+        logger.info('[PipelineCron] Cold-lead nudge DISABLED (COLD_NUDGE_ENABLED != true) — skipping');
+        return;
+    }
     const dayOfWeek = new Date().getDay(); // 0=Sun..6=Sat
     const isWeekend = dayOfWeek === 0 || dayOfWeek === 4 || dayOfWeek === 5 || dayOfWeek === 6;
 
@@ -206,10 +283,31 @@ async function runColdLeadNudge(): Promise<void> {
         },
     });
 
+    // (P-E, 2026-06-23) Per-run cap. On first BullMQ activation ~255 stale QUALIFIED deals are all
+    // eligible at once (no prior nudge to dedup against) — without a cap this blasts every customer in
+    // one run. The cap spreads the backlog across daily runs; steady-state volume is well below it.
+    const COLD_NUDGE_CAP = 25;
+    let coldNudgesSent = 0;
+
     for (const deal of candidates) {
         if (!deal.demand_contact?.phone_number) continue;
         // Skip if team shared a property or acted in the last 7 days
         if (teamActedRecently(deal, 7 * 24 * 60 * 60 * 1000)) continue;
+
+        // Skip if the deal is ACTIVELY ENGAGED — an AI property-share to this deal OR a customer
+        // reply in the last 7 days. Neither bumps transaction.updated_at, so without this the cron
+        // would nudge "are you still interested?" at a buyer who's actively browsing. (QUALIFIED-3)
+        const recentEngagement = await prisma.interaction.findFirst({
+            where: {
+                created_at: { gte: sevenDaysAgo },
+                OR: [
+                    { event_type: 'property_shared', metadata: { path: ['deal_id'], equals: deal.id } },
+                    { phone_number: deal.demand_contact.phone_number, direction: 'inbound', channel: 'whatsapp' },
+                ],
+            },
+            select: { id: true },
+        });
+        if (recentEngagement) continue;
 
         const isRent = deal.type === 'RENT';
         if (isRent && !isWeekend) continue; // RENT nudges only on weekends
@@ -273,6 +371,11 @@ async function runColdLeadNudge(): Promise<void> {
                 },
             });
             logger.info(`[PipelineCron] Cold nudge sent to ${deal.demand_contact.phone_number} (${tplName})`);
+            coldNudgesSent++;
+            if (coldNudgesSent >= COLD_NUDGE_CAP) {
+                logger.info(`[PipelineCron] Cold-nudge per-run cap (${COLD_NUDGE_CAP}) reached — ${candidates.length - candidates.indexOf(deal) - 1} remaining deferred to the next run`);
+                break;
+            }
         } catch (err) {
             logger.warn(`[PipelineCron] Cold nudge failed for deal ${deal.id}:`, err);
         }
@@ -285,7 +388,7 @@ async function runColdLeadNudge(): Promise<void> {
 // firing in (~24hr ± 30min) and (~2hr ± 30min) windows; sends reminder + opens
 // fresh Meta session via reply button. Dedup via Interaction event_type.
 
-async function runVisitReminders(): Promise<void> {
+export async function runVisitReminders(): Promise<void> {
     const now = Date.now();
     const window24Start = new Date(now + 23.5 * 60 * 60 * 1000);
     const window24End = new Date(now + 24.5 * 60 * 60 * 1000);
@@ -378,7 +481,7 @@ async function runVisitReminders(): Promise<void> {
 // their VISIT_SCHEDULED appointments for the day. Uses rp_visit_daily_schedule
 // (already in registry).
 
-async function runManagerDailySchedule(): Promise<void> {
+export async function runManagerDailySchedule(): Promise<void> {
     const todayIst = new Date();
     // Build a 24h window in IST (start of today IST = previous-day 18:30 UTC).
     const istOffsetMin = 5 * 60 + 30;
@@ -451,7 +554,7 @@ async function runManagerDailySchedule(): Promise<void> {
 // send a per-deal briefing to the assigned agent. Reuses rp_visit_manager_1hr
 // (closest existing template; richer template can be swapped in later).
 
-async function runManager24hrBriefing(): Promise<void> {
+export async function runManager24hrBriefing(): Promise<void> {
     const now = Date.now();
     const windowStart = new Date(now + 23.5 * 60 * 60 * 1000);
     const windowEnd = new Date(now + 24.5 * 60 * 60 * 1000);
@@ -510,5 +613,125 @@ async function runManager24hrBriefing(): Promise<void> {
         } catch (err) {
             logger.warn(`[PipelineCron] 24hr briefing failed for appt ${appt.id}:`, err);
         }
+    }
+}
+
+// ─── 7. POST-VISIT follow-up (VS-1) + stale 'requested' re-ask (VS-2) ─────────
+// Closes the two biggest VISIT_SCHEDULED silent stalls. Runs every 30 min.
+//   (a) A slotted visit whose time has PASSED (>=3h ago) with NO outcome logged → ask the customer
+//       how it went + create a HIGH "log visit outcome" task for the coordinator. That human-submitted
+//       outcome is what advances the deal — this cron does NOT auto-advance.
+//   (b) A provisional 'requested' appointment >4h old with no slot (the QUALIFIED-1 orphan) → re-ask
+//       the customer for a day/time via rp_visit_availability.
+// Dedup: once per appointment via a marker Interaction. ai_paused deals are skipped.
+const EVT_POST_VISIT = 'post_visit_followup';
+const EVT_REQUESTED_REASK = 'requested_visit_reask';
+
+export async function runPostVisitFollowup(): Promise<void> {
+    const now = Date.now();
+
+    // (a) Slotted visits whose time has passed, no outcome yet
+    const pastVisits = await prisma.appointment.findMany({
+        where: {
+            status: { in: ['scheduled', 'confirmed'] },
+            // Visit time passed by >=3h, but cap the lookback to 7 days so the FIRST run doesn't blast
+            // prompts at a weeks-old backlog of stalled visits. (VS-1, 2026-06-22)
+            scheduled_at: { gte: new Date(now - 7 * 24 * 60 * 60 * 1000), lt: new Date(now - 3 * 60 * 60 * 1000) },
+            transaction_id: { not: null },
+        },
+        include: {
+            contact: { select: { phone_number: true, name: true } },
+            property: { select: { type: true, location: true } },
+            transaction: {
+                select: {
+                    id: true, status: true, ai_paused: true, visit_outcome: true, tenant_id: true,
+                    coordinator: { select: { id: true, name: true, phone: true } },
+                },
+            },
+        },
+        take: 200,
+    });
+    for (const appt of pastVisits) {
+        const tx = appt.transaction;
+        if (!tx || tx.status !== 'VISIT_SCHEDULED' || tx.ai_paused || tx.visit_outcome) continue;
+        if (!appt.contact?.phone_number) continue;
+        const already = await prisma.interaction.findFirst({
+            where: { event_type: EVT_POST_VISIT, metadata: { path: ['appointment_id'], equals: appt.id } },
+            select: { id: true },
+        });
+        if (already) continue;
+
+        const propLabel = appt.property?.type
+            ? `${appt.property.type}${appt.property.location ? ' (' + appt.property.location + ')' : ''}`
+            : 'the property';
+        await whatsapp.sendText(appt.contact.phone_number,
+            `🙏 Namaste ${appt.contact.name || ''}! Aapki ${propLabel} ki visit kaisi rahi?\n\n👍 Pasand aayi\n🔎 Aur options dekhne hain\n🚫 Visit nahi ho payi\n\nReply karein — hum aage ki process turant shuru karte hain.`,
+        ).catch(() => {});
+
+        if (tx.coordinator?.id) {
+            await prisma.task.create({
+                data: {
+                    title: `📝 Log visit outcome — ${appt.contact.name || appt.contact.phone_number}`,
+                    description: `Visit was scheduled for ${appt.scheduled_at.toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}. Submit the visit outcome (Liked / Want more / Re-match / No-show) to move the deal forward.`,
+                    contact_phone: appt.contact.phone_number,
+                    deal_id: tx.id,
+                    assigned_to: tx.coordinator.id,
+                    priority: 'HIGH', status: 'TODO', task_type: 'GENERAL',
+                    due_date: new Date(now + 4 * 60 * 60 * 1000),
+                },
+            }).catch(e => logger.warn('[PostVisit] outcome task create failed:', (e as Error).message));
+            try {
+                const { notify } = await import('./notify');
+                notify('task_assigned',
+                    [{ id: tx.coordinator.id, type: 'agent', phone: tx.coordinator.phone ?? undefined, name: tx.coordinator.name ?? undefined }],
+                    { title: `Log the visit outcome for ${appt.contact.name || appt.contact.phone_number} — visit time has passed`, due_date: 'now' });
+            } catch { /* notify is best-effort */ }
+        }
+
+        await prisma.interaction.create({
+            data: {
+                tenant_id: tx.tenant_id, phone_number: appt.contact.phone_number, channel: 'whatsapp',
+                direction: 'outbound', event_type: EVT_POST_VISIT,
+                content: 'Post-visit follow-up sent + outcome task created',
+                metadata: { appointment_id: appt.id, deal_id: tx.id },
+            },
+        }).catch(() => {});
+        logger.info(`[PostVisit] Followed up on deal ${tx.id} (appt ${appt.id})`);
+    }
+
+    // (b) Stale 'requested' appointments (no slot set) — re-ask for a day/time
+    const staleRequested = await prisma.appointment.findMany({
+        where: {
+            status: 'requested',
+            // >=4h old but within 7 days — bound the first-run set (VS-2, 2026-06-22).
+            created_at: { gte: new Date(now - 7 * 24 * 60 * 60 * 1000), lt: new Date(now - 4 * 60 * 60 * 1000) },
+            transaction_id: { not: null },
+        },
+        include: {
+            contact: { select: { phone_number: true, name: true } },
+            transaction: { select: { id: true, status: true, ai_paused: true, tenant_id: true } },
+        },
+        take: 200,
+    });
+    for (const appt of staleRequested) {
+        const tx = appt.transaction;
+        if (!tx || tx.status !== 'VISIT_SCHEDULED' || tx.ai_paused) continue;
+        if (!appt.contact?.phone_number) continue;
+        const already = await prisma.interaction.findFirst({
+            where: { event_type: EVT_REQUESTED_REASK, metadata: { path: ['appointment_id'], equals: appt.id } },
+            select: { id: true },
+        });
+        if (already) continue;
+
+        await whatsapp.sendTemplate(appt.contact.phone_number, 'rp_visit_availability', {}).catch(() => {});
+        await prisma.interaction.create({
+            data: {
+                tenant_id: tx.tenant_id, phone_number: appt.contact.phone_number, channel: 'whatsapp',
+                direction: 'outbound', event_type: EVT_REQUESTED_REASK,
+                content: 'Re-asked for visit day/time (requested appointment had no slot)',
+                metadata: { appointment_id: appt.id, deal_id: tx.id },
+            },
+        }).catch(() => {});
+        logger.info(`[PostVisit] Re-asked slot for requested appt ${appt.id} (deal ${tx.id})`);
     }
 }

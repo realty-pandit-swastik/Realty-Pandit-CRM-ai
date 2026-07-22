@@ -23,10 +23,12 @@ import {
     listDeals,
     getDealPipelineStats,
 } from '../services/deal_service';
-import { transitionTransaction, getValidNextStatuses } from '../services/transaction_state_machine';
+import { transitionTransaction, advanceVisitedDeal, getValidNextStatuses } from '../services/transaction_state_machine';
 import { notifyDealEvent } from '../services/deal_notifications';
 import { notify } from '../services/notify';
 import { commissionService } from '../services/commission_service';
+import { createDealReminder } from '../services/deal_reminder';
+import { getTeamIds } from '../utils/team_scope';
 import prisma from '../db';
 import logger from '../utils/logger';
 import { captureRouteError } from '../utils/capture';
@@ -76,10 +78,39 @@ router.post('/', checkPermission('manage_deals'), validate(createDealSchema), as
 });
 
 // ─── GET /api/deals — List deals with filters ────────────────────────────────
+/**
+ * PARTNER deal guard (2026-07-13). No-op for team members. For a partner: must be ACTIVE and the deal must
+ * be theirs (they/their sub-agents handle it, OR it came from a lead they referred). 403 otherwise.
+ */
+async function partnerOwnsDealOr403(req: any, res: any, dealId: string): Promise<boolean> {
+    if (req.agent?.role !== 'partner') return true;
+
+    const pa = await prisma.partnerAgent.findUnique({
+        where: { id: req.agent.id }, select: { status: true },
+    });
+    if (!pa || pa.status !== 'ACTIVE') {
+        res.status(403).json({ success: false, error: 'Partner account is not active' });
+        return false;
+    }
+
+    const { partnerDealWhereOr } = await import('../utils/partner_scope');
+    const or = await partnerDealWhereOr(req.agent.id);
+    const owned = await prisma.transaction.findFirst({
+        where: { id: dealId, OR: or },
+        select: { id: true },
+    });
+    if (!owned) {
+        logger.warn(`[PartnerGuard] Partner ${req.agent.id} blocked from deal ${dealId}`);
+        res.status(403).json({ success: false, error: 'You can only work your own deals.' });
+        return false;
+    }
+    return true;
+}
+
 router.get('/', async (req: any, res) => {
     try {
         const agent = req.agent;
-        const { status, deal_scenario, coordinator_agent_id, demand_handler_id, supply_handler_id, min_priority, page, limit, search, hide_closed, taxonomy_node_ids, bhk } = req.query;
+        const { status, deal_scenario, coordinator_agent_id, demand_handler_id, supply_handler_id, min_priority, page, limit, search, hide_closed, taxonomy_node_ids, bhk, sort, direction } = req.query;
 
         const filters: any = { tenant_id: agent.tenant_id };
         if (status) filters.status = status;
@@ -93,13 +124,23 @@ router.get('/', async (req: any, res) => {
         if (search && typeof search === 'string' && search.trim()) filters.search = search.trim();
         if (taxonomy_node_ids && typeof taxonomy_node_ids === 'string' && taxonomy_node_ids.trim()) filters.taxonomy_node_ids = taxonomy_node_ids.trim();
         if (bhk && typeof bhk === 'string' && bhk.trim()) filters.bhk = bhk.trim();
+        // Ordering (2026-07-21): 'next_action' (default) | 'lead_date' | 'reminder_date',
+        // with direction 'asc' | 'desc'. Sorting runs across the WHOLE filtered set
+        // server-side — see listDeals(); the board no longer re-sorts client-side.
+        if (sort && typeof sort === 'string' && sort.trim()) filters.sort = sort.trim();
+        if (direction && typeof direction === 'string' && direction.trim()) filters.direction = direction.trim();
         // 2026-05-13: hide CLOSED_WON+CLOSED_LOST by default — pass hide_closed=false to see them.
         // If a specific status is requested, that wins.
         filters.hide_closed = hide_closed === undefined ? true : (hide_closed !== 'false');
 
-        // Employees only see their own deals
-        if (agent.role === 'employee') {
-            filters.coordinator_agent_id = agent.id;
+        // Visibility (2026-06-27): manager = their team, employee = own, super_boss = all.
+        // PARTNER (2026-07-13): not an Agent — team_ids would always match nothing. Scope to THEIR deals.
+        if (agent.role === 'partner') {
+            const { partnerIdsWithSubAgents } = await import('../utils/partner_scope');
+            const { ids } = await partnerIdsWithSubAgents(agent.id);
+            filters.partner_ids = ids;
+        } else if (agent.role !== 'super_boss') {
+            filters.team_ids = await getTeamIds(agent);
         }
 
         const result = await listDeals(filters);
@@ -114,7 +155,15 @@ router.get('/', async (req: any, res) => {
 // ─── GET /api/deals/pipeline — Pipeline stats ────────────────────────────────
 router.get('/pipeline', async (req: any, res) => {
     try {
-        const stats = await getDealPipelineStats(req.agent.tenant_id);
+        let partnerIds: string[] | undefined;
+        let teamIds: string[] | undefined;
+        if (req.agent.role === 'partner') {
+            const { partnerIdsWithSubAgents } = await import('../utils/partner_scope');
+            partnerIds = (await partnerIdsWithSubAgents(req.agent.id)).ids;
+        } else if (req.agent.role !== 'super_boss') {
+            teamIds = await getTeamIds(req.agent);
+        }
+        const stats = await getDealPipelineStats(req.agent.tenant_id, teamIds, partnerIds);
         res.json({ success: true, data: stats });
     } catch (error: any) {
         captureRouteError(error, req, { route: 'deals#3' });
@@ -123,15 +172,50 @@ router.get('/pipeline', async (req: any, res) => {
     }
 });
 
+/**
+ * POST /api/deals/:id/partner-assign  { partner_agent_id: string | null }
+ * PARTNER TEAMS (2026-07-13): a partner COMPANY OWNER assigns one of THEIR OWN deals to one of THEIR
+ * OWN sub-agents (or themselves, or unassigns). Writes ONLY `partner_assignee_id` — the handler/referral
+ * fields (who BROUGHT the business → commission) are never touched.
+ * Deal-level assign overrides whatever the lead-level cascade set for this one deal.
+ */
+router.post('/:id/partner-assign', async (req: any, res) => {
+    try {
+        if (!(await partnerOwnsDealOr403(req, res, req.params.id))) return;
+        const { assertPartnerOwnerCanAssign } = await import('../utils/partner_team');
+        const check = await assertPartnerOwnerCanAssign(req, res, req.body?.partner_agent_id ?? null);
+        if (!check.ok) return;
+
+        const updated = await prisma.transaction.update({
+            where: { id: req.params.id },
+            data: { partner_assignee_id: check.assigneeId },
+            select: { id: true, partner_assignee_id: true },
+        });
+        logger.info(`[PartnerAssign] deal ${updated.id} -> ${check.assigneeId ?? 'unassigned'} by partner ${req.agent.id}`);
+        res.json({ success: true, ...updated });
+    } catch (error: any) {
+        captureRouteError(error, req, { route: 'deals#partner-assign' });
+        logger.error('[PartnerAssign] deal error:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
 // ─── GET /api/deals/:id — Full deal detail ───────────────────────────────────
 router.get('/:id', async (req: any, res) => {
     try {
+        if (!(await partnerOwnsDealOr403(req, res, req.params.id))) return;
+
         const deal = await getDealById(req.params.id);
         if (!deal) return res.status(404).json({ success: false, error: 'Deal not found' });
 
-        // Employees only see own deals
-        if (req.agent.role === 'employee' && deal.coordinator_agent_id !== req.agent.id && deal.executive_agent_id !== req.agent.id) {
-            return res.status(403).json({ success: false, error: 'Access denied' });
+        // Visibility (2026-06-27): non-super_boss can only open deals handled by themselves or their team.
+        // PARTNER: they belong to no team, so this rule would always reject them — their ownership was
+        // already enforced by partnerOwnsDealOr403 above.
+        if (req.agent.role !== 'super_boss' && req.agent.role !== 'partner') {
+            const teamIds = await getTeamIds(req.agent);
+            if (!teamIds.includes(deal.coordinator_agent_id) && !teamIds.includes(deal.executive_agent_id)) {
+                return res.status(403).json({ success: false, error: 'Access denied' });
+            }
         }
 
         const validNext = getValidNextStatuses(deal.status);
@@ -146,6 +230,7 @@ router.get('/:id', async (req: any, res) => {
 // ─── GET /api/deals/:id/timeline — Unified timeline ──────────────────────────
 router.get('/:id/timeline', async (req: any, res) => {
     try {
+        if (!(await partnerOwnsDealOr403(req, res, req.params.id))) return;
         const timeline = await getDealTimeline(req.params.id);
         res.json({ success: true, data: timeline });
     } catch (error: any) {
@@ -158,6 +243,7 @@ router.get('/:id/timeline', async (req: any, res) => {
 // ─── PATCH /api/deals/:id/match — Link property + supply handler ─────────────
 router.patch('/:id/match', checkPermission('act_on_deals'), validate(matchPropertySchema), async (req: any, res) => {
     try {
+        if (!(await partnerOwnsDealOr403(req, res, req.params.id))) return;
         const { inventory_id, supply_contact_id, supply_handler_type, supply_handler_id } = req.body;
         const updated = await matchPropertyToDeal(
             req.params.id,
@@ -179,7 +265,8 @@ router.patch('/:id/match', checkPermission('act_on_deals'), validate(matchProper
 // ─── PATCH /api/deals/:id/status — State machine transition ──────────────────
 router.patch('/:id/status', checkPermission('act_on_deals'), validate(updateDealStatusSchema), async (req: any, res) => {
     try {
-        const { status, reason } = req.body;
+        if (!(await partnerOwnsDealOr403(req, res, req.params.id))) return;
+        const { status, reason, final_price } = req.body;
         const updated = await transitionTransaction(
             req.params.id,
             status,
@@ -187,6 +274,34 @@ router.patch('/:id/status', checkPermission('act_on_deals'), validate(updateDeal
             'admin',
             { reason, changed_by: req.agent.name }
         );
+        // (NEG-2, 2026-06-22) Capture the agreed price at close — every revenue report reads
+        // Transaction.final_price, and the board close path previously recorded none → won deals
+        // reported ₹0. Best-effort; the status transition already committed.
+        if (status === 'CLOSED_WON' && final_price != null) {
+            await prisma.transaction.update({
+                where: { id: req.params.id },
+                data: { final_price },
+            }).catch(err => logger.warn('[DealAPI] final_price persist failed:', err));
+        }
+        // (NEG-4, 2026-06-23) Loss capture — persist the structured close reason (the reports + future
+        // analytics read Transaction.close_reason) and queue a 1h win-back follow-up to the buyer.
+        // (No lead-score penalty: a lost deal often means "bought elsewhere", not an unreliable lead.)
+        if (status === 'CLOSED_LOST') {
+            if (reason) {
+                await prisma.transaction.update({
+                    where: { id: req.params.id }, data: { close_reason: reason },
+                }).catch(err => logger.warn('[DealAPI] close_reason persist failed:', err));
+            }
+            const lostPhone = (updated as any).demand_contact_id;
+            if (lostPhone) {
+                import('../queues/index').then(({ scheduledJobsQueue }) =>
+                    scheduledJobsQueue.add('workflow-ai-followup', {
+                        contact_phone: lostPhone, deal_id: req.params.id,
+                        stage: 'DEAL_LOST', template_name: 'rp_tx_followup_lost_v2',
+                    }, { delay: 60 * 60 * 1000, attempts: 2, removeOnComplete: true, removeOnFail: { count: 100 } })
+                ).catch(err => logger.warn('[DealAPI] win-back followup queue failed:', err));
+            }
+        }
         const validNext = getValidNextStatuses(updated.status);
 
         // Notify all parties about status change
@@ -228,6 +343,7 @@ router.patch('/:id/status', checkPermission('act_on_deals'), validate(updateDeal
 // shared, or { sent: false } if nothing left to share.
 router.post('/:id/share-next-property', checkPermission('act_on_deals'), async (req: any, res) => {
     try {
+        if (!(await partnerOwnsDealOr403(req, res, req.params.id))) return;
         const deal = await prisma.transaction.findUnique({ where: { id: req.params.id }, select: { status: true } });
         if (!deal) return res.status(404).json({ success: false, error: 'Deal not found' });
         if (deal.status !== 'QUALIFIED') {
@@ -235,7 +351,8 @@ router.post('/:id/share-next-property', checkPermission('act_on_deals'), async (
         }
 
         const { shareNextProperty } = await import('../services/property_sharing');
-        const inventoryId = await shareNextProperty(req.params.id);
+        // Human-initiated manual share — bypass the ai_paused guard (the agent is the one acting). (QUALIFIED-4)
+        const inventoryId = await shareNextProperty(req.params.id, { bypassPause: true });
         res.json({ success: true, data: { sent: !!inventoryId, inventory_id: inventoryId } });
     } catch (error: any) {
         captureRouteError(error, req, { route: 'deals#8' });
@@ -248,6 +365,7 @@ router.post('/:id/share-next-property', checkPermission('act_on_deals'), async (
 router.patch('/:id/requirements', checkPermission('act_on_deals'), async (req: any, res) => {
     const { id } = req.params;
     const agent = req.agent;
+    if (!(await partnerOwnsDealOr403(req, res, id))) return;
     // Phase 5 (2026-05-29): legacy demand_category / demand_type_slug /
     // demand_property_type / demand_bedrooms / demand_amenities columns
     // dropped from Transaction. Accept them in the body for back-compat but
@@ -339,6 +457,23 @@ router.patch('/:id/requirements', checkPermission('act_on_deals'), async (req: a
             }),
         ]);
 
+        // Re-share with the NEW criteria: a matching-relevant edit (budget/location/type/BHK — not a
+        // notes-only edit) should proactively surface a fresh card, not strand a broadened deal on
+        // "all shared". QUALIFIED only; shareNextProperty honours ai_paused + dedup + score floor. (QUALIFIED-5a)
+        const matchingChanged = [
+            'demand_intent', 'demand_location', 'demand_budget_min', 'demand_budget_max',
+            'demand_area_min', 'demand_area_max', 'demand_type_slug', 'demand_property_type',
+            'demand_bedrooms', 'demand_amenities', 'demand_schema_values', 'demand_taxonomy_node_id',
+        ].some(k => k in req.body);
+        if (deal.status === 'QUALIFIED' && matchingChanged) {
+            (async () => {
+                try {
+                    const { shareNextProperty } = await import('../services/property_sharing');
+                    await shareNextProperty(id);
+                } catch (e) { logger.warn('[DealAPI] post-requirements re-share failed:', (e as Error).message); }
+            })();
+        }
+
         res.json({ success: true });
     } catch (err: any) {
         captureRouteError(err, req, { route: 'deals#9' });
@@ -398,7 +533,7 @@ router.patch('/:id/reassign', checkPermission('act_on_deals'), async (req: any, 
             ...(contactPhone ? [
                 prisma.contact.update({
                     where: { phone_number: contactPhone },
-                    data: { assigned_agent_id: agent_id },
+                    data: { assigned_agent_id: agent_id, assignment_method: 'manual' }, // Phase 5C
                 }),
                 prisma.interaction.create({
                     data: {
@@ -561,6 +696,7 @@ router.post('/match-counts', checkPermission('act_on_deals'), async (req: any, r
 router.get('/:id/matched-inventory', checkPermission('act_on_deals'), async (req: any, res) => {
     const { id } = req.params;
     const agent = req.agent;
+    if (!(await partnerOwnsDealOr403(req, res, id))) return;
     const {
         intent, category, type_slug, bedrooms, location,
         budget_min, budget_max, area_min, area_max,
@@ -569,6 +705,7 @@ router.get('/:id/matched-inventory', checkPermission('act_on_deals'), async (req
         type_node_list, // comma-separated TYPE-level taxonomy node ids (the "Type" chips) →
                         // resolved to legacy sub_category_ids (inventory's 100%-populated tier)
         radius_km,      // pin geo search to one radius
+        roof_rights,    // 2026-06-28: only listings that include roof rights
     } = req.query as Record<string, string>;
 
     try {
@@ -583,6 +720,9 @@ router.get('/:id/matched-inventory', checkPermission('act_on_deals'), async (req
                 demand_contact: { select: {
                     category_id: true, sub_category_id: true, type_id: true,
                     demand_taxonomy_node_id: true, demand_schema_values: true,
+                    // #5 (2026-07-01): matching now reads demand CONTACT-first (the SSOT) — need
+                    // budget + intent from the contact too, not just the (stale) deal snapshot.
+                    budget_min: true, budget_max: true, intent: true,
                     // Geo lives on the Contact (Transaction has no lat/lng) — needed so the
                     // matching engine can do precise radius search for the deal. (2026-06-01)
                     preferred_location: true, preferred_lat: true, preferred_lng: true,
@@ -608,36 +748,40 @@ router.get('/:id/matched-inventory', checkPermission('act_on_deals'), async (req
         // demand_property_type columns dropped from Transaction. Derive bhk from
         // canonical demand_schema_values.bhk on the deal or contact; fall back to
         // the explicit `bedrooms` override from the request.
-        const canonicalDemand = ((deal as any).demand_schema_values
-            ?? (deal as any).demand_contact?.demand_schema_values
+        // #5 (2026-07-01): the Contact is the demand SSOT (kept current on every edit + qualify);
+        // the Transaction snapshot can be stale/incomplete (e.g. bhk missing) and was producing wrong
+        // matches. Read demand CONTACT-first, fall back to the deal snapshot. Explicit query params
+        // (budget/location/bhk_list/type_node_list below) still override everything.
+        const dc = ((deal as any).demand_contact || {}) as Record<string, any>;
+        const canonicalDemand = (dc.demand_schema_values
+            ?? (deal as any).demand_schema_values
             ?? {}) as Record<string, any>;
         const bhkRaw = bedrooms || canonicalDemand.bhk || canonicalDemand['bhk'] || null;
         const bhkNum = typeof bhkRaw === 'string' ? bhkRaw.match(/\d+/)?.[0] : (bhkRaw != null ? String(bhkRaw) : undefined);
         const criteria = buildMatchCriteriaFromLead({
-            intent: (intent || deal.demand_intent || 'buy') as 'buy' | 'rent',
+            intent: (intent || dc.intent || deal.demand_intent || 'buy') as 'buy' | 'rent',
             demand_type_slug: type_slug || null,
-            type_id: (deal as any).demand_contact?.type_id || null,
-            sub_category_id: (deal as any).demand_contact?.sub_category_id || null,
-            category_id: (deal as any).demand_contact?.category_id || null,
-            budget_min: budget_min ? parseFloat(budget_min) : (deal.demand_budget_min ?? null),
-            budget_max: budget_max ? parseFloat(budget_max) : (deal.demand_budget_max ?? null),
-            // If `location` is PRESENT in the query (even empty) the caller is explicit — empty
-            // means "no location filter" (lets the agent clear a brittle/typo'd text location like
-            // "Kaushsmbi" that matches no inventory). Only fall back to the deal's stored location
-            // when the param is absent entirely.
+            type_id: dc.type_id || null,
+            sub_category_id: dc.sub_category_id || null,
+            category_id: dc.category_id || null,
+            budget_min: budget_min ? parseFloat(budget_min) : (dc.budget_min != null ? Number(dc.budget_min) : (deal.demand_budget_min ?? null)),
+            budget_max: budget_max ? parseFloat(budget_max) : (dc.budget_max != null ? Number(dc.budget_max) : (deal.demand_budget_max ?? null)),
+            // If `location` is PRESENT in the query (even empty) the caller is explicit — empty means
+            // "no location filter" (clears a typo'd text location). Otherwise fall back to the contact's
+            // location (SSOT), then the deal snapshot.
             preferred_location: location !== undefined
                 ? (location || null)
-                : (deal.demand_location || (deal as any).demand_contact?.preferred_location || null),
+                : (dc.preferred_location || deal.demand_location || null),
             // Geo from the contact (SSOT) → enables Haversine radius search instead of text-only. (2026-06-01)
-            preferred_lat: (deal as any).demand_contact?.preferred_lat ?? null,
-            preferred_lng: (deal as any).demand_contact?.preferred_lng ?? null,
+            preferred_lat: dc.preferred_lat ?? null,
+            preferred_lng: dc.preferred_lng ?? null,
             demand_bhk: bhkNum ? parseInt(bhkNum, 10) : null,
-            // Phase 3 canonical fields — prefer deal-side, fall back to contact (SSOT).
-            demand_taxonomy_node_id: (deal as any).demand_taxonomy_node_id
-                ?? (deal as any).demand_contact?.demand_taxonomy_node_id
+            // Canonical demand — CONTACT-first (SSOT), fall back to the deal snapshot.
+            demand_taxonomy_node_id: dc.demand_taxonomy_node_id
+                ?? (deal as any).demand_taxonomy_node_id
                 ?? null,
-            demand_schema_values: (deal as any).demand_schema_values
-                ?? (deal as any).demand_contact?.demand_schema_values
+            demand_schema_values: dc.demand_schema_values
+                ?? (deal as any).demand_schema_values
                 ?? null,
         });
 
@@ -669,7 +813,16 @@ router.get('/:id/matched-inventory', checkPermission('act_on_deals'), async (req
         }
 
         const matches = await engine.findMatches(criteria, 50);
-        const results = matches.map((m: any) => ({
+        // Roof-rights filter (2026-06-28): narrow the matched set to listings that include
+        // roof rights. Post-filter by id so the matching engine stays untouched.
+        let matchList = matches;
+        if (roof_rights === 'true' && matches.length) {
+            const ids = matches.map((m: any) => m.id);
+            const rr = await prisma.inventory.findMany({ where: { id: { in: ids }, roof_rights: true }, select: { id: true } });
+            const rrSet = new Set(rr.map((r: any) => r.id));
+            matchList = matches.filter((m: any) => rrSet.has(m.id));
+        }
+        const results = matchList.map((m: any) => ({
             ...m,
             already_shared: alreadySharedIds.has(m.id),
         }));
@@ -687,6 +840,7 @@ router.get('/:id/matched-inventory', checkPermission('act_on_deals'), async (req
 router.post('/:id/share-properties', checkPermission('act_on_deals'), async (req: any, res) => {
     const { id } = req.params;
     const agent = req.agent;
+    if (!(await partnerOwnsDealOr403(req, res, id))) return;
     const { inventory_ids } = req.body || {};
     if (!Array.isArray(inventory_ids) || inventory_ids.length === 0) {
         return res.status(400).json({ error: 'inventory_ids array required' });
@@ -718,6 +872,7 @@ router.post('/:id/share-properties', checkPermission('act_on_deals'), async (req
 router.post('/:id/book-appointment', checkPermission('act_on_deals'), async (req: any, res) => {
     const { id } = req.params;
     const agent = req.agent;
+    if (!(await partnerOwnsDealOr403(req, res, id))) return;
     const { inventory_id, date, time } = req.body || {};
 
     if (!inventory_id || !date || !time) {
@@ -763,26 +918,40 @@ router.post('/:id/book-appointment', checkPermission('act_on_deals'), async (req
             { inventory_id, visit_date: date, visit_time: time, booked_by: agent.name }
         );
 
-        // Create Appointment record
-        const appointment = await prisma.appointment.create({
-            data: {
-                contact_id: deal.demand_contact!.phone_number!,
-                title: `Property Visit — ${inv.flat_property_type?.name || inv.property_type_link?.name || inv.type || 'Property'}`,
-                type: 'property_visit',
-                scheduled_at: scheduledAt,
-                property_id: inventory_id,
-                transaction_id: id,
-                assigned_to_agent_id: deal.coordinator?.id || null,
-                source: 'admin',
-                channel: 'whatsapp',
-            },
+        // Create OR slot-fill the appointment — if the deal already has an open appointment (the
+        // provisional 'requested' one from a card tap, or a prior booking), update THAT row instead
+        // of creating a duplicate (which would double the reminder chains). (QUALIFIED-1, 2026-06-22)
+        const apptData = {
+            title: `Property Visit — ${inv.flat_property_type?.name || inv.property_type_link?.name || inv.type || 'Property'}`,
+            type: 'property_visit' as const,
+            scheduled_at: scheduledAt,
+            property_id: inventory_id,
+            assigned_to_agent_id: deal.coordinator?.id || null,
+            status: 'scheduled' as const,
+            source: 'admin',
+            channel: 'whatsapp',
+        };
+        const openAppt = await prisma.appointment.findFirst({
+            where: { transaction_id: id, status: { notIn: ['cancelled', 'completed', 'no_show'] } },
+            orderBy: { created_at: 'desc' }, select: { id: true },
         });
+        const appointment = openAppt
+            ? await prisma.appointment.update({ where: { id: openAppt.id }, data: apptData })
+            : await prisma.appointment.create({
+                data: { ...apptData, contact_id: deal.demand_contact!.phone_number!, transaction_id: id, tenant_id: deal.tenant_id },
+            });
 
         // Notify customer + coordinator + key holder
         const { notifyAppointmentBooked } = await import('../services/deal_notifications');
         await notifyAppointmentBooked({
             deal: deal as any, inv, appointment, visitDate: date, visitTime: time, bookedByName: agent.name,
         });
+
+        // Push to the assigned agent's Google Calendar immediately instead of waiting up to ~5 min for
+        // the reconcile sweep. Opt-in (only if the agent connected Google) + best-effort. (VS-8, 2026-06-22)
+        import('../services/google_sync').then(({ pushAppointmentToGoogle }) =>
+            pushAppointmentToGoogle(appointment.id).catch(() => {})
+        ).catch(() => {});
 
         res.json({ success: true, appointment_id: appointment.id });
     } catch (err: any) {
@@ -799,6 +968,7 @@ router.post('/:id/book-appointment', checkPermission('act_on_deals'), async (req
 // Drives state transition + side-effects (auto-share for Re-match, reschedule WhatsApp on No Show).
 router.post('/:id/visit-outcome', checkPermission('act_on_deals'), async (req: any, res) => {
     try {
+        if (!(await partnerOwnsDealOr403(req, res, req.params.id))) return;
         const { outcome, interest_level, feedback, updated_requirements, notes } = req.body || {};
         if (!outcome) return res.status(400).json({ success: false, error: 'outcome is required' });
 
@@ -885,40 +1055,50 @@ router.post('/:id/visit-outcome', checkPermission('act_on_deals'), async (req: a
                 }
                 break;
             case 'No Show':
-                nextStatus = 'VISIT_SCHEDULED';
-                // Auto-send reschedule WhatsApp to customer (Stage 4 KRA No-Show)
+                nextStatus = 'VISIT_SCHEDULED'; // stays here so a re-book can happen
                 if (deal.demand_contact?.phone_number) {
+                    // (VS-4, 2026-06-22) Mark the appointment no_show (was left 'scheduled' with a past
+                    // time → it would otherwise still look like a live visit + dodge the audit clock).
                     try {
-                        const { WhatsAppService } = await import('../services/whatsapp');
-                        const whatsapp = new WhatsAppService();
-                        await whatsapp.sendTemplate(
-                            deal.demand_contact.phone_number,
-                            'rp_call_attempted',
-                            { name: deal.demand_contact.name || 'Customer' },
-                        );
-                    } catch (err) {
-                        logger.warn('[DealAPI] No-show reschedule WhatsApp failed:', err);
-                    }
+                        const noShowAppt = await prisma.appointment.findFirst({
+                            where: { transaction_id: req.params.id, status: { notIn: ['cancelled', 'completed', 'no_show'] } },
+                            orderBy: { scheduled_at: 'desc' }, select: { id: true },
+                        });
+                        if (noShowAppt) await prisma.appointment.update({ where: { id: noShowAppt.id }, data: { status: 'no_show' } });
+                    } catch (err) { logger.warn('[DealAPI] No-show appointment update failed:', err); }
+                    // Proper no-show handling: reliability penalty + the dedicated rp_noshow_recovery
+                    // reschedule template (and cold-downgrade on a repeat) — replaces the generic
+                    // rp_call_attempted that didn't record the no-show. (VS-4)
+                    try {
+                        const { LeadScoreService } = await import('../services/lead_score');
+                        await new LeadScoreService().handleNoShow(deal.demand_contact.phone_number);
+                    } catch (err) { logger.warn('[DealAPI] handleNoShow failed:', err); }
                 }
                 break;
             default:
                 return res.status(400).json({ success: false, error: `Unknown outcome: ${outcome}` });
         }
 
-        // Transition + notify (only if status actually changes)
-        if (nextStatus && nextStatus !== deal.status) {
+        // (VS4-1/VS4-3, 2026-06-22) Advance through VISITED for the "visit happened" outcomes — the
+        // ONLY valid gateway to NEGOTIATION (canTransition VISIT_SCHEDULED→NEGOTIATION is false) and a
+        // measurable funnel fact. advanceVisitedDeal records VISITED first when leaving VISIT_SCHEDULED,
+        // then transitions onward; No-Show/Want-More resolve to a same-status no-op (no false "visited").
+        // We notify once, for the final status.
+        if (nextStatus) {
             try {
-                await transitionTransaction(req.params.id, nextStatus as any, req.agent.id, 'admin',
+                const finalStatus = await advanceVisitedDeal(req.params.id, nextStatus as any, req.agent.id, 'admin',
                     { reason: `Visit outcome: ${outcome}`, notes });
-                const event = 'status_changed' as const;
-                notifyDealEvent({ dealId: req.params.id, event, newStatus: nextStatus, reason: `Visit outcome: ${outcome}` })
-                    .catch(err => logger.warn('[DealAPI] visit-outcome notification failed:', err));
-                // Re-match auto-shares first new property
-                if (nextStatus === 'QUALIFIED') {
-                    import('../services/property_sharing').then(({ shareNextProperty }) =>
-                        shareNextProperty(req.params.id).catch(err =>
-                            logger.warn('[DealAPI] Re-match property share failed:', err))
-                    );
+                if (finalStatus !== deal.status) {
+                    const event = 'status_changed' as const;
+                    notifyDealEvent({ dealId: req.params.id, event, newStatus: nextStatus, reason: `Visit outcome: ${outcome}` })
+                        .catch(err => logger.warn('[DealAPI] visit-outcome notification failed:', err));
+                    // Re-match auto-shares first new property
+                    if (nextStatus === 'QUALIFIED') {
+                        import('../services/property_sharing').then(({ shareNextProperty }) =>
+                            shareNextProperty(req.params.id).catch(err =>
+                                logger.warn('[DealAPI] Re-match property share failed:', err))
+                        );
+                    }
                 }
             } catch (err: any) {
         captureRouteError(err, req, { route: 'deals#14' });
@@ -938,6 +1118,7 @@ router.post('/:id/visit-outcome', checkPermission('act_on_deals'), async (req: a
 // ─── POST /api/deals/:id/query — Raise a query ──────────────────────────────
 router.post('/:id/query', validate(createDealQuerySchema), async (req: any, res) => {
     try {
+        if (!(await partnerOwnsDealOr403(req, res, req.params.id))) return;
         const deal = await prisma.transaction.findUnique({ where: { id: req.params.id } });
         if (!deal) return res.status(404).json({ success: false, error: 'Deal not found' });
 
@@ -1001,6 +1182,7 @@ router.patch('/:id/query/:qid', checkPermission('act_on_deals'), validate(answer
 // ─── GET /api/deals/:id/queries — List queries for a deal ───────────────────
 router.get('/:id/queries', async (req: any, res) => {
     try {
+        if (!(await partnerOwnsDealOr403(req, res, req.params.id))) return;
         const queries = await prisma.dealQuery.findMany({
             where: { transaction_id: req.params.id },
             orderBy: { created_at: 'desc' },
@@ -1069,6 +1251,7 @@ router.get('/:id/commission-entries', checkPermission('manage_deals'), async (re
 // Body: { action_type, outcome?, notes?, new_status? }
 router.post('/:id/log-action', checkPermission('act_on_deals'), async (req: any, res) => {
     try {
+        if (!(await partnerOwnsDealOr403(req, res, req.params.id))) return;
         const agent = req.agent!;
         const { action_type, outcome, notes, new_status } = req.body;
 
@@ -1119,9 +1302,10 @@ router.post('/:id/log-action', checkPermission('act_on_deals'), async (req: any,
 // records the reminder in BOTH the deal timeline and the lead timeline.
 router.post('/:id/reminder', checkPermission('act_on_deals'), async (req: any, res) => {
     try {
+        if (!(await partnerOwnsDealOr403(req, res, req.params.id))) return;
         const agent = req.agent!;
         const id = req.params.id;
-        const { remind_at, note, advance_minutes } = req.body || {};
+        const { remind_at, note, advance_minutes, reason } = req.body || {};
 
         if (!remind_at) return res.status(400).json({ success: false, error: 'remind_at is required' });
         const due = new Date(remind_at);
@@ -1145,6 +1329,22 @@ router.post('/:id/reminder', checkPermission('act_on_deals'), async (req: any, r
         const whenStr = due.toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'medium', timeStyle: 'short' });
         const title = `Follow-up: ${contactName}`;
         const reminderNote = (note && String(note).trim()) || `Reminder to follow up with ${contactName}`;
+
+        // #3 (2026-07-01): supersede any prior OPEN reminder on this deal so the tile's "Next follow-up"
+        // shows only the newly-set one and old/overdue reminders stop firing. (This route creates the
+        // task inline rather than via createDealReminder, so the supersede must live here too.)
+        const priorOpenReminders = await prisma.task.findMany({
+            where: { deal_id: id, task_type: 'REMINDER', status: 'TODO' },
+            select: { id: true },
+        });
+        if (priorOpenReminders.length) {
+            const gsync = await import('../services/google_sync');
+            for (const t of priorOpenReminders) { await gsync.cancelReminderGoogle(t.id).catch(() => {}); }
+            await prisma.task.updateMany({
+                where: { id: { in: priorOpenReminders.map(t => t.id) } },
+                data: { status: 'DONE', completed_at: new Date() },
+            });
+        }
 
         const task = await prisma.task.create({
             data: {
@@ -1202,6 +1402,24 @@ router.post('/:id/reminder', checkPermission('act_on_deals'), async (req: any, r
             ] : []),
         ]);
 
+        // Deal-workflow QUALIFIED (2026-06-29): if this reminder is being set because the customer
+        // did not answer, also log a NO_ANSWER call-outcome interaction — same shape the NEW-stage
+        // log-call writes — so the derived no_answer_count + the N=4 escalation gate work in any
+        // stage (the Reminder button is the only no-answer entry point in QUALIFIED).
+        if (reason === 'NO_ANSWER' && contactPhone) {
+            await prisma.interaction.create({
+                data: {
+                    tenant_id: deal.tenant_id,
+                    phone_number: contactPhone,
+                    channel: 'voice',
+                    direction: 'outbound',
+                    event_type: 'human_call_outcome',
+                    content: `Human call by ${agent.name || 'team'}: NO_ANSWER${note ? ' — ' + String(note).trim() : ''}`,
+                    metadata: { deal_id: id, outcome: 'NO_ANSWER', performed_by: agent.id, reason: 'NO_ANSWER', via: 'reminder' },
+                },
+            }).catch((e: any) => logger.warn(`[DealAPI] reminder no-answer log failed: ${e?.message}`));
+        }
+
         logger.info(`[DealAPI] Reminder task ${task.id} set on deal ${id} by ${agent.id} for ${due.toISOString()}`);
 
         // P2: also push to the member's own Google Calendar + Tasks if they
@@ -1222,27 +1440,87 @@ router.post('/:id/reminder', checkPermission('act_on_deals'), async (req: any, r
 // ─── GET /api/deals/:id/property-shares — All properties shared for this deal ─
 router.get('/:id/property-shares', async (req: any, res) => {
     try {
+        if (!(await partnerOwnsDealOr403(req, res, req.params.id))) return;
         const deal = await prisma.transaction.findUnique({
             where: { id: req.params.id },
             select: { demand_contact_id: true },
         });
         if (!deal) return res.status(404).json({ success: false, error: 'Deal not found' });
 
-        const shares = await prisma.propertyShare.findMany({
-            where: { client_phone: deal.demand_contact_id },
-            include: {
-                inventory: {
-                    select: {
-                        id: true, type: true, category: true, location: true, price: true,
-                        media_urls: true, specs: true,
-                        owner_phone: true,
-                        contact: { select: { name: true } },
-                        key_holder_name: true, key_holder_phone: true,
-                    },
+        // 2026-07-22: shares are recorded in TWO ledgers and this endpoint only ever read one.
+        // Every deal-workspace / AI share writes an Interaction(property_shared) — 2,102 rows —
+        // while property_shares holds just 421, so 1,076 of the 1,123 deals that HAVE shares
+        // rendered an empty tab. Read both, union them, de-duplicated.
+        const INV_SELECT = {
+            id: true, type: true, category: true, location: true,
+            price: true, display_price: true, display_id: true,
+            apartment_name: true, locality: true, city: true,
+            media_urls: true, specs: true,
+            owner_phone: true,
+            contact: { select: { name: true } },
+            key_holder_name: true, key_holder_phone: true,
+            taxonomy_node: { select: { name: true } },
+            flat_property_type: { select: { name: true } },
+        };
+
+        const [legacyShares, shareInteractions] = await Promise.all([
+            prisma.propertyShare.findMany({
+                where: { client_phone: deal.demand_contact_id },
+                include: { inventory: { select: INV_SELECT } },
+                orderBy: { created_at: 'desc' },
+            }),
+            prisma.interaction.findMany({
+                where: {
+                    event_type: 'property_shared',
+                    OR: [
+                        { metadata: { path: ['deal_id'], equals: req.params.id } },
+                        ...(deal.demand_contact_id ? [{ phone_number: deal.demand_contact_id }] : []),
+                    ],
                 },
-            },
-            orderBy: { created_at: 'desc' },
-        });
+                select: { id: true, created_at: true, channel: true, metadata: true },
+                orderBy: { created_at: 'desc' },
+            }),
+        ]);
+
+        // Hydrate the inventory the interaction ledger points at (metadata.inventory_id).
+        const invIds = Array.from(new Set(
+            shareInteractions.map(i => (i.metadata as any)?.inventory_id).filter(Boolean)
+        )) as string[];
+        const invRows = invIds.length
+            ? await prisma.inventory.findMany({ where: { id: { in: invIds } }, select: INV_SELECT })
+            : [];
+        const invById: Record<string, any> = {};
+        for (const iv of invRows) invById[iv.id] = iv;
+
+        // De-dup: the two inventory.ts share routes write BOTH ledgers, so the same send would
+        // otherwise appear twice. Same inventory inside a 2-minute window = one event.
+        // property_shares wins when both exist — it carries property_link / whatsapp_sent / clicked.
+        const shareKey = (invId: string, ts: any) => `${invId}|${Math.floor(new Date(ts).getTime() / 120000)}`;
+        const merged = new Map<string, any>();
+        for (const s of legacyShares) {
+            merged.set(shareKey(s.inventory_id, s.created_at), { ...s, source: 'property_share' });
+        }
+        for (const it of shareInteractions) {
+            const invId = (it.metadata as any)?.inventory_id;
+            if (!invId) continue;
+            const k = shareKey(invId, it.created_at);
+            if (merged.has(k)) continue;
+            merged.set(k, {
+                id: it.id,
+                inventory_id: invId,
+                client_phone: deal.demand_contact_id,
+                channel: it.channel || 'whatsapp',
+                created_at: it.created_at,
+                property_link: (it.metadata as any)?.property_link ?? null,
+                whatsapp_sent: true,
+                link_clicked: false,
+                inventory: invById[invId] || null,
+                source: 'interaction',
+            });
+        }
+
+        const shares = Array.from(merged.values())
+            .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
         res.json({ success: true, data: shares });
     } catch (error: any) {
@@ -1258,12 +1536,18 @@ async function notifyKeyHolder(dealId: string): Promise<void> {
         where: { id: dealId },
         include: {
             demand_contact: { select: { name: true } },
-            inventory: { select: { type: true, location: true, owner_phone: true, full_address: true } },
+            inventory: { select: { type: true, location: true, owner_phone: true, key_holder_phone: true, full_address: true } },
             appointments: { orderBy: { scheduled_at: 'desc' }, take: 1 },
         },
     });
-    if (!deal?.inventory?.owner_phone) {
-        logger.info(`[DealAPI] Key holder notification skipped — no owner_phone for deal ${dealId}`);
+    // VS-7: prefer the dedicated key-holder phone, fall back to the owner's. (was owner-only)
+    if (!deal?.inventory) {
+        logger.info(`[DealAPI] Key holder notification skipped — no inventory for deal ${dealId}`);
+        return;
+    }
+    const keyPhone = deal.inventory.key_holder_phone || deal.inventory.owner_phone;
+    if (!keyPhone) {
+        logger.warn(`[DealAPI] Key holder notification skipped — no key_holder_phone OR owner_phone for deal ${dealId} (access must be arranged)`);
         return;
     }
 
@@ -1278,7 +1562,7 @@ async function notifyKeyHolder(dealId: string): Promise<void> {
 
     const { WhatsAppService } = await import('../services/whatsapp');
     const whatsapp = new WhatsAppService();
-    await whatsapp.sendTemplate(deal.inventory.owner_phone, 'rp_visit_keyholder_v2', {
+    await whatsapp.sendTemplate(keyPhone, 'rp_visit_keyholder_v2', {
         property: deal.inventory.type || 'Property',
         address: deal.inventory.full_address || deal.inventory.location || 'Location TBD',
         visitor_name: deal.demand_contact?.name || 'Customer',
@@ -1310,10 +1594,12 @@ const VALID_LOG_CALL_OUTCOMES = [
     'CALLBACK_REQUESTED',
     'WRONG_OR_SPAM',
     'LANGUAGE_BARRIER',
+    'CLOSED_UNREACHABLE', // deal-workflow (2026-06-29): close after repeated no-answers, stamping the count
 ] as const;
 
 router.post('/:id/log-call', checkPermission('act_on_deals'), async (req: any, res) => {
     try {
+        if (!(await partnerOwnsDealOr403(req, res, req.params.id))) return;
         const dealId = req.params.id;
         const { outcome, payload = {} } = req.body || {};
 
@@ -1374,6 +1660,20 @@ router.post('/:id/log-call', checkPermission('act_on_deals'), async (req: any, r
                         lead_status: 'warm',
                     },
                 });
+                // #4 (2026-07-01): keep the DEAL's own demand snapshot in sync with the edited
+                // requirements. matched-inventory reads deal-snapshot-first (deals.ts ~689-694), so
+                // without this the Match & Share matched the pre-qualify (stale) demand. Mirror the
+                // contact write above onto the transaction's demand_* columns.
+                const dealDemand: Record<string, any> = {
+                    demand_intent: r.intent ?? undefined,
+                    demand_budget_min: (r.budget_min != null && r.budget_min !== '') ? Number(r.budget_min) : undefined,
+                    demand_budget_max: (r.budget_max != null && r.budget_max !== '') ? Number(r.budget_max) : undefined,
+                    demand_location: r.preferred_location ?? undefined,
+                };
+                if (demandNodeId !== null) dealDemand.demand_taxonomy_node_id = demandNodeId;
+                const mergedDealSV = mergeDemandSchemaValues((deal as any).demand_schema_values, demandSchema);
+                if (mergedDealSV) dealDemand.demand_schema_values = mergedDealSV;
+                await prisma.transaction.update({ where: { id: dealId }, data: dealDemand });
                 await transitionTransaction(dealId, 'QUALIFIED' as any, performedBy, 'admin', {
                     notes: `Lead qualified by ${performerName} after call`,
                 });
@@ -1381,16 +1681,35 @@ router.post('/:id/log-call', checkPermission('act_on_deals'), async (req: any, r
             }
 
             case 'NOT_INTERESTED': {
-                const reason = payload.reason || 'NOT_INTERESTED_NOW';
-                const nextStatus = reason === 'JUST_BROWSING' ? 'CLOSED_LOST' : 'ON_HOLD';
-                await transitionTransaction(dealId, nextStatus as any, performedBy, 'admin', {
-                    notes: `Customer not interested: ${reason}. ${payload.notes || ''}`.trim(),
+                // Phase 4 (2026-06-27): "Not interested" now ALWAYS closes the deal (CLOSED_LOST) and
+                // drops it off the board — and a note is MANDATORY so the reason is captured. (The
+                // "not now, maybe later" case is handled by the Callback/Remind action instead.)
+                const notes = String(payload.notes || '').trim();
+                if (!notes) {
+                    return res.status(400).json({ success: false, error: 'Please add a note explaining why before closing this deal as not interested.' });
+                }
+                await transitionTransaction(dealId, 'CLOSED_LOST' as any, performedBy, 'admin', {
+                    notes: `Customer not interested: ${notes}`,
                 });
                 break;
             }
 
             case 'NO_ANSWER': {
-                // Stays NEW. AI cadence continues from existing schedulers.
+                // Stays NEW; AI cadence continues from existing schedulers (runs alongside, per the
+                // workflow design). Deal-workflow (2026-06-29): if the member set a "call again" time,
+                // book a Google-synced reminder so the deal resurfaces for them at that time.
+                if (payload.remind_at) {
+                    const remindAt = new Date(payload.remind_at);
+                    if (!isNaN(remindAt.getTime())) {
+                        await createDealReminder({
+                            dealId, tenantId: deal.tenant_id, dealStatus: deal.status,
+                            agentId: performedBy, agentName: performerName,
+                            contactPhone: phone, contactName: deal.demand_contact.name,
+                            remindAt, note: String(payload.notes || '').trim() || `Call ${deal.demand_contact.name || phone} again`,
+                            actionType: 'CALLBACK_SCHEDULED',
+                        }).catch(err => logger.error('[log-call] no-answer reminder failed:', err));
+                    }
+                }
                 break;
             }
 
@@ -1398,6 +1717,25 @@ router.post('/:id/log-call', checkPermission('act_on_deals'), async (req: any, r
                 if (!payload.callback_at) {
                     return res.status(400).json({ success: false, error: 'callback_at required' });
                 }
+                const callbackAt = new Date(payload.callback_at);
+                if (isNaN(callbackAt.getTime())) {
+                    return res.status(400).json({ success: false, error: 'callback_at is not a valid date' });
+                }
+                // Phase 4 (2026-06-27): book a Google-synced follow-up reminder so the callback actually
+                // resurfaces the deal — agent's Google Calendar + Tasks + in-app notify (before + at).
+                await createDealReminder({
+                    dealId,
+                    tenantId: deal.tenant_id,
+                    dealStatus: deal.status,
+                    agentId: performedBy,
+                    agentName: performerName,
+                    contactPhone: phone,
+                    contactName: deal.demand_contact.name,
+                    remindAt: callbackAt,
+                    note: String(payload.notes || '').trim() || `Callback requested by ${deal.demand_contact.name || phone}`,
+                    actionType: 'CALLBACK_SCHEDULED',
+                }).catch(err => logger.error('[log-call] callback reminder failed:', err));
+
                 const { WhatsAppService } = await import('../services/whatsapp');
                 const wa = new WhatsAppService();
                 const mgr = await prisma.agent.findFirst({
@@ -1415,10 +1753,15 @@ router.post('/:id/log-call', checkPermission('act_on_deals'), async (req: any, r
 
             case 'WRONG_OR_SPAM': {
                 const reason = payload.reason || 'WRONG_NUMBER';
+                // Phase 4 (2026-06-27): a closing outcome — note is MANDATORY.
+                const wsNotes = String(payload.notes || '').trim();
+                if (!wsNotes) {
+                    return res.status(400).json({ success: false, error: 'Please add a note before closing this deal.' });
+                }
                 const closedReasons = ['WRONG_NUMBER', 'SPAM', 'BANKER_VALUER', 'DUPLICATE'];
                 const nextStatus = closedReasons.includes(reason) ? 'CLOSED_LOST' : 'ON_HOLD';
                 await transitionTransaction(dealId, nextStatus as any, performedBy, 'admin', {
-                    notes: `Marked as ${reason} by ${performerName}`,
+                    notes: `Marked as ${reason} by ${performerName}. ${wsNotes}`,
                 });
                 if (reason === 'WRONG_NUMBER' || reason === 'SPAM') {
                     await prisma.contact.update({ where: { phone_number: phone }, data: { lead_status: 'lost' } }).catch(() => {});
@@ -1441,6 +1784,25 @@ router.post('/:id/log-call', checkPermission('act_on_deals'), async (req: any, r
                 }
                 break;
             }
+
+            case 'CLOSED_UNREACHABLE': {
+                // Deal-workflow (2026-06-29): closing after repeated no-answers. Stamp how many
+                // no-answer calls were logged on THIS deal into the close note (count is derived).
+                const naCount = await prisma.interaction.count({
+                    where: {
+                        phone_number: phone,
+                        event_type: 'human_call_outcome',
+                        AND: [
+                            { metadata: { path: ['outcome'], equals: 'NO_ANSWER' } },
+                            { metadata: { path: ['deal_id'], equals: dealId } },
+                        ],
+                    },
+                });
+                await transitionTransaction(dealId, 'CLOSED_LOST' as any, performedBy, 'admin', {
+                    notes: `Closed — unreachable after ${naCount} no-answer call${naCount === 1 ? '' : 's'} by ${performerName}.${payload.notes ? ' ' + String(payload.notes).trim() : ''}`,
+                });
+                break;
+            }
         }
 
         // Always log the human call outcome as an interaction
@@ -1455,6 +1817,23 @@ router.post('/:id/log-call', checkPermission('act_on_deals'), async (req: any, r
                 metadata: { deal_id: dealId, outcome, performed_by: performedBy, ...payload },
             },
         });
+
+        // Log the call as a TeamAction too, so the pipeline tile's "last action" line shows it
+        // (CALL_LOGGED → "📞 Called (<outcome>)"). Only when a real agent performed it — the
+        // agent_id is an FK and drives the tile's "who" + timestamp. (2026-07-09)
+        if (req.agent?.id) {
+            await prisma.teamAction.create({
+                data: {
+                    tenant_id: deal.demand_contact.tenant_id || deal.tenant_id,
+                    transaction_id: dealId,
+                    agent_id: req.agent.id,
+                    stage: deal.status,            // the stage the call was logged in (NEW)
+                    action_type: 'CALL_LOGGED',
+                    outcome,
+                    notes: payload.notes ?? null,
+                },
+            }).catch((e: any) => logger.warn('[log-call] teamAction write failed:', e?.message));
+        }
 
         // Mark team action timestamp so AI back-off rule fires
         await prisma.transaction.update({

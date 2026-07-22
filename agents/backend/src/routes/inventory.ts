@@ -5,6 +5,7 @@ import path from 'path';
 import fs from 'fs';
 import { InventoryStateMachine } from '../workflows/inventory_machine';
 import prisma from '../db';
+import { Prisma, AppointmentType, AppointmentStatus } from '@prisma/client';
 import { upsertCatalogProduct, deleteCatalogProduct, syncInventoryById } from '../services/catalog_sync';
 import { sessionStore } from '../services/session/store';
 import { StorageService } from '../services/storage';
@@ -15,10 +16,16 @@ import logger from '../utils/logger';
 import { absurdPriceError } from '../utils/price_sanity';
 import { normalizePhone, isPlaceholderPhone } from '../utils/phone';
 import { findInventoryIdsByAddress } from '../utils/inventory_search';
+import { generateDisplayId } from '../utils/inventory_id';
+import { getTeamIds } from '../utils/team_scope';
+import { partnerOwnInventoryWhere } from '../utils/partner_scope';
 import { expandTaxonomyNodeIds, bhkSpecsFilter } from '../utils/taxonomy_filter';
 import { WhatsAppService } from '../services/whatsapp';
 import { notify } from '../services/notify';
+import { sanitizationService } from '../services/sanitization_service';
 import { broadcastInventoryToQualifiedDeals } from '../services/inventory_broadcast';
+import { broadcastNewInventoryToTeam } from '../services/team_inventory_broadcast';
+import { resolveTypeFilter } from '../utils/demand_taxonomy';
 import { cacheDel } from '../utils/redis';
 
 const router = Router();
@@ -56,13 +63,13 @@ router.post('/', authMiddleware, checkPermission('edit_inventory'), async (req, 
             category, type,
             // Property details
             location, price, specs, features, description, furnishing,
-            floor_number, total_floors, facing, property_age,
+            floor_number, floor_label, display_floor, total_floors, facing, property_age,
             // Owner info
             owner_phone, owner_name,
             // Key holder
             key_holder_type, key_holder_name, key_holder_phone,
             // Renovation
-            renovated,
+            renovated, roof_rights,
             // Pre-rented (pre-lease): for-sale property already tenanted + the current monthly rent.
             pre_rented, pre_rented_monthly_rent,
             // Source partner (middleman model, 2026-04-17). If the inventory came from
@@ -221,7 +228,11 @@ router.post('/', authMiddleware, checkPermission('edit_inventory'), async (req, 
 
                 // Property details (only non-deprecated columns)
                 description: description || null,
-                floor_number: floor_number ? parseInt(String(floor_number)) : null,
+                // floor_number is a sort key — keep 0 (Ground), don't treat it as falsy. floor_label is the
+                // authoritative display value for named levels; display_floor is the buyer-facing override.
+                floor_number: floor_number !== undefined && floor_number !== null && floor_number !== '' ? parseInt(String(floor_number)) : null,
+                floor_label: floor_label ? String(floor_label).trim() : null,
+                display_floor: display_floor ? String(display_floor).trim() : null,
 
                 // Key holder
                 key_holder_type: key_holder_type || null,
@@ -230,6 +241,7 @@ router.post('/', authMiddleware, checkPermission('edit_inventory'), async (req, 
 
                 // Renovation
                 renovated: renovated === true || renovated === 'true',
+                roof_rights: roof_rights === true || roof_rights === 'true',
 
                 // Pre-rented (pre-lease): for-sale property already tenanted + the sitting tenant's monthly rent
                 pre_rented: pre_rented === true || pre_rented === 'true',
@@ -266,6 +278,9 @@ router.post('/', authMiddleware, checkPermission('edit_inventory'), async (req, 
         cacheDel('cache:/public/featured*').catch(() => {});
         cacheDel('cache:/public/properties*').catch(() => {});
 
+        // Team "new inventory" broadcast now fires CENTRALLY from the db.ts inventory.create
+        // extension (covers every create path, idempotent) — no per-route call needed here. (2026-07-10)
+
         logger.info(`[Inventory] Created ${inventory.id} by agent ${req.agent!.id}`);
         res.status(201).json(inventory);
     } catch (error) {
@@ -289,38 +304,97 @@ const getManagedPartnerOwnerIds = async (agentIds: string[]): Promise<string[]> 
     return owners.map((o: { id: string }) => o.id);
 };
 
+/**
+ * PARTNER write-guard (2026-07-12). For any mutating inventory route a partner can reach, they may only
+ * touch their OWN listing. Returns true when the request may proceed; sends 403 and returns false otherwise.
+ * (No-op for team members — they keep their existing permission/team guards.)
+ */
+async function partnerMayMutateInventory(req: any, res: any, inventoryId: string): Promise<boolean> {
+    const agent = req.agent;
+    if (!agent || agent.role !== 'partner') return true;
+
+    const pa = await prisma.partnerAgent.findUnique({
+        where: { id: agent.id }, select: { status: true },
+    });
+    if (!pa || pa.status !== 'ACTIVE') {
+        res.status(403).json({ error: 'Partner account is not active' });
+        return false;
+    }
+
+    const inv = await prisma.inventory.findUnique({
+        where: { id: inventoryId },
+        select: { referral_partner_id: true, owner_phone: true, uploader_phone: true, key_holder_phone: true },
+    });
+    if (!inv) {
+        res.status(404).json({ error: 'Inventory not found' });
+        return false;
+    }
+
+    const { partnerIdsWithSubAgents, isPartnerOwnInventory } = await import('../utils/partner_scope');
+    const { ids, phones } = await partnerIdsWithSubAgents(agent.id);
+    if (!isPartnerOwnInventory(inv as any, ids, phones)) {
+        logger.warn(`[PartnerGuard] Partner ${agent.id} blocked from mutating inventory ${inventoryId}`);
+        res.status(403).json({ error: 'You can only modify your own listings.' });
+        return false;
+    }
+    return true;
+}
+
+/**
+ * POST /inventory/:id/partner-assign  { partner_agent_id: string | null }
+ * PARTNER TEAMS (2026-07-13): a partner COMPANY OWNER assigns one of THEIR OWN listings to one of THEIR
+ * OWN sub-agents. The assignee gains FULL work rights on it (isPartnerOwnInventory now matches
+ * partner_assignee_id, so partnerMayMutateInventory lets them edit it) — the user chose full work rights.
+ * Writes ONLY `partner_assignee_id`; `referral_partner_id` (attribution) is never touched.
+ */
+router.post('/:id/partner-assign', authMiddleware, async (req: any, res) => {
+    try {
+        const id = req.params.id as string;
+        if (!(await partnerMayMutateInventory(req, res, id))) return;
+        const { assertPartnerOwnerCanAssign } = await import('../utils/partner_team');
+        const check = await assertPartnerOwnerCanAssign(req, res, req.body?.partner_agent_id ?? null);
+        if (!check.ok) return;
+
+        const updated = await prisma.inventory.update({
+            where: { id },
+            data: { partner_assignee_id: check.assigneeId },
+            select: { id: true, display_id: true, partner_assignee_id: true },
+        });
+        logger.info(`[PartnerAssign] listing ${id} -> ${check.assigneeId ?? 'unassigned'} by partner ${req.agent.id}`);
+        res.json({ success: true, ...updated });
+    } catch (error) {
+        captureRouteError(error, req, { route: 'inventory#partner-assign' });
+        logger.error('[PartnerAssign] listing error:', error);
+        res.status(500).json({ error: (error as Error).message });
+    }
+});
+
 // GET /inventory - List inventory (role-based filtering + query filters + pagination)
 router.get('/', authMiddleware, async (req, res) => {
     try {
         const agent = req.agent!;
         const where: any = {};
 
-        // Role-based visibility (DUAL-VISIBILITY: uploader OR reference + managed partner agents)
-        if (agent.role === 'super_boss') {
-            // Super boss sees ALL inventory
-        } else if (agent.role === 'manager') {
-            // Manager sees own/team uploads/references + managed partner agents' inventory
-            const team = await prisma.agent.findMany({
-                where: { reports_to_id: agent.id },
-                select: { id: true },
-            });
-            const teamIds = [agent.id, ...team.map((a: { id: string }) => a.id)];
+        // Visibility (2026-06-27): manager = their team, employee = own, BY DEFAULT. super_boss sees all.
+        // `?all=true` ("Browse all") returns the whole catalog so agents can still match clients to any
+        // property — but owner contact + exact unit (flat_no/plot_no) are redacted for listings OUTSIDE
+        // the agent's team (see redactInventoryForStaff, now team-aware); pricing stays visible.
+        const browseAll = req.query.all === 'true';
+        // PARTNER (2026-07-12): an external partner sees the ACTIVE catalogue (so they can match their
+        // clients) PLUS their own listings in any status. Everything is redacted below — no owner contact,
+        // no exact address. They are never scoped by team.
+        const isPartner = agent.role === 'partner';
+        const teamIds = isPartner ? [] : await getTeamIds(agent); // [self] or [self, ...direct reports]
+        if (isPartner) {
+            const ownOr = await partnerOwnInventoryWhere(agent.id);
+            where.OR = [{ status: 'active' }, ...ownOr];
+        } else if (agent.role !== 'super_boss' && !browseAll) {
             const partnerOwnerIds = await getManagedPartnerOwnerIds(teamIds);
             where.OR = [
                 { uploaded_by_agent_id: { in: teamIds } },
                 { reference_agent_id: { in: teamIds } },
                 { assigned_agent_id: { in: teamIds } },
                 { shared_with_ids: { hasSome: teamIds } },
-                ...(partnerOwnerIds.length > 0 ? [{ owner_id: { in: partnerOwnerIds } }] : []),
-            ];
-        } else {
-            // Employee sees own uploads + own references + assigned + shared + managed partner agents' inventory
-            const partnerOwnerIds = await getManagedPartnerOwnerIds([agent.id]);
-            where.OR = [
-                { uploaded_by_agent_id: agent.id },
-                { reference_agent_id: agent.id },
-                { assigned_agent_id: agent.id },
-                { shared_with_ids: { has: agent.id } },
                 ...(partnerOwnerIds.length > 0 ? [{ owner_id: { in: partnerOwnerIds } }] : []),
             ];
         }
@@ -346,6 +420,11 @@ router.get('/', authMiddleware, async (req, res) => {
 
         if (intent && typeof intent === 'string') where.intent = intent;
         if (status && typeof status === 'string') where.status = status;
+        // Contacts page: list the inventories a given owner contact provided.
+        if (req.query.owner_phone) {
+            const op = normalizePhone(String(req.query.owner_phone));
+            if (op) where.owner_phone = op;
+        }
         if (state && typeof state === 'string') where.state = { contains: state, mode: 'insensitive' };
         if (type && typeof type === 'string') where.type = { contains: type, mode: 'insensitive' };
         if (category && typeof category === 'string') where.category = { contains: category, mode: 'insensitive' };
@@ -406,6 +485,21 @@ router.get('/', authMiddleware, async (req, res) => {
                 { id: { in: ids } },
             ];
         }
+
+        // Budget / price range filter (#3, 2026-06-28): price_min / price_max (₹) on the asking price.
+        {
+            const priceMin = req.query.price_min ? parseFloat(String(req.query.price_min)) : NaN;
+            const priceMax = req.query.price_max ? parseFloat(String(req.query.price_max)) : NaN;
+            if (!isNaN(priceMin) || !isNaN(priceMax)) {
+                const priceWhere: any = {};
+                if (!isNaN(priceMin)) priceWhere.gte = priceMin;
+                if (!isNaN(priceMax)) priceWhere.lte = priceMax;
+                where.price = priceWhere;
+            }
+        }
+
+        // Roof rights filter (2026-06-28): ?roof_rights=true → only listings that include roof rights.
+        if (req.query.roof_rights === 'true') where.roof_rights = true;
 
         // Classification ID filters (v2)
         if (category_id && typeof category_id === 'string') {
@@ -494,14 +588,15 @@ router.get('/', authMiddleware, async (req, res) => {
                 take,
                 include: {
                     uploaded_by_agent: {
-                        select: { id: true, name: true, role: true },
+                        select: { id: true, name: true, role: true, phone: true },
                     },
                     reference_agent: {
                         select: { id: true, name: true, role: true },
                     },
                     assigned_agent: {
-                        select: { id: true, name: true, role: true },
+                        select: { id: true, name: true, role: true, phone: true },
                     },
+                    referral_partner: { select: { name: true, phone_number: true } },
                     property_category: { select: { id: true, name: true, slug: true } },
                     property_sub_category: { select: { id: true, name: true, slug: true } },
                     property_type_link: { select: { id: true, name: true, slug: true } },
@@ -512,8 +607,93 @@ router.get('/', authMiddleware, async (req, res) => {
             prisma.inventory.count({ where }),
         ]);
 
+        // Phase A (2026-06-18): per-tile engagement counts — shares / website views / visits.
+        // Batched (2 groupBy + 1 raw view-count) to avoid N+1; attached as `stats` on each row.
+        const pageIds = inventory.map((i: { id: string }) => i.id);
+        const stats: Record<string, { shares: number; views: number; visits_scheduled: number; visits_done: number }> = {};
+        for (const id of pageIds) stats[id] = { shares: 0, views: 0, visits_scheduled: 0, visits_done: 0 };
+        if (pageIds.length > 0) {
+            const [shareGroups, visitGroups, viewRows] = await Promise.all([
+                prisma.propertyShare.groupBy({ by: ['inventory_id'], where: { inventory_id: { in: pageIds } }, _count: { _all: true } }),
+                prisma.appointment.groupBy({
+                    by: ['property_id', 'status'],
+                    where: { property_id: { in: pageIds }, type: { in: [AppointmentType.property_visit, AppointmentType.site_visit] } },
+                    _count: { _all: true },
+                }),
+                prisma.$queryRaw<Array<{ iid: string; c: number }>>`
+                    SELECT metadata->>'property_id' AS iid, COUNT(*)::int AS c
+                    FROM interactions
+                    WHERE event_type = 'property_view' AND metadata->>'property_id' IN (${Prisma.join(pageIds)})
+                    GROUP BY metadata->>'property_id'`,
+            ]);
+            for (const g of shareGroups) { const k = g.inventory_id; if (k && stats[k]) stats[k].shares = g._count._all; }
+            for (const g of visitGroups) {
+                const pid = g.property_id;
+                if (!pid || !stats[pid]) continue;
+                if (g.status !== AppointmentStatus.cancelled) stats[pid].visits_scheduled += g._count._all;
+                if (g.status === AppointmentStatus.completed) stats[pid].visits_done += g._count._all;
+            }
+            for (const r of viewRows) { if (r.iid && stats[r.iid]) stats[r.iid].views = Number(r.c); }
+        }
+
+        // PARTNER response (2026-07-12): run every row through the partner redaction — strips owner/
+        // key-holder/uploader contact, source/referral fields, and the exact address (flat_no, plot_no,
+        // full_address, apartment_name, lat/lng); locality/city are kept so they can still place it.
+        // No `source` block at all. can_edit only on their OWN listings.
+        if (isPartner) {
+            const { applyRoleMaskList, viewerFromPartner } = await import('../services/permission_engine');
+            const { partnerIdsWithSubAgents, isPartnerOwnInventory } = await import('../utils/partner_scope');
+            const { ids, phones } = await partnerIdsWithSubAgents(agent.id);
+            const ownFlags = (inventory as any[]).map(i => isPartnerOwnInventory(i, ids, phones));
+            const masked = applyRoleMaskList(
+                (inventory as any[]).map(i => ({ ...i, stats: stats[i.id] })),
+                viewerFromPartner(agent.id),
+            ) as any[];
+            const partnerData = masked.map((r: any, idx: number) => ({
+                ...r,
+                source: null,
+                mine: ownFlags[idx],
+                can_edit: ownFlags[idx],
+                needs_owner_fix: false,
+            }));
+            return res.json({ data: partnerData, total, page: pageNum, totalPages: Math.ceil(total / take) });
+        }
+
+        // Per-tile SOURCE (point 6): owner vs dealer + name (shown to all) + a phone that is gated to
+        // the handling manager (assigned_agent) + super_boss. Computed from the RAW row before redaction
+        // (which strips the underlying owner/dealer PII), then re-attached.
+        const isSB = agent.role === 'super_boss';
+        const data = inventory.map((i: any) => {
+            const canSeeSourcePhone = isSB || teamIds.includes(i.assigned_agent_id) || teamIds.includes(i.uploaded_by_agent_id);
+            const isDealer = i.ownership_type === 'EXTERNAL_AGENT';
+            const isAgentOwner = i.ownership_type === 'AGENT_OWNER';
+            const sourceName = (isDealer ? i.referral_partner?.name : i.owner_name) || i.uploader_name || null;
+            const sourcePhoneRaw = isDealer
+                ? (i.referral_partner?.phone_number || i.uploader_phone)
+                : (i.owner_phone || i.uploader_phone);
+            const source = {
+                type: isDealer ? 'DEALER' : (isAgentOwner ? 'AGENT_OWNER' : 'OWNER'),
+                name: sourceName,
+                phone: canSeeSourcePhone ? (sourcePhoneRaw || null) : null,
+            };
+            const redacted = sanitizationService.redactInventoryForStaff(
+                { ...i, stats: stats[i.id] },
+                { agentId: agent.id, isSuperBoss: isSB, teamIds },
+            );
+            // mine = uploaded by OR assigned to me (for the "Yours" badge);
+            // can_edit = super_boss, or (manager of) the team that owns it — matches the PATCH guard.
+            const mine = i.uploaded_by_agent_id === agent.id || i.assigned_agent_id === agent.id;
+            const can_edit = isSB || teamIds.includes(i.assigned_agent_id) || teamIds.includes(i.uploaded_by_agent_id);
+            // needs_owner_fix = the owner number equals the uploading/assigned team member's own number
+            // (Part B, 2026-06-20) — flags the ~317 listings where an agent put themselves as the owner.
+            const d10 = (p: any) => (p ? String(p) : '').replace(/\D/g, '').slice(-10);
+            const ownerD = d10(i.owner_phone);
+            const needs_owner_fix = !!ownerD && (ownerD === d10(i.uploaded_by_agent?.phone) || ownerD === d10(i.assigned_agent?.phone));
+            return { ...redacted, source, mine, can_edit, needs_owner_fix };
+        });
+
         res.json({
-            data: inventory,
+            data,
             total,
             page: pageNum,
             totalPages: Math.ceil(total / take),
@@ -543,6 +723,9 @@ router.get('/:id', authMiddleware, async (req, res, next) => {
                 uploaded_by_agent: {
                     select: { id: true, name: true, role: true },
                 },
+                assigned_agent: {
+                    select: { id: true, name: true, role: true, phone: true },
+                },
                 contact: {
                     select: { name: true, phone_number: true },
                 },
@@ -569,7 +752,33 @@ router.get('/:id', authMiddleware, async (req, res, next) => {
             return res.status(404).json({ error: 'Inventory not found' });
         }
 
-        res.json(inventory);
+        const meDetail = req.agent!;
+
+        // PARTNER (2026-07-12): may open an ACTIVE listing (to match their clients) or their OWN listing
+        // in any status — nothing else. Response is partner-redacted (no owner contact, no exact address).
+        if (meDetail.role === 'partner') {
+            const { applyRoleMask, viewerFromPartner } = await import('../services/permission_engine');
+            const { partnerIdsWithSubAgents, isPartnerOwnInventory } = await import('../utils/partner_scope');
+            const { ids, phones } = await partnerIdsWithSubAgents(meDetail.id);
+            const isOwn = isPartnerOwnInventory(inventory as any, ids, phones);
+            if (!isOwn && (inventory as any).status !== 'active') {
+                return res.status(403).json({ error: 'Not available' });
+            }
+            const maskedDetail: any = applyRoleMask(inventory as any, viewerFromPartner(meDetail.id));
+            return res.json({ ...maskedDetail, source: null, mine: isOwn, can_edit: isOwn });
+        }
+
+        const detailTeamIds = await getTeamIds(meDetail);
+        const redactedDetail: any = sanitizationService.redactInventoryForStaff(inventory, {
+            agentId: meDetail.id,
+            isSuperBoss: meDetail.role === 'super_boss',
+            teamIds: detailTeamIds,
+        });
+        // can_edit mirrors the PATCH guard: super_boss, or (manager of) the team that owns the listing.
+        redactedDetail.can_edit = meDetail.role === 'super_boss'
+            || detailTeamIds.includes(inventory.assigned_agent_id)
+            || detailTeamIds.includes(inventory.uploaded_by_agent_id);
+        res.json(redactedDetail);
     } catch (error) {
         captureRouteError(error, req, { route: 'inventory#3' });
         logger.error(error);
@@ -577,13 +786,77 @@ router.get('/:id', authMiddleware, async (req, res, next) => {
     }
 });
 
+// POST /inventory/:id/clone — Task 4b (2026-06-27): clone a listing's building + features into a new
+// one. Spreads the source row (so no column-name drift), strips identity/unique/timestamp fields,
+// CLEARS the caller-specified unit-level fields (the agent re-enters them in the Edit that opens next),
+// and mints a fresh display_id. Owner is always copied (required FK) but is editable in that Edit.
+// Media is NOT copied unless copy_media=true.
+router.post('/:id/clone', authMiddleware, checkPermission('edit_inventory'), async (req, res) => {
+    try {
+        const { id } = req.params;
+        const agent = req.agent!;
+        const { clear = [], copy_media = false } = req.body || {};
+
+        const src = await prisma.inventory.findFirst({ where: { id, tenant_id: agent.tenant_id } });
+        if (!src) return res.status(404).json({ error: 'Inventory not found' });
+
+        // Only these (all nullable) unit-level fields may be cleared by the clone request.
+        const CLEARABLE = new Set(['flat_no', 'plot_no', 'floor_number', 'floor_label', 'display_floor',
+            'price', 'customer_price', 'display_price', 'latitude', 'longitude', 'full_address']);
+        const clearSet = (Array.isArray(clear) ? clear : []).filter((f: string) => CLEARABLE.has(f));
+
+        // Spread all scalar columns; drop identity/unique/derived fields so the clone gets fresh ones.
+        const { id: _id, display_id: _did, slug: _slug, created_at: _c, updated_at: _u, ...rest } = src as any;
+        for (const f of clearSet) rest[f] = null;
+        if (!copy_media) { rest.media_urls = []; rest.media_score = 0; }
+        rest.uploaded_by_agent_id = agent.id; // the cloner becomes the new uploader
+        rest.status = 'active';
+        rest.completion_pct = 0;
+        rest.is_enriched = false;
+
+        const displayId = await generateDisplayId(src.city || src.locality || '', String(src.category || ''));
+
+        // __no_team_broadcast: a duplicated listing must NOT blast the team (copied details,
+        // usually edited right after). Stripped before Prisma sees it by the db.ts create hook.
+        const clone = await prisma.inventory.create({ data: { ...rest, display_id: displayId, __no_team_broadcast: true } as any });
+        upsertCatalogProduct(clone).catch(e => logger.warn('[Catalog] post-clone upsert failed:', e.message));
+        logger.info(`[inventory.clone] ${src.display_id || src.id} -> ${clone.display_id} (cleared: ${clearSet.join(',') || 'none'}) by agent ${agent.id}`);
+        return res.json({ inventory_id: clone.id, display_id: clone.display_id });
+    } catch (e: any) {
+        logger.error('[inventory.clone] failed:', e?.message || e);
+        return res.status(500).json({ error: 'Failed to clone listing' });
+    }
+});
+
 // PATCH /inventory/:id - Update inventory (requires edit_inventory permission)
 router.patch('/:id', authMiddleware, checkPermission('edit_inventory'), async (req, res) => {
     try {
         const id = req.params.id as string;
+        // Partner write-guard: a partner may only mutate their OWN listing.
+        if (!(await partnerMayMutateInventory(req, res, id))) return;
         const existing = await prisma.inventory.findUnique({ where: { id } });
         if (!existing) {
             return res.status(404).json({ error: 'Inventory not found' });
+        }
+
+        // Edit guard (point 3, 2026-06-19): inventory is VISIBLE to all staff, but only the
+        // listing's ASSIGNED inventory manager or super_boss may EDIT it. (Tightened from the
+        // earlier uploader/manager-of-team allowance — after a reassignment only the new assignee
+        // + super_boss can edit.) This also blocks status changes (e.g. deactivate) by others.
+        {
+            const me = req.agent!;
+            // Edit rule (2026-06-27): super_boss, OR a manager whose team owns the listing, OR the
+            // assigned/uploading agent themselves. Mirrors getTeamIds (manager = self + direct reports).
+            // PARTNER (2026-07-12): a partner belongs to no team, so this rule would always reject them.
+            // Their ownership was already enforced above by partnerMayMutateInventory() (403 unless the
+            // listing is theirs), so they are allowed through here.
+            if (me.role !== 'partner') {
+                const editTeamIds = await getTeamIds(me);
+                const canEdit = me.role === 'super_boss'
+                    || editTeamIds.includes(existing.assigned_agent_id)
+                    || editTeamIds.includes(existing.uploaded_by_agent_id);
+                if (!canEdit) return res.status(403).json({ error: 'You can only edit listings owned by you or your team.' });
+            }
         }
 
         // Allowed fields to update.
@@ -603,7 +876,7 @@ router.patch('/:id', authMiddleware, checkPermission('edit_inventory'), async (r
             // Dual pricing (Redesign v2)
             'customer_price', 'display_price',
             // Property details (only non-deprecated columns remain)
-            'description', 'floor_number',
+            'description', 'floor_number', 'floor_label', 'display_floor',
             // Structured address (city + district for backward compat)
             'flat_no', 'plot_no', 'apartment_name',
             'state', 'district', 'city', 'locality', 'sub_locality', 'pincode', 'full_address',
@@ -620,6 +893,9 @@ router.patch('/:id', authMiddleware, checkPermission('edit_inventory'), async (r
         // Handle renovated boolean explicitly (not in allowedFields loop to avoid string coercion)
         if (req.body.renovated !== undefined) {
             updateData.renovated = req.body.renovated === true || req.body.renovated === 'true';
+        }
+        if (req.body.roof_rights !== undefined) {
+            updateData.roof_rights = req.body.roof_rights === true || req.body.roof_rights === 'true';
         }
         // Pre-rented (pre-lease) — boolean flag + the sitting tenant's monthly rent (number or null).
         if (req.body.pre_rented !== undefined) {
@@ -638,8 +914,10 @@ router.patch('/:id', authMiddleware, checkPermission('edit_inventory'), async (r
                     const parsed = req.body[field] !== null && req.body[field] !== '' ? parseFloat(req.body[field]) : NaN;
                     updateData[field] = isNaN(parsed) ? null : parsed;
                 } else if (field === 'floor_number') {
-                    const parsed = req.body[field] !== null ? parseInt(String(req.body[field])) : NaN;
+                    const parsed = req.body[field] !== null && req.body[field] !== '' ? parseInt(String(req.body[field])) : NaN;
                     updateData[field] = isNaN(parsed) ? null : parsed;
+                } else if (field === 'floor_label' || field === 'display_floor') {
+                    updateData[field] = req.body[field] ? String(req.body[field]).trim() : null;
                 } else {
                     updateData[field] = req.body[field];
                 }
@@ -752,6 +1030,13 @@ router.patch('/:id', authMiddleware, checkPermission('edit_inventory'), async (r
         if (updateData.owner_phone) {
             const normalized = normalizePhone(updateData.owner_phone);
             if (!normalized) return res.status(400).json({ error: 'Invalid owner phone number' });
+            // (2026-06-20) A team member may NOT set their OWN number as the property owner — the owner
+            // number must be the actual owner's. Blocks "fixing" a flagged listing back to the agent.
+            const meEdit = await prisma.agent.findUnique({ where: { id: req.agent!.id }, select: { phone: true } });
+            const myDigits = (normalizePhone(meEdit?.phone || '') || '').replace(/\D/g, '').slice(-10);
+            if (myDigits && normalized.replace(/\D/g, '').slice(-10) === myDigits) {
+                return res.status(400).json({ error: 'You cannot use your own number as the property owner. Enter the actual owner number.' });
+            }
             updateData.owner_phone = normalized;
             // Ensure Owner record exists and update FK
             const tenant = await prisma.tenant.findFirst();
@@ -795,6 +1080,10 @@ router.patch('/:id', authMiddleware, checkPermission('edit_inventory'), async (r
         if (updateData.status === 'active' && existing.status !== 'active') {
             broadcastInventoryToQualifiedDeals(id).catch(e =>
                 logger.warn('[InvBroadcast] PATCH broadcast failed:', e.message)
+            );
+            // Phase D: alert the whole team about the newly-active listing.
+            broadcastNewInventoryToTeam(String(id)).catch(e =>
+                logger.warn('[TeamInvBroadcast] PATCH broadcast failed:', e.message)
             );
         }
 
@@ -900,7 +1189,7 @@ router.post('/share-pdf', authMiddleware, async (req: any, res) => {
                 customer_price: true, price_unit: true, description: true,
                 media_urls: true, owner_phone: true,
                 uploaded_by_agent_id: true, assigned_agent_id: true, reference_agent_id: true,
-                shared_with_ids: true,
+                shared_with_ids: true, status: true,
             },
         });
 
@@ -918,6 +1207,7 @@ router.post('/share-pdf', authMiddleware, async (req: any, res) => {
                 teamIds = team.map(t => t.id);
             }
             const allowed = inventories.every(inv => {
+                if ((inv as any).status === 'active') return true;  // marketplace model (2026-06-18): any agent may share any ACTIVE listing
                 const direct = inv.uploaded_by_agent_id === agent.id
                     || inv.assigned_agent_id === agent.id
                     || inv.reference_agent_id === agent.id
@@ -943,7 +1233,7 @@ router.post('/share-pdf', authMiddleware, async (req: any, res) => {
         res.setHeader('Content-Type', 'application/pdf');
         res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
 
-        const stream = generateInventoryPdfStream(inventories as any, {
+        const stream = await generateInventoryPdfStream(inventories as any, {
             variant: effectiveVariant,
             partnerName: partner_name || (effectiveVariant === 'brandless' ? agentRecord?.name : undefined),
             partnerPhone: partner_phone || (effectiveVariant === 'brandless' ? agentRecord?.phone : undefined),
@@ -992,12 +1282,214 @@ router.get('/:id/share-link', authMiddleware, async (req: any, res) => {
     }
 });
 
+// Rooms parsing for the matching-clients type/rooms gate. "Studio"/"1 RK" → 0 bedrooms.
+function _parseRooms(v: any): number | null {
+    if (v == null) return null;
+    const s = String(v).toLowerCase();
+    if (/studio|1\s*rk/.test(s)) return 0;
+    const m = s.match(/\d+/);
+    return m ? parseInt(m[0], 10) : null;
+}
+function _roomsFromSpecs(specs: any, typeName?: string | null): number | null {
+    const sp = (specs && typeof specs === 'object') ? specs : {};
+    const r = _parseRooms(sp.bhk ?? sp.rooms ?? sp.bhk_count ?? sp.bedrooms);
+    if (r != null) return r;
+    if (typeName && /studio/i.test(typeName)) return 0;
+    return null;
+}
+function _roomsFromSchema(sv: any): number | null {
+    const v = (sv && typeof sv === 'object') ? (sv.bhk ?? sv.rooms ?? sv.bedrooms) : null;
+    return _parseRooms(v);
+}
+
+// GET /inventory/:id/matching-clients — find OPEN deals whose demand GENUINELY matches this listing.
+// Strict (2026-06-18): hard filters on intent + property TYPE (residential/commercial + sub-category via
+// the canonical taxonomy join) + rooms/BHK + budget; leads with no resolvable type are dropped (they are
+// unqualified, not matches). Contact phone is REDACTED unless the viewer is super_boss OR the lead is
+// assigned to them (deal or contact) — the middleman model; the name + Share (by deal_id) still work.
+router.get('/:id/matching-clients', authMiddleware, async (req: any, res) => {
+    try {
+        const inv = await prisma.inventory.findUnique({
+            where: { id: req.params.id },
+            select: {
+                id: true, tenant_id: true, intent: true, price: true, display_price: true,
+                locality: true, city: true, district: true, location: true, type: true,
+                category_id: true, sub_category_id: true, taxonomy_node_id: true,
+                flat_property_type_id: true, specs: true,
+                assigned_agent: { select: { name: true } },
+            },
+        });
+        if (!inv) return res.status(404).json({ error: 'Property not found' });
+
+        const me = req.agent!;
+        const isSuperBoss = me.role === 'super_boss';
+
+        const invIsRent = inv.intent === 'rent' || inv.intent === 'rent_lease' || inv.intent === 'lease';
+        const invPrice = inv.price ? Number(inv.price) : null;
+        const invLoc = (inv.locality || inv.city || inv.district || inv.location || '').toLowerCase();
+
+        // Listing type → canonical {category, sub_category} for a HARD type filter.
+        const invType = await resolveTypeFilter({
+            demand_taxonomy_node_id: inv.taxonomy_node_id,
+            sub_category_id: inv.sub_category_id,
+            category_id: inv.category_id,
+            type_id: inv.flat_property_type_id,
+        });
+        const invRooms = _roomsFromSpecs(inv.specs, inv.type);
+
+        // PARTNER (2026-07-12): a partner may ONLY match against THEIR OWN leads — never the team's or
+        // another partner's. Scope the candidate demand to deals they handle or leads they referred.
+        const isPartnerViewer = me.role === 'partner';
+        let partnerDealWhere: any = {};
+        if (isPartnerViewer) {
+            const { partnerIdsWithSubAgents } = await import('../utils/partner_scope');
+            const { ids } = await partnerIdsWithSubAgents(me.id);
+            partnerDealWhere = {
+                OR: [
+                    { demand_handler_id: { in: ids } },
+                    { supply_handler_id: { in: ids } },
+                    { demand_contact: { referral_partner_id: { in: ids } } },
+                ],
+            };
+        }
+
+        const deals = await prisma.transaction.findMany({
+            where: {
+                tenant_id: inv.tenant_id,
+                status: { notIn: ['CLOSED_WON', 'CLOSED_LOST'] },
+                ...partnerDealWhere,
+            },
+            include: {
+                demand_contact: { select: { phone_number: true, name: true, assigned_agent_id: true, referral_partner_id: true, assigned_agent: { select: { name: true } } } },
+            },
+            take: 800,
+        });
+
+        const matches: any[] = [];
+        for (const d of deals as any[]) {
+            const phone = d.demand_contact?.phone_number;
+            if (!phone || isPlaceholderPhone(phone)) continue;
+
+            // 1) Intent — rent listing needs a rent/lease demand; sale needs buy. No auto-pass on a missing intent.
+            const di = (d.demand_intent || '').toLowerCase();
+            const dWantsRent = di === 'rent' || di === 'rent_lease' || di === 'lease';
+            const dWantsBuy = di === 'buy' || di === 'sell';
+            if (invIsRent && dWantsBuy) continue;
+            if (!invIsRent && dWantsRent) continue;
+
+            // 2) Type — resolve the demand's canonical type. HARD gate ONLY on a KNOWN residential↔
+            //    commercial conflict; an unresolved demand type (≈53% of leads carry a node that doesn't
+            //    map to a legacy category) is NEUTRAL, not a drop — else genuine leads like a budget-fit
+            //    rent seeker get thrown away. Sub-category is a bonus; the rooms check (step 4) does the
+            //    fine separation (studio vs 2 BHK).
+            const dType = await resolveTypeFilter({ demand_taxonomy_node_id: d.demand_taxonomy_node_id });
+            const hasType = !!(dType.category_id || dType.sub_category_id);
+            if (invType.category_id && dType.category_id && invType.category_id !== dType.category_id) continue; // residential vs commercial → drop
+            let typeScore = 0.6;
+            if (invType.category_id && dType.category_id) typeScore = 0.85;                                       // same category (res/com) known
+            if (invType.sub_category_id && dType.sub_category_id && invType.sub_category_id === dType.sub_category_id) typeScore = 1; // exact sub-category bonus
+
+            // 3) Budget — listing price within the deal's window (±30%) when both are known.
+            const bmax = d.demand_budget_max ? Number(d.demand_budget_max) : null;
+            const bmin = d.demand_budget_min ? Number(d.demand_budget_min) : null;
+
+            // 4) Rooms/BHK — exclude a clear conflict (e.g. 2 BHK demand vs studio); else score closeness.
+            const dRooms = _roomsFromSchema(d.demand_schema_values);
+
+            // Qualification gate — drop leads with NO substantive relevance signal (type, budget, location
+            // OR rooms). Bare intent alone (every rent seeker "wants rent") does NOT qualify. This is what
+            // removes the empty/unqualified leads (no budget, no type, no location) the user flagged.
+            if (!hasType && !bmax && !bmin && !d.demand_location && dRooms == null) continue;
+
+            let budgetScore = 0.5;
+            if (invPrice && invPrice > 0) {
+                if (bmax && invPrice > bmax * 1.3) continue;
+                if (bmin && invPrice < bmin * 0.7) continue;
+                if (bmax) budgetScore = invPrice <= bmax ? 1 : Math.max(0, 1 - (invPrice - bmax) / (bmax * 0.3));
+            }
+
+            let roomScore = 0.5;
+            if (invRooms != null && dRooms != null) {
+                const diff = Math.abs(invRooms - dRooms);
+                if (diff >= 2) continue;
+                roomScore = diff === 0 ? 1 : 0.7;
+            }
+
+            // 5) Location — soft; skip only on a clear two-sided mismatch.
+            let locScore = 0.5;
+            const dLoc = (d.demand_location || '').toLowerCase();
+            if (dLoc && invLoc) {
+                if (invLoc.includes(dLoc) || dLoc.includes(invLoc)) locScore = 1;
+                else continue;
+            }
+
+            const score = Math.round((typeScore * 0.35 + budgetScore * 0.3 + roomScore * 0.2 + locScore * 0.15) * 100);
+
+            const reasons: string[] = [invIsRent ? 'Rent' : 'Buy'];
+            if (invRooms != null && dRooms != null && invRooms === dRooms) reasons.push(dRooms === 0 ? 'Studio' : `${dRooms} BHK`);
+            if (invPrice && bmax) reasons.push('budget fit');
+            if (locScore === 1) reasons.push('location match');
+
+            // Middleman model: phone visible only to super_boss or the agent who owns the lead.
+            // A PARTNER only ever reaches their OWN leads here (scoped above) — those are their own
+            // referred clients, so they may see them. They can never see a team/other-partner lead.
+            const owned = isPartnerViewer
+                ? true
+                : (isSuperBoss
+                    || (d.assigned_agent_id && d.assigned_agent_id === me.id)
+                    || (d.demand_contact?.assigned_agent_id && d.demand_contact.assigned_agent_id === me.id));
+
+            matches.push({
+                deal_id: d.id,
+                contact_name: d.demand_contact?.name || null,
+                contact_phone: owned ? phone : undefined,   // redacted unless mine / super_boss
+                contact_redacted: !owned,
+                // The agent who manages THIS lead (the contact's assigned agent) — shown next to each
+                // match so the viewer knows who to coordinate with (esp. redacted leads).
+                lead_manager: d.demand_contact?.assigned_agent?.name || null,
+                demand_intent: d.demand_intent || null,
+                demand_budget_min: bmin,
+                demand_budget_max: bmax,
+                demand_location: d.demand_location || null,
+                status: d.status,
+                score,
+                match_reason: reasons.join(' · '),
+            });
+        }
+        matches.sort((a, b) => b.score - a.score);
+        res.json({
+            matches: matches.slice(0, 30),
+            total_matched: matches.length,
+            inventory_manager: (inv as any).assigned_agent?.name || null,
+        });
+    } catch (err) {
+        captureRouteError(err, req, { route: 'inventory#matching-clients' });
+        res.status(500).json({ error: 'Failed to find matching clients' });
+    }
+});
+
 // POST /inventory/:id/share-to-client — Share property with a client via WhatsApp + generate link
 router.post('/:id/share-to-client', authMiddleware, async (req, res) => {
     try {
         const { id } = req.params;
-        const { client_phone, client_name } = req.body;
-        if (!client_phone) return res.status(400).json({ error: 'client_phone required' });
+        let { client_phone, client_name } = req.body;
+        const { deal_id } = req.body;
+        // Redaction-safe path: when the client's number is hidden from this agent (a lead
+        // assigned to another team member), the frontend sends deal_id instead of the phone.
+        // The phone is resolved server-side and never returned — sharing still goes via company
+        // WhatsApp without exposing the contact.
+        if (!client_phone && deal_id) {
+            const deal = await prisma.transaction.findUnique({
+                where: { id: String(deal_id) },
+                include: { demand_contact: { select: { phone_number: true, name: true } } },
+            });
+            if (!deal || deal.tenant_id !== req.agent!.tenant_id) {
+                return res.status(404).json({ error: 'Deal not found' });
+            }
+            client_phone = deal.demand_contact?.phone_number;
+            client_name = client_name || deal.demand_contact?.name || undefined;
+        }
+        if (!client_phone) return res.status(400).json({ error: 'client_phone or deal_id required' });
 
         const normalized = normalizePhone(client_phone);
         // Guard against placeholder keys (PENDING-/TEMP_) and un-normalizable junk: normalizePhone
@@ -1008,6 +1500,23 @@ router.post('/:id/share-to-client', authMiddleware, async (req, res) => {
             return res.status(400).json({ error: 'No valid client phone to share to' });
         }
         const agent = req.agent!;
+
+        // PARTNER (2026-07-12): an external partner sharing a property to THEIR client.
+        // A PartnerAgent id is NOT an Agent id, and PropertyShare.agent_id / Contact.created_by are
+        // Agent FKs — so the share is RECORDED under the partner's coordinator (managing agent), with
+        // the partner captured on the contact (referral_partner_id) + the interaction metadata.
+        const isPartnerShare = agent.role === 'partner';
+        let actingAgentId: string | null = agent.id;
+        if (isPartnerShare) {
+            const pa = await prisma.partnerAgent.findUnique({
+                where: { id: agent.id }, select: { managing_agent_id: true, status: true },
+            });
+            if (!pa || pa.status !== 'ACTIVE') return res.status(403).json({ error: 'Partner account is not active' });
+            actingAgentId = pa.managing_agent_id
+                || (await prisma.agent.findFirst({ where: { role: 'super_boss', status: 'active' }, select: { id: true } }))?.id
+                || null;
+            if (!actingAgentId) return res.status(500).json({ error: 'No coordinator available to record this share' });
+        }
 
         // Fetch inventory with details for the WhatsApp message
         const inventory = await prisma.inventory.findUnique({
@@ -1024,6 +1533,13 @@ router.post('/:id/share-to-client', authMiddleware, async (req, res) => {
             || inventory.assigned_agent_id === agent.id
             || inventory.reference_agent_id === agent.id
             || (inventory.shared_with_ids || []).includes(agent.id);
+        // A partner may share any ACTIVE listing, or their OWN listing in any status.
+        if (isPartnerShare) {
+            const { partnerIdsWithSubAgents, isPartnerOwnInventory } = await import('../utils/partner_scope');
+            const { ids, phones } = await partnerIdsWithSubAgents(agent.id);
+            canShare = inventory.status === 'active' || isPartnerOwnInventory(inventory as any, ids, phones);
+            if (!canShare) return res.status(403).json({ error: 'Not authorized to share this property' });
+        }
         if (!canShare) {
             const partnerOwnerIds = await getManagedPartnerOwnerIds([agent.id]);
             if (inventory.owner_id && partnerOwnerIds.includes(inventory.owner_id)) canShare = true;
@@ -1033,6 +1549,9 @@ router.post('/:id/share-to-client', authMiddleware, async (req, res) => {
             const teamIds = team.map((a: { id: string }) => a.id);
             canShare = teamIds.includes(inventory.uploaded_by_agent_id || '') || teamIds.includes(inventory.assigned_agent_id || '');
         }
+        // Marketplace model (2026-06-18): any agent may share any ACTIVE listing to a client (listings
+        // are visible to all; the card carries no owner PII). Non-active listings stay owner/team-guarded.
+        if (!canShare && inventory.status === 'active') canShare = true;
         if (!canShare) return res.status(403).json({ error: 'Not authorized to share this property' });
 
         // Upsert contact as BUYER
@@ -1047,12 +1566,19 @@ router.post('/:id/share-to-client', authMiddleware, async (req, res) => {
             create: {
                 phone_number: normalized,
                 name: client_name || null,
-                source: 'manual',
+                source: isPartnerShare ? 'partner_referral' : 'manual',
                 contact_type: 'BUYER',
                 tenant_id: agent.tenant_id,
                 last_channel: 'whatsapp',
                 last_interaction: new Date(),
-                created_by: req.agent?.id || null,
+                // created_by is an Agent FK — never a PartnerAgent id. A partner's new client is
+                // attributed to them via referral_partner_id (so it shows up as THEIR lead).
+                created_by: isPartnerShare ? null : (req.agent?.id || null),
+                ...(isPartnerShare ? {
+                    lead_type: 'PARTNER_REFERRAL',
+                    referral_partner_id: agent.id,
+                    owning_manager_id: actingAgentId,
+                } : {}),
             }
         });
 
@@ -1086,18 +1612,30 @@ router.post('/:id/share-to-client', authMiddleware, async (req, res) => {
             logger.error('[ShareToClient] WhatsApp template send failed:', err);
         }
 
-        // Create PropertyShare record
+        // Create PropertyShare record. agent_id is an Agent FK — for a partner share it is recorded
+        // under their coordinator (actingAgentId); the partner is captured in the interaction metadata.
         const share = await prisma.propertyShare.create({
             data: {
                 tenant_id: agent.tenant_id,
                 inventory_id: inventory.id,
-                agent_id: agent.id,
+                agent_id: actingAgentId!,
                 client_phone: normalized,
                 channel: 'whatsapp_api',
                 property_link: propertyLink,
                 whatsapp_sent: whatsappSent,
             }
         });
+
+        // 2026-07-22: without deal_id this share is invisible in the deal TIMELINE —
+        // getDealTimeline filters interactions on metadata.deal_id, which silently dropped
+        // 204 rows. The sibling share-batch-to-client route already resolves it; mirror that.
+        let sharedDealId: string | null = null;
+        try {
+            const { resolveActiveDealId } = await import('../services/property_sharing');
+            sharedDealId = await resolveActiveDealId(normalized);
+        } catch (err) {
+            logger.warn('[ShareToClient] resolveActiveDealId failed — timeline link skipped:', err);
+        }
 
         // Log interaction
         await prisma.interaction.create({
@@ -1107,8 +1645,13 @@ router.post('/:id/share-to-client', authMiddleware, async (req, res) => {
                 channel: 'whatsapp',
                 direction: 'outbound',
                 event_type: 'property_shared',
-                content: `Property shared: ${typeName} in ${inventory.location || inventory.full_address || 'N/A'}`,
-                metadata: { inventory_id: inventory.id, share_id: share.id, property_link: propertyLink }
+                content: `Property shared: ${typeName} in ${inventory.location || inventory.full_address || 'N/A'}`
+                    + (isPartnerShare ? ' (by partner agent)' : ''),
+                metadata: {
+                    inventory_id: inventory.id, share_id: share.id, property_link: propertyLink,
+                    ...(sharedDealId ? { deal_id: sharedDealId } : {}),
+                    ...(isPartnerShare ? { partner_agent_id: agent.id, recorded_under_agent_id: actingAgentId } : {}),
+                },
             }
         });
 
@@ -1178,6 +1721,7 @@ router.post('/share-batch-to-client', authMiddleware, async (req: any, res) => {
             teamIds = team.map((t: { id: string }) => t.id);
         }
         const canShare = (inv: any) => agent.role === 'super_boss'
+            || inv.status === 'active'   // marketplace model (2026-06-18): ANY agent may share any ACTIVE listing to a client (matches /:id/share-to-client). Was the "Not authorized" bulk-share bug.
             || inv.uploaded_by_agent_id === agent.id || inv.assigned_agent_id === agent.id
             || inv.reference_agent_id === agent.id || (inv.shared_with_ids || []).includes(agent.id)
             || (agent.role === 'manager' && (teamIds.includes(inv.uploaded_by_agent_id || '') || teamIds.includes(inv.assigned_agent_id || '')));
@@ -1253,7 +1797,7 @@ router.post('/share/add-lead', authMiddleware, async (req: any, res) => {
                 id: true, intent: true, type: true, category_id: true, sub_category_id: true, type_id: true,
                 taxonomy_node_id: true, specs: true, locality: true, city: true, location: true,
                 display_price: true, price: true, customer_price: true, latitude: true, longitude: true,
-            } as any,
+            },
         });
         if (!inv) return res.status(404).json({ error: 'Inventory not found' });
 
@@ -1277,7 +1821,10 @@ router.post('/share/add-lead', authMiddleware, async (req: any, res) => {
                 data: {
                     phone_number: pendingKey, tenant_id: agent.tenant_id, name: null, source: 'inventory_share',
                     contact_type: 'BUYER', intent: d.intent, lead_type: 'PARTNER_REFERRAL',
-                    referral_partner_id: pa.partnerId, owning_manager_id: owningManagerId,
+                    // Denormalize the partner phone/name so the deal UI (Match & Share fallback, Call-partner)
+                    // has them without a join — was missing here, causing "can't share" on partner deals. (2026-06-28)
+                    referral_partner_id: pa.partnerId, referral_partner_phone: pa.partnerPhone, referral_partner_name: name || 'Partner Agent',
+                    owning_manager_id: owningManagerId,
                     preferred_location: d.preferred_location, preferred_lat: d.preferred_lat, preferred_lng: d.preferred_lng,
                     budget_min: d.budget_min, budget_max: d.budget_max,
                     category_id: d.category_id, sub_category_id: d.sub_category_id, type_id: d.type_id,
@@ -1312,12 +1859,90 @@ router.post('/share/add-lead', authMiddleware, async (req: any, res) => {
             } as any,
         });
         const deal = await ensureDealForLead({ contactPhone: normalized, source: 'inventory_share', createdByAgentId: agent.id, assignedAgentId: agent.id });
+        // Greet a genuinely-new direct client the same way every other intake path does
+        // (2026-07-13) — was the one lead-creation path with no confirmation at all.
+        if (!existing) {
+            const { sendBuyerConfirmationWhatsApp } = await import('../services/lead_notifications');
+            sendBuyerConfirmationWhatsApp(normalized, name || null, 'inventory_share')
+                .catch((e: any) => logger.warn(`[ShareAddLead] welcome message failed: ${e.message}`));
+        }
         logger.info(`[ShareAddLead] Direct ${normalized} + deal ${deal.dealId} by ${agent.id}`);
         res.json({ success: true, role, deal_id: deal.dealId, contact_created: !existing, contact_phone: normalized });
     } catch (error) {
         captureRouteError(error, req, { route: 'inventory#share-add-lead' });
         logger.error('[ShareAddLead] Error:', error);
         res.status(500).json({ error: 'Failed to add lead' });
+    }
+});
+
+// POST /inventory/bulk-transfer — transfer many listings to one agent in a single call.
+// Mirrors /:id/transfer per-listing (same authorization + audit row + notify). Returns a
+// per-listing result summary for partial-success reporting. (#4 bulk reassign, 2026-06-28)
+router.post('/bulk-transfer', authMiddleware, checkPermission('transfer_inventory'), async (req, res) => {
+    try {
+        const { ids, to_agent_id, reason } = req.body || {};
+        const agent = req.agent!;
+        if (!Array.isArray(ids) || ids.length === 0) return res.status(400).json({ error: 'ids array required' });
+        if (!to_agent_id) return res.status(400).json({ error: 'to_agent_id required' });
+        if (ids.length > 500) return res.status(400).json({ error: 'Too many listings (max 500 per call)' });
+
+        const targetAgent = await prisma.agent.findUnique({ where: { id: to_agent_id }, select: { id: true, name: true, phone: true, email: true } });
+        if (!targetAgent) return res.status(404).json({ error: 'Target agent not found' });
+        const actorName = (await prisma.agent.findUnique({ where: { id: agent.id }, select: { name: true } }))?.name || agent.email || 'a team member';
+
+        // Precompute the manager's team + managed-partner owners ONCE (not per listing).
+        const teamIds = agent.role === 'manager'
+            ? (await prisma.agent.findMany({ where: { reports_to_id: agent.id }, select: { id: true } })).map((a: { id: string }) => a.id)
+            : [];
+        const partnerOwnerIds = await getManagedPartnerOwnerIds([agent.id]);
+
+        const results: { id: string; ok: boolean; error?: string }[] = [];
+        for (const rawId of ids) {
+            const id = String(rawId);
+            try {
+                const existing = await prisma.inventory.findUnique({ where: { id } });
+                if (!existing) { results.push({ id, ok: false, error: 'Not found' }); continue; }
+                // Same authorization as the single endpoint.
+                const canTransfer = agent.role === 'super_boss'
+                    || existing.uploaded_by_agent_id === agent.id
+                    || existing.assigned_agent_id === agent.id
+                    || existing.reference_agent_id === agent.id
+                    || (existing.shared_with_ids || []).includes(agent.id)
+                    || partnerOwnerIds.includes(existing.owner_id)
+                    || (agent.role === 'manager' && (teamIds.includes(existing.uploaded_by_agent_id || '') || teamIds.includes(existing.assigned_agent_id || '')));
+                if (!canTransfer) { results.push({ id, ok: false, error: 'Not authorized' }); continue; }
+                if (existing.assigned_agent_id === to_agent_id) { results.push({ id, ok: true }); continue; }
+                const noteText = reason || `Transferred to ${targetAgent.name}`;
+                const auditPhone = existing.owner_phone || existing.uploader_phone || existing.key_holder_phone;
+                await prisma.$transaction([
+                    prisma.inventory.update({ where: { id }, data: { assigned_agent_id: to_agent_id, updated_at: new Date() } }),
+                    ...(auditPhone ? [prisma.interaction.create({
+                        data: {
+                            tenant_id: existing.tenant_id, phone_number: auditPhone, channel: 'admin', direction: 'outbound',
+                            event_type: 'inventory_transferred',
+                            content: `Inventory ${existing.display_id || id.slice(0, 8)} transferred from ${actorName} to ${targetAgent.name}. Reason: ${noteText}`,
+                            metadata: { inventory_id: id, display_id: existing.display_id, from_agent_id: existing.assigned_agent_id, from_agent_name: actorName, to_agent_id, to_agent_name: targetAgent.name, reason: noteText, actor_id: agent.id, bulk: true },
+                        },
+                    })] : []),
+                ]);
+                results.push({ id, ok: true });
+            } catch (e: any) {
+                results.push({ id, ok: false, error: e?.message || 'failed' });
+            }
+        }
+        const okCount = results.filter(r => r.ok).length;
+        try {
+            if (okCount > 0) notify('inventory_transferred', [{ id: targetAgent.id, type: 'agent', phone: targetAgent.phone ?? undefined, email: targetAgent.email || undefined, name: targetAgent.name }], {
+                inventory_id: '', display_id: `${okCount} listings`, from_agent: actorName, property_type: '', location: '',
+            });
+        } catch (notifyErr) { logger.warn(`[Inventory] bulk transfer notify failed: ${(notifyErr as Error).message}`); }
+
+        logger.info(`[Inventory] bulk transfer: ${okCount}/${ids.length} → ${targetAgent.name} by ${actorName}`);
+        res.json({ success: true, transferred: okCount, total: ids.length, new_agent: targetAgent, results });
+    } catch (err: any) {
+        captureRouteError(err, req, { route: 'inventory#bulk-transfer' });
+        logger.error('[Inventory] Bulk transfer error:', err);
+        res.status(500).json({ error: err.message });
     }
 });
 
@@ -1567,6 +2192,10 @@ router.post('/:id/approve', authMiddleware, checkPermission('edit_inventory'), a
         broadcastInventoryToQualifiedDeals(id).catch(e =>
             logger.warn('[InvBroadcast] Approve broadcast failed:', e.message)
         );
+        // Phase D: alert the whole team about the newly-approved listing.
+        broadcastNewInventoryToTeam(String(id)).catch(e =>
+            logger.warn('[TeamInvBroadcast] Approve broadcast failed:', e.message)
+        );
 
         // Notify partner agent via WhatsApp
         if (existing.uploader_phone) {
@@ -1594,6 +2223,22 @@ router.post('/:id/approve', authMiddleware, checkPermission('edit_inventory'), a
                 });
             }
         }
+
+        // In-app partner-portal notification (bell) — if this listing came from a partner. (2026-07-12)
+        try {
+            if (existing.uploader_phone) {
+                const pa = await prisma.partnerAgent.findFirst({ where: { phone_number: existing.uploader_phone }, select: { id: true } });
+                if (pa) {
+                    const { notifyPartnerInApp } = await import('../services/partner_inapp_notify');
+                    await notifyPartnerInApp(pa.id, {
+                        event: 'inventory_approved', category: 'inventory',
+                        title: 'Listing approved ✅',
+                        body: `Your listing ${existing.display_id || ''} is now live on Realty Pandit.`.replace(/\s+/g, ' ').trim(),
+                        data: { inventory_id: id },
+                    });
+                }
+            }
+        } catch (e) { logger.warn('[Inventory Approve] partner in-app notify failed'); }
 
         res.json({ message: 'Inventory approved and is now live', id });
     } catch (error) {
@@ -1774,6 +2419,10 @@ router.post('/commit', async (req, res) => {
                 floor_number: data.floorNumber ? parseInt(data.floorNumber) : undefined,
             }
         });
+
+        // Team "new inventory" broadcast now fires CENTRALLY from the db.ts inventory.create
+        // extension (covers this /commit path + the wizard + bulk import + public + AI, idempotent)
+        // — no per-route call needed here. (2026-07-10, supersedes the incomplete #7 2026-07-01 fix)
 
         // Log event
         await prisma.interaction.create({
@@ -1973,11 +2622,11 @@ router.get('/:id/brochure.pdf', async (req: any, res) => {
         const { generateInventoryPdfStream, brochureFilename } = await import('../services/pdf_generator');
         res.setHeader('Content-Type', 'application/pdf');
         res.setHeader('Content-Disposition', `inline; filename="${brochureFilename(inv as any)}"`);
-        generateInventoryPdfStream([inv as any], {
+        (await generateInventoryPdfStream([inv as any], {
             variant,
             partnerName: req.query.pn ? String(req.query.pn) : undefined,
             partnerPhone: req.query.pp ? String(req.query.pp) : undefined,
-        }).pipe(res);
+        })).pipe(res);
     } catch (err) {
         captureRouteError(err, req, { route: 'inventory#brochure-pdf' });
         logger.error('[BrochurePdf] Error:', err);
@@ -2277,6 +2926,8 @@ const docUpload = multer({
 router.post('/:id/documents', authMiddleware, checkPermission('edit_inventory'), docUpload.single('document'), async (req, res) => {
     try {
         const inventoryId = req.params.id as string;
+        // Partner write-guard: a partner may only mutate their OWN listing.
+        if (!(await partnerMayMutateInventory(req, res, inventoryId))) return;
         const file = req.file;
         const { doc_type, title } = req.body;
 
@@ -2343,6 +2994,8 @@ router.post('/:id/documents', authMiddleware, checkPermission('edit_inventory'),
 router.delete('/:id/documents/:docId', authMiddleware, checkPermission('edit_inventory'), async (req, res) => {
     try {
         const { id: inventoryId, docId } = req.params;
+        // Partner write-guard: a partner may only mutate their OWN listing.
+        if (!(await partnerMayMutateInventory(req, res, inventoryId))) return;
 
         const doc = await prisma.inventoryDocument.findUnique({ where: { id: docId } });
         if (!doc || doc.inventory_id !== inventoryId) {
@@ -2375,6 +3028,150 @@ router.delete('/:id/documents/:docId', authMiddleware, checkPermission('edit_inv
     } catch (error) {
         captureRouteError(error, req, { route: 'inventory#22' });
         logger.error('[Documents DELETE] Error:', error);
+        res.status(500).json({ error: (error as Error).message });
+    }
+});
+
+/**
+ * PATCH /inventory/:id/documents/:docId
+ * Rename a document's title/label (so the team can label docs to remember them). (2026-07-09)
+ */
+router.patch('/:id/documents/:docId', authMiddleware, checkPermission('edit_inventory'), async (req, res) => {
+    try {
+        const { id: inventoryId, docId } = req.params;
+        // Partner write-guard: a partner may only mutate their OWN listing.
+        if (!(await partnerMayMutateInventory(req, res, inventoryId))) return;
+        const title = (req.body?.title ?? '').toString().trim();
+        if (!title) {
+            return res.status(400).json({ error: 'title is required' });
+        }
+        const doc = await prisma.inventoryDocument.findUnique({ where: { id: docId } });
+        if (!doc || doc.inventory_id !== inventoryId) {
+            return res.status(404).json({ error: 'Document not found' });
+        }
+        const updated = await prisma.inventoryDocument.update({
+            where: { id: docId },
+            data: { title },
+        });
+        logger.info(`[Documents] Renamed ${docId} on inventory ${inventoryId} → "${title}"`);
+        res.json(updated);
+    } catch (error) {
+        captureRouteError(error, req, { route: 'inventory#doc-rename' });
+        logger.error('[Documents PATCH] Error:', error);
+        res.status(500).json({ error: (error as Error).message });
+    }
+});
+
+// POST /inventory/:id/documents/:docId/share — share ONE inventory document to a contact as a link,
+// via WhatsApp (rp_document_share template, falls back to in-window text) and/or email. Gated to
+// edit_inventory (inventory manager / manager / super_boss) — the roles that can edit inventory. (#8, 2026-07-09)
+router.post('/:id/documents/:docId/share', authMiddleware, checkPermission('edit_inventory'), async (req, res) => {
+    try {
+        const { id: inventoryId, docId } = req.params;
+        // Partner write-guard: a partner may only mutate their OWN listing.
+        if (!(await partnerMayMutateInventory(req, res, inventoryId))) return;
+        const agent = req.agent!;
+        const phoneRaw = (req.body?.contact_phone ?? '').toString().trim();
+        const email = (req.body?.email ?? '').toString().trim();
+        const contactName = (req.body?.contact_name ?? '').toString().trim() || null;
+        const channelsIn: string[] = Array.isArray(req.body?.channels) ? req.body.channels : [];
+        // Default to sending on whichever identifier(s) were supplied.
+        const wantWhatsApp = channelsIn.length ? channelsIn.includes('whatsapp') : !!phoneRaw;
+        const wantEmail = channelsIn.length ? channelsIn.includes('email') : !!email;
+        if (!phoneRaw && !email) return res.status(400).json({ error: 'A contact phone or email is required' });
+
+        const doc = await prisma.inventoryDocument.findUnique({ where: { id: docId } });
+        if (!doc || doc.inventory_id !== inventoryId) return res.status(404).json({ error: 'Document not found' });
+
+        const inventory = await prisma.inventory.findUnique({
+            where: { id: inventoryId },
+            select: {
+                id: true, display_id: true, type: true, location: true, full_address: true,
+                locality: true, city: true, tenant_id: true,
+            },
+        });
+        if (!inventory) return res.status(404).json({ error: 'Property not found' });
+
+        // Public link — the file is served statically by the backend at /uploads/… (same URL the
+        // in-app "View" button opens). file_url is stored as a leading-slash path.
+        const fileUrl = doc.file_url.startsWith('http')
+            ? doc.file_url
+            : `https://api.realtypandit.in${doc.file_url.startsWith('/') ? '' : '/'}${doc.file_url}`;
+        const docTitle = doc.title || doc.file_name || 'Document';
+        const propertyLabel = `${inventory.type ? inventory.type.toUpperCase() + ' · ' : ''}${inventory.locality || inventory.city || inventory.location || inventory.full_address || inventory.display_id || 'Property'}`;
+
+        let whatsappSent = false, whatsappError: string | null = null;
+        if (wantWhatsApp && phoneRaw) {
+            const normalized = normalizePhone(phoneRaw);
+            if (!normalized || isPlaceholderPhone(phoneRaw)) {
+                whatsappError = 'invalid phone';
+            } else {
+                const wa = new WhatsAppService();
+                try {
+                    await wa.sendTemplate(normalized, 'rp_document_share', { title: docTitle, property: propertyLabel, link: fileUrl });
+                    whatsappSent = true;
+                } catch (tErr) {
+                    // Template still PENDING approval (or other Meta error) → fall back to free-form text,
+                    // which delivers only inside the contact's 24h customer-service window.
+                    logger.warn(`[DocShare] template send failed, trying text: ${(tErr as Error).message}`);
+                    try {
+                        await wa.sendText(normalized, `📄 ${docTitle}\nProperty: ${propertyLabel}\n\nView / download:\n${fileUrl}\n\n— Realty Pandit`);
+                        whatsappSent = true;
+                    } catch (txtErr) {
+                        whatsappError = (txtErr as Error).message;
+                        logger.error('[DocShare] WhatsApp text fallback failed:', txtErr);
+                    }
+                }
+                await prisma.interaction.create({ data: {
+                    tenant_id: agent.tenant_id, phone_number: normalized, channel: 'whatsapp',
+                    direction: 'outbound', event_type: 'document_shared',
+                    content: `Document shared: ${docTitle} (${propertyLabel})`,
+                    metadata: { inventory_id: inventoryId, document_id: docId, link: fileUrl, sent: whatsappSent },
+                } }).catch(() => {});
+            }
+        }
+
+        let emailSent = false, emailError: string | null = null;
+        if (wantEmail && email) {
+            try {
+                const { EmailService } = await import('../services/email_service');
+                const es = new EmailService();
+                const html = `<p>Namaste${contactName ? ' ' + contactName : ''},</p>
+<p>A property document has been shared with you by Realty Pandit:</p>
+<p><b>${docTitle}</b><br/>Property: ${propertyLabel}</p>
+<p><a href="${fileUrl}">View or download the document</a></p>
+<p>Reply if you have any questions.<br/>— Realty Pandit</p>`;
+                const info = await es.sendEmail({
+                    from: 'Realty Pandit <noreply@realtypandit.in>',
+                    to: email,
+                    subject: `Document shared: ${docTitle}`,
+                    html,
+                    senderAgentId: agent.id,
+                }, agent.tenant_id);
+                emailSent = !!info;
+                if (!info) emailError = 'send returned empty';
+                await prisma.interaction.create({ data: {
+                    tenant_id: agent.tenant_id, phone_number: email, channel: 'email',
+                    direction: 'outbound', event_type: 'document_shared',
+                    content: `Document shared: ${docTitle} (${propertyLabel})`,
+                    metadata: { inventory_id: inventoryId, document_id: docId, link: fileUrl, sent: emailSent },
+                } }).catch(() => {});
+            } catch (eErr) {
+                emailError = (eErr as Error).message;
+                logger.error('[DocShare] Email send failed:', eErr);
+            }
+        }
+
+        logger.info(`[DocShare] Agent ${agent.id} shared doc ${docId} (inv ${inventoryId}) → wa:${whatsappSent} email:${emailSent}`);
+        res.json({
+            success: whatsappSent || emailSent,
+            whatsapp_sent: whatsappSent, whatsapp_error: whatsappError,
+            email_sent: emailSent, email_error: emailError,
+            link: fileUrl,
+        });
+    } catch (error) {
+        captureRouteError(error, req, { route: 'inventory#doc-share' });
+        logger.error('[Documents SHARE] Error:', error);
         res.status(500).json({ error: (error as Error).message });
     }
 });

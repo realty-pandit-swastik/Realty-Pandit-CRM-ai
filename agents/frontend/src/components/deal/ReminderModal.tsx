@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import type { Deal } from '../../api/client';
 import { setDealReminder } from '../../api/client';
 import { useToast } from '../../contexts/ToastContext';
+import { defaultReminderLocal } from '../../lib/defaultReminder';
 
 interface Props {
     deal: Deal;
@@ -24,7 +25,7 @@ function toLocalInputValue(d: Date): string {
 
 export function ReminderModal({ deal, onClose, onSaved }: Props) {
     const { showToast } = useToast();
-    const [remindAt, setRemindAt] = useState<string>('');
+    const [remindAt, setRemindAt] = useState<string>(() => defaultReminderLocal());
     const [note, setNote] = useState('');
     const [advance, setAdvance] = useState(30);
     const [saving, setSaving] = useState(false);

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import type { Deal } from '../../api/client';
 import { getDealPropertyShares, bookDealAppointment } from '../../api/client';
 import { useToast } from '../../contexts/ToastContext';
+import { bhkOf, societyOf, propertyTypeLabel } from '../../lib/specChips';
 
 interface PropertyShare {
     id: string;
@@ -14,7 +15,13 @@ interface PropertyShare {
         location: string;
         price: number | null;
         media_urls?: string[];
-        specs?: { society_name?: string; bhk_count?: number; area?: number; area_unit?: string };
+        specs?: Record<string, any>;
+        apartment_name?: string | null;
+        locality?: string | null;
+        display_price?: number | null;
+        display_id?: string | null;
+        taxonomy_node?: { name: string } | null;
+        flat_property_type?: { name: string } | null;
         contact?: { name: string };
         key_holder_name?: string;
     };
@@ -82,9 +89,10 @@ export function SharedTab({ deal, onAppointmentBooked }: Props) {
         <div style={{ padding: '14px 20px', display: 'flex', flexDirection: 'column', gap: 10 }}>
             {shares.map(share => {
                 const inv = share.inventory;
-                const bhk = inv?.specs?.bhk_count ? `${inv.specs.bhk_count}BHK ` : '';
-                const label = `${bhk}${inv?.type || 'Property'}`;
-                const society = inv?.specs?.society_name || inv?.location || '—';
+                const bhkVal = bhkOf(inv?.specs);
+                const bhk = bhkVal ? `${bhkVal}BHK ` : '';
+                const label = `${bhk}${propertyTypeLabel(inv)}`;
+                const society = societyOf(inv) || '—';
                 const area = inv?.specs?.area ? `${inv.specs.area} ${inv?.specs?.area_unit || 'sqft'}` : null;
                 const sentAt = new Date(share.created_at).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' });
                 const isExpanded = expandedId === share.id;
@@ -160,9 +168,9 @@ export function SharedTab({ deal, onAppointmentBooked }: Props) {
                                     </div>
                                 )}
                                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px 16px', fontSize: 12 }}>
-                                    <div><span style={{ color: 'var(--text-muted)', fontWeight: 600 }}>Type: </span><span style={{ color: 'var(--text-primary)' }}>{bhk}{inv.type}</span></div>
-                                    <div><span style={{ color: 'var(--text-muted)', fontWeight: 600 }}>Price: </span><span style={{ color: 'var(--text-primary)' }}>{formatPrice(inv.price)}</span></div>
-                                    <div><span style={{ color: 'var(--text-muted)', fontWeight: 600 }}>Society: </span><span style={{ color: 'var(--text-primary)' }}>{inv.specs?.society_name || '—'}</span></div>
+                                    <div><span style={{ color: 'var(--text-muted)', fontWeight: 600 }}>Type: </span><span style={{ color: 'var(--text-primary)' }}>{bhk}{propertyTypeLabel(inv)}</span></div>
+                                    <div><span style={{ color: 'var(--text-muted)', fontWeight: 600 }}>Price: </span><span style={{ color: 'var(--text-primary)' }}>{formatPrice(inv.display_price ?? inv.price)}</span></div>
+                                    <div><span style={{ color: 'var(--text-muted)', fontWeight: 600 }}>Society: </span><span style={{ color: 'var(--text-primary)' }}>{societyOf(inv) || '—'}</span></div>
                                     <div><span style={{ color: 'var(--text-muted)', fontWeight: 600 }}>Area: </span><span style={{ color: 'var(--text-primary)' }}>{area || '—'}</span></div>
                                     <div style={{ gridColumn: '1 / -1' }}><span style={{ color: 'var(--text-muted)', fontWeight: 600 }}>Location: </span><span style={{ color: 'var(--text-primary)' }}>{inv.location}</span></div>
                                     {inv.key_holder_name && <div style={{ gridColumn: '1 / -1' }}><span style={{ color: 'var(--text-muted)', fontWeight: 600 }}>Key holder: </span><span style={{ color: 'var(--text-primary)' }}>{inv.key_holder_name}</span></div>}

@@ -4,6 +4,10 @@ import { getDealMatchedInventory, shareDealProperties, getInventoryItem, getTaxo
 import { useToast } from '../../contexts/ToastContext';
 import { useConfirm } from '../../contexts/ConfirmContext';
 import { toDialablePhone } from '../../lib/phone';
+import { getDisplayFloor } from '../../lib/floor';
+import { CopyChip } from '../CopyChip';
+import { InventoryFilterCommandBar } from './InventoryFilterCommandBar';
+import { bhkOf, societyOf, propertyTypeLabel } from '../../lib/specChips';
 
 interface MatchedProperty {
     id: string;
@@ -24,6 +28,8 @@ interface MatchedProperty {
     property_age?: string | null;
     furnishing?: string | null;
     floor_number?: number | null;
+    floor_label?: string | null;
+    display_floor?: string | null;
     total_floors?: number | null;
     features?: Record<string, any> | string[] | null;
     match_score: number;
@@ -138,10 +144,11 @@ export function InventoryPreviewModal({ inventoryId, onClose }: { inventoryId: s
         ? (inv.media_urls[0].startsWith('http') ? inv.media_urls[0] : `${API_BASE}${inv.media_urls[0]}`)
         : null;
 
-    const title = inv?.specs?.bhk_count
-        ? `${inv.specs.bhk_count}BHK ${inv.flat_property_type?.name || inv.type || 'Property'}`
-        : (inv?.flat_property_type?.name || inv?.type || 'Property');
-    const society = inv?.specs?.society_name || inv?.locality || inv?.location || '';
+    const bhkVal = bhkOf(inv?.specs);
+    const title = bhkVal
+        ? `${bhkVal}BHK ${propertyTypeLabel(inv)}`
+        : propertyTypeLabel(inv);
+    const society = societyOf(inv);
     const price = inv ? formatPrice(inv.price, inv.price_unit) : '-';
 
     return (
@@ -174,6 +181,8 @@ export function InventoryPreviewModal({ inventoryId, onClose }: { inventoryId: s
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
                             <div>
                                 <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)' }}>{title}</div>
+                                {/* #1 (2026-07-01): click-to-copy inventory code so it's easy to paste into the inventory search. */}
+                                {inv.display_id && <div style={{ marginTop: 4 }}><CopyChip text={inv.display_id} size="xs" /></div>}
                                 {society && <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>{society}</div>}
                                 <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>📍 {[inv.locality, inv.city, inv.state].filter(Boolean).join(', ')}</div>
                             </div>
@@ -182,9 +191,9 @@ export function InventoryPreviewModal({ inventoryId, onClose }: { inventoryId: s
 
                         {/* Specs grid */}
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px 16px', marginBottom: 12 }}>
-                            {inv.specs?.bhk_count && <SpecRow label="BHK" value={`${inv.specs.bhk_count} BHK`} />}
+                            {bhkVal && <SpecRow label="BHK" value={`${bhkVal} BHK`} />}
                             {inv.specs?.area && <SpecRow label="Area" value={`${inv.specs.area} sq.ft`} />}
-                            {inv.specs?.floor && <SpecRow label="Floor" value={inv.specs.floor} />}
+                            {(inv.specs?.floors ?? inv.specs?.floor) && <SpecRow label="Floor" value={String(inv.specs?.floors ?? inv.specs?.floor)} />}
                             {inv.specs?.furnishing && <SpecRow label="Furnishing" value={inv.specs.furnishing} />}
                             {inv.specs?.facing && <SpecRow label="Facing" value={inv.specs.facing} />}
                             {inv.intent && <SpecRow label="Intent" value={inv.intent === 'sell' ? 'For Sale' : inv.intent === 'rent' ? 'For Rent' : inv.intent} />}
@@ -244,6 +253,12 @@ export function MatchShareTab({ deal, onShared }: Props) {
     // Canonical, country-coded recipient for any WhatsApp send. null for placeholder/junk phones
     // (e.g. a partner-referral deal whose contact PK is a PENDING- key) → both send buttons disable.
     const customerTel = toDialablePhone(deal.demand_contact?.phone_number);
+    // #6 (2026-06-28): if the buyer has no real phone yet (partner-referral deal with a PENDING- contact),
+    // fall back to the partner agent's number → backend sends them the brandless brochure.
+    const partnerTel = toDialablePhone((deal.demand_contact as any)?.referral_partner_phone);
+    const partnerName = (deal.demand_contact as any)?.referral_partner_name as string | undefined;
+    const shareTel = customerTel || partnerTel;
+    const shareToPartner = !customerTel && !!partnerTel;
 
     // ── Filter state ───────────────────────────────────────────────────────────
     const [intent] = useState<string>(deal.demand_intent || 'buy');
@@ -253,6 +268,7 @@ export function MatchShareTab({ deal, onShared }: Props) {
     const [budgetMax, setBudgetMax] = useState<string>(deal.demand_budget_max?.toString() || '');
     const [radiusKm, setRadiusKm] = useState<number | null>(null); // null = auto-escalate 2→20
     const [location, setLocation] = useState<string>(deal.demand_location || (deal.demand_contact as any)?.preferred_location || '');
+    const [roofRights, setRoofRights] = useState<boolean>(false); // roof-rights match filter (2026-06-28)
 
     const [results, setResults] = useState<MatchedProperty[]>([]);
     const [loading, setLoading] = useState(false);
@@ -294,7 +310,7 @@ export function MatchShareTab({ deal, onShared }: Props) {
     const typeGroups = useMemo(() => (categoryNode ? collectTypeGroups(categoryNode) : []), [categoryNode]);
 
     // ── Search ─────────────────────────────────────────────────────────────────
-    type Snapshot = { bhkSet: Set<number>; typeNodeSet: Set<string>; budgetMin: string; budgetMax: string; radiusKm: number | null; location: string };
+    type Snapshot = { bhkSet: Set<number>; typeNodeSet: Set<string>; budgetMin: string; budgetMax: string; radiusKm: number | null; location: string; roofRights: boolean };
     const buildParams = (s: Snapshot): Record<string, string> => {
         const p: Record<string, string> = {};
         if (intent) p.intent = intent;
@@ -303,6 +319,7 @@ export function MatchShareTab({ deal, onShared }: Props) {
         if (s.bhkSet.size) p.bhk_list = [...s.bhkSet].sort((a, b) => a - b).join(',');
         if (s.typeNodeSet.size) p.type_node_list = [...s.typeNodeSet].join(',');
         if (s.radiusKm != null) p.radius_km = String(s.radiusKm);
+        if (s.roofRights) p.roof_rights = 'true';
         // Always send `location` (even empty) so clearing it actually drops the filter — the
         // endpoint only falls back to the deal's stored location when the param is ABSENT.
         p.location = s.location || '';
@@ -310,7 +327,7 @@ export function MatchShareTab({ deal, onShared }: Props) {
     };
 
     const runSearch = useCallback(async (override?: Partial<Snapshot>) => {
-        const snap: Snapshot = { bhkSet, typeNodeSet, budgetMin, budgetMax, radiusKm, location, ...override };
+        const snap: Snapshot = { bhkSet, typeNodeSet, budgetMin, budgetMax, radiusKm, location, roofRights, ...override };
         setLoading(true);
         setSendResults({});
         try {
@@ -321,7 +338,7 @@ export function MatchShareTab({ deal, onShared }: Props) {
         } finally {
             setLoading(false);
         }
-    }, [deal.id, bhkSet, typeNodeSet, budgetMin, budgetMax, radiusKm, location, intent, showToast]);
+    }, [deal.id, bhkSet, typeNodeSet, budgetMin, budgetMax, radiusKm, location, roofRights, intent, showToast]);
 
     // First load: once the tree resolves, default-select the deal's own TYPE node and search
     // with it EXPLICITLY (override) — avoids the stale-closure race where the auto-search would
@@ -472,8 +489,7 @@ export function MatchShareTab({ deal, onShared }: Props) {
             if (p.specs?.bathrooms) specBits.push(`🛁 ${p.specs.bathrooms} Bath`);
 
             const ffBits: string[] = [];
-            if (p.floor_number != null && p.total_floors) ffBits.push(`🏢 Floor ${p.floor_number} of ${p.total_floors}`);
-            else if (p.floor_number != null) ffBits.push(`🏢 Floor ${p.floor_number}`);
+            { const _fl = getDisplayFloor(p); if (_fl && p.total_floors) ffBits.push(`🏢 Floor ${_fl} of ${p.total_floors}`); else if (_fl) ffBits.push(`🏢 Floor ${_fl}`); }
             if (p.facing) ffBits.push(`🧭 ${prettyValue(p.facing)}`);
 
             const amenities = featureList(p.features);
@@ -501,8 +517,8 @@ export function MatchShareTab({ deal, onShared }: Props) {
         const msg = encodeURIComponent(
             `Hi! Here are some properties for you:\n\n${blocks.join('\n\n')}\n\n— Realty Pandit Team`
         );
-        if (!customerTel) return;
-        window.open(`https://wa.me/${customerTel.slice(1)}?text=${msg}`, '_blank');
+        if (!shareTel) return;
+        window.open(`https://wa.me/${shareTel.slice(1)}?text=${msg}`, '_blank');
     };
 
     const inputStyle: React.CSSProperties = {
@@ -510,116 +526,51 @@ export function MatchShareTab({ deal, onShared }: Props) {
         backgroundColor: 'var(--bg-secondary)', color: 'var(--text-primary)', fontSize: 12,
         outline: 'none', width: '100%', boxSizing: 'border-box',
     };
-    const chip = (active: boolean): React.CSSProperties => ({
-        padding: '5px 12px', borderRadius: 999, fontSize: 12, fontWeight: 600, cursor: 'pointer',
-        border: active ? '1.5px solid var(--accent-primary)' : '1px solid var(--border-secondary)',
-        background: active ? 'var(--accent-primary)' : 'var(--bg-tertiary)',
-        color: active ? '#fff' : 'var(--text-primary)',
-    });
-    const labelStyle: React.CSSProperties = {
-        fontSize: 10, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase',
-        letterSpacing: '0.5px', marginBottom: 5, display: 'block',
-    };
-
     return (
         <div style={{ padding: '14px 20px' }}>
-            {/* Requirement summary chip row (live filters) */}
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 12, alignItems: 'center' }}>
-                <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Matching:</span>
-                {categoryNode && <span style={chip(false)}>{categoryNode.name}</span>}
-                {subCatLabel && <span style={chip(false)}>{subCatLabel}</span>}
-                {bhkSet.size > 0 && <span style={chip(false)}>{[...bhkSet].sort((a, b) => a - b).join('/')} {specLabel}</span>}
-                {(budgetMin || budgetMax) && <span style={chip(false)}>{budgetMin ? formatPrice(Number(budgetMin)) : '—'} – {budgetMax ? formatPrice(Number(budgetMax)) : '—'}</span>}
-                {location && (
-                    <span style={chip(false)}>📍 {location}{radiusKm ? ` · ${radiusKm}km` : ''}
-                        <span onClick={() => { setLocation(''); runSearch({ location: '' }); }}
-                            style={{ cursor: 'pointer', marginLeft: 6, fontWeight: 700 }} title="Remove location filter">×</span>
-                    </span>
-                )}
-            </div>
+            {/* Command-menu filter bar (2026-07-08) — filters live as removable tokens inside one
+                expandable search bar (click/type → facet dropdown). Replaces the old chip-wall;
+                same underlying matched-inventory params. */}
+            <InventoryFilterCommandBar
+                bhkSet={bhkSet}
+                typeNodeSet={typeNodeSet}
+                budgetMin={budgetMin}
+                budgetMax={budgetMax}
+                radiusKm={radiusKm}
+                location={location}
+                roofRights={roofRights}
+                specMode={specMode}
+                specLabel={specLabel}
+                bhkChoices={BHK_CHOICES}
+                radiusChoices={RADIUS_CHOICES}
+                typeGroups={typeGroups}
+                hasGeo={hasGeo}
+                categoryName={categoryNode?.name ?? subCatLabel}
+                formatPrice={formatPrice}
+                onToggleBhk={toggleBhk}
+                onToggleType={toggleType}
+                onSetBudget={(min, max) => { setBudgetMin(min); setBudgetMax(max); runSearch({ budgetMin: min, budgetMax: max }); }}
+                onChangeRadius={changeRadius}
+                onSetLocation={(loc) => { setLocation(loc); runSearch({ location: loc }); }}
+                onToggleRoof={() => { const next = !roofRights; setRoofRights(next); runSearch({ roofRights: next }); }}
+            />
 
-            {/* Filters */}
-            <div style={{ marginBottom: 14, display: 'flex', flexDirection: 'column', gap: 12 }}>
-                {/* BHK / Rooms multi-select — category-aware; hidden for plot/land/orchard (no rooms). */}
-                {specMode !== 'none' && (
-                <div>
-                    <label style={labelStyle}>{specLabel} (pick one or more)</label>
-                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                        {BHK_CHOICES.map(n => (
-                            <span key={n} onClick={() => toggleBhk(n)} style={chip(bhkSet.has(n))}>{n} {specLabel}</span>
-                        ))}
-                    </div>
+            {/* Slim action row — broaden + sort kept off the bar so it stays clean. */}
+            <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', margin: '10px 0 14px' }}>
+                <button onClick={broaden} disabled={loading} style={{
+                    padding: '6px 12px', borderRadius: 7, fontSize: 12, fontWeight: 700, cursor: 'pointer',
+                    backgroundColor: 'var(--bg-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border-secondary)',
+                }}>➕ Broaden</button>
+                {loading && <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Searching…</span>}
+                {broadenNote && <span style={{ fontSize: 11, color: 'var(--accent-primary)', fontWeight: 600 }}>↔ {broadenNote}</span>}
+                <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>Sort</span>
+                    <select aria-label="Sort results" style={{ ...inputStyle, width: 'auto', fontSize: 11, padding: '4px 8px' }} value={sortBy} onChange={e => setSortBy(e.target.value as any)}>
+                        <option value="score">Best match</option>
+                        <option value="price">Price</option>
+                        {hasGeo && <option value="distance">Distance</option>}
+                    </select>
                 </div>
-                )}
-
-                {/* Type multi-select (TYPE nodes under the deal's category, grouped by sub-category) */}
-                {typeGroups.length > 0 && (
-                    <div>
-                        <label style={labelStyle}>Property Type (pick one or more)</label>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                            {typeGroups.map(g => (
-                                <div key={g.sub} style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-                                    <span style={{ fontSize: 10, color: 'var(--text-muted)', minWidth: 90 }}>{g.sub}</span>
-                                    {g.types.map(t => (
-                                        <span key={t.id} onClick={() => toggleType(t.id)} style={chip(typeNodeSet.has(t.id))}>{t.name}</span>
-                                    ))}
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                )}
-
-                {/* Budget (hard cap) + Radius + Location */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
-                    <div>
-                        <label style={labelStyle}>Budget Min ₹ (hard)</label>
-                        <input type="number" style={inputStyle} placeholder="Min" value={budgetMin}
-                            onChange={e => setBudgetMin(e.target.value)} onBlur={() => runSearch()} />
-                    </div>
-                    <div>
-                        <label style={labelStyle}>Budget Max ₹ (hard)</label>
-                        <input type="number" style={inputStyle} placeholder="Max" value={budgetMax}
-                            onChange={e => setBudgetMax(e.target.value)} onBlur={() => runSearch()} />
-                    </div>
-                    <div>
-                        <label style={labelStyle}>{hasGeo ? 'Radius' : 'Radius (needs geo)'}</label>
-                        <select style={inputStyle} value={radiusKm ?? ''} disabled={!hasGeo}
-                            onChange={e => changeRadius(e.target.value ? parseInt(e.target.value, 10) : null)}>
-                            <option value="">Auto (2→20km)</option>
-                            {RADIUS_CHOICES.map(r => <option key={r} value={r}>{r} km</option>)}
-                        </select>
-                    </div>
-                </div>
-                <div>
-                    <label style={labelStyle}>Location {hasGeo ? '(geo radius active)' : '(text match)'}</label>
-                    <input style={inputStyle} placeholder="Locality / area" value={location}
-                        onChange={e => setLocation(e.target.value)} onBlur={() => runSearch()} />
-                </div>
-
-                {/* Actions */}
-                <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                    <button onClick={() => runSearch()} disabled={loading} style={{
-                        padding: '7px 16px', borderRadius: 7, fontSize: 12, fontWeight: 700, cursor: 'pointer',
-                        backgroundColor: 'var(--accent-primary)', color: '#fff', border: 'none',
-                    }}>
-                        {loading ? 'Searching…' : '🔍 Search'}
-                    </button>
-                    <button onClick={broaden} disabled={loading} style={{
-                        padding: '7px 14px', borderRadius: 7, fontSize: 12, fontWeight: 700, cursor: 'pointer',
-                        backgroundColor: 'var(--bg-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border-secondary)',
-                    }}>
-                        ➕ Broaden
-                    </button>
-                    <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>Sort</span>
-                        <select style={{ ...inputStyle, width: 'auto', fontSize: 11, padding: '4px 8px' }} value={sortBy} onChange={e => setSortBy(e.target.value as any)}>
-                            <option value="score">Best match</option>
-                            <option value="price">Price</option>
-                            {hasGeo && <option value="distance">Distance</option>}
-                        </select>
-                    </div>
-                </div>
-                {broadenNote && <div style={{ fontSize: 11, color: 'var(--accent-primary)', fontWeight: 600 }}>↔ {broadenNote}</div>}
             </div>
 
             {/* Action bar */}
@@ -628,18 +579,23 @@ export function MatchShareTab({ deal, onShared }: Props) {
                     <span style={{ fontSize: 12, color: 'var(--text-secondary)', flex: 1, alignSelf: 'center' }}>
                         {selected.size} selected
                     </span>
-                    {!customerTel && (
+                    {!shareTel && (
                         <span style={{ fontSize: 12, color: 'var(--text-muted)', fontStyle: 'italic', alignSelf: 'center' }}>
-                            No customer phone on file — can't share
+                            No customer or partner phone on file — can't share
                         </span>
                     )}
-                    {customerTel && (
+                    {shareTel && (
                         <>
+                            {shareToPartner && (
+                                <span style={{ fontSize: 11, color: '#7c3aed', fontWeight: 700, alignSelf: 'center' }}>
+                                    🤝 To partner {partnerName || 'agent'} (brochure)
+                                </span>
+                            )}
                             <button onClick={sendViaCompanyWA} disabled={sending} style={{
                                 padding: '6px 14px', borderRadius: 7, fontSize: 12, fontWeight: 700, cursor: 'pointer',
                                 backgroundColor: 'rgba(37,211,102,0.12)', border: '1.5px solid rgba(37,211,102,0.5)', color: '#16a34a',
                             }}>
-                                {sending ? '⏳ Sending…' : '📤 Company WhatsApp'}
+                                {sending ? '⏳ Sending…' : (shareToPartner ? '📤 Send brochure to partner' : '📤 Company WhatsApp')}
                             </button>
                             <button onClick={sendViaPersonalWA} style={{
                                 padding: '6px 14px', borderRadius: 7, fontSize: 12, fontWeight: 700, cursor: 'pointer',
@@ -662,7 +618,12 @@ export function MatchShareTab({ deal, onShared }: Props) {
                     {sortedResults.map(prop => {
                         const isSelected = selected.has(prop.id);
                         const status = sendResults[prop.id];
-                        const label = prop.specs?.bhk_count ? `${prop.specs.bhk_count}BHK ${prettyType(prop.type)}` : prettyType(prop.type);
+                        // BHK from specs (bhk_count / bedrooms) or the slug ("3bhk-…"). When a BHK
+                        // filter is active and none is readable, flag it — the backend keeps these but
+                        // ranks them last (2026-07-08 strict-BHK fix). (Legacy specs.bhk also read.)
+                        const beds = prop.specs?.bhk_count || prop.specs?.bedrooms || (prop.specs as any)?.bhk || bhkFromSlug(prop.slug);
+                        const bhkUnknown = bhkSet.size > 0 && !beds;
+                        const label = beds ? `${beds}BHK ${prettyType(prop.type)}` : prettyType(prop.type);
                         const society = prop.specs?.society_name || prop.location;
                         return (
                             <div key={prop.id} style={{
@@ -682,7 +643,11 @@ export function MatchShareTab({ deal, onShared }: Props) {
 
                                 <div style={{ flex: 1, minWidth: 0 }}>
                                     <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>{label} — {society}</div>
-                                    <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>📍 {prop.city} · {formatPrice(prop.price, prop.price_unit)}</div>
+                                    {/* #1: click-to-copy inventory code on the tile so it's easy to paste into search. */}
+                                    {prop.display_id && <div style={{ marginTop: 2 }}><CopyChip text={prop.display_id} size="xs" /></div>}
+                                    {/* Strict-BHK flag (2026-07-08): this listing has no recorded BHK; kept but ranked last. */}
+                                    {bhkUnknown && <div style={{ marginTop: 3, fontSize: 10, fontWeight: 700, color: '#b45309', display: 'inline-flex', alignItems: 'center', gap: 3 }}>⚠ BHK not specified</div>}
+                                    <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 2 }}>📍 {prop.city} · {formatPrice(prop.price, prop.price_unit)}</div>
                                     {prop.match_reason && (
                                         <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 1 }}>{prop.match_reason}</div>
                                     )}

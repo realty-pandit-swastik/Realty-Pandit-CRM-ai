@@ -14,6 +14,7 @@
 
 import { TransactionStatus, TransactionLogAction, TransactionType } from '@prisma/client';
 import prisma from '../db';
+import { partnerDealOr } from '../utils/partner_scope';
 import { assignExecutive } from './executive_assigner';
 import { findExistingTransaction } from './transaction_service';
 import { MatchingEngine } from './matching_engine';
@@ -321,7 +322,7 @@ export async function getDealById(dealId: string) {
     const deal = await prisma.transaction.findUnique({
         where: { id: dealId },
         include: {
-            demand_contact: { select: { phone_number: true, name: true, email: true, contact_type: true, demand_taxonomy_node_id: true, demand_schema_values: true, budget_min: true, budget_max: true, area_min: true, area_max: true, intent: true, preferred_location: true } },
+            demand_contact: { select: { phone_number: true, name: true, email: true, contact_type: true, demand_taxonomy_node_id: true, demand_schema_values: true, budget_min: true, budget_max: true, area_min: true, area_max: true, intent: true, preferred_location: true, referral_partner_id: true, referral_partner_name: true, referral_partner_phone: true } },
             supply_contact: { select: { phone_number: true, name: true, email: true, contact_type: true } },
             executive_agent: { select: { id: true, name: true, email: true, phone: true, department: true } },
             coordinator: { select: { id: true, name: true, email: true, phone: true, department: true } },
@@ -506,6 +507,12 @@ export async function listDeals(filters: {
     status?: TransactionStatus;
     deal_scenario?: DealScenario;
     coordinator_agent_id?: string;
+    /** Visibility scope (2026-06-27): restrict to deals where coordinator OR executive ∈ team_ids
+     *  (manager = self + direct reports, employee = [self]). Omitted for super_boss (sees all). */
+    team_ids?: string[];
+    /** PARTNER scope (2026-07-13): an external partner is NOT an Agent, so team_ids never matches.
+     *  Restrict instead to deals they handle OR deals from leads they referred (incl. sub-agents). */
+    partner_ids?: string[];
     demand_handler_id?: string;
     supply_handler_id?: string;
     min_priority?: number;
@@ -515,19 +522,39 @@ export async function listDeals(filters: {
     taxonomy_node_ids?: string;
     bhk?: string;
     hide_closed?: boolean;
+    /** Ordering (2026-07-21): 'next_action' (default) | 'lead_date' | 'reminder_date' */
+    sort?: string;
+    /** 'asc' | 'desc' — omitted falls back to the per-key default */
+    direction?: string;
 }) {
-    const { tenant_id, status, deal_scenario, coordinator_agent_id, demand_handler_id, supply_handler_id, min_priority, page = 1, limit = 20, search, taxonomy_node_ids, bhk, hide_closed } = filters;
+    const { tenant_id, status, deal_scenario, coordinator_agent_id, team_ids, partner_ids, demand_handler_id, supply_handler_id, min_priority, page = 1, limit = 20, search, taxonomy_node_ids, bhk, hide_closed, sort, direction } = filters;
 
     const where: any = { tenant_id };
     if (status) {
         where.status = status;
-    } else if (hide_closed) {
+    } else if (hide_closed && !(search && String(search).trim())) {
         // 2026-05-13: kanban columns already segment stages, but CLOSED_WON +
         // CLOSED_LOST are clutter for daily work. Hide by default; reveal via toggle.
-        where.status = { notIn: ['CLOSED_WON', 'CLOSED_LOST'] };
+        // #2 (2026-07-01): when the user is SEARCHING, DON'T hide Won/Lost — otherwise a search
+        // for a past (esp. Won) client returns nothing. Search spans all stages.
+        // 2026-07-21: ON_HOLD added — it was only dropped from the kanban COLUMN list
+        // client-side, so 145 on-hold deals still leaked into the mobile + list views.
+        where.status = { notIn: ['CLOSED_WON', 'CLOSED_LOST', 'ON_HOLD'] };
     }
     if (deal_scenario) where.deal_scenario = deal_scenario;
     if (coordinator_agent_id) where.coordinator_agent_id = coordinator_agent_id;
+    // Team-scoped visibility: the deal is handled by this agent or someone on their team.
+    if (team_ids && team_ids.length) {
+        where.AND = [...(where.AND || []), { OR: [
+            { coordinator_agent_id: { in: team_ids } },
+            { executive_agent_id: { in: team_ids } },
+        ] }];
+    }
+    // PARTNER scope: their own deals only. Uses the SAME OR-builder as the per-deal guard
+    // (partnerOwnsDealOr403) — never hand-copy it, or the list and the guard drift apart.
+    if (partner_ids && partner_ids.length) {
+        where.AND = [...(where.AND || []), { OR: partnerDealOr(partner_ids) }];
+    }
     if (demand_handler_id) where.demand_handler_id = demand_handler_id;
     if (supply_handler_id) where.supply_handler_id = supply_handler_id;
     if (min_priority !== undefined && !Number.isNaN(min_priority)) where.priority = { gte: min_priority };
@@ -577,42 +604,131 @@ export async function listDeals(filters: {
 
     const skip = (page - 1) * limit;
 
-    const [rawDeals, total] = await Promise.all([
-        prisma.transaction.findMany({
-            where,
-            skip,
-            take: limit,
-            orderBy: { updated_at: 'desc' },
-            include: {
-                demand_contact: {
-                    select: {
-                        phone_number: true, name: true, contact_type: true,
-                        // Phase 5: legacy demand_main_category / demand_category /
-                        // demand_type_slug / demand_amenities / demand_bhk dropped.
-                        // Canonical SoT is taxonomy_node_id + schema_values.
-                        demand_taxonomy_node_id: true, demand_schema_values: true,
-                        area_min: true, area_max: true, area_unit: true,
-                        timeline: true, budget_min: true, budget_max: true,
-                        category_id: true, sub_category_id: true, type_id: true,
-                        intent: true, preferred_location: true,
-                    },
+    // ─── Server-side ordering (2026-07-21) ──────────────────────────────────────
+    // Was: orderBy updated_at desc + take(limit). With ~4k active deals and the board
+    // requesting 500, ANY write (AI reply, webhook, cron) bumped updated_at and changed
+    // WHICH rows came back — 3,114 of 3,603 deals holding a pending reminder (86%) never
+    // appeared on the board at all. Order across the WHOLE filtered set, then page.
+    //   next_action (default) — overdue → soonest upcoming → no-reminder (newest lead first)
+    //   lead_date             — created_at (default newest first)
+    //   reminder_date         — pending reminder due_date; no-reminder deals always LAST
+    const allRows = await prisma.transaction.findMany({ where, select: { id: true, created_at: true } });
+    const total = allRows.length;
+    const allIds = allRows.map(r => r.id);
+    const createdMs: Record<string, number> = {};
+    for (const r of allRows) createdMs[r.id] = r.created_at ? r.created_at.getTime() : 0;
+
+    // Next PENDING reminder per deal across the whole filtered set — this drives the order.
+    // (Same query shape as the old per-page fetch, just widened to every matching deal.)
+    const allReminders = allIds.length ? await prisma.task.findMany({
+        where: { deal_id: { in: allIds }, task_type: 'REMINDER', status: 'TODO' },
+        select: { deal_id: true, due_date: true, description: true },
+        orderBy: { due_date: 'asc' },
+    }) : [];
+    const reminderByDeal: Record<string, { due_date: Date | null; description: string | null }> = {};
+    for (const t of allReminders) {
+        if (t.deal_id && !reminderByDeal[t.deal_id]) reminderByDeal[t.deal_id] = { due_date: t.due_date, description: t.description };
+    }
+    const remMs = (id: string): number | null => {
+        const d = reminderByDeal[id]?.due_date;
+        return d ? new Date(d as any).getTime() : null;
+    };
+
+    const rawDir = direction === 'asc' ? 1 : direction === 'desc' ? -1 : 0;
+    const orderedIds = [...allIds];
+    if (sort === 'lead_date') {
+        const d = rawDir === 0 ? -1 : rawDir; // default: newest lead first
+        orderedIds.sort((a, b) => (createdMs[a] - createdMs[b]) * d);
+    } else if (sort === 'reminder_date') {
+        const d = rawDir === 0 ? 1 : rawDir; // default: oldest / most-overdue reminder first
+        orderedIds.sort((a, b) => {
+            const ra = remMs(a), rb = remMs(b);
+            if (ra === null && rb === null) return createdMs[b] - createdMs[a];
+            if (ra === null) return 1;  // no pending reminder always sinks, both directions
+            if (rb === null) return -1;
+            return (ra - rb) * d;
+        });
+    } else {
+        // next_action (default): overdue first, then soonest upcoming, then no-reminder newest-first
+        orderedIds.sort((a, b) => {
+            const ra = remMs(a), rb = remMs(b);
+            if (ra !== null && rb !== null) return ra - rb;
+            if (ra !== null) return -1;
+            if (rb !== null) return 1;
+            return createdMs[b] - createdMs[a];
+        });
+    }
+
+    const pageIds = orderedIds.slice(skip, skip + limit);
+
+    const rawUnordered = pageIds.length ? await prisma.transaction.findMany({
+        where: { id: { in: pageIds } },
+        include: {
+            demand_contact: {
+                select: {
+                    phone_number: true, name: true, contact_type: true,
+                    // Phase 5: legacy demand_main_category / demand_category /
+                    // demand_type_slug / demand_amenities / demand_bhk dropped.
+                    // Canonical SoT is taxonomy_node_id + schema_values.
+                    demand_taxonomy_node_id: true, demand_schema_values: true,
+                    area_min: true, area_max: true, area_unit: true,
+                    timeline: true, budget_min: true, budget_max: true,
+                    category_id: true, sub_category_id: true, type_id: true,
+                    intent: true, preferred_location: true,
+                    referral_partner_id: true, referral_partner_name: true, referral_partner_phone: true,
                 },
-                supply_contact: { select: { phone_number: true, name: true } },
-                coordinator: { select: { id: true, name: true, phone: true } },
-                inventory: { select: { id: true, type: true, location: true, price: true, media_urls: true } },
             },
-        }),
-        prisma.transaction.count({ where }),
-    ]);
+            supply_contact: { select: { phone_number: true, name: true } },
+            coordinator: { select: { id: true, name: true, phone: true } },
+            inventory: { select: { id: true, type: true, location: true, price: true, media_urls: true } },
+            // Latest non-terminal appointment → powers the board "visit requested vs booked" chip (QUALIFIED-1).
+            appointments: {
+                where: { status: { notIn: ['cancelled', 'completed', 'no_show'] } },
+                orderBy: { scheduled_at: 'desc' }, take: 1,
+                select: { status: true, scheduled_at: true },
+            },
+            // Latest human action → powers the tile's "last team action" line (2026-06-26).
+            team_actions: {
+                take: 1,
+                orderBy: { created_at: 'desc' },
+                select: { action_type: true, outcome: true, created_at: true, agent: { select: { name: true } } },
+            },
+        },
+    }) : [];
+    // findMany({ id: { in: … } }) does NOT preserve order — re-apply the computed ranking.
+    const dealById: Record<string, any> = {};
+    for (const d of rawUnordered) dealById[d.id] = d;
+    const rawDeals = pageIds.map(id => dealById[id]).filter(Boolean);
+
+    // Derived no-answer count per deal (gates Close/Reassign at N=4). Page-scoped, batched.
+    const pageDemandPhones = rawDeals.map(d => d.demand_contact?.phone_number).filter(Boolean) as string[];
+    const noAnswerInteractions = pageDemandPhones.length ? await prisma.interaction.findMany({
+        where: {
+            phone_number: { in: pageDemandPhones },
+            event_type: 'human_call_outcome',
+            metadata: { path: ['outcome'], equals: 'NO_ANSWER' },
+        },
+        select: { metadata: true },
+    }) : [];
+    const noAnswerByDeal: Record<string, number> = {};
+    for (const it of noAnswerInteractions) {
+        const did = (it.metadata as any)?.deal_id;
+        if (did) noAnswerByDeal[did] = (noAnswerByDeal[did] || 0) + 1;
+    }
 
     const twoHoursMs = 2 * 60 * 60 * 1000;
     const deals = rawDeals.map(deal => {
         const ai_status: 'active' | 'waiting' | 'paused' = deal.ai_paused
             ? 'paused'
             : deal.last_team_action_at && (Date.now() - deal.last_team_action_at.getTime()) < twoHoursMs
-                ? 'waiting'
-                : 'active';
-        return { ...deal, ai_status };
+            ? 'waiting'
+            : 'active';
+        return {
+            ...deal,
+            ai_status,
+            next_reminder: reminderByDeal[deal.id] || null,
+            no_answer_count: noAnswerByDeal[deal.id] || 0,
+        };
     });
 
     return {
@@ -629,10 +745,22 @@ export async function listDeals(filters: {
 /**
  * Get pipeline stats grouped by status
  */
-export async function getDealPipelineStats(tenantId: string) {
+export async function getDealPipelineStats(tenantId: string, teamIds?: string[], partnerIds?: string[]) {
+    const where: any = { tenant_id: tenantId };
+    // PARTNER scope (2026-07-13): partners aren't Agents, so teamIds never matches — scope the column
+    // counts to THEIR deals, using the shared OR-builder (single source of truth).
+    if (partnerIds && partnerIds.length) {
+        where.OR = partnerDealOr(partnerIds);
+    } else if (teamIds && teamIds.length) {
+        // Visibility (2026-06-27): scope the column counts to the agent's team (omit for super_boss).
+        where.OR = [
+            { coordinator_agent_id: { in: teamIds } },
+            { executive_agent_id: { in: teamIds } },
+        ];
+    }
     const stats = await prisma.transaction.groupBy({
         by: ['status'],
-        where: { tenant_id: tenantId },
+        where,
         _count: { id: true },
     });
 

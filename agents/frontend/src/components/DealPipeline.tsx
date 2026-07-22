@@ -1,18 +1,21 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { getDeals, getDealPipeline, updateDealStatus, getTeamMembersList, getDeal, getDealMatchCounts, type Deal, type DealPipelineStats } from '../api/client';
+import { getDeals, getDealPipeline, updateDealStatus, getTeamMembersList, getDeal, getDealMatchCounts, getPartnerAssignable, assignDealToTeammate, type Deal, type DealPipelineStats } from '../api/client';
 import client from '../api/client';
 import { FilterSection, FilterTaxonomySection } from './filters/FilterSheetShared';
 import type { TaxonomySelection } from './filters/FilterSheetShared';
 import { useIsMobile } from '../hooks/useIsMobile';
 import { useToast } from '../contexts/ToastContext';
+import { useAuth } from '../contexts/AuthContext';
 import { DealCloseCommissionDialog } from './DealCloseCommissionDialog';
-import LogCallOverlay from './deal/LogCallOverlay';
+import LogCallOverlay, { type CallOutcome, type CallEntryMode } from './deal/LogCallOverlay';
+import QualifiedActionsModal, { type QualifiedActionMode } from './deal/QualifiedActionsModal';
 import { DealWorkspace } from './deal/DealWorkspace';
 import { AIStatusBadge } from './AIStatusBadge';
 import { QuickCallStrip } from './QuickCallStrip';
 import { toDialablePhone } from '../lib/phone';
 import { InventoryQuickView } from './InventoryQuickView';
 import { LogActionModal, type LogActionType } from './LogActionModal';
+import CloseWonDialog from './deal/CloseWonDialog';
 
 export const STAGES = ['NEW', 'QUALIFIED', 'VISIT_SCHEDULED', 'VISITED', 'NEGOTIATION', 'CLOSED_WON', 'CLOSED_LOST', 'ON_HOLD'] as const;
 
@@ -84,6 +87,7 @@ interface DealPipelineProps {
 export default function DealPipeline({ initialDealId }: DealPipelineProps) {
     const isMobile = useIsMobile();
     const { showToast } = useToast();
+    const { isPartner, isPartnerOwner } = useAuth();
     const [deals, setDeals] = useState<Deal[]>([]);
     const [matchCounts, setMatchCounts] = useState<Record<string, number>>({}); // dealId → quick match count (tile badge)
     const [pipeline, setPipeline] = useState<DealPipelineStats>({});
@@ -123,10 +127,21 @@ export default function DealPipeline({ initialDealId }: DealPipelineProps) {
     const [showClosedDeals, setShowClosedDeals] = useState(false);
     const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const [selectedDeal, setSelectedDeal] = useState<Deal | null>(null);
+    const [partnerRoster, setPartnerRoster] = useState<Array<{ id: string; name: string; is_owner: boolean }>>([]);
+    // busyRef pauses the 30s background refresh while any modal/form is open (kept in sync by an effect below). (2026-07-09)
+    const busyRef = useRef(false);
     const [logCallDeal, setLogCallDeal] = useState<Deal | null>(null);
+    // Phase 4 (2026-06-27): when a NEW-stage tile button opens the overlay pre-jumped to an outcome.
+    const [logCallInitialOutcome, setLogCallInitialOutcome] = useState<CallOutcome | null>(null);
+    // Guided 2-button entry (deal-workflow, 2026-06-29)
+    const [logCallEntryMode, setLogCallEntryMode] = useState<CallEntryMode | null>(null);
+    // QUALIFIED-stage guided actions (Reminder / Share) modal
+    const [qualifiedAction, setQualifiedAction] = useState<{ deal: Deal; mode: QualifiedActionMode } | null>(null);
     const [dragDealId, setDragDealId] = useState<string | null>(null);
     // Commission entry dialog (post-close capture — middleman model 2026-04-17)
     const [commissionDealId, setCommissionDealId] = useState<string | null>(null);
+    const [closeWonTarget, setCloseWonTarget] = useState<{ id: string; label?: string } | null>(null);
+    const [closingWon, setClosingWon] = useState(false);
     // masterCategories was used to resolve legacy category_id → slug strings
     // for LogCallOverlay prefill. Phase 5 (2026-05-29) reads from canonical
     // demand_schema_values instead, so the master tree fetch is no longer
@@ -145,10 +160,21 @@ export default function DealPipeline({ initialDealId }: DealPipelineProps) {
     const [transferContactSearch, setTransferContactSearch] = useState('');
     const [transferContactSearching, setTransferContactSearching] = useState(false);
     const transferSearchTimer = useRef<any>(null);
+    const [filteredTotal, setFilteredTotal] = useState(0); // true server-side total for the CURRENT filters (#7)
+    // 2026-07-22: ordering now runs SERVER-side across the WHOLE filtered set (see listDeals).
+    // 'next_action' = default work queue: overdue → soonest upcoming reminder → newest no-reminder.
+    // Deliberately NOT persisted — a refresh always returns to the default order (matches Ext. Leads).
+    const [sortMode, setSortMode] = useState<string>('next_action');
+    // "Load more" grows the server-side page size; the 30s silent refresh then re-fetches
+    // everything already on screen in one correctly-ordered call.
+    const PAGE_SIZE = 500;
+    const [pageCount, setPageCount] = useState(1);
 
-    const fetchData = useCallback(async () => {
+    const fetchData = useCallback(async (opts?: { silent?: boolean }) => {
         try {
-            setLoading(true);
+            // Silent = background 30s poll: update data WITHOUT flipping the page-level loading state
+            // (which would unmount + remount the whole board and reset the user's scroll). (#8, 2026-06-28)
+            if (!opts?.silent) setLoading(true);
             const params: any = {};
             if (filterStatus) params.status = filterStatus;
             if (filterScenario) params.deal_scenario = filterScenario;
@@ -162,12 +188,18 @@ export default function DealPipeline({ initialDealId }: DealPipelineProps) {
             // Send hide_closed flag (server-side default is true, this just makes intent explicit)
             params.hide_closed = showClosedDeals ? 'false' : 'true';
 
+            // Ordering is server-side (2026-07-22). sortMode encodes "key" or "key:direction".
+            const [sKey, sDir] = sortMode.split(':');
+            params.sort = sKey;
+            if (sDir) params.direction = sDir;
+
             const [dealsRes, pipelineRes] = await Promise.all([
-                getDeals({ ...params, limit: 500 }),
+                getDeals({ ...params, limit: PAGE_SIZE * pageCount }),
                 getDealPipeline(),
             ]);
             const loadedDeals = dealsRes.deals || [];
             setDeals(loadedDeals);
+            setFilteredTotal(dealsRes.pagination?.total ?? loadedDeals.length);
             setPipeline(pipelineRes.data || {});
             setError(null);
             // Tile match-count badges — fire-and-forget so it never blocks the pipeline render.
@@ -175,11 +207,15 @@ export default function DealPipeline({ initialDealId }: DealPipelineProps) {
         } catch (err: any) {
             setError(err?.response?.data?.error || err.message);
         } finally {
-            setLoading(false);
+            if (!opts?.silent) setLoading(false);
         }
-    }, [filterStatus, filterScenario, filterMinPriority, filterSource, filterIntent, filterCoordinatorId, filterTaxonomy, searchQuery, showClosedDeals]);
+    }, [filterStatus, filterScenario, filterMinPriority, filterSource, filterIntent, filterCoordinatorId, filterTaxonomy, searchQuery, showClosedDeals, sortMode, pageCount]);
 
     useEffect(() => { fetchData(); }, [fetchData]);
+
+    // Any change to filters / search / sort restarts paging at the first page, so a
+    // previously-grown limit isn't carried into an unrelated result set.
+    useEffect(() => { setPageCount(1); }, [filterStatus, filterScenario, filterMinPriority, filterSource, filterIntent, filterCoordinatorId, filterTaxonomy, searchQuery, showClosedDeals, sortMode]);
 
     // Deep link (?deal=<id>): open that deal's detail straight away. Used by the
     // Google Calendar/Task "call the new lead" reminder links so the member lands
@@ -188,7 +224,9 @@ export default function DealPipeline({ initialDealId }: DealPipelineProps) {
         if (!initialDealId) return;
         let cancelled = false;
         getDeal(initialDealId)
-            .then((deal) => { if (!cancelled && deal) setSelectedDeal(deal); })
+            // GET /api/deals/:id returns { success, data: deal } — unwrap, else deal.id is undefined
+            // and the workspace fetches /deals/undefined/matched-inventory. (2026-06-28)
+            .then((res: any) => { const d = res?.data ?? res; if (!cancelled && d?.id) setSelectedDeal(d); })
             .catch(() => { /* deleted/forbidden deal — stay on the pipeline list */ });
         return () => { cancelled = true; };
     }, [initialDealId]);
@@ -206,11 +244,29 @@ export default function DealPipeline({ initialDealId }: DealPipelineProps) {
     }, []);
 
     useEffect(() => {
-        getTeamMembersList().then(data => {
-            const members = Array.isArray(data) ? data : [];
-            setAgentsList(members.map((m: any) => ({ id: m.id, name: m.name })));
-        }).catch(() => {});
-    }, []);
+        // Partners must never load the internal roster (it 403s for them, and its ids are Agent ids —
+        // Agent FK columns. Their own sub-agents live in partnerRoster, kept separate on purpose).
+        if (!isPartner) {
+            getTeamMembersList().then(data => {
+                const members = Array.isArray(data) ? data : [];
+                setAgentsList(members.map((m: any) => ({ id: m.id, name: m.name })));
+            }).catch(() => {});
+        } else if (isPartnerOwner) {
+            getPartnerAssignable().then(r => setPartnerRoster(r.members || [])).catch(() => {});
+        }
+    }, [isPartner, isPartnerOwner]);
+
+    /** Assign a deal to one of the owner's own sub-agents (or unassign). Writes partner_assignee_id only. */
+    const handleAssignDealTeammate = async (dealId: string, partnerAgentId: string) => {
+        try {
+            await assignDealToTeammate(dealId, partnerAgentId || null);
+            const who = partnerRoster.find(m => m.id === partnerAgentId)?.name;
+            showToast(partnerAgentId ? `Assigned to ${who}.` : 'Unassigned.', 'success');
+            fetchData();
+        } catch (e: any) {
+            showToast(e.response?.data?.error || 'Could not assign this deal.', 'error');
+        }
+    };
 
     // Debounced search — updates searchQuery (which triggers fetchData) 400ms after last keystroke
     const handleSearchChange = (value: string) => {
@@ -219,9 +275,14 @@ export default function DealPipeline({ initialDealId }: DealPipelineProps) {
         searchTimerRef.current = setTimeout(() => setSearchQuery(value), 400);
     };
 
-    // Auto-refresh every 30s
+    // Auto-refresh every 30s — SILENT so it never flips the page loading state / remounts the board.
+    // Skips while the user is working (a modal/form open) or the tab isn't focused, so it never
+    // refreshes mid-action. (2026-07-09)
     useEffect(() => {
-        const interval = setInterval(fetchData, 30000);
+        const interval = setInterval(() => {
+            if (busyRef.current || document.hidden) return;
+            fetchData({ silent: true });
+        }, 30000);
         return () => clearInterval(interval);
     }, [fetchData]);
 
@@ -249,6 +310,12 @@ export default function DealPipeline({ initialDealId }: DealPipelineProps) {
 
     const handleDrop = async (newStatus: string) => {
         if (!dragDealId) return;
+        // (NEG-2) Dropping into Won opens the price dialog so the agreed final_price is captured.
+        if (newStatus === 'CLOSED_WON') {
+            setCloseWonTarget({ id: dragDealId });
+            setDragDealId(null);
+            return;
+        }
         try {
             await updateDealStatus(dragDealId, newStatus);
             await fetchData();
@@ -256,6 +323,18 @@ export default function DealPipeline({ initialDealId }: DealPipelineProps) {
             showToast(err?.response?.data?.error || 'Status change failed', 'error');
         }
         setDragDealId(null);
+    };
+
+    const confirmCloseWon = async (finalPrice?: number) => {
+        if (!closeWonTarget) return;
+        setClosingWon(true);
+        try {
+            await updateDealStatus(closeWonTarget.id, 'CLOSED_WON', undefined, finalPrice);
+            await fetchData();
+            setCloseWonTarget(null);
+        } catch (err: any) {
+            showToast(err?.response?.data?.error || 'Close failed', 'error');
+        } finally { setClosingWon(false); }
     };
 
     const handleDragOver = (e: React.DragEvent) => {
@@ -279,6 +358,10 @@ export default function DealPipeline({ initialDealId }: DealPipelineProps) {
     // AI coordination — inventory quick view + manual action modal
     const [quickViewInventoryId, setQuickViewInventoryId] = useState<string | null>(null);
     const [logActionDeal, setLogActionDeal] = useState<Deal | null>(null);
+    // Keep busyRef in sync — the 30s background poll skips while any of these modals/forms is open.
+    useEffect(() => {
+        busyRef.current = !!(selectedDeal || logCallDeal || qualifiedAction || commissionDealId || ownershipTransferDeal || visitOutcomeDeal || reviveDeal || logActionDeal);
+    }, [selectedDeal, logCallDeal, qualifiedAction, commissionDealId, ownershipTransferDeal, visitOutcomeDeal, reviveDeal, logActionDeal]);
     const [logActionType, setLogActionType] = useState<LogActionType>('CALLED');
 
     const openLogAction = (deal: Deal, type: LogActionType, e: React.MouseEvent) => {
@@ -287,7 +370,60 @@ export default function DealPipeline({ initialDealId }: DealPipelineProps) {
         setLogActionType(type);
     };
 
+    // Guided 2-button entry: open the overlay at the Answered / Not-answered sub-step.
+    const openLogCallEntry = (deal: Deal, mode: CallEntryMode) => {
+        setLogCallInitialOutcome(null);
+        setLogCallEntryMode(mode);
+        setLogCallDeal(deal);
+    };
+
+    // P7 (2026-07-01): guided loop for the later stages (VISIT_SCHEDULED / VISITED / NEGOTIATION) —
+    // advance the deal's status, then immediately open the reminder modal so the member sets their
+    // next self-task and the self-perpetuating chain keeps running (same pattern as NEW/QUALIFIED).
+    const advanceAndRemind = async (deal: Deal, newStatus: string) => {
+        try {
+            await updateDealStatus(deal.id, newStatus as any);
+            setQualifiedAction({ deal: { ...deal, status: newStatus } as Deal, mode: 'reminder' });
+        } catch (err: any) {
+            alert(err?.response?.data?.error || err.message);
+        }
+    };
+
+    // Phase 4: NEW-stage tile action bar — 📞 Call + the 6 outcomes inline (replaces "Log My Call").
+    // No-answer fires in one tap; the rest open the overlay pre-jumped to that outcome (Not-interested
+    // & Wrong/spam require a note there and CLOSE the deal; Callback books a Google-synced reminder).
+    const renderNewCallActions = (deal: Deal) => {
+        const dial = toDialablePhone(deal.demand_contact?.phone_number);
+        const cell = (label: string, color: 'blue'|'purple'|'amber'|'cyan'|'green'|'orange'|'gray'|'red', onClick: () => void) => (
+            <button type="button" onClick={e => { e.stopPropagation(); onClick(); }}
+                style={{ ...actionBtnStyle(color), fontSize: '11px', padding: '7px 6px', width: '100%' }}>
+                {label}
+            </button>
+        );
+        return (
+            <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {dial && (
+                    <a href={`tel:${dial}`} onClick={e => e.stopPropagation()}
+                        style={{ ...actionBtnStyle('blue'), width: '100%', textAlign: 'center', textDecoration: 'none', display: 'block', boxSizing: 'border-box' }}>
+                        📞 Call {deal.demand_contact?.name || ''}
+                    </a>
+                )}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                    {cell('📞 Answered', 'green', () => openLogCallEntry(deal, 'answered'))}
+                    {cell('📵 Not answered', 'gray', () => openLogCallEntry(deal, 'not_answered'))}
+                </div>
+            </div>
+        );
+    };
+
     const totalDeals = Object.values(pipeline).reduce((a, b) => a + b, 0);
+    // #7 (2026-06-28): when a filter/search is active, the header total + per-stage counts come from the
+    // FILTERED result so they reflect the filter; otherwise use the full (unfiltered) pipeline stats.
+    const anyFilterActive = !!(searchQuery || filterStatus || filterTaxonomy.nodeIds.length || filterTaxonomy.bhk.length || filterScenario || filterMinPriority || filterSource || filterIntent || filterCoordinatorId);
+    const stageCounts: Record<string, number> = anyFilterActive
+        ? deals.reduce((acc: Record<string, number>, d: any) => { acc[d.status] = (acc[d.status] || 0) + 1; return acc; }, {})
+        : pipeline;
+    const displayTotal = anyFilterActive ? filteredTotal : totalDeals;
     // 2026-05-13: kanban columns. CLOSED_WON / CLOSED_LOST / ON_HOLD hidden by
     // default; toggling showClosedDeals reveals CLOSED_WON + CLOSED_LOST so the team
     // can review past outcomes without losing focus on active work.
@@ -295,7 +431,15 @@ export default function DealPipeline({ initialDealId }: DealPipelineProps) {
         ? STAGES.filter(s => s !== 'ON_HOLD')
         : STAGES.filter(s => s !== 'CLOSED_WON' && s !== 'CLOSED_LOST' && s !== 'ON_HOLD');
 
+    // Ordering is SERVER-side as of 2026-07-22 (listDeals ranks the WHOLE filtered set, then pages).
+    // The board used to re-sort here, but it could only ever reorder the rows already fetched — which
+    // is why 86% of deals holding a reminder never appeared at all. Render in the order received.
     const getDealsForStage = (stage: string) => deals.filter(d => d.status === stage);
+
+    // Flat Mobile + List views render every fetched row, so apply the same stage visibility the
+    // kanban columns use — otherwise ON_HOLD / closed deals leak into them. When an explicit stage
+    // filter is set the server already scoped the result, so pass it straight through.
+    const visibleDeals = filterStatus ? deals : deals.filter(d => activeStages.includes(d.status as any));
 
     const formatBudget = (min?: number | null, max?: number | null) => {
         if (!min && !max) return '-';
@@ -322,9 +466,12 @@ export default function DealPipeline({ initialDealId }: DealPipelineProps) {
                     : `🏘️ Searching for match`;
             case 'VISIT_SCHEDULED': {
                 const appt = deal.appointments?.[0];
+                // A provisional 'requested' appointment carries a placeholder slot — show "awaiting slot",
+                // not the placeholder time. A real booking (scheduled/confirmed) shows the date/time. (QUALIFIED-1)
+                if (appt?.status === 'requested') return `🗓️ Visit requested · awaiting slot`;
                 if (appt?.scheduled_at) {
                     const d = new Date(appt.scheduled_at);
-                    return `📅 ${d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })} ${d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}`;
+                    return `✅ Visit booked: ${d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })} ${d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}`;
                 }
                 return `📅 Visit scheduled`;
             }
@@ -338,6 +485,85 @@ export default function DealPipeline({ initialDealId }: DealPipelineProps) {
             default:
                 return null;
         }
+    };
+
+    // Deal age (2026-06-26) — how long since the deal was created (created_at). Stale deals stand out
+    // via colour: muted <7d, amber 7–13d, red ≥14d. Tooltip shows the exact creation date.
+    const dealAge = (created: string | Date | undefined | null): { label: string; color: string; title: string } | null => {
+        if (!created) return null;
+        const t = new Date(created).getTime();
+        if (Number.isNaN(t)) return null;
+        const days = Math.floor((Date.now() - t) / 86400000);
+        const label = days <= 0 ? 'today' : `${days}d`;
+        const color = days >= 14 ? '#ef4444' : days >= 7 ? '#f59e0b' : 'var(--text-muted)';
+        const createdStr = new Date(created).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+        const title = `Created ${createdStr} · ${days <= 0 ? 'today' : `${days} day${days === 1 ? '' : 's'} old`}`;
+        return { label, color, title };
+    };
+
+    const renderAgeChip = (deal: any) => {
+        const a = dealAge(deal?.created_at);
+        if (!a) return null;
+        return (
+            <span title={a.title} style={{
+                display: 'inline-flex', alignItems: 'center', gap: 3,
+                padding: '2px 7px', borderRadius: 999, fontSize: '10px', fontWeight: 700,
+                whiteSpace: 'nowrap', flexShrink: 0,
+                backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-secondary)',
+                color: a.color,
+            }}>🕐 {a.label}</span>
+        );
+    };
+
+    // Last REAL human action (from team_actions[0], the actual logged action) + stage-derived next action. (2026-06-26)
+    const LAST_ACTION_LABEL: Record<string, string> = {
+        CALL_LOGGED: '📞 Called', TRANSFER: '🔁 Reassigned',
+        REMINDER_SET: '⏰ Reminder', REMINDER_GIVEN: '⏰ Reminder',
+        SCHEDULED_VISIT: '🗓️ Visit set', CONFIRMED_VISIT: '🗓️ Visit set', VISIT_RESCHEDULED: '🗓️ Visit moved',
+        MEETING_BOOKED: '🗓️ Meeting', WHATSAPPED: '💬 WhatsApp', LOGGED_NOTE: '📝 Note',
+        PAUSED_AI: '⏯️ AI paused', RESUMED_AI: '⏯️ AI resumed',
+    };
+    const lastActionText = (deal: any): string | null => {
+        const ta = deal?.team_actions?.[0];
+        if (!ta) return null;
+        const label = LAST_ACTION_LABEL[ta.action_type] || `📝 ${String(ta.action_type).replace(/_/g, ' ').toLowerCase()}`;
+        const who = (ta.agent?.name || '').trim().split(' ')[0];
+        const outcome = ta.outcome ? ` (${String(ta.outcome).replace(/_/g, ' ').toLowerCase()})` : '';
+        // Exact date + time of the last action (user asked for date/time on the tile). e.g. "9 Jul, 2:30 pm"
+        const when = new Date(ta.created_at).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' });
+        return `👤 ${who ? who + ' · ' : ''}${label}${outcome} · ${when}`;
+    };
+    const nextActionText = (deal: any): string | null => {
+        // Deal-workflow Phase 1 (2026-06-29): the member's own open follow-up reminder drives
+        // "Next" when set — turning the pipeline into a self-driving worklist.
+        if (deal?.next_reminder?.due_date) {
+            const due = new Date(deal.next_reminder.due_date);
+            const when = due.toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' });
+            return `Follow up · ${when}`;
+        }
+        switch (deal?.status) {
+            case 'NEW': return 'Call & qualify';
+            case 'QUALIFIED': return deal.inventory ? 'Schedule visit' : 'Share property';
+            case 'MATCHING_APPOINTMENT': return 'Set appointment';
+            case 'VISIT_SCHEDULED': return deal.appointments?.[0]?.status === 'requested' ? 'Confirm slot' : 'Remind & confirm visit';
+            case 'VISITED': return 'Submit visit outcome';
+            case 'NEGOTIATION': return 'Follow up to close';
+            case 'ON_HOLD': return 'Revive / review';
+            default: return null;
+        }
+    };
+    const renderActivityLine = (deal: any) => {
+        const last = lastActionText(deal);
+        const next = nextActionText(deal);
+        const noAns = Number(deal?.no_answer_count || 0);
+        if (!last && !next && !noAns) return null;
+        return (
+            <div style={{ display: 'flex', justifyContent: last ? 'space-between' : 'flex-start', alignItems: 'center', gap: 8, flexWrap: 'wrap', fontSize: '11px', marginBottom: '6px', lineHeight: 1.4 }}>
+                {last && <span style={{ color: 'var(--text-secondary)' }}>{last}</span>}
+                {noAns > 0 && <span style={{ color: noAns >= 4 ? '#f87171' : 'var(--text-muted)', whiteSpace: 'nowrap', fontWeight: 600 }} title={`${noAns} no-answer call${noAns === 1 ? '' : 's'} logged`}>📵 {noAns}× no answer</span>}
+                {next && <span style={{ color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>➡️ Next: {next}</span>}
+            </div>
+        );
     };
 
     const actionBtnStyle = (variant: 'blue'|'purple'|'amber'|'cyan'|'green'|'orange'|'gray'|'red'): React.CSSProperties => {
@@ -473,8 +699,8 @@ export default function DealPipeline({ initialDealId }: DealPipelineProps) {
                     <h2 style={{ margin: 0, fontSize: isMobile ? '18px' : '20px', fontWeight: 700, color: 'var(--text-primary)' }}>Deal Pipeline</h2>
                     <p style={{ margin: '2px 0 0', fontSize: '12px', color: 'var(--text-secondary)' }}>
                         {searchQuery || filterStatus || filterTaxonomy.nodeIds.length > 0 || [filterScenario, filterMinPriority, filterSource, filterIntent, filterCoordinatorId].some(Boolean)
-                            ? `${deals.length} result${deals.length !== 1 ? 's' : ''} (of ${totalDeals})`
-                            : `${totalDeals} total deals`}
+                            ? `${deals.length} result${deals.length !== 1 ? 's' : ''} (of ${displayTotal})`
+                            : `${displayTotal} total deals`}
                     </p>
                 </div>
                 {/* View toggle — desktop only */}
@@ -524,12 +750,31 @@ export default function DealPipeline({ initialDealId }: DealPipelineProps) {
                         cursor: 'pointer',
                     }}
                 >
-                    <option value="">All Stages ({totalDeals})</option>
+                    <option value="">All Stages ({displayTotal})</option>
                     {STAGES.map(stage => (
                         <option key={stage} value={stage}>
-                            {STAGE_LABELS[stage]} ({pipeline[stage] || 0})
+                            {STAGE_LABELS[stage]} ({stageCounts[stage] || 0})
                         </option>
                     ))}
+                </select>
+
+                {/* Sort control (2026-07-22) — server-side ordering across ALL matching deals */}
+                <select
+                    value={sortMode}
+                    onChange={e => setSortMode(e.target.value)}
+                    title="Sort deals"
+                    style={{
+                        padding: '9px 12px', borderRadius: '10px', cursor: 'pointer', flexShrink: 0,
+                        border: sortMode !== 'next_action' ? '1.5px solid var(--text-link)' : '1px solid var(--border-secondary)',
+                        backgroundColor: 'var(--bg-secondary)', color: 'var(--text-secondary)',
+                        fontWeight: 600, fontSize: '13px', outline: 'none',
+                    }}
+                >
+                    <option value="next_action">⚡ Work queue (default)</option>
+                    <option value="lead_date:desc">🆕 Newest lead first</option>
+                    <option value="lead_date:asc">🕰 Oldest lead first</option>
+                    <option value="reminder_date:asc">⏰ Oldest reminder first</option>
+                    <option value="reminder_date:desc">⏳ Latest reminder first</option>
                 </select>
 
                 {/* Filters button */}
@@ -600,7 +845,7 @@ export default function DealPipeline({ initialDealId }: DealPipelineProps) {
                                 <p className="empty-state__title">No deals yet</p>
                                 <p className="empty-state__body">Create your first deal to track it through the pipeline.</p>
                             </div>
-                        ) : deals.map(deal => (
+                        ) : visibleDeals.map(deal => (
                             <div
                                 key={deal.id}
                                 onClick={() => setSelectedDeal(deal)}
@@ -630,8 +875,19 @@ export default function DealPipeline({ initialDealId }: DealPipelineProps) {
                                                 }}
                                             >📞</a>
                                         )}
+                                        {/* #6 (2026-07-01): call the referral partner directly from the tile (partner-referral
+                                            deals have a PENDING placeholder customer phone, so the green call above is hidden). */}
+                                        {toDialablePhone((deal.demand_contact as any)?.referral_partner_phone) && (
+                                            <a
+                                                href={`tel:${toDialablePhone((deal.demand_contact as any)?.referral_partner_phone)}`}
+                                                onClick={e => e.stopPropagation()}
+                                                title={`Call partner ${(deal.demand_contact as any)?.referral_partner_name || ''}`.trim()}
+                                                style={{ display: 'inline-flex', alignItems: 'center', gap: 3, height: 22, borderRadius: 11, padding: '0 8px', backgroundColor: '#8b5cf622', color: '#7c3aed', textDecoration: 'none', fontSize: 11, fontWeight: 600, flexShrink: 0 }}
+                                            >🤝📞 {((deal.demand_contact as any)?.referral_partner_name || 'Partner').split(' ')[0]}</a>
+                                        )}
                                     </div>
                                     <div style={{ display: 'flex', gap: 4, alignItems: 'center', flexShrink: 0 }}>
+                                        {renderAgeChip(deal)}
                                         {(deal as any).ai_status && <AIStatusBadge status={(deal as any).ai_status} />}
                                         <span style={{
                                             padding: '2px 8px', borderRadius: '10px', fontSize: '10px', fontWeight: 600,
@@ -675,12 +931,14 @@ export default function DealPipeline({ initialDealId }: DealPipelineProps) {
                                     )}
                                 </div>
 
-                                {/* Stage info line */}
+                                {/* Stage info line (AI activity) */}
                                 {getStageInfoLine(deal) && (
                                     <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '6px' }}>
                                         {getStageInfoLine(deal)}
                                     </div>
                                 )}
+                                {/* Last human action + next action */}
+                                {renderActivityLine(deal)}
 
                                 {/* Tags */}
                                 <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', marginBottom: 6 }}>
@@ -697,6 +955,22 @@ export default function DealPipeline({ initialDealId }: DealPipelineProps) {
                                     )}
                                 </div>
 
+                                {/* PARTNER COMPANY OWNER — assign this deal to one of THEIR OWN sub-agents.
+                                    stopPropagation: the card itself opens the deal workspace on click. */}
+                                {isPartnerOwner && (
+                                    <div style={{ marginBottom: 6 }} onClick={e => e.stopPropagation()}>
+                                        <select
+                                            value={(deal as any).partner_assignee_id || ''}
+                                            onChange={e => handleAssignDealTeammate(deal.id, e.target.value)}
+                                            style={{ width: '100%', fontSize: '11px', padding: '3px 6px', borderRadius: '4px', border: '1px solid var(--border-secondary)', backgroundColor: 'var(--bg-input)', color: 'var(--text-primary)' }}
+                                            title="Assign to one of your team members"
+                                        >
+                                            <option value="">👤 Assign to teammate…</option>
+                                            {partnerRoster.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                                        </select>
+                                    </div>
+                                )}
+
                                 {/* Tappable inventory preview */}
                                 {deal.inventory && (
                                     <div
@@ -710,44 +984,51 @@ export default function DealPipeline({ initialDealId }: DealPipelineProps) {
                                 )}
 
                                 {/* Action buttons — stage specific */}
-                                {deal.status === 'NEW' && (
-                                    <div style={{ marginTop: 6 }}>
-                                        <button type="button"
-                                            onClick={e => { e.stopPropagation(); setLogCallDeal(deal); }}
-                                            style={{ ...actionBtnStyle('blue'), width: '100%' }}>
-                                            📞 Log My Call
-                                        </button>
-                                    </div>
-                                )}
+                                {deal.status === 'NEW' && renderNewCallActions(deal)}
                                 {deal.status === 'QUALIFIED' && (
-                                    <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
-                                        <button type="button" onClick={async e => { e.stopPropagation(); try { const res: any = await client.post(`/api/deals/${deal.id}/share-next-property`); alert(res.data?.data?.sent ? 'Property card sent.' : 'No more matching properties.'); } catch (err: any) { alert(err?.response?.data?.error || err.message); } }}
-                                            style={actionBtnStyle('purple')}>
-                                            📤 Share Property
-                                        </button>
-                                        <button type="button" onClick={e => openLogAction(deal, 'SCHEDULED_VISIT', e)}
-                                            style={actionBtnStyle('amber')}>
-                                            📅 Schedule Visit
+                                    <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6 }}>
+                                            <button type="button" onClick={e => { e.stopPropagation(); setQualifiedAction({ deal, mode: 'reminder' }); }} style={actionBtnStyle('cyan')}>⏰ Reminder</button>
+                                            <button type="button" onClick={e => openLogAction(deal, 'SCHEDULED_VISIT', e)} style={actionBtnStyle('amber')}>📅 Visit</button>
+                                            <button type="button" onClick={e => { e.stopPropagation(); setQualifiedAction({ deal, mode: 'share' }); }} style={actionBtnStyle('purple')}>📤 Share</button>
+                                        </div>
+                                        <button type="button" onClick={e => { e.stopPropagation(); handleDispose(deal); }}
+                                            style={{ background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: '11px', cursor: 'pointer', alignSelf: 'flex-start', textDecoration: 'underline', padding: '2px 0' }}>
+                                            Close as lost
                                         </button>
                                     </div>
                                 )}
+                                {/* P7 (2026-07-01): guided VISIT_SCHEDULED — advance→Visited / reschedule / next reminder. */}
                                 {deal.status === 'VISIT_SCHEDULED' && (
-                                    <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
-                                        <button type="button" onClick={e => { e.stopPropagation(); openVisitOutcomeModal(deal); }}
-                                            style={actionBtnStyle('amber')}>
-                                            📝 Outcome
-                                        </button>
-                                        <button type="button" onClick={async e => { e.stopPropagation(); try { await client.post(`/api/deals/${deal.id}/log-action`, { action_type: 'REMINDER_GIVEN', outcome: 'reminder_given' }); showToast('Reminder logged', 'success'); } catch (err: any) { alert(err?.response?.data?.error || err.message); } }}
-                                            style={actionBtnStyle('cyan')}>
-                                            📞 I Reminded
-                                        </button>
+                                    <div style={{ marginTop: 6, display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6 }}>
+                                        <button type="button" onClick={e => { e.stopPropagation(); advanceAndRemind(deal, 'VISITED'); }} style={actionBtnStyle('green')}>✅ Visited</button>
+                                        <button type="button" onClick={e => openLogAction(deal, 'SCHEDULED_VISIT', e)} style={actionBtnStyle('amber')}>📅 Reschedule</button>
+                                        <button type="button" onClick={e => { e.stopPropagation(); setQualifiedAction({ deal, mode: 'reminder' }); }} style={actionBtnStyle('cyan')}>⏰ Reminder</button>
+                                    </div>
+                                )}
+                                {/* P7: guided VISITED — move to negotiation / book a revisit / next reminder. */}
+                                {deal.status === 'VISITED' && (
+                                    <div style={{ marginTop: 6, display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6 }}>
+                                        <button type="button" onClick={e => { e.stopPropagation(); advanceAndRemind(deal, 'NEGOTIATION'); }} style={actionBtnStyle('green')}>👍 Negotiate</button>
+                                        <button type="button" onClick={e => openLogAction(deal, 'SCHEDULED_VISIT', e)} style={actionBtnStyle('amber')}>🔁 Revisit</button>
+                                        <button type="button" onClick={e => { e.stopPropagation(); setQualifiedAction({ deal, mode: 'reminder' }); }} style={actionBtnStyle('cyan')}>⏰ Reminder</button>
                                     </div>
                                 )}
                                 {deal.status === 'NEGOTIATION' && (
-                                    <button type="button" onClick={e => openLogAction(deal, 'MEETING_BOOKED', e)}
-                                        style={{ ...actionBtnStyle('orange'), marginTop: 6, width: '100%' }}>
-                                        📝 Log Update
-                                    </button>
+                                    <>
+                                        <button type="button" onClick={e => openLogAction(deal, 'MEETING_BOOKED', e)}
+                                            style={{ ...actionBtnStyle('orange'), marginTop: 6, width: '100%' }}>
+                                            📝 Log Update
+                                        </button>
+                                        <button type="button" onClick={e => { e.stopPropagation(); setQualifiedAction({ deal, mode: 'reminder' }); }}
+                                            style={{ ...actionBtnStyle('cyan'), marginTop: 6, width: '100%' }}>
+                                            ⏰ Set Reminder
+                                        </button>
+                                        <button type="button" onClick={e => { e.stopPropagation(); setCloseWonTarget({ id: deal.id, label: `${deal.demand_contact?.name ? deal.demand_contact.name + ' · ' : ''}Deal #${deal.id.slice(0, 8)}` }); }}
+                                            style={{ ...actionBtnStyle('green'), marginTop: 6, width: '100%' }}>
+                                            🏆 Close Won
+                                        </button>
+                                    </>
                                 )}
                                 {deal.status === 'ON_HOLD' && (
                                     <button type="button" onClick={e => { e.stopPropagation(); setReviveStage(''); setReviveDeal(deal); }}
@@ -759,8 +1040,7 @@ export default function DealPipeline({ initialDealId }: DealPipelineProps) {
                                     Previously the only way to lose a deal was drag-and-drop into
                                     a hidden LOST column or via the ON_HOLD revive modal — invisible
                                     affordance. Now: one click on the active card. */}
-                                {(deal.status === 'NEW' || deal.status === 'QUALIFIED' ||
-                                  deal.status === 'VISIT_SCHEDULED' || deal.status === 'VISITED' ||
+                                {(deal.status === 'VISIT_SCHEDULED' || deal.status === 'VISITED' ||
                                   deal.status === 'NEGOTIATION') && (
                                     <button type="button"
                                         onClick={e => { e.stopPropagation(); handleDispose(deal); }}
@@ -830,7 +1110,7 @@ export default function DealPipeline({ initialDealId }: DealPipelineProps) {
                                         fontSize: '11px', fontWeight: 600, color: STAGE_COLORS[stage],
                                         backgroundColor: STAGE_COLORS[stage] + '15', padding: '2px 8px', borderRadius: '10px',
                                     }}>
-                                        {pipeline[stage] || 0}
+                                        {stageCounts[stage] || 0}
                                     </span>
                                 </div>
 
@@ -877,10 +1157,22 @@ export default function DealPipeline({ initialDealId }: DealPipelineProps) {
                                                             }}
                                                         >📞</a>
                                                     )}
+                                                    {/* #6 (2026-07-01): call the referral partner directly from the tile (mobile). */}
+                                                    {toDialablePhone((deal.demand_contact as any)?.referral_partner_phone) && (
+                                                        <a
+                                                            href={`tel:${toDialablePhone((deal.demand_contact as any)?.referral_partner_phone)}`}
+                                                            onClick={e => e.stopPropagation()}
+                                                            title={`Call partner ${(deal.demand_contact as any)?.referral_partner_name || ''}`.trim()}
+                                                            style={{ display: 'inline-flex', alignItems: 'center', gap: 3, height: 20, borderRadius: 10, padding: '0 7px', backgroundColor: '#8b5cf622', color: '#7c3aed', textDecoration: 'none', fontSize: 10, fontWeight: 600, flexShrink: 0 }}
+                                                        >🤝📞 {((deal.demand_contact as any)?.referral_partner_name || 'Partner').split(' ')[0]}</a>
+                                                    )}
                                                 </div>
-                                                {(deal as any).ai_status && (
-                                                    <AIStatusBadge status={(deal as any).ai_status} />
-                                                )}
+                                                <div style={{ display: 'flex', gap: 4, alignItems: 'center', flexShrink: 0 }}>
+                                                    {renderAgeChip(deal)}
+                                                    {(deal as any).ai_status && (
+                                                        <AIStatusBadge status={(deal as any).ai_status} />
+                                                    )}
+                                                </div>
                                             </div>
 
                                             {/* Property Type + Location. Phase 5: derive
@@ -912,12 +1204,14 @@ export default function DealPipeline({ initialDealId }: DealPipelineProps) {
                                                 )}
                                             </div>
 
-                                            {/* Stage-specific info line */}
+                                            {/* Stage-specific info line (AI activity) */}
                                             {getStageInfoLine(deal) && (
                                                 <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '6px', lineHeight: 1.4 }}>
                                                     {getStageInfoLine(deal)}
                                                 </div>
                                             )}
+                                            {/* Last human action + next action */}
+                                            {renderActivityLine(deal)}
 
                                             {/* Tags Row */}
                                             <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
@@ -940,6 +1234,22 @@ export default function DealPipeline({ initialDealId }: DealPipelineProps) {
                                                 )}
                                             </div>
 
+                                            {/* PARTNER COMPANY OWNER — assign to one of THEIR OWN sub-agents.
+                                                stopPropagation: the tile itself opens the deal workspace. */}
+                                            {isPartnerOwner && (
+                                                <div style={{ marginBottom: 6 }} onClick={e => e.stopPropagation()}>
+                                                    <select
+                                                        value={(deal as any).partner_assignee_id || ''}
+                                                        onChange={e => handleAssignDealTeammate(deal.id, e.target.value)}
+                                                        style={{ width: '100%', fontSize: '11px', padding: '3px 6px', borderRadius: '4px', border: '1px solid var(--border-secondary)', backgroundColor: 'var(--bg-input)', color: 'var(--text-primary)' }}
+                                                        title="Assign to one of your team members"
+                                                    >
+                                                        <option value="">👤 Assign to teammate…</option>
+                                                        {partnerRoster.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                                                    </select>
+                                                </div>
+                                            )}
+
                                             {/* Tappable property preview */}
                                             {deal.inventory && (
                                                 <div
@@ -959,44 +1269,51 @@ export default function DealPipeline({ initialDealId }: DealPipelineProps) {
                                             )}
 
                                             {/* Action buttons */}
-                                            {deal.status === 'NEW' && (
-                                                <div style={{ marginTop: 8 }}>
-                                                    <button type="button"
-                                                        onClick={e => { e.stopPropagation(); setLogCallDeal(deal); }}
-                                                        style={{ ...actionBtnStyle('blue'), width: '100%' }}>
-                                                        📞 Log My Call
-                                                    </button>
-                                                </div>
-                                            )}
+                                            {deal.status === 'NEW' && renderNewCallActions(deal)}
                                             {deal.status === 'QUALIFIED' && (
-                                                <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
-                                                    <button type="button" onClick={async e => { e.stopPropagation(); try { const res: any = await client.post(`/api/deals/${deal.id}/share-next-property`); alert(res.data?.data?.sent ? 'Property card sent.' : 'No more matching properties.'); } catch (err: any) { alert(err?.response?.data?.error || err.message); } }}
-                                                        style={actionBtnStyle('purple')}>
-                                                        📤 Share Property
-                                                    </button>
-                                                    <button type="button" onClick={e => openLogAction(deal, 'SCHEDULED_VISIT', e)}
-                                                        style={actionBtnStyle('amber')}>
-                                                        📅 Schedule Visit
+                                                <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6 }}>
+                                                        <button type="button" onClick={e => { e.stopPropagation(); setQualifiedAction({ deal, mode: 'reminder' }); }} style={actionBtnStyle('cyan')}>⏰ Reminder</button>
+                                                        <button type="button" onClick={e => openLogAction(deal, 'SCHEDULED_VISIT', e)} style={actionBtnStyle('amber')}>📅 Visit</button>
+                                                        <button type="button" onClick={e => { e.stopPropagation(); setQualifiedAction({ deal, mode: 'share' }); }} style={actionBtnStyle('purple')}>📤 Share</button>
+                                                    </div>
+                                                    <button type="button" onClick={e => { e.stopPropagation(); handleDispose(deal); }}
+                                                        style={{ background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: '11px', cursor: 'pointer', alignSelf: 'flex-start', textDecoration: 'underline', padding: '2px 0' }}>
+                                                        Close as lost
                                                     </button>
                                                 </div>
                                             )}
+                                            {/* P7 (2026-07-01): guided VISIT_SCHEDULED (mobile). */}
                                             {deal.status === 'VISIT_SCHEDULED' && (
-                                                <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
-                                                    <button type="button" onClick={e => { e.stopPropagation(); openVisitOutcomeModal(deal); }}
-                                                        style={actionBtnStyle('amber')}>
-                                                        📝 Outcome
-                                                    </button>
-                                                    <button type="button" onClick={async e => { e.stopPropagation(); try { await client.post(`/api/deals/${deal.id}/log-action`, { action_type: 'REMINDER_GIVEN', outcome: 'reminder_given' }); showToast('Reminder logged — AI will skip next automated reminder', 'success'); } catch (err: any) { alert(err?.response?.data?.error || err.message); } }}
-                                                        style={actionBtnStyle('cyan')}>
-                                                        📞 I Reminded
-                                                    </button>
+                                                <div style={{ marginTop: 8, display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6 }}>
+                                                    <button type="button" onClick={e => { e.stopPropagation(); advanceAndRemind(deal, 'VISITED'); }} style={actionBtnStyle('green')}>✅ Visited</button>
+                                                    <button type="button" onClick={e => openLogAction(deal, 'SCHEDULED_VISIT', e)} style={actionBtnStyle('amber')}>📅 Reschedule</button>
+                                                    <button type="button" onClick={e => { e.stopPropagation(); setQualifiedAction({ deal, mode: 'reminder' }); }} style={actionBtnStyle('cyan')}>⏰ Reminder</button>
+                                                </div>
+                                            )}
+                                            {/* P7: guided VISITED (mobile). */}
+                                            {deal.status === 'VISITED' && (
+                                                <div style={{ marginTop: 8, display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6 }}>
+                                                    <button type="button" onClick={e => { e.stopPropagation(); advanceAndRemind(deal, 'NEGOTIATION'); }} style={actionBtnStyle('green')}>👍 Negotiate</button>
+                                                    <button type="button" onClick={e => openLogAction(deal, 'SCHEDULED_VISIT', e)} style={actionBtnStyle('amber')}>🔁 Revisit</button>
+                                                    <button type="button" onClick={e => { e.stopPropagation(); setQualifiedAction({ deal, mode: 'reminder' }); }} style={actionBtnStyle('cyan')}>⏰ Reminder</button>
                                                 </div>
                                             )}
                                             {deal.status === 'NEGOTIATION' && (
-                                                <button type="button" onClick={e => openLogAction(deal, 'MEETING_BOOKED', e)}
-                                                    style={{ ...actionBtnStyle('orange'), marginTop: 8, width: '100%' }}>
-                                                    📝 Log Update
-                                                </button>
+                                                <>
+                                                    <button type="button" onClick={e => openLogAction(deal, 'MEETING_BOOKED', e)}
+                                                        style={{ ...actionBtnStyle('orange'), marginTop: 8, width: '100%' }}>
+                                                        📝 Log Update
+                                                    </button>
+                                                    <button type="button" onClick={e => { e.stopPropagation(); setQualifiedAction({ deal, mode: 'reminder' }); }}
+                                                        style={{ ...actionBtnStyle('cyan'), marginTop: 8, width: '100%' }}>
+                                                        ⏰ Set Reminder
+                                                    </button>
+                                                    <button type="button" onClick={e => { e.stopPropagation(); setCloseWonTarget({ id: deal.id, label: `${deal.demand_contact?.name ? deal.demand_contact.name + ' · ' : ''}Deal #${deal.id.slice(0, 8)}` }); }}
+                                                        style={{ ...actionBtnStyle('green'), marginTop: 8, width: '100%' }}>
+                                                        🏆 Close Won
+                                                    </button>
+                                                </>
                                             )}
                                             {deal.status === 'ON_HOLD' && (
                                                 <button type="button" onClick={e => { e.stopPropagation(); setReviveStage(''); setReviveDeal(deal); }}
@@ -1010,8 +1327,7 @@ export default function DealPipeline({ initialDealId }: DealPipelineProps) {
                                                     ₹ Record Commissions
                                                 </button>
                                             )}
-                                            {(deal.status === 'NEW' || deal.status === 'QUALIFIED' ||
-                                              deal.status === 'VISIT_SCHEDULED' || deal.status === 'VISITED' ||
+                                            {(deal.status === 'VISIT_SCHEDULED' || deal.status === 'VISITED' ||
                                               deal.status === 'NEGOTIATION') && (
                                                 <button type="button"
                                                     onClick={e => { e.stopPropagation(); handleDispose(deal); }}
@@ -1052,7 +1368,7 @@ export default function DealPipeline({ initialDealId }: DealPipelineProps) {
                             </tr>
                         </thead>
                         <tbody>
-                            {deals.map(deal => (
+                            {visibleDeals.map(deal => (
                                 <tr
                                     key={deal.id}
                                     onClick={() => setSelectedDeal(deal)}
@@ -1091,6 +1407,26 @@ export default function DealPipeline({ initialDealId }: DealPipelineProps) {
                             <p className="empty-state__body">Create your first deal to track it through the pipeline.</p>
                         </div>
                     )}
+                </div>
+            )}
+
+            {/* Load more (2026-07-22): the server ranks ALL matching deals; this grows the window. */}
+            {!loading && deals.length > 0 && deals.length < filteredTotal && (
+                <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '12px', padding: '14px 0' }}>
+                    <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                        Showing {deals.length} of {filteredTotal}
+                    </span>
+                    <button
+                        type="button"
+                        onClick={() => setPageCount(c => c + 1)}
+                        style={{
+                            padding: '9px 18px', borderRadius: '10px', cursor: 'pointer',
+                            border: '1px solid var(--border-secondary)', backgroundColor: 'var(--bg-secondary)',
+                            color: 'var(--text-primary)', fontWeight: 600, fontSize: '13px',
+                        }}
+                    >
+                        Load more (+{Math.min(PAGE_SIZE, filteredTotal - deals.length)})
+                    </button>
                 </div>
             )}
 
@@ -1142,6 +1478,7 @@ export default function DealPipeline({ initialDealId }: DealPipelineProps) {
             {logCallDeal && (
                 <LogCallOverlay
                     dealId={logCallDeal.id}
+                    deal={logCallDeal}
                     contactName={logCallDeal.demand_contact?.name || ''}
                     contactPhone={logCallDeal.demand_contact?.phone_number || ''}
                     isMobile={isMobile}
@@ -1186,8 +1523,26 @@ export default function DealPipeline({ initialDealId }: DealPipelineProps) {
                             demand_schema_values: canonicalSV,
                         };
                     })()}
-                    onClose={() => setLogCallDeal(null)}
-                    onSuccess={() => { setLogCallDeal(null); fetchData(); showToast('Lead qualified — AI taking over for property sharing', 'success'); }}
+                    initialOutcome={logCallInitialOutcome}
+                    entryMode={logCallEntryMode}
+                    noAnswerCount={(logCallDeal as any).no_answer_count || 0}
+                    agents={agentsList}
+                    onClose={() => { setLogCallDeal(null); setLogCallInitialOutcome(null); setLogCallEntryMode(null); }}
+                    onSuccess={() => { setLogCallDeal(null); setLogCallInitialOutcome(null); setLogCallEntryMode(null); fetchData(); showToast('Saved', 'success'); }}
+                />
+            )}
+
+            {/* QUALIFIED-stage guided actions (Reminder / Share) */}
+            {qualifiedAction && (
+                <QualifiedActionsModal
+                    dealId={qualifiedAction.deal.id}
+                    deal={qualifiedAction.deal}
+                    contactName={qualifiedAction.deal.demand_contact?.name || qualifiedAction.deal.demand_contact?.phone_number || 'the client'}
+                    noAnswerCount={(qualifiedAction.deal as any).no_answer_count || 0}
+                    agents={agentsList}
+                    mode={qualifiedAction.mode}
+                    onClose={() => setQualifiedAction(null)}
+                    onSuccess={() => { setQualifiedAction(null); fetchData(); showToast('Saved', 'success'); }}
                 />
             )}
 
@@ -1199,6 +1554,14 @@ export default function DealPipeline({ initialDealId }: DealPipelineProps) {
                     onSuccess={() => fetchData()}
                 />
             )}
+
+            <CloseWonDialog
+                open={!!closeWonTarget}
+                dealLabel={closeWonTarget?.label}
+                submitting={closingWon}
+                onConfirm={confirmCloseWon}
+                onClose={() => setCloseWonTarget(null)}
+            />
 
             {/* Ownership Transfer Modal */}
             {ownershipTransferDeal && (
@@ -1484,7 +1847,7 @@ export default function DealPipeline({ initialDealId }: DealPipelineProps) {
                                         onClick={() => setFilterStatus(filterStatus === stage ? '' : stage)}
                                         className={`chip ${filterStatus === stage ? 'chip-active' : 'chip-inactive'}`}
                                         style={filterStatus === stage ? { borderColor: STAGE_COLORS[stage], backgroundColor: STAGE_COLORS[stage] + '20', color: STAGE_COLORS[stage] } : {}}>
-                                        {STAGE_LABELS[stage]} ({pipeline[stage] || 0})
+                                        {STAGE_LABELS[stage]} ({stageCounts[stage] || 0})
                                     </button>
                                 ))}
                             </div>
