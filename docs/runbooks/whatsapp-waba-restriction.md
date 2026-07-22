@@ -75,6 +75,59 @@ reminders, digests). It self-heals as each person messages the bot again.
 **Structural fix:** internal notifications should use approved UTILITY **templates**, which deliver
 outside the 24h window. Free-form `sendText()` to staff is inherently unreliable.
 
+## Opt-outs — the root cause, and how it is enforced now
+
+Meta locked the account for **"Sending spam"**. The audit that followed found the
+mechanism: the closing-signal block had fired **once in the application's entire
+lifetime**, while **21 people who asked us to stop kept receiving messages — 98
+sends, some dating back to April.** Ignoring opt-outs drives blocks and reports,
+which drive quality down, which ends in a lock.
+
+Fixed 2026-07-22 (commit `55c1629`). Three things had to be true, and only one of
+them is about pattern matching:
+
+1. **Detection** — `withdrawingPatterns` in `services/webhook_processor.ts`.
+   Bare `stop` / `unsubscribe` / `band karo` are matched **only when they are the
+   entire message**; a substring match would silence "stop by the property
+   tomorrow". There is a negative lookbehind on the older `stop sending` pattern
+   because *"please dont stop sending options"* means the opposite.
+2. **Coverage** — detection runs **before** the `if (activeDeal)` gate. It used to
+   sit inside it, so anyone without an open deal was never evaluated.
+3. **Enforcement** — `contacts.opted_out_at`. This is a **consent** field and is
+   deliberately NOT `lost_reason`, which is a sales outcome (`BUDGET`,
+   `LOCATION`, …) — suppressing someone lost on budget would be wrong.
+
+On opt-out we stamp `opted_out_at` **and** set `ai_paused = true` on every deal
+that contact has. `ai_paused` is the pre-existing suppression convention already
+honoured by `property_sharing`, `inventory_broadcast`, `pipeline_crons` and
+`interaction_engine`, so reusing it avoids building a parallel system and having
+to sweep every send site. `followup_scheduler` and `lead_auto_engage` did **not**
+honour it, so they carry an explicit `opted_out_at` guard.
+
+⚠ **Any new proactive sender must honour `opted_out_at`.** Replies to messages a
+customer starts are still fine — suppression applies to proactive sends only.
+"Purchased elsewhere" is intentionally not an opt-out; its reply promises future
+opportunities.
+
+**Audit query — re-run this before enabling any aggressive outbound:**
+```sql
+WITH opt AS (
+  SELECT DISTINCT ON (phone_number) phone_number, created_at AS asked_at
+  FROM interactions
+  WHERE direction='inbound' AND channel='whatsapp'
+    AND ( lower(btrim(content)) IN ('stop','stop.','unsubscribe','band karo')
+       OR content ~* '(do ?n.?t|dont) *(text|message|msg|contact)'
+       OR content ~* 'not interested' )
+  ORDER BY phone_number, created_at ASC)
+SELECT count(*) AS asked,
+       count(*) FILTER (WHERE a.n > 0) AS still_messaged
+FROM opt LEFT JOIN LATERAL (
+  SELECT count(*) n FROM interactions o
+  WHERE o.phone_number=opt.phone_number AND o.direction='outbound'
+    AND o.created_at > opt.asked_at) a ON true;
+```
+`still_messaged` must be **0**. It was 21 of 21 before the fix.
+
 ## Outage history
 
 ### 2026-07-13 → 2026-07-22 — WABA locked, "Sending spam" (9 days)
