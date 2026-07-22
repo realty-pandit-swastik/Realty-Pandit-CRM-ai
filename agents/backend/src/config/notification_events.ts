@@ -251,6 +251,16 @@ export const NOTIFICATION_EVENTS: Record<string, NotificationEventConfig> = {
         title: (d) => 'Deal Reassigned to You',
         body: (d) => `Deal ${d.deal_id || ''} (${d.customer_name || 'customer'}) reassigned to you by ${d.from_agent || 'a team member'}${d.reason ? ' — ' + d.reason : ''}`,
         defaultChannels: ['whatsapp', 'push'],
+        // Approved 2026-07-22 — delivers even when the agent's 24h window has closed.
+        waTemplate: {
+            key: 'rp_agent_deal_reassigned',
+            params: (d) => ({
+                deal: String(d.deal_id || '').slice(0, 8) || 'N/A',
+                customer: d.customer_name || 'a customer',
+                from: d.from_agent || 'a team member',
+                reason: d.reason || 'N/A',
+            }),
+        },
         actionUrl: (d) => `#/deals?highlight=${d.deal_id}`,
     },
     deal_reassigned_away: {

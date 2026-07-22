@@ -488,6 +488,23 @@ export const TEMPLATE_REGISTRY: Record<string, TemplateDefinition> = {
         ],
     },
 
+    // Agent-facing reassignment alert (2026-07-22). Approved UTILITY, so it delivers
+    // outside the 24h window — unlike the free-form text these alerts used to use,
+    // which bounced with 131047 for 33 of 34 staff.
+    // NOTE: distinct from rp_executive_reassigned below, which is CUSTOMER-facing.
+    rp_agent_deal_reassigned: {
+        name: 'rp_agent_deal_reassigned',
+        category: 'UTILITY',
+        language: 'en',
+        body: '🔄 Deal reassigned to you\n\n🤝 Deal: {{1}}\n👤 Customer: {{2}}\n↪️ From: {{3}}\n📝 Reason: {{4}}\n\nOpen the Deal Pipeline to continue.',
+        params: [
+            { key: 'deal', example: '8021f0e3' },
+            { key: 'customer', example: 'Umesh Sharma' },
+            { key: 'from', example: 'Ashwani' },
+            { key: 'reason', example: 'Coordinator change' },
+        ],
+    },
+
     rp_executive_reassigned: {
         name: 'rp_executive_reassigned_v2',
         category: 'UTILITY',
