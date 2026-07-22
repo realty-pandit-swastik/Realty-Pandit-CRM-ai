@@ -89,6 +89,7 @@ export async function notifyDealEvent(ctx: DealEventContext): Promise<void> {
         const budget = formatBudgetRange(deal.demand_budget_min, deal.demand_budget_max);
         const coordinatorName = deal.coordinator?.name || 'Team';
         const customerName = deal.demand_contact?.name || 'Customer';
+        const ownerName = deal.supply_contact?.name || 'Owner';
         const mapsLink = (deal.inventory?.latitude && deal.inventory?.longitude)
             ? `https://maps.google.com/?q=${deal.inventory.latitude},${deal.inventory.longitude}`
             : null;
@@ -105,12 +106,12 @@ export async function notifyDealEvent(ctx: DealEventContext): Promise<void> {
                 // Send WhatsApp
                 if (recipient.phone && !isQuietHours) {
                     await sendWhatsAppNotification(ctx, recipient, {
-                        propertyType, location, budget, coordinatorName, customerName, mapsLink,
+                        propertyType, location, budget, coordinatorName, customerName, ownerName, mapsLink,
                     });
                 }
 
-                // Send Email
-                if (recipient.email) {
+                // Send Email (owner/seller is WhatsApp-only for now — NEG-3)
+                if (recipient.email && recipient.role !== 'supply_handler') {
                     await sendEmailNotification(ctx, recipient, deal.tenant_id, {
                         propertyType, location, budget, coordinatorName, customerName,
                     });
@@ -225,6 +226,15 @@ function getRecipientsForEvent(event: DealEvent, deal: any, ctx?: DealEventConte
         role: 'customer',
     } : null;
 
+    // (NEG-3, 2026-06-23) The property owner/seller — previously loaded but never notified, so a
+    // "two-sided" negotiation ran entirely single-sided. Looped in on NEGOTIATION entry + CLOSED_WON.
+    const seller: Recipient | null = deal.supply_contact ? {
+        name: deal.supply_contact.name || 'Owner',
+        phone: deal.supply_contact.phone_number,
+        email: deal.supply_contact.email,
+        role: 'supply_handler',
+    } : null;
+
     switch (event) {
         case 'created':
             if (coordinator) recipients.push(coordinator);
@@ -235,6 +245,9 @@ function getRecipientsForEvent(event: DealEvent, deal: any, ctx?: DealEventConte
         case 'closed_lost':
             if (coordinator) recipients.push(coordinator);
             if (customer) recipients.push(customer);
+            // Tell the owner their property's deal closed (won only — CLOSED_LOST just silently
+            // returns the inventory to `active` via the NEG-1 lock, no owner message needed).
+            if (event === 'closed_won' && seller) recipients.push(seller);
             break;
 
         case 'status_changed': {
@@ -243,8 +256,9 @@ function getRecipientsForEvent(event: DealEvent, deal: any, ctx?: DealEventConte
                 // Customer only — coordinator booked via Deal Workspace so they already know
                 if (customer) recipients.push(customer);
             } else if (ns === 'NEGOTIATION') {
-                // Customer only — AI asks for availability; coordinator drove the move
+                // Customer (availability ask) + owner (a buyer is negotiating their property). NEG-3.
                 if (customer) recipients.push(customer);
+                if (seller) recipients.push(seller);
             } else if (ns === 'ON_HOLD') {
                 // Coordinator only — customer is not notified on hold (per KRA)
                 if (coordinator) recipients.push(coordinator);
@@ -297,10 +311,23 @@ async function getLatestAppointmentDatetime(dealId: string): Promise<string> {
 async function sendWhatsAppNotification(
     ctx: DealEventContext,
     recipient: Recipient,
-    data: { propertyType: string; location: string; budget: string; coordinatorName: string; customerName: string; mapsLink: string | null }
+    data: { propertyType: string; location: string; budget: string; coordinatorName: string; customerName: string; ownerName: string; mapsLink: string | null }
 ): Promise<void> {
     const phone = recipient.phone;
     if (!phone) return;
+
+    // (NEG-3, 2026-06-23) Owner/seller-side notifications use distinct seller templates. Best-effort:
+    // these templates are pending Meta approval and won't deliver until approved — a failure here must
+    // not block the buyer/coordinator notifications (the caller try/catches per recipient).
+    if (recipient.role === 'supply_handler') {
+        const propertyLabel = `${data.propertyType}, ${data.location}`;
+        if (ctx.event === 'status_changed' && ctx.newStatus === 'NEGOTIATION') {
+            await whatsapp.sendTemplate(phone, 'rp_negotiation_seller', { owner_name: data.ownerName, property: propertyLabel });
+        } else if (ctx.event === 'closed_won') {
+            await whatsapp.sendTemplate(phone, 'rp_deal_closed_seller', { owner_name: data.ownerName, property: propertyLabel });
+        }
+        return;
+    }
 
     switch (ctx.event) {
         case 'created':
@@ -519,11 +546,14 @@ export async function notifyAppointmentBooked(params: {
         } catch (e) { logger.warn('[Notify] Manager visit notification failed:', e); SentrySDK.captureException(e, { tags: { notify: 'visit_manager' } }); }
     }
 
-    if (inv.key_holder_phone) {
+    // VS-7 (2026-06-22): fall back to the owner's phone when no dedicated key-holder phone is set,
+    // so the agent isn't sent to a property with nobody to unlock it. Warn if neither exists.
+    const keyPhone = inv.key_holder_phone || inv.owner_phone;
+    if (keyPhone) {
         const rawPhone = deal.demand_contact?.phone_number || '';
         const masked = rawPhone.length > 4 ? `XXXXXX${rawPhone.slice(-4)}` : 'XXXXXX';
         try {
-            await wa.sendTemplate(inv.key_holder_phone, 'rp_visit_keyholder_alert', {
+            await wa.sendTemplate(keyPhone, 'rp_visit_keyholder_alert', {
                 keyholder_name: inv.key_holder_name || 'Key Holder',
                 property_label: propertyLabel,
                 location: inv.location || inv.locality || '-',
@@ -531,6 +561,8 @@ export async function notifyAppointmentBooked(params: {
                 customer_masked_phone: masked,
             });
         } catch (e) { logger.warn('[Notify] Key holder visit notification failed:', e); SentrySDK.captureException(e, { tags: { notify: 'visit_keyholder' } }); }
+    } else {
+        logger.warn(`[Notify] No key-holder OR owner phone for the visit property — access must be arranged manually (deal ${deal.id})`);
     }
 }
 

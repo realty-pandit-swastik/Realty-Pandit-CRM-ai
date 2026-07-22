@@ -6,6 +6,7 @@ import { useToast } from '../../contexts/ToastContext';
 import { useConfirm } from '../../contexts/ConfirmContext';
 import { AIStatusBadge } from '../AIStatusBadge';
 import DemandRequirementsForm, { type DemandPayload, type DemandRequirementsFormHandle } from '../leads/DemandRequirementsForm';
+import CloseWonDialog from './CloseWonDialog';
 
 // ── Canonical taxonomy tree shape (from GET /public/taxonomy/tree) ────────────
 // Same source the Edit form (<DemandRequirementsForm>) reads. The legacy slug-based
@@ -40,6 +41,7 @@ export function RequirementsTab({ deal, stageLabels, onRefresh, onDealUpdated, o
     const [isEditing, setIsEditing]   = useState(false);
     const [saving, setSaving]         = useState(false);
     const [statusChanging, setStatusChanging] = useState(false);
+    const [closeWonOpen, setCloseWonOpen] = useState(false);
     const [aiToggling, setAiToggling] = useState(false);
     // Lets the top-bar "Save & Close" button drive the embedded form's submit.
     const formRef = useRef<DemandRequirementsFormHandle>(null);
@@ -268,6 +270,8 @@ export function RequirementsTab({ deal, stageLabels, onRefresh, onDealUpdated, o
     // now live inside <DemandRequirementsForm>.
 
     const handleStatusChange = async (status: string) => {
+        // (NEG-2) Closing as Won opens the price dialog so the agreed final_price is captured.
+        if (status === 'CLOSED_WON') { setCloseWonOpen(true); return; }
         const ok = await confirm(`Move deal to ${stageLabels[status] || status}?`);
         if (!ok) return;
         setStatusChanging(true);
@@ -276,6 +280,17 @@ export function RequirementsTab({ deal, stageLabels, onRefresh, onDealUpdated, o
             onRefresh();
         } catch (err: any) {
             showToast(err?.response?.data?.error || 'Status change failed', 'error');
+        } finally { setStatusChanging(false); }
+    };
+
+    const confirmCloseWon = async (finalPrice?: number) => {
+        setStatusChanging(true);
+        try {
+            await updateDealStatus(deal.id, 'CLOSED_WON', undefined, finalPrice);
+            setCloseWonOpen(false);
+            onRefresh();
+        } catch (err: any) {
+            showToast(err?.response?.data?.error || 'Close failed', 'error');
         } finally { setStatusChanging(false); }
     };
 
@@ -464,6 +479,14 @@ export function RequirementsTab({ deal, stageLabels, onRefresh, onDealUpdated, o
                 onStatusChange={handleStatusChange}
                 onVisitOutcome={onVisitOutcome}
                 onRevive={onRevive}
+            />
+
+            <CloseWonDialog
+                open={closeWonOpen}
+                dealLabel={`${deal.demand_contact?.name ? deal.demand_contact.name + ' · ' : ''}Deal #${deal.id.slice(0, 8)}`}
+                submitting={statusChanging}
+                onConfirm={confirmCloseWon}
+                onClose={() => setCloseWonOpen(false)}
             />
         </div>
     );

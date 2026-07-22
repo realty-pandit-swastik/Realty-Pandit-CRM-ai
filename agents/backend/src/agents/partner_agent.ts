@@ -12,6 +12,8 @@
  */
 
 import { BaseAgent, AgentContext, AgentResponse } from './types';
+import { getDisplayFloor } from '../utils/floor';
+import { formatPropertyPrice } from '../utils/format_price';
 import { LLMService } from '../services/llm';
 import { SystemPromptService } from '../services/system_prompt';
 import { InventoryStateMachine, InventoryState } from '../workflows/inventory_machine';
@@ -815,16 +817,7 @@ RULES:
         const bhk = specs.bedrooms ? `${specs.bedrooms} BHK ` : '';
         const area = specs.area ? `${specs.area} ${specs.area_unit || 'sqft'}` : '';
 
-        let priceStr = 'Price on request';
-        if (property.price) {
-            if (property.intent === 'rent') {
-                priceStr = `₹${Number(property.price).toLocaleString('en-IN')}/month`;
-            } else {
-                priceStr = property.price >= 10_000_000
-                    ? `₹${(property.price / 10_000_000).toFixed(1)} Cr`
-                    : `₹${(property.price / 100_000).toFixed(1)} Lakh`;
-            }
-        }
+        const priceStr = formatPropertyPrice(property.price, { intent: property.intent, unit: (property as any).price_unit });
 
         let msg = `*Property ${index}/${total}*\n\n`;
         msg += `🏠 *${bhk}${property.type.toUpperCase()}*\n`;
@@ -835,7 +828,7 @@ RULES:
         const _specs: any = property.specs || {};
         if (_specs.furnishing) msg += `🛋️ ${String(_specs.furnishing).replace(/_/g, ' ')}\n`;
         const _totalFloors = _specs.floors;
-        if (property.floor_number) msg += `🏢 Floor ${property.floor_number}${_totalFloors ? '/' + _totalFloors : ''}\n`;
+        { const _fl = getDisplayFloor(property); if (_fl) msg += `🏢 Floor ${_fl}${_totalFloors ? '/' + _totalFloors : ''}\n`; }
 
         if (Array.isArray(_specs.amenities) && _specs.amenities.length > 0) {
             const amenities = _specs.amenities.slice(0, 4).map((a: string) => String(a));

@@ -23,6 +23,7 @@ import { isRealEmail } from '../utils/email';
 import { sanitizeName } from '../utils/name_sanitizer';
 import { sendBuyerConfirmationWhatsApp, sendBuyerConfirmationEmail } from './lead_notifications';
 import { assignViaRoundRobin, resolveAgentByEmail, assignViaManagerRoundRobin } from './lead_assignment';
+import { assignContact, type AssignmentMethod } from './assign_contact';
 import { ensureDealForLead } from './ensure_deal';
 import { notify } from './notify';
 import { alertCritical } from '../utils/alerter';
@@ -291,19 +292,19 @@ export class HousingPoller {
         // ── Assign agent ────────────────────────────────────────────────────
         let finalAgentId = contact.assigned_agent_id;
         if (!finalAgentId) {
+            let method: AssignmentMethod | null = null;
             // Try portal-email match first (parity with 99acres SubUserName routing).
             const housingBrokerEmail = (lead as any).broker_email || (lead as any).agent_email || null;
             if (housingBrokerEmail) {
                 finalAgentId = await resolveAgentByEmail(housingBrokerEmail);
+                if (finalAgentId) method = 'sub_user';
             }
             if (!finalAgentId) {
                 finalAgentId = await assignViaManagerRoundRobin();
+                if (finalAgentId) method = 'manager_review';
             }
             if (finalAgentId) {
-                await prisma.contact.update({
-                    where: { phone_number: phoneNumber },
-                    data:  { assigned_agent_id: finalAgentId },
-                });
+                await assignContact(phoneNumber, finalAgentId, method);
             }
         }
 

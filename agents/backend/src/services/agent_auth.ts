@@ -159,7 +159,10 @@ export class AgentAuthService {
             attempts: 0,
         });
 
-        await this.whatsapp.sendTemplate(phone, 'rp_partner_login_otp_v2', { otp });
+        // Use the REGISTRY KEY (rp_partner_login_otp), not the Meta name (rp_partner_login_otp_v2).
+        // buildTemplatePayload looks up by key; passing the _v2 name threw "not found in registry".
+        // (2026-06-26 partner-OTP fix.)
+        await this.whatsapp.sendTemplate(phone, 'rp_partner_login_otp', { otp });
 
         logger.info(`[AgentAuth] Partner OTP sent to ${phone}`);
     }

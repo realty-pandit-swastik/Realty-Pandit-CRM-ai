@@ -60,9 +60,17 @@ export async function resolveAgentByEmail(email: string | null | undefined): Pro
     if (!email?.trim()) return null;
 
     try {
+        // Match the lister email against EITHER personal_email OR google_email — a team member's
+        // portal-registered Gmail may live in google_email (their Google-connect address) rather than
+        // personal_email (e.g. Bhuvneswar, Bharat). Checking both routes those leads to the originating agent.
         const agent = await prisma.agent.findFirst({
             where: {
-                personal_email: { equals: email.trim(), mode: 'insensitive' },
+                OR: [
+                    // Dedicated 99acres portal email (manager-entered) takes precedence.
+                    { nine9acres_email: { equals: email.trim(), mode: 'insensitive' } },
+                    { personal_email: { equals: email.trim(), mode: 'insensitive' } },
+                    { google_email: { equals: email.trim(), mode: 'insensitive' } },
+                ],
                 role: { in: ['employee', 'manager'] },
                 status: 'active',
             },
@@ -70,14 +78,71 @@ export async function resolveAgentByEmail(email: string | null | undefined): Pro
         });
 
         if (!agent) {
-            logger.info(`[LeadAssign] No active employee found for SubUserName personal_email: ${email}`);
+            logger.info(`[LeadAssign] No active employee found for SubUserName email (personal/google): ${email}`);
             return null;
         }
 
-        logger.info(`[LeadAssign] SubUserName matched agent via personal_email: ${agent.name} (${agent.id})`);
+        logger.info(`[LeadAssign] SubUserName matched agent via email (personal/google): ${agent.name} (${agent.id})`);
         return agent.id;
     } catch (err) {
         logger.warn(`[LeadAssign] resolveAgentByEmail error for "${email}": ${(err as Error).message}`);
+        return null;
+    }
+}
+
+/**
+ * Resolve an active agent from a MagicBricks `sub_user` value.
+ * MagicBricks sub-users arrive as `<agent's registered phone>@timesgroup.com`
+ * (e.g. "7906597808@timesgroup.com" = the lister's mobile). We match the embedded
+ * number against Agent.phone (E.164 +91…). Falls back to a personal_email match in
+ * case a sub_user is ever an email rather than a phone. Mirrors resolveAgentByEmail
+ * (99acres SubUserName routing): active employee/manager only, null if unmatched.
+ */
+export async function resolveAgentByMagicBricksSubUser(subUser: string | null | undefined): Promise<string | null> {
+    const raw = subUser?.trim();
+    if (!raw) return null;
+    try {
+        // Primary: explicit per-agent MagicBricks identifier set on the profile (manager-entered).
+        // Holds whatever MagicBricks sends as sub_user (their MB Gmail OR <phone>@timesgroup.com), so
+        // an exact match on the raw value is the most reliable route. (2026-06-25)
+        const byMbField = await prisma.agent.findFirst({
+            where: {
+                magicbricks_email: { equals: raw, mode: 'insensitive' },
+                role: { in: ['employee', 'manager'] },
+                status: 'active',
+            },
+            select: { id: true, name: true },
+        });
+        if (byMbField) {
+            logger.info(`[LeadAssign] MagicBricks sub_user matched agent via magicbricks_email: ${byMbField.name} (${byMbField.id})`);
+            return byMbField.id;
+        }
+        // Secondary: the phone before the @ → match Agent.phone by its last 10 digits.
+        const digits = raw.split('@')[0].replace(/\D/g, '');
+        if (digits.length >= 10) {
+            const last10 = digits.slice(-10);
+            const agent = await prisma.agent.findFirst({
+                where: {
+                    phone: { contains: last10 },
+                    role: { in: ['employee', 'manager'] },
+                    status: 'active',
+                },
+                select: { id: true, name: true },
+            });
+            if (agent) {
+                logger.info(`[LeadAssign] MagicBricks sub_user matched agent via phone: ${agent.name} (${agent.id})`);
+                return agent.id;
+            }
+        }
+        // Fallback: treat the sub_user as an email and match personal_email.
+        if (raw.includes('@')) {
+            const byEmail = await resolveAgentByEmail(raw);
+            if (byEmail) return byEmail;
+        }
+        logger.info(`[LeadAssign] No active agent for MagicBricks sub_user: ${raw}`);
+        return null;
+    } catch (err) {
+        logger.warn(`[LeadAssign] resolveAgentByMagicBricksSubUser error for "${raw}": ${(err as Error).message}`);
         return null;
     }
 }

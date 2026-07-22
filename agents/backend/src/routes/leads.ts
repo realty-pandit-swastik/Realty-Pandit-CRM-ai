@@ -24,6 +24,7 @@ const matchingEngine = new MatchingEngine();
 
 import { buildContactVisibilityFilter, buildFullContactVisibilityFilter } from '../middleware/contact_visibility';
 import { captureRouteError } from '../utils/capture';
+import logger from '../utils/logger';
 
 const PRIVILEGED_ROLES = ['super_boss', 'manager'];
 
@@ -45,8 +46,9 @@ async function resolvePhone(raw: string): Promise<string> {
 // Groups contacts by source with counts (scoped by role)
 router.get('/by-source', async (req: any, res) => {
     try {
-        const isPrivileged = PRIVILEGED_ROLES.includes(req.agent.role);
-        const roleWhere = isPrivileged ? {} : { assigned_agent_id: req.agent.id };
+        // Visibility (2026-06-27): counts must match the list — manager = team, employee = own,
+        // super_boss = all. Use the same team-aware filter instead of "manager sees everything".
+        const roleWhere = buildContactVisibilityFilter(req.agent.id, req.agent.role);
 
         const grouped = await prisma.contact.groupBy({
             by: ['source'],
@@ -79,6 +81,55 @@ router.get('/by-source', async (req: any, res) => {
 
 // GET /api/leads/recent-external
 // Returns leads. Super boss/manager see all; employees see only their assigned leads.
+/**
+ * PARTNER lead scoping (2026-07-12).
+ * A partner may ONLY see/work the leads THEY referred (Contact.referral_partner_id), incl. their
+ * company sub-agents'. Never a team lead, never another partner's.
+ */
+/**
+ * Apply the partner lead scope by MUTATING `where` — push into `where.AND`, never assign.
+ *
+ * ⚠ SECURITY: the previous version RETURNED a where-fragment that the caller merged with
+ * `Object.assign(where, ...)`. That sets a TOP-LEVEL `where.OR`, while every other filter in this
+ * endpoint pushes into `where.AND`. The moment any filter also sets `where.OR`, one clobbers the
+ * other — and if the partner scope is the one clobbered, the partner sees EVERY LEAD IN THE SYSTEM.
+ * Pushing an AND-ed OR-group is the only composable form. (2026-07-13)
+ */
+async function applyPartnerLeadScope(req: any, where: any): Promise<void> {
+    if (req.agent?.role !== 'partner') return;
+    const { partnerIdsWithSubAgents, partnerLeadOr } = await import('../utils/partner_scope');
+    const { ids } = await partnerIdsWithSubAgents(req.agent.id);
+    where.AND = [...(where.AND || []), { OR: partnerLeadOr(ids) }];
+}
+
+/**
+ * Guard for per-lead routes: 403 unless this partner REFERRED the lead or was ASSIGNED it.
+ * No-op for team members.
+ */
+async function partnerOwnsLeadOr403(req: any, res: any, phone: string): Promise<boolean> {
+    if (req.agent?.role !== 'partner') return true;
+    const pa = await prisma.partnerAgent.findUnique({ where: { id: req.agent.id }, select: { status: true } });
+    if (!pa || pa.status !== 'ACTIVE') {
+        res.status(403).json({ error: 'Partner account is not active' });
+        return false;
+    }
+    const { partnerIdsWithSubAgents } = await import('../utils/partner_scope');
+    const { ids } = await partnerIdsWithSubAgents(req.agent.id);
+    const c = await prisma.contact.findUnique({
+        where: { phone_number: phone },
+        select: { referral_partner_id: true, partner_assignee_id: true },
+    });
+    const mine = !!c && (
+        (!!c.referral_partner_id && ids.includes(c.referral_partner_id))
+        || (!!c.partner_assignee_id && ids.includes(c.partner_assignee_id))
+    );
+    if (!mine) {
+        res.status(403).json({ error: 'You can only work leads that are yours.' });
+        return false;
+    }
+    return true;
+}
+
 router.get('/recent-external', async (req: any, res) => {
     try {
         const page = parseInt(req.query.page as string) || 1;
@@ -110,7 +161,10 @@ router.get('/recent-external', async (req: any, res) => {
 
         const where: any = {
             contact_type: { notIn: ['LANDLORD', 'MANAGEMENT', 'PARTNER_AGENT'] },
-            ...visibilityFilter,
+            // PARTNER: the team visibility filter is assigned-agent based and would always yield zero
+            // for an external partner (they're not an Agent). Their scope is `referral_partner_id`,
+            // applied below via partnerLeadWhere().
+            ...(req.agent?.role === 'partner' ? {} : visibilityFilter),
         };
 
         // Source filter — when specified use it; when not, show all
@@ -167,6 +221,22 @@ router.get('/recent-external', async (req: any, res) => {
         }
         if (agentId) {
             where.assigned_agent_id = agentId;
+        }
+
+        // PARTNER: only their own leads (referred by OR assigned to them / their sub-agents).
+        // Mutates `where.AND` — must never Object.assign a top-level OR here (see the helper).
+        await applyPartnerLeadScope(req, where);
+
+        // Budget filter (#3, 2026-06-28): budget_min / budget_max (₹) on the lead's stated max budget.
+        {
+            const budgetMin = req.query.budget_min ? parseFloat(String(req.query.budget_min)) : NaN;
+            const budgetMax = req.query.budget_max ? parseFloat(String(req.query.budget_max)) : NaN;
+            if (!isNaN(budgetMin) || !isNaN(budgetMax)) {
+                const bWhere: any = {};
+                if (!isNaN(budgetMin)) bWhere.gte = budgetMin;
+                if (!isNaN(budgetMax)) bWhere.lte = budgetMax;
+                where.budget_max = bWhere;
+            }
         }
 
         // Intent filter (contact_type: BUYER or TENANT)
@@ -284,6 +354,7 @@ router.get('/recent-external', async (req: any, res) => {
 // Update a lead's status
 router.patch('/:phone/status', async (req, res) => {
     try {
+        if (!(await partnerOwnsLeadOr403(req as any, res, decodeURIComponent(req.params.phone)))) return;
         const phone = await resolvePhone(req.params.phone);
         const { lead_status, lifecycle_stage, notes } = req.body;
 
@@ -356,7 +427,7 @@ router.patch('/:phone/reassign', async (req: any, res) => {
         await prisma.$transaction([
             prisma.contact.update({
                 where: { phone_number: phone },
-                data: { assigned_agent_id: agent_id, updated_at: new Date() },
+                data: { assigned_agent_id: agent_id, assignment_method: 'manual', updated_at: new Date() }, // Phase 5C
             }),
             // Lead owner == deal coordinator (single source of truth). The
             // /assign endpoint already did this; /reassign must too, or the
@@ -424,6 +495,81 @@ router.patch('/:phone/reassign', async (req: any, res) => {
         captureRouteError(error, req, { route: 'leads#reassign' });
         if (error?.code === 'P2025') return res.status(404).json({ error: 'Lead not found' });
         console.error('[Leads] Reassign error:', error);
+        res.status(500).json({ error: (error as Error).message });
+    }
+});
+
+// POST /api/leads/bulk-reassign — reassign many leads to one agent in a single call.
+// Mirrors the single /:phone/reassign logic per-lead (same employee-ownership permission
+// check + audit row + deal-coordinator sync). Returns a per-lead result summary so the
+// UI can show partial success. (#4 bulk reassign, 2026-06-28)
+router.post('/bulk-reassign', async (req: any, res) => {
+    try {
+        const { phones, agent_id, reason } = req.body || {};
+        const actor = req.agent;
+        if (!Array.isArray(phones) || phones.length === 0) return res.status(400).json({ error: 'phones array required' });
+        if (!agent_id) return res.status(400).json({ error: 'agent_id is required' });
+        if (agent_id === actor.id) return res.status(400).json({ error: 'Cannot reassign to yourself' });
+        if (phones.length > 500) return res.status(400).json({ error: 'Too many leads (max 500 per call)' });
+
+        const targetAgent = await prisma.agent.findFirst({
+            where: { id: agent_id, tenant_id: actor.tenant_id, status: 'active' },
+            select: { id: true, name: true, role: true, phone: true, email: true },
+        });
+        if (!targetAgent) return res.status(404).json({ error: 'Target agent not found or inactive' });
+
+        const actorRecord = await prisma.agent.findUnique({ where: { id: actor.id }, select: { name: true } });
+        const actorName = actorRecord?.name || actor.email || 'a team member';
+
+        const results: { phone: string; ok: boolean; error?: string }[] = [];
+        for (const raw of phones) {
+            try {
+                const phone = await resolvePhone(String(raw));
+                const contact = await prisma.contact.findUnique({
+                    where: { phone_number: phone },
+                    select: { phone_number: true, name: true, assigned_agent_id: true, tenant_id: true },
+                });
+                if (!contact) { results.push({ phone: String(raw), ok: false, error: 'Lead not found' }); continue; }
+                // Same permission model as the single endpoint: employees can only reassign leads they own.
+                if (actor.role === 'employee' && contact.assigned_agent_id !== actor.id) {
+                    results.push({ phone, ok: false, error: 'Not your lead' }); continue;
+                }
+                if (contact.assigned_agent_id === agent_id) { results.push({ phone, ok: true }); continue; }
+                const noteText = reason || `Bulk reassigned to ${targetAgent.name}`;
+                await prisma.$transaction([
+                    prisma.contact.update({ where: { phone_number: phone }, data: { assigned_agent_id: agent_id, assignment_method: 'manual', updated_at: new Date() } }), // Phase 5C
+                    prisma.transaction.updateMany({
+                        where: { demand_contact_id: phone, status: { notIn: ['CLOSED_WON', 'CLOSED_LOST', 'ON_HOLD'] } },
+                        data: { coordinator_agent_id: agent_id, executive_agent_id: agent_id, updated_at: new Date() },
+                    }),
+                    prisma.interaction.create({
+                        data: {
+                            tenant_id: contact.tenant_id, phone_number: phone, channel: 'admin', direction: 'outbound',
+                            event_type: 'lead_reassigned',
+                            content: `Lead reassigned from ${actorName} to ${targetAgent.name} (${targetAgent.role}). Reason: ${noteText}`,
+                            metadata: { from_agent_id: contact.assigned_agent_id, from_agent_name: actor.name, to_agent_id: agent_id, to_agent_name: targetAgent.name, reason: noteText, actor_id: actor.id, bulk: true },
+                        },
+                    }),
+                ]);
+                results.push({ phone, ok: true });
+            } catch (e: any) {
+                results.push({ phone: String(raw), ok: false, error: e?.message || 'failed' });
+            }
+        }
+        const okCount = results.filter(r => r.ok).length;
+        // One summary notification to the new owner (avoid N pings for a bulk action).
+        try {
+            if (okCount > 0) notify('lead_reassigned_to_me', [{
+                id: targetAgent.id, type: 'agent' as const, phone: targetAgent.phone ?? undefined,
+                email: targetAgent.email || undefined, name: targetAgent.name,
+            }], { contact_name: `${okCount} leads`, contact_phone: '', from_agent_name: actor.name, reason: `Bulk reassign of ${okCount} leads` });
+        } catch (notifyErr) { console.warn(`[Leads] bulk reassign notify failed: ${(notifyErr as Error).message}`); }
+
+        console.info(`[Leads] bulk reassign: ${okCount}/${phones.length} → ${targetAgent.name} by ${actorName}`);
+        res.json({ success: true, reassigned: okCount, total: phones.length, new_agent: targetAgent, results });
+    } catch (error: any) {
+        captureRouteError(error, req, { route: 'leads#bulk-reassign' });
+        console.error('[Leads] Bulk reassign error:', error);
         res.status(500).json({ error: (error as Error).message });
     }
 });
@@ -847,7 +993,7 @@ router.post('/', async (req: any, res) => {
 
         // Auto-assign: privileged users can specify an agent; employees are auto-assigned to themselves
         const isPrivileged = PRIVILEGED_ROLES.includes(req.agent.role);
-        const resolvedAgentId = isPrivileged
+        let resolvedAgentId = isPrivileged
             ? (assigned_agent_id || null)
             : req.agent.id;
 
@@ -859,6 +1005,26 @@ router.post('/', async (req: any, res) => {
         // inherits from the partner's managing_agent_id; for direct admin-created leads it
         // defaults to the creating agent. null => super_boss fallback at permission layer.
         let owningManagerId: string | null = req.agent?.id ?? null;
+
+        // PARTNER (2026-07-12): an external partner adding THEIR OWN lead. A PartnerAgent id is NOT an
+        // Agent id — assigned_agent_id and owning_manager_id are Agent FKs, so they must resolve to the
+        // partner's coordinator (who will actually work the lead). The lead is attributed to the partner
+        // via referral_partner_id so it appears in THEIR list (and nowhere else).
+        const isPartnerCreator = req.agent?.role === 'partner';
+        if (isPartnerCreator) {
+            const pa = await prisma.partnerAgent.findUnique({
+                where: { id: req.agent.id }, select: { managing_agent_id: true, status: true },
+            });
+            if (!pa || pa.status !== 'ACTIVE') {
+                return res.status(403).json({ error: 'Partner account is not active' });
+            }
+            const coordinatorId = pa.managing_agent_id
+                || (await prisma.agent.findFirst({ where: { role: 'super_boss', status: 'active' }, select: { id: true } }))?.id
+                || null;
+            resolvedAgentId = coordinatorId;      // a real Agent works it
+            owningManagerId = coordinatorId;
+            resolvedPartnerId = req.agent.id;     // attributed to the partner
+        }
 
         if (lead_type === 'PARTNER_REFERRAL' && referral_partner_phone) {
             try {
@@ -965,26 +1131,29 @@ router.post('/', async (req: any, res) => {
             ? `${notes ? notes + ' | ' : ''}[Partner referral — phone not provided yet]`
             : (notes || null);
 
+        // Attach a NEW requirement to an existing client. Refresh demand; PRESERVE identity, assignment,
+        // status, and any existing partner attribution unless this request explicitly supplies it (so a
+        // direct add doesn't wipe a partner link, and a partner add can claim a direct client). Shared by
+        // the explicit-attach path AND the create's race fallback below.
+        const attachData = {
+            ...demandWrite,
+            name: name || undefined,
+            email: email || undefined,
+            lead_type: (isPartnerCreator ? 'PARTNER_REFERRAL' : lead_type) || undefined,
+            referral_partner_id: resolvedPartnerId ?? undefined,
+            referral_partner_name: referral_partner_name || undefined,
+            referral_partner_phone: referralPartnerPhoneStored ?? undefined,
+            owning_manager_id: isPartnerReferral ? owningManagerId : undefined,
+            updated_at: new Date(),
+        };
         const contact = attachToExistingContact
-            // Attach a NEW requirement to an existing client. Refresh demand; PRESERVE identity, assignment,
-            // status, and any existing partner attribution unless this request explicitly supplies it (so a
-            // direct add doesn't wipe a partner link, and a partner add can claim a direct client).
-            ? await prisma.contact.update({
+            ? await prisma.contact.update({ where: { phone_number: phoneNumber }, data: attachData })
+            // (GT-96, 2026-06-23) Atomic create-or-attach. A concurrent request can create this contact
+            // between our findUnique (above) and here — `upsert` closes that TOCTOU race so we attach to
+            // the just-created contact instead of throwing P2002 (which previously 500'd POST /api/leads).
+            : await prisma.contact.upsert({
                 where: { phone_number: phoneNumber },
-                data: {
-                    ...demandWrite,
-                    name: name || undefined,
-                    email: email || undefined,
-                    lead_type: lead_type || undefined,
-                    referral_partner_id: resolvedPartnerId ?? undefined,
-                    referral_partner_name: referral_partner_name || undefined,
-                    referral_partner_phone: referralPartnerPhoneStored ?? undefined,
-                    owning_manager_id: isPartnerReferral ? owningManagerId : undefined,
-                    updated_at: new Date(),
-                },
-            })
-            : await prisma.contact.create({
-                data: {
+                create: {
                     phone_number: phoneNumber,
                     tenant_id: tenant.id,
                     name: name || null,
@@ -994,14 +1163,18 @@ router.post('/', async (req: any, res) => {
                     lead_status: isPartnerReferral ? 'warm' : 'cold',
                     lifecycle_stage: 'NEW',
                     assigned_agent_id: resolvedAgentId,
-                    lead_type: lead_type || null,
+                    // Phase 5C — partner-creator routes to the managing agent; else admin/employee manual pick.
+                    assignment_method: resolvedAgentId ? (isPartnerCreator ? 'partner' : 'manual') : undefined,
+                    lead_type: (isPartnerCreator ? 'PARTNER_REFERRAL' : lead_type) || null,
                     referral_partner_id: resolvedPartnerId,
                     referral_partner_name: referral_partner_name || null,
                     referral_partner_phone: referralPartnerPhoneStored,
-                    created_by: req.agent?.id ?? null,
+                    // created_by is an Agent FK — never a PartnerAgent id (partner leads use the coordinator).
+                    created_by: isPartnerCreator ? (resolvedAgentId ?? null) : (req.agent?.id ?? null),
                     owning_manager_id: owningManagerId,
                     ...demandWrite,
                 },
+                update: attachData,
             });
 
         // Notify buyer immediately (fire-and-forget) — skip if temp phone (partner referral without contact)
@@ -1046,7 +1219,7 @@ router.post('/', async (req: any, res) => {
                     lead_status: isPartnerReferral ? 'warm' : 'cold',
                     lifecycle_stage: 'NEW',
                     assigned_agent_id: resolvedAgentId,
-                    created_by: req.agent.id,
+                    created_by: isPartnerCreator ? (resolvedAgentId as any) : req.agent.id,
                     lead_type: lead_type || null,
                     referral_partner_id: resolvedPartnerId || null,
                     referral_partner_name: referral_partner_name || null,
@@ -1126,8 +1299,21 @@ router.get('/:phone/score', async (req, res) => {
 // Frees the team from having to spin up a fake deal just to mark a lead dead.
 router.patch('/:phone/mark-lost', async (req, res) => {
     try {
+        if (!(await partnerOwnsLeadOr403(req as any, res, decodeURIComponent(req.params.phone)))) return;
         const phone = await resolvePhone(req.params.phone);
         const { reason, note } = req.body as { reason?: string; note?: string };
+
+        // Mandatory structured reason (dashboard spec). Keep in sync with the
+        // frontend constant src/constants/lostReasons.ts. Persisted to
+        // contacts.lost_reason so it feeds the Lost-Reasons analytics.
+        const LOST_REASONS = [
+            'Budget Issue', 'Location Issue', 'Property Mismatch', 'Not Interested',
+            'Purchased Elsewhere', 'No Response', 'Wrong Number', 'Duplicate Lead',
+            'Competitor Chosen', 'Other',
+        ];
+        if (!reason || !LOST_REASONS.includes(reason)) {
+            return res.status(400).json({ error: 'A valid lost reason is required.' });
+        }
 
         const contact = await prisma.contact.findUnique({
             where: { phone_number: phone },
@@ -1167,6 +1353,8 @@ router.patch('/:phone/mark-lost', async (req, res) => {
             data: {
                 lead_status: 'lost',
                 lifecycle_stage: 'CLOSED_LOST',
+                lost_reason: reason,
+                lost_at: new Date(),
                 next_action_at: null,
                 next_action_type: null,
             },
@@ -1204,6 +1392,63 @@ router.patch('/:phone/mark-lost', async (req, res) => {
     }
 });
 
+// PATCH /api/leads/:phone/delay-reason
+// 2026-06-15: structured "why is this active lead stuck" capture. Persists
+// stagnation_reason + stagnation_set_at (Phase 3b columns). Non-destructive —
+// does NOT change lead_status/lifecycle. Feeds the Delay-Reasons analytics.
+router.patch('/:phone/delay-reason', async (req, res) => {
+    try {
+        if (!(await partnerOwnsLeadOr403(req as any, res, decodeURIComponent(req.params.phone)))) return;
+        const phone = await resolvePhone(req.params.phone);
+        const { reason, note } = req.body as { reason?: string; note?: string };
+
+        // Keep in sync with the frontend constant src/constants/delayReasons.ts.
+        const DELAY_REASONS = [
+            'Client Not Responding', 'Waiting For Budget Approval', 'Waiting For Family Decision',
+            'Property Not Available', 'Site Visit Pending', 'Loan Approval Pending',
+            'Documentation Pending', 'Future Purchase Plan', 'Negotiation Ongoing', 'Other',
+        ];
+        if (!reason || !DELAY_REASONS.includes(reason)) {
+            return res.status(400).json({ error: 'A valid delay reason is required.' });
+        }
+
+        const contact = await prisma.contact.findUnique({
+            where: { phone_number: phone },
+            select: { phone_number: true },
+        });
+        if (!contact) return res.status(404).json({ error: 'Contact not found' });
+
+        const updated = await prisma.contact.update({
+            where: { phone_number: phone },
+            data: { stagnation_reason: reason, stagnation_set_at: new Date() },
+            select: { phone_number: true, name: true, stagnation_reason: true, stagnation_set_at: true },
+        });
+
+        // Timeline entry (unchecked scalar form, incl. required tenant_id — keeps tsc clean).
+        await prisma.interaction.create({
+            data: {
+                tenant_id: req.agent!.tenant_id,
+                phone_number: phone,
+                channel: 'admin',
+                direction: 'outbound',
+                event_type: 'delay_reason_set',
+                content: `Delay reason set — ${reason}${note ? ` — note: ${note}` : ''}`,
+                metadata: {
+                    reason,
+                    note: note ?? null,
+                    performed_by_agent_id: req.agent!.id,
+                    performed_by_name: req.agent!.email,
+                },
+            },
+        }).catch(() => undefined); // non-fatal
+
+        res.json({ success: true, contact: updated });
+    } catch (error) {
+        captureRouteError(error, req, { route: 'leads#delay-reason' });
+        res.status(500).json({ error: (error as Error).message });
+    }
+});
+
 // POST /api/leads/:phone/no-show
 router.post('/:phone/no-show', async (req, res) => {
     try {
@@ -1232,6 +1477,7 @@ router.post('/:phone/no-show', async (req, res) => {
 // Full lead detail: contact + score + recent interactions
 router.get('/:phone', async (req, res) => {
     try {
+        if (!(await partnerOwnsLeadOr403(req as any, res, decodeURIComponent(req.params.phone)))) return;
         const phone = await resolvePhone(req.params.phone);
         const [contact, interactions] = await Promise.all([
             prisma.contact.findUnique({
@@ -1259,8 +1505,57 @@ router.get('/:phone', async (req, res) => {
 
 // POST /api/leads/:phone/match
 // Run MatchingEngine for a lead — uses Haversine if lat/lng available
+/**
+ * POST /api/leads/:phone/partner-assign  { partner_agent_id: string | null }
+ * PARTNER TEAMS (2026-07-13): a partner COMPANY OWNER assigns one of THEIR OWN leads to one of THEIR
+ * OWN sub-agents (or to themselves, or unassigns with null).
+ *
+ * Writes ONLY `partner_assignee_id` — `referral_partner_id` (who BROUGHT the lead, and therefore who the
+ * commission belongs to) is never touched.
+ *
+ * CASCADE: `ensureDealForLead` auto-creates a deal per lead with the handler fields unset, so without this
+ * the sub-agent would see the LEAD but not its DEAL. We mirror the assignee onto the lead's OPEN deals in
+ * the same transaction. (partnerDealOr also matches via demand_contact.partner_assignee_id, so this is
+ * belt-and-braces — it keeps the Deal screen's "Assigned to" column truthful.)
+ */
+router.post('/:phone/partner-assign', async (req: any, res) => {
+    try {
+        const phone = await resolvePhone(req.params.phone as string);
+        // 1) the row must be theirs (this also 403s non-partners' access to the partner flow)
+        if (!(await partnerOwnsLeadOr403(req, res, phone))) return;
+        // 2) the caller must be an ACTIVE COMPANY OWNER and the target one of their ACTIVE sub-agents
+        const { assertPartnerOwnerCanAssign } = await import('../utils/partner_team');
+        const check = await assertPartnerOwnerCanAssign(req, res, req.body?.partner_agent_id ?? null);
+        if (!check.ok) return;
+        const assigneeId = check.assigneeId;
+
+        const [contact] = await prisma.$transaction([
+            prisma.contact.update({
+                where: { phone_number: phone },
+                data: { partner_assignee_id: assigneeId },
+                select: { phone_number: true, partner_assignee_id: true, referral_partner_id: true },
+            }),
+            prisma.transaction.updateMany({
+                where: {
+                    demand_contact_id: phone,
+                    status: { notIn: ['CLOSED_WON', 'CLOSED_LOST'] },
+                },
+                data: { partner_assignee_id: assigneeId },
+            }),
+        ]);
+
+        logger.info(`[PartnerAssign] lead ${phone} -> ${assigneeId ?? 'unassigned'} by partner ${req.agent.id}`);
+        res.json({ success: true, phone_number: contact.phone_number, partner_assignee_id: contact.partner_assignee_id });
+    } catch (error: any) {
+        captureRouteError(error, req, { route: 'leads#partner-assign' });
+        logger.error('[PartnerAssign] lead error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
 router.post('/:phone/match', async (req, res) => {
     try {
+        if (!(await partnerOwnsLeadOr403(req as any, res, decodeURIComponent(req.params.phone)))) return;
         const phone = await resolvePhone(req.params.phone);
         const contact = await prisma.contact.findUnique({ where: { phone_number: phone } });
 
@@ -1337,7 +1632,8 @@ router.patch('/:phone/assign', async (req, res) => {
 
         const contact = await prisma.contact.update({
             where: { phone_number: phone },
-            data: { assigned_agent_id: agent_id || null },
+            // Phase 5C — 'manual' when assigning; clear the method when unassigning.
+            data: { assigned_agent_id: agent_id || null, assignment_method: agent_id ? 'manual' : null },
             select: { phone_number: true, assigned_agent_id: true, name: true },
         });
 
@@ -1400,6 +1696,7 @@ router.get('/:phone/session', async (req, res) => {
 // rename from the panel self-heals everywhere. See contact_identity.syncContactName.
 router.patch('/:phone', checkPermission('edit_contact'), async (req, res) => {
     try {
+        if (!(await partnerOwnsLeadOr403(req as any, res, decodeURIComponent(req.params.phone)))) return;
         const phone = await resolvePhone(req.params.phone as string);
         const { name, email } = req.body || {};
         if (name === undefined && email === undefined) {
@@ -1437,6 +1734,7 @@ router.patch('/:phone', checkPermission('edit_contact'), async (req, res) => {
 // Update buyer requirements including geo location and classification IDs
 router.patch('/:phone/requirements', async (req, res) => {
     try {
+        if (!(await partnerOwnsLeadOr403(req as any, res, decodeURIComponent(req.params.phone)))) return;
         const phone = await resolvePhone(req.params.phone);
         const {
             budget_min, budget_max, demand_bhk,

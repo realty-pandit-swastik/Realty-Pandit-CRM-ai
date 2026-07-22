@@ -84,6 +84,33 @@ export class CommissionService {
             `[Commission] entry recorded txn=${transactionId} party=${input.partyType} ` +
             `amount=${amount.toFixed(2)} by=${input.enteredBy}`,
         );
+
+        // Partner-portal in-app notification (bell) when a partner is the payee. (2026-07-12)
+        if (input.partyType === 'PARTNER_AGENT' && input.partnerAgentId) {
+            import('./partner_inapp_notify').then(({ notifyPartnerInApp }) =>
+                notifyPartnerInApp(input.partnerAgentId!, {
+                    event: 'commission_earned', category: 'deal',
+                    title: 'Commission earned 🎉',
+                    body: `You earned ₹${amount.toFixed(0)} commission on a closed deal.`,
+                    data: { transaction_id: transactionId, amount: amount.toNumber() },
+                }),
+            ).catch(() => { /* fire-and-forget */ });
+        }
+
+        // (NEG-2, 2026-06-22) Mirror the running commission total into the legacy
+        // Transaction.commission_amount that every revenue report reads (reports.ts / analytics.ts /
+        // panditji_daily_briefing / internal_tools all SUM this scalar). Without this, commissions in
+        // the DealCommissionEntry ledger never surface in any report. Best-effort.
+        try {
+            const { total } = await this.summarize(transactionId);
+            await prisma.transaction.update({
+                where: { id: transactionId },
+                data: { commission_amount: total.toNumber() },
+            });
+        } catch (mirrorErr) {
+            logger.warn(`[Commission] mirror to Transaction.commission_amount failed for ${transactionId}: ${(mirrorErr as Error).message}`);
+        }
+
         return entry as CommissionEntry;
     }
 

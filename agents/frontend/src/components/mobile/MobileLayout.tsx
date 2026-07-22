@@ -23,6 +23,7 @@ const NAV_SECTIONS: { label: string; items: { id: string; label: string; icon: s
     {
         label: 'Leads & Deals',
         items: [
+            { id: 'contacts', label: 'Contacts', icon: '📇', permission: null },
             { id: 'leads', label: 'Ext. Leads', icon: '📥', permission: null },
             { id: 'buyer-chat', label: 'Buyer Lead', icon: '🔍', permission: null },
             { id: 'deals', label: 'Deal Pipeline', icon: '🎯', permission: null },
@@ -39,7 +40,7 @@ const NAV_SECTIONS: { label: string; items: { id: string; label: string; icon: s
     {
         label: 'Communication',
         items: [
-            { id: 'chats', label: 'Chats', icon: '💬', permission: null },
+            // Standalone Chats removed (2026-06-19) — chat now lives inside each lead/deal.
             { id: 'emails', label: 'Emails', icon: '📧', permission: null },
             { id: 'calls', label: 'Call Log', icon: '📞', permission: null },
         ],
@@ -81,13 +82,26 @@ export function MobileLayout({ activeView, onViewChange, children }: MobileLayou
     const { theme, toggleTheme } = useTheme();
     const [drawerOpen, setDrawerOpen] = useState(false);
 
-    const tabs = [
-        { id: 'dashboard', label: 'Home', icon: '🏡' },
-        { id: 'deals', label: 'Pipeline', icon: '🎯' },
-        { id: 'leads', label: 'Leads', icon: '📥' },
-        { id: 'chats', label: 'Chats', icon: '💬' },
-        { id: '_menu', label: 'Menu', icon: '☰' },
-    ];
+    // Bottom nav (2026-06-19 redesign): left = Leads + Pipeline, centre = Dashboard,
+    // right = Inventory + Visits. The ☰ menu lives in the top bar. Chats removed (it
+    // now lives inside each lead/deal).
+    // PARTNER-SCOPED (2026-07-12): the bottom bar is NOT permission-gated, so an external partner
+    // must get an explicitly restricted set — Inventory / their Leads / their Deals only.
+    const isPartner = agent?.role === 'partner';
+    const tabs = isPartner
+        ? [
+            { id: 'inventory', label: 'Inventory', icon: '🏠' },
+            { id: 'leads', label: 'My Leads', icon: '📥' },
+            { id: 'deals', label: 'My Deals', icon: '🎯' },
+            { id: 'my-profile', label: 'Profile', icon: '👤' },
+        ]
+        : [
+            { id: 'leads', label: 'Leads', icon: '📥' },
+            { id: 'deals', label: 'Pipeline', icon: '🎯' },
+            { id: 'dashboard', label: 'Home', icon: '🏡' },
+            { id: 'inventory', label: 'Inventory', icon: '🏠' },
+            { id: 'calendar', label: 'Visits', icon: '📅' },
+        ];
 
     const displayTitle = ALL_NAV_ITEMS.find(t => t.id === activeView)?.label
         || tabs.find(t => t.id === activeView)?.label
@@ -199,7 +213,9 @@ export function MobileLayout({ activeView, onViewChange, children }: MobileLayou
                         <nav style={{ flex: 1, padding: '8px 8px', overflowY: 'auto', minHeight: 0, WebkitOverflowScrolling: 'touch' }}>
                             {NAV_SECTIONS.map(section => {
                                 const sectionItems = section.items.filter(
-                                    item => item.permission === null || hasPermission(item.permission)
+                                    item => isPartner
+                                        ? ['inventory', 'leads', 'deals', 'my-profile'].includes(item.id)
+                                        : (item.permission === null || hasPermission(item.permission))
                                 );
                                 if (sectionItems.length === 0) return null;
                                 return (

@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { getPartners, verifyPartner, updatePartnerStatus, updatePartnerPackage, createPartner } from '../api/client';
+import { getPartners, verifyPartner, updatePartnerStatus, updatePartnerPackage, updatePartnerCategory, createPartner } from '../api/client';
 import { loadGoogleMaps } from '../lib/loadGoogleMaps';
 import { useAuth } from '../contexts/AuthContext';
 import { useIsMobile } from '../hooks/useIsMobile';
@@ -141,6 +141,25 @@ export function PartnerManagement() {
             await loadPartners();
         } catch {
             showToast('Failed to update plan', 'error');
+        }
+    };
+
+    // COMPANY partners get the "My Team" screen and can build their own team of sub-agents.
+    // Self-registered partners always land INDIVIDUAL — promoting them is OUR decision, made here.
+    const handleCategoryChange = async (id: string, name: string, category: string) => {
+        const ok = await confirm(
+            category === 'COMPANY'
+                ? `Make ${name} a Company? They'll be able to add their own team members and assign their leads, deals and listings to them.`
+                : `Make ${name} an Individual? They'll lose the My Team screen.`
+        );
+        if (!ok) return;
+        try {
+            await updatePartnerCategory(id, category as 'INDIVIDUAL' | 'COMPANY');
+            showToast(category === 'COMPANY' ? `${name} can now build a team.` : `${name} is now an individual.`, 'success');
+            await loadPartners();
+        } catch (err: any) {
+            // e.g. "still has N team member(s)" or "is a team member of another partner"
+            showToast(err.response?.data?.error || 'Failed to update partner type', 'error');
         }
     };
 
@@ -321,6 +340,13 @@ export function PartnerManagement() {
                                     <option value="FREE">Free</option>
                                     <option value="PRO">Pro</option>
                                     <option value="ADVANCE_PRO">Advance Pro</option>
+                                </select>
+                                {/* Company partners get "My Team" and can assign their own leads/deals/listings to their own agents. */}
+                                <select value={p.partner_category} onChange={e => handleCategoryChange(p.id, p.name, e.target.value)}
+                                    title="Company partners can build their own team"
+                                    style={{ fontSize: '12px', padding: '6px 8px', borderRadius: '6px', border: '1px solid var(--border-secondary)', backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)', cursor: 'pointer' }}>
+                                    <option value="INDIVIDUAL">Individual</option>
+                                    <option value="COMPANY">Company (can build a team)</option>
                                 </select>
                                 {!p.verified && (
                                     <button onClick={() => handleVerify(p.id)} style={{ ...btnStyle, backgroundColor: '#22c55e', padding: '6px 12px' }}>Verify</button>

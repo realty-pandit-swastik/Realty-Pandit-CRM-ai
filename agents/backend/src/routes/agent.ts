@@ -60,6 +60,26 @@ async function checkAgentOtpRate(phone: string): Promise<{ allowed: boolean; rem
 
 const router = Router();
 const JWT_SECRET = process.env.AGENT_JWT_SECRET!;
+// 2026-07-12: partners now log into the SAME admin app. Their session token is signed with the
+// ADMIN secret + role:'partner' so admin `authMiddleware` recognizes it (the admin app's /auth/me
+// then returns a partner-scoped identity). The default-deny guard locks partners to the allow-list.
+const ADMIN_JWT_SECRET = process.env.JWT_SECRET!;
+async function signPartnerAdminSession(agent: { id: string; email?: string | null; phone_number: string; partner_category?: string | null; parent_partner_id?: string | null }): Promise<string> {
+    const tenant = await prisma.tenant.findFirst({ select: { id: true } });
+    return jwt.sign(
+        {
+            id: agent.id,
+            email: agent.email || '',
+            role: 'partner',
+            tenant_id: tenant?.id,
+            phone: agent.phone_number,
+            partner_category: agent.partner_category,
+            parent_partner_id: agent.parent_partner_id,
+        },
+        ADMIN_JWT_SECRET,
+        { expiresIn: '7d' },
+    );
+}
 
 // Middleware for Agent Auth
 // Accepts the JWT from EITHER the Authorization: Bearer <token> header OR the
@@ -158,15 +178,17 @@ router.post('/verify-otp', validate(agentVerifyOtpSchema), async (req, res) => {
             return res.status(404).json({ error: 'No partner account found. Please contact your coordinator.' });
         }
 
+        // SECURITY (2026-07-12): OTP verify had NO status check — a SUSPENDED/EXPIRED partner could log in.
+        // Now that a partner session grants access to the admin app, only ACTIVE partners may sign in
+        // (matches the /agent/login-password guard).
+        if (agent.status !== 'ACTIVE') {
+            logger.warn(`[AgentAuth] Blocked OTP sign-in for non-ACTIVE partner ${agent.id} (status=${agent.status})`);
+            return res.status(403).json({ error: 'Your partner account is not active. Please contact your coordinator.' });
+        }
+
         const hasPassword = !!agent.password_hash;
 
-        const token = jwt.sign({
-            id: agent.id,
-            phone: agent.phone_number,
-            partner_category: agent.partner_category,
-            parent_partner_id: agent.parent_partner_id
-        }, JWT_SECRET, { expiresIn: '7d' });
-
+        const token = await signPartnerAdminSession(agent);
         setAuthCookies(res, token);
 
         res.json({
@@ -282,13 +304,7 @@ router.post('/login-password', async (req, res) => {
             return res.status(403).json({ error: 'Account is not active. Contact your coordinator.' });
         }
 
-        const token = jwt.sign({
-            id: agent.id,
-            phone: agent.phone_number,
-            partner_category: agent.partner_category,
-            parent_partner_id: agent.parent_partner_id
-        }, JWT_SECRET, { expiresIn: '7d' });
-
+        const token = await signPartnerAdminSession(agent);
         setAuthCookies(res, token);
 
         res.json({
@@ -461,6 +477,82 @@ router.get('/dashboard', authenticateAgent, async (req: any, res) => {
         totalEnquiries: visits,
         visitsScheduled: visits,
     });
+});
+
+// 4b. Commissions (List) — the partner's OWN commission entries (payee = them or a sub-agent).
+// Phase 1 partner portal (2026-07-11). Scoped by partner_agent_id → a partner can only ever see
+// their own earnings. DealCommissionEntry has no paid/pending status, so we report total earned + list.
+router.get('/commissions', authenticateAgent, async (req: any, res) => {
+    try {
+        const agentId = req.agentId;
+        const subAgents = await prisma.partnerAgent.findMany({
+            where: { parent_partner_id: agentId }, select: { id: true },
+        });
+        const ids = [agentId, ...subAgents.map((s: { id: string }) => s.id)];
+
+        const entries = await prisma.dealCommissionEntry.findMany({
+            where: { party_type: 'PARTNER_AGENT', partner_agent_id: { in: ids } },
+            orderBy: { entered_at: 'desc' },
+            select: {
+                id: true, amount: true, currency: true, notes: true, entered_at: true,
+                transaction: { select: { id: true, status: true, demand_location: true } },
+            },
+        });
+
+        const total = entries.reduce((s: number, e: any) => s + Number(e.amount), 0);
+        res.json({
+            total_earned: total,
+            currency: entries[0]?.currency || 'INR',
+            count: entries.length,
+            entries: entries.map((e: any) => ({
+                id: e.id,
+                amount: Number(e.amount),
+                currency: e.currency,
+                notes: e.notes,
+                earned_at: e.entered_at,
+                deal_id: e.transaction?.id || null,
+                deal_status: e.transaction?.status || null,
+                location: e.transaction?.demand_location || null,
+            })),
+        });
+    } catch (error: any) {
+        captureRouteError(error, req, { route: 'agent#commissions' });
+        logger.error('[AgentCommissions] Error:', error);
+        res.status(500).json({ error: 'Failed to fetch commissions' });
+    }
+});
+
+// 4c. Notifications (bell) — partner-scoped in-app notifications. (2026-07-12)
+router.get('/notifications', authenticateAgent, async (req: any, res) => {
+    try {
+        const agentId = req.agentId;
+        const items = await prisma.notification.findMany({
+            where: { recipient_type: 'partner', recipient_id: agentId },
+            orderBy: { created_at: 'desc' },
+            take: 50,
+            select: { id: true, event: true, category: true, title: true, body: true, action_url: true, read: true, created_at: true },
+        });
+        res.json({ notifications: items, unread: items.filter((n: { read: boolean }) => !n.read).length });
+    } catch (err: any) {
+        captureRouteError(err, req, { route: 'agent#notifications' });
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// POST /agent/notifications/read — mark one (by id) or all as read.
+router.post('/notifications/read', authenticateAgent, async (req: any, res) => {
+    try {
+        const agentId = req.agentId;
+        const id = req.body?.id;
+        await prisma.notification.updateMany({
+            where: { recipient_type: 'partner', recipient_id: agentId, ...(id ? { id: String(id) } : {}) },
+            data: { read: true },
+        });
+        res.json({ success: true });
+    } catch (err: any) {
+        captureRouteError(err, req, { route: 'agent#notifications-read' });
+        res.status(500).json({ error: err.message });
+    }
 });
 
 // 5. Inventory (List)

@@ -26,7 +26,23 @@ const prisma = basePrisma.$extends({
                 if (data && data.assigned_agent_id === undefined && data.uploaded_by_agent_id) {
                     data.assigned_agent_id = data.uploaded_by_agent_id;
                 }
-                return query(args);
+                // 2026-07-10: internal skip-flag (clone/duplicate) — strip BEFORE Prisma sees it.
+                const skipTeamBroadcast = !!(data && data.__no_team_broadcast);
+                if (data) delete data.__no_team_broadcast;
+                const created: any = await query(args);
+                // Central "new inventory → notify EVERY staff member" hook. Fires for ALL create
+                // paths (wizard, CSV/bulk import, public, AI sales agent, direct API, any future
+                // path) so the trigger can never be forgotten per-route again. Idempotent +
+                // active-only + excludes the uploader inside broadcastNewInventoryToTeam.
+                // Fire-and-forget — never blocks the write. (pending→active transitions are still
+                // handled by the explicit calls in routes/inventory.ts PATCH + approve.)
+                if (created && created.status === 'active' && !skipTeamBroadcast) {
+                    try {
+                        const { broadcastNewInventoryToTeam } = await import('./services/team_inventory_broadcast');
+                        broadcastNewInventoryToTeam(created.id).catch(() => {});
+                    } catch { /* ignore — never block the create */ }
+                }
+                return created;
             },
         },
         contact: {
@@ -38,7 +54,10 @@ const prisma = basePrisma.$extends({
                         const { shouldAutoAssignToSunny, resolveSunnyAgentId } = await import('./services/new_lead_alerts');
                         if (shouldAutoAssignToSunny(data.source)) {
                             const sunnyId = await resolveSunnyAgentId(basePrisma);
-                            if (sunnyId) data.assigned_agent_id = sunnyId;
+                            // Fixed super_boss default for organic WhatsApp/voice contacts. Phase 5C:
+                            // record the routing method inline (this is the $extends itself, so it
+                            // cannot call the assignContact helper).
+                            if (sunnyId) { data.assigned_agent_id = sunnyId; data.assignment_method = 'other'; }
                         }
                     } catch { /* ignore — don't block the create */ }
                 }

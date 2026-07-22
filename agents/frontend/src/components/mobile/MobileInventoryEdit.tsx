@@ -95,6 +95,7 @@ export function MobileInventoryEdit({ item, onSaved, onCancel: _onCancel }: Mobi
         taxonomy_node_id: item.taxonomy_node_id || '',
         intent: item.intent || 'sell',
         status: item.status || 'active',
+        roof_rights: item.roof_rights || false, // roof-rights flag (2026-06-28)
         // specs.* is SOLE SoT (Phase 3 dedup, 2026-05-28) — column fallbacks dropped.
         // Note: furnishing/property_age/facing live in editSchemaValues now (Phase 2);
         // kept in `data` here only for back-compat with any code that reads `data.*`.
@@ -105,6 +106,8 @@ export function MobileInventoryEdit({ item, onSaved, onCancel: _onCancel }: Mobi
         area_unit: specs.area_unit || 'sqft',
         flat_no: item.flat_no || '',
         floor_number: item.floor_number ?? '',
+        floor_label: item.floor_label ?? '',
+        display_floor: item.display_floor ?? '',
         total_floors: item.total_floors ?? '',
         plot_no: item.plot_no || '',
         apartment_name: item.apartment_name || '',
@@ -447,6 +450,22 @@ export function MobileInventoryEdit({ item, onSaved, onCancel: _onCancel }: Mobi
                                 <option value="active">Active</option><option value="inactive">Inactive</option><option value="sold">Sold</option><option value="rented">Rented</option><option value="withdrawn">Withdrawn</option>
                             </select>
                         </div>
+                        {/* Roof rights toggle (2026-06-28) — rides data.roof_rights → PATCH */}
+                        <div style={{ gridColumn: 'span 2' }}>
+                            <label style={labelStyle}>Roof Rights</label>
+                            <button type="button" onClick={() => set('roof_rights', !data.roof_rights)}
+                                style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 12px', borderRadius: '8px', cursor: 'pointer', width: '100%', textAlign: 'left',
+                                    border: data.roof_rights ? '1.5px solid #f59e0b' : '1px solid var(--border-secondary)',
+                                    backgroundColor: data.roof_rights ? 'rgba(245,158,11,0.08)' : 'var(--bg-secondary)' }}>
+                                <div style={{ width: '20px', height: '20px', borderRadius: '4px', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                    border: data.roof_rights ? '2px solid #f59e0b' : '2px solid var(--border-secondary)', backgroundColor: data.roof_rights ? '#f59e0b' : 'transparent' }}>
+                                    {data.roof_rights && <span style={{ color: '#fff', fontSize: '12px', lineHeight: 1 }}>✓</span>}
+                                </div>
+                                <span style={{ fontSize: '13px', fontWeight: 600, color: data.roof_rights ? '#f59e0b' : 'var(--text-secondary)' }}>
+                                    {data.roof_rights ? 'Roof rights included ✓' : 'Mark roof rights'}
+                                </span>
+                            </button>
+                        </div>
                         {/* Furnishing / Age / Facing inputs removed Phase 2 dedup (2026-05-28) —
                             rendered by the taxonomy-driven by-type panel inside the Specs section below. */}
                     </div>
@@ -521,6 +540,8 @@ export function MobileInventoryEdit({ item, onSaved, onCancel: _onCancel }: Mobi
                                 apartment_name: data.apartment_name || '',
                                 flat_no: data.flat_no || '',
                                 floor_number: data.floor_number ?? '',
+                                floor_label: data.floor_label ?? '',
+                                display_floor: data.display_floor ?? '',
                                 total_floors: data.total_floors ?? '',
                                 plot_no: data.plot_no || '',
                                 latitude: ((data as any).latitude == null || (data as any).latitude === '') ? undefined : Number((data as any).latitude),

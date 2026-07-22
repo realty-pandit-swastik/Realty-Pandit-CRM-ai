@@ -129,7 +129,13 @@ export function LoginPage() {
     const [cardExiting, setCardExiting] = useState(false);
 
     // Forgot password states
-    const [mode, setMode] = useState<'login' | 'forgot'>('login');
+    const [mode, setMode] = useState<'login' | 'forgot' | 'partner'>('login');
+    // Partner-agent sign-in (2026-07-12): partners have no admin password — they authenticate by
+    // WhatsApp OTP against their PartnerAgent record, which issues a role:'partner' session cookie.
+    const [partnerStep, setPartnerStep] = useState<'phone' | 'otp'>('phone');
+    // Partners can sign in three ways: WhatsApp OTP, password (if they've set one), or Google.
+    const [partnerAuthMode, setPartnerAuthMode] = useState<'otp' | 'password'>('otp');
+    const [partnerPassword, setPartnerPassword] = useState('');
     const [forgotStep, setForgotStep] = useState<'phone' | 'otp' | 'done'>('phone');
     const [phone, setPhone] = useState('');
     const [otp, setOtp] = useState('');
@@ -254,6 +260,34 @@ export function LoginPage() {
         }
     };
 
+    // Partner sign-in: phone → WhatsApp OTP → verify. verify-otp sets the HttpOnly session cookie
+    // (role:'partner'), so a reload lets AuthContext's /auth/me load the partner identity.
+    const handlePartnerSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setError('');
+        setLoading(true);
+        try {
+            if (partnerAuthMode === 'password') {
+                await axios.post(`${API_BASE_URL}/agent/login-password`, { phone, password: partnerPassword }, { withCredentials: true });
+                window.location.reload();
+                return;
+            }
+            if (partnerStep === 'phone') {
+                await axios.post(`${API_BASE_URL}/agent/login-otp`, { phone }, { withCredentials: true });
+                setPartnerStep('otp');
+                setSuccessMessage('OTP sent to your WhatsApp.');
+            } else {
+                await axios.post(`${API_BASE_URL}/agent/verify-otp`, { phone, otp }, { withCredentials: true });
+                window.location.reload();
+                return;
+            }
+        } catch (err: any) {
+            setError(err.response?.data?.error || 'Sign-in failed. Please try again.');
+        } finally {
+            setLoading(false);
+        }
+    };
+
     // Show the skyline transition overlay
     if (showTransition) {
         return <SkylineOverlay onDone={() => {}} />;
@@ -329,7 +363,7 @@ export function LoginPage() {
                     <p className="login-subtitle" style={{
                         color: '#64748b', margin: 0, fontSize: '14px',
                     }}>
-                        {mode === 'forgot' ? 'Reset Your Password' : 'Management Dashboard'}
+                        {mode === 'forgot' ? 'Reset Your Password' : mode === 'partner' ? 'Partner Agent Sign-in' : 'Management Dashboard'}
                     </p>
                 </div>
 
@@ -392,7 +426,17 @@ export function LoginPage() {
                             />
                         </div>
 
-                        <div className="login-form-field-3" style={{ textAlign: 'right', marginBottom: '20px' }}>
+                        <div className="login-form-field-3" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px' }}>
+                            <button
+                                type="button"
+                                onClick={() => { setMode('partner'); setError(''); setSuccessMessage(''); setPartnerStep('phone'); setOtp(''); }}
+                                style={{
+                                    background: 'none', border: 'none', color: '#94a3b8',
+                                    cursor: 'pointer', fontSize: '13px', padding: 0, fontWeight: 500,
+                                }}
+                            >
+                                Partner agent? Sign in with OTP
+                            </button>
                             <button
                                 type="button"
                                 onClick={() => { setMode('forgot'); setError(''); setSuccessMessage(''); setForgotStep('phone'); }}
@@ -453,6 +497,110 @@ export function LoginPage() {
                         </button>
                         <p style={{ color: '#64748b', fontSize: '11px', textAlign: 'center', marginTop: '10px', marginBottom: 0 }}>
                             Works only after you've connected Google in your profile.
+                        </p>
+                    </form>
+                )}
+
+                {/* PARTNER AGENT SIGN-IN (WhatsApp OTP) */}
+                {mode === 'partner' && (
+                    <form onSubmit={handlePartnerSubmit}>
+                        {/* Phone is always needed for OTP + password sign-in */}
+                        {(partnerAuthMode === 'password' || partnerStep === 'phone') && (
+                            <div style={{ marginBottom: '16px' }}>
+                                <label style={{ display: 'block', color: '#94a3b8', fontSize: '13px', marginBottom: '6px', fontWeight: 500 }}>
+                                    Your registered WhatsApp number
+                                </label>
+                                <input
+                                    type="tel" inputMode="tel" value={phone} onChange={e => setPhone(e.target.value)}
+                                    placeholder="9876543210" required autoFocus
+                                    style={{
+                                        width: '100%', padding: '12px 14px', borderRadius: '10px', fontSize: '15px',
+                                        border: '1px solid #334155', backgroundColor: '#0f172a', color: '#e2e8f0',
+                                        boxSizing: 'border-box',
+                                    }}
+                                />
+                            </div>
+                        )}
+
+                        {partnerAuthMode === 'password' && (
+                            <div style={{ marginBottom: '16px' }}>
+                                <label style={{ display: 'block', color: '#94a3b8', fontSize: '13px', marginBottom: '6px', fontWeight: 500 }}>
+                                    Password
+                                </label>
+                                <input
+                                    type="password" value={partnerPassword} onChange={e => setPartnerPassword(e.target.value)}
+                                    placeholder="Enter your password" required
+                                    style={{
+                                        width: '100%', padding: '12px 14px', borderRadius: '10px', fontSize: '15px',
+                                        border: '1px solid #334155', backgroundColor: '#0f172a', color: '#e2e8f0',
+                                        boxSizing: 'border-box',
+                                    }}
+                                />
+                            </div>
+                        )}
+
+                        {partnerAuthMode === 'otp' && partnerStep === 'otp' && (
+                            <div style={{ marginBottom: '16px' }}>
+                                <label style={{ display: 'block', color: '#94a3b8', fontSize: '13px', marginBottom: '6px', fontWeight: 500 }}>
+                                    Enter the OTP sent to WhatsApp
+                                </label>
+                                <input
+                                    type="tel" inputMode="numeric" value={otp}
+                                    onChange={e => setOtp(e.target.value.replace(/\D/g, ''))}
+                                    placeholder="••••••" maxLength={6} required autoFocus
+                                    style={{
+                                        width: '100%', padding: '12px 14px', borderRadius: '10px',
+                                        fontSize: '20px', letterSpacing: '6px', textAlign: 'center',
+                                        border: '1px solid #334155', backgroundColor: '#0f172a', color: '#e2e8f0',
+                                        boxSizing: 'border-box',
+                                    }}
+                                />
+                            </div>
+                        )}
+
+                        <button type="submit" disabled={loading} className="login-btn" style={{ width: '100%' }}>
+                            {loading ? 'Please wait…'
+                                : partnerAuthMode === 'password' ? 'Sign in'
+                                    : partnerStep === 'phone' ? 'Send OTP' : 'Verify & Sign in'}
+                        </button>
+
+                        {/* Switch between OTP and password */}
+                        <button
+                            type="button"
+                            onClick={() => {
+                                setPartnerAuthMode(m => (m === 'otp' ? 'password' : 'otp'));
+                                setError(''); setSuccessMessage(''); setOtp(''); setPartnerPassword(''); setPartnerStep('phone');
+                            }}
+                            style={{
+                                background: 'none', border: 'none', color: '#f59e0b', cursor: 'pointer',
+                                fontSize: '13px', padding: '12px 0 0', width: '100%', fontWeight: 500,
+                            }}
+                        >
+                            {partnerAuthMode === 'otp' ? 'Sign in with password instead' : 'Sign in with WhatsApp OTP instead'}
+                        </button>
+
+                        {/* Google — works for partners whose Google email is on their partner record */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', margin: '14px 0' }}>
+                            <div style={{ flex: 1, height: '1px', backgroundColor: '#334155' }} />
+                            <span style={{ color: '#64748b', fontSize: '12px' }}>or</span>
+                            <div style={{ flex: 1, height: '1px', backgroundColor: '#334155' }} />
+                        </div>
+                        <button type="button" onClick={handleGoogleSignIn} className="google-btn" style={{ width: '100%' }}>
+                            Sign in with Google
+                        </button>
+
+                        <button
+                            type="button"
+                            onClick={() => { setMode('login'); setError(''); setSuccessMessage(''); setOtp(''); setPartnerPassword(''); setPartnerStep('phone'); setPartnerAuthMode('otp'); }}
+                            style={{
+                                background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer',
+                                fontSize: '13px', padding: '12px 0 0', width: '100%', fontWeight: 500,
+                            }}
+                        >
+                            ← Back to team login
+                        </button>
+                        <p style={{ color: '#64748b', fontSize: '11px', textAlign: 'center', marginTop: '10px', marginBottom: 0 }}>
+                            Not registered? Contact your Realty Pandit coordinator.
                         </p>
                     </form>
                 )}

@@ -139,6 +139,17 @@ export async function startScheduledWorker(): Promise<void> {
         { name: 'session-keepalive' },
     );
 
+    // 13b. WhatsApp safety-net backstop sweep (every 15 minutes) — 2026-07-13.
+    // A 60-day audit found 146 stale inbound messages (BUYER/TENANT/LANDLORD/UNKNOWN/
+    // PARTNER_AGENT) with zero outbound reply logged, even though the inline safety net
+    // in webhook_processor.ts is meant to guarantee an ack — the inline guard alone isn't
+    // catching everything. This sweep re-checks for anything it missed.
+    await scheduledJobsQueue.upsertJobScheduler(
+        'whatsapp-safety-net-sweep',
+        { every: 900000 }, // 15 min
+        { name: 'whatsapp-safety-net-sweep' },
+    );
+
     // 14. Partner upload nudge (every hour)
     // Partners who registered 23-25h ago with zero inventory get a nudge to upload.
     await scheduledJobsQueue.upsertJobScheduler(
@@ -234,6 +245,20 @@ export async function startScheduledWorker(): Promise<void> {
         { pattern: '0 9 * * *' },
         { name: 'lead-recycler' },
     );
+
+    // Deal-pipeline crons (2026-06-23). These lived ONLY in pipeline_crons.ts (node-cron), which runs
+    // only via the dead BullMQ-down fallback → they never fired in prod (see feedback_legacy_cron_is_dead).
+    // Registered here so they actually run. Patterns are IST-local (this worker fires at the pattern's
+    // IST time, per the lead-recycler TZ note above); 30-min cadences use `every`.
+    // (P-E, 2026-06-23) cold-lead-nudge now has a per-run cap (COLD_NUDGE_CAP=25) so first activation can't
+    // blast all ~255 QUALIFIED customers at once; manager schedule/briefing are internal-only. All live.
+    await scheduledJobsQueue.upsertJobScheduler('pipeline-visit-reminders', { every: 1800000 }, { name: 'pipeline-visit-reminders' });
+    await scheduledJobsQueue.upsertJobScheduler('pipeline-post-visit-followup', { every: 1800000 }, { name: 'pipeline-post-visit-followup' });
+    await scheduledJobsQueue.upsertJobScheduler('pipeline-negotiation-nudge', { pattern: '10 9 * * *' }, { name: 'pipeline-negotiation-nudge' });
+    await scheduledJobsQueue.upsertJobScheduler('pipeline-inactivity-sweep', { pattern: '15 9 * * *' }, { name: 'pipeline-inactivity-sweep' });
+    await scheduledJobsQueue.upsertJobScheduler('pipeline-cold-lead-nudge', { pattern: '20 10 * * *' }, { name: 'pipeline-cold-lead-nudge' });
+    await scheduledJobsQueue.upsertJobScheduler('pipeline-manager-schedule', { pattern: '0 8 * * *' }, { name: 'pipeline-manager-schedule' });
+    await scheduledJobsQueue.upsertJobScheduler('pipeline-manager-briefing', { every: 1800000 }, { name: 'pipeline-manager-briefing' });
 
     logger.info('[ScheduledWorker] All repeatable jobs registered');
 
@@ -378,6 +403,43 @@ async function dispatchJob(job: Job): Promise<void> {
             // their connected Google Calendar/Tasks.
             const { reconcileGoogleSync } = await import('../../services/google_sync');
             await reconcileGoogleSync();
+            break;
+        }
+
+        // ─── Deal-pipeline crons (2026-06-23) — moved here from the dead pipeline_crons.ts node-cron ───
+        case 'pipeline-visit-reminders': {
+            const { runVisitReminders } = await import('../../services/pipeline_crons');
+            await runVisitReminders();
+            break;
+        }
+        case 'pipeline-post-visit-followup': {
+            const { runPostVisitFollowup } = await import('../../services/pipeline_crons');
+            await runPostVisitFollowup();
+            break;
+        }
+        case 'pipeline-negotiation-nudge': {
+            const { runNegotiationNudge } = await import('../../services/pipeline_crons');
+            await runNegotiationNudge();
+            break;
+        }
+        case 'pipeline-inactivity-sweep': {
+            const { runInactivitySweep } = await import('../../services/pipeline_crons');
+            await runInactivitySweep();
+            break;
+        }
+        case 'pipeline-cold-lead-nudge': {
+            const { runColdLeadNudge } = await import('../../services/pipeline_crons');
+            await runColdLeadNudge();
+            break;
+        }
+        case 'pipeline-manager-schedule': {
+            const { runManagerDailySchedule } = await import('../../services/pipeline_crons');
+            await runManagerDailySchedule();
+            break;
+        }
+        case 'pipeline-manager-briefing': {
+            const { runManager24hrBriefing } = await import('../../services/pipeline_crons');
+            await runManager24hrBriefing();
             break;
         }
 
@@ -559,7 +621,7 @@ async function dispatchJob(job: Job): Promise<void> {
 
             await prisma.contact.update({
                 where: { phone_number },
-                data: { assigned_agent_id: superBoss.id },
+                data: { assigned_agent_id: superBoss.id, assignment_method: 'other' }, // Phase 5C — SLA escalation
             });
 
             const originalAgent = await prisma.agent.findUnique({
@@ -624,7 +686,7 @@ async function dispatchJob(job: Job): Promise<void> {
                 await prismaDb.task.update({ where: { id: task_id }, data: { assigned_to: manager.id } });
                 // Update contact assignment too
                 if (contact_phone) {
-                    await prismaDb.contact.update({ where: { phone_number: contact_phone }, data: { assigned_agent_id: manager.id } });
+                    await prismaDb.contact.update({ where: { phone_number: contact_phone }, data: { assigned_agent_id: manager.id, assignment_method: 'other' } }); // Phase 5C — workflow escalation
                 }
                 notify('workflow_escalated', [
                     { id: manager.id, type: 'agent', phone: manager.phone ?? undefined, email: manager.email, name: manager.name },
@@ -701,6 +763,77 @@ async function dispatchJob(job: Job): Promise<void> {
                 }
             }
             logger.info(`[SessionKeepAlive] Processed ${expiringContacts.length} expiring sessions`);
+            break;
+        }
+
+        case 'whatsapp-safety-net-sweep': {
+            // Backstop for the inline never-silent guard in webhook_processor.ts — a 60-day
+            // audit found 146 stale inbound messages with zero outbound reply despite the
+            // inline guard, so this periodically re-checks for anything it missed.
+            const prisma = (await import('../../db')).default;
+            const { SAFETYNET_COVERED_TYPES, SAFETYNET_SKIP_RE, sendSafetyNetAck } = await import('../../services/webhook_processor');
+
+            const now = new Date();
+            const staleThreshold = new Date(now.getTime() - 15 * 60 * 1000); // 15 min old
+            const lookback = new Date(now.getTime() - 6 * 60 * 60 * 1000);   // bound query cost to last 6h
+
+            const conversationalTypes = [
+                'message', 'workflow_message', 'template_button', 'buyer_workflow_message',
+                'buyer_workflow_start', 'property_card_visit_request', 'property_card_callback_request',
+                'closing_signal', 'frustration_escalation', 'workflow_start',
+            ];
+
+            const staleInbound = await prisma.interaction.findMany({
+                where: {
+                    channel: 'whatsapp', direction: 'inbound',
+                    event_type: { in: conversationalTypes },
+                    created_at: { gte: lookback, lte: staleThreshold },
+                },
+                orderBy: { created_at: 'desc' },
+                select: { phone_number: true, content: true, created_at: true },
+            });
+
+            // Only the most recent stale inbound per phone matters — an ack covers everything before it.
+            const latestByPhone = new Map<string, (typeof staleInbound)[number]>();
+            for (const i of staleInbound) {
+                if (!latestByPhone.has(i.phone_number)) latestByPhone.set(i.phone_number, i);
+            }
+
+            let acked = 0;
+            for (const [phone, msg] of latestByPhone) {
+                const text = msg.content || '';
+                if (!text || SAFETYNET_SKIP_RE.test(text)) continue;
+
+                // 2026-07-13 hotfix: some synchronous reply handlers (e.g. admin_agent's
+                // "Hi" → daily-snapshot reply) log their outbound Interaction a few
+                // milliseconds BEFORE the inbound one finishes writing, in the same
+                // turn — a logging-order race, not a real miss. A strict `gt` here
+                // false-positived on that, sending a confusing duplicate ack to a
+                // contact who'd already gotten a real reply. 15s tolerance absorbs
+                // same-turn write-order jitter without weakening the 15-min staleness
+                // check itself (staleThreshold already requires the inbound to be
+                // >=15 min old before we even get here).
+                const REPLY_RACE_TOLERANCE_MS = 15000;
+                const laterOutbound = await prisma.interaction.findFirst({
+                    where: {
+                        phone_number: phone, direction: 'outbound',
+                        created_at: { gte: new Date(msg.created_at.getTime() - REPLY_RACE_TOLERANCE_MS) },
+                    },
+                    select: { id: true },
+                });
+                if (laterOutbound) continue;
+
+                const contact = await prisma.contact.findUnique({
+                    where: { phone_number: phone },
+                    select: { tenant_id: true, contact_type: true, assigned_agent_id: true, name: true },
+                });
+                if (!contact || !SAFETYNET_COVERED_TYPES.includes(String(contact.contact_type))) continue;
+
+                await sendSafetyNetAck(phone, contact, text).catch((e) =>
+                    logger.warn(`[SafetyNetSweep] ack failed for ${phone}: ${(e as Error).message}`));
+                acked++;
+            }
+            if (acked > 0) logger.warn(`[SafetyNetSweep] Acked ${acked} stale conversation(s) the inline guard missed`);
             break;
         }
 

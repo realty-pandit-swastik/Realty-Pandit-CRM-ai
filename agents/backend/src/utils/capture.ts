@@ -19,6 +19,7 @@
 import type { Request } from 'express';
 import * as SentrySDK from '@sentry/node';
 import logger from './logger';
+import { AppError } from '../middleware/error_handler';
 
 export function captureRouteError(
     err: unknown,
@@ -26,6 +27,22 @@ export function captureRouteError(
     context: Record<string, any> = {},
 ): void {
     const error = err instanceof Error ? err : new Error(String(err));
+
+    // Business-rule rejections (validation/auth/not-found, i.e. 4xx AppError) are
+    // expected user-input outcomes, not server faults. Log them but DON'T push to
+    // GlitchTip — otherwise the digest floods with non-actionable noise (e.g. the
+    // "own number" owner guard → #105/#16, invalid stage transition → #97). Mirrors
+    // captureBackgroundError's benign-skip. (2026-06-25)
+    if (err instanceof AppError && err.statusCode < 500) {
+        logger.warn('Route validation rejection (not captured)', {
+            path: req.path,
+            method: req.method,
+            statusCode: err.statusCode,
+            ...context,
+            error: error.message,
+        });
+        return;
+    }
 
     logger.error('Route error', {
         path: req.path,

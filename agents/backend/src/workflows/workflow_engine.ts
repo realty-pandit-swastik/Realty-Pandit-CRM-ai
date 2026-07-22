@@ -25,6 +25,7 @@ import { WorkflowStep, WorkflowAnswer, ConditionalRule, StepOption, StepResult, 
 import { INDIAN_STATES, ACTIVE_STATES, DISTRICTS_BY_STATE } from '../data/india_geo';
 import { normalizePhone, phoneVariants } from '../utils/phone';
 import { generateDisplayId } from '../utils/inventory_id';
+import { ValidationError } from '../middleware/error_handler';
 
 // Cache validation rules per sub_category_id during a session
 const validationRulesCache = new Map<string, Record<string, any>>();
@@ -440,8 +441,23 @@ export class WorkflowEngine {
         answers: WorkflowAnswer,
         source: 'web' | 'admin' | 'whatsapp' | 'voice',
         agentId?: string,
+        // 2026-07-12: an external PARTNER agent submitting through the admin wizard. A PartnerAgent id is
+        // NOT an Agent id, so it must never land in uploaded_by_agent_id (FK). Instead the listing is
+        // attributed to the partner (referral_partner_id) + their coordinator (owning_manager_id) and is
+        // created pending_approval — the coordinator approves before it goes live.
+        partnerAgentId?: string,
     ): Promise<{ inventory_id: string; display_id: string; completion_pct: number }> {
-        logger.info(`[WorkflowEngine] Committing inventory from ${source}`);
+        logger.info(`[WorkflowEngine] Committing inventory from ${source}${partnerAgentId ? ` (partner ${partnerAgentId})` : ''}`);
+
+        // Resolve the partner's coordinator so the listing routes to them for approval.
+        let partnerManagingAgentId: string | undefined;
+        if (partnerAgentId) {
+            const pa = await prisma.partnerAgent.findUnique({
+                where: { id: partnerAgentId },
+                select: { managing_agent_id: true },
+            });
+            partnerManagingAgentId = pa?.managing_agent_id || undefined;
+        }
 
         // ─── 0. Snapshot raw answers for audit trail (before any override) ───
         const rawUploaderPhone = answers.uploader_phone as string || '';
@@ -452,18 +468,15 @@ export class WorkflowEngine {
         let uploaderName = answers.uploader_name as string || '';
 
         if (source === 'admin' && agentId) {
-            // Admin: source contact was selected in the InventoryModal
-            // Use the contact's phone from workflow answers, NOT the logged-in agent's phone
+            // Admin: the source contact (owner OR partner agent) MUST be entered in the InventoryModal.
+            // (2026-06-20) We NEVER fall back to the logged-in agent's own phone — that legacy default
+            // stamped the team member as the "owner" on 317 listings. And a team member may NOT use
+            // their OWN number as the source: the owner/partner number must be a different person.
             if (answers.uploader_phone) {
                 uploaderPhone = normalizePhone(answers.uploader_phone as string) || '';
             }
-            // Fallback: if no uploader_phone in answers, use agent phone (legacy behavior)
             if (!uploaderPhone) {
-                const agent = await prisma.agent.findUnique({ where: { id: agentId } });
-                if (agent) {
-                    uploaderPhone = normalizePhone(agent.phone) || '';
-                    uploaderName = uploaderName || agent.name;
-                }
+                throw new Error('Enter the property owner or partner agent phone number. The source contact cannot be blank.');
             }
         } else {
             // Website/WhatsApp/Voice: from uploader_phone step
@@ -487,6 +500,17 @@ export class WorkflowEngine {
 
         if (!ownerPhone) {
             throw new Error('Phone number is required');
+        }
+
+        // (2026-06-20) Hard guard on the RESOLVED owner number — no matter which step set it (source
+        // contact OR owner-details override), an ADMIN team member can never list their OWN number as
+        // the owner/partner. This is the root fix for the 317 "agent is the owner" listings.
+        if (source === 'admin' && agentId) {
+            const meOwner = await prisma.agent.findUnique({ where: { id: agentId }, select: { phone: true } });
+            const myOwnerDigits = (normalizePhone(meOwner?.phone || '') || '').replace(/\D/g, '').slice(-10);
+            if (myOwnerDigits && ownerPhone.replace(/\D/g, '').slice(-10) === myOwnerDigits) {
+                throw new ValidationError('You cannot use your own number as the property owner. Enter the actual owner number (or the partner agent number).');
+            }
         }
 
         // Get tenant
@@ -721,8 +745,11 @@ export class WorkflowEngine {
         const addrCity = addrBlock.city || addrBlock.district || answers.district || undefined;
         const addrState = addrBlock.state || answers.state || undefined;
         const addrPincode = addrBlock.pincode || answers.pincode || undefined;
-        const floorNumber = addrBlock.floor_number ? parseInt(addrBlock.floor_number)
-            : (answers.floor_number ? parseInt(answers.floor_number) : undefined);
+        // Floor: keep 0 (Ground) — don't treat it as falsy. floor_label = named display value; display_floor = override.
+        const floorRaw = addrBlock.floor_number ?? answers.floor_number;
+        const floorNumber = (floorRaw !== undefined && floorRaw !== null && floorRaw !== '') ? parseInt(String(floorRaw)) : undefined;
+        const floorLabel = (addrBlock.floor_label ?? answers.floor_label) || undefined;
+        const displayFloor = (addrBlock.display_floor ?? answers.display_floor) || undefined;
 
         const fullAddress = addrBlock.full_address || [
             flatNo, apartmentName, addrSubLocality, addrLocality, addrCity, addrState,
@@ -858,7 +885,9 @@ export class WorkflowEngine {
 
                 // Property Details — only the non-deprecated columns remain here.
                 description: answers.description || undefined,
-                floor_number: floorNumber || undefined,
+                floor_number: (floorNumber !== undefined && !Number.isNaN(floorNumber)) ? floorNumber : undefined,
+                floor_label: floorLabel,
+                display_floor: displayFloor,
 
                 // Structured Address
                 flat_no: flatNo,
@@ -898,17 +927,19 @@ export class WorkflowEngine {
                 uploader_phone: uploaderPhone || undefined,
                 uploader_name: uploaderName || undefined,
 
-                // Agent (uploader and reference)
-                uploaded_by_agent_id: agentId || undefined,
+                // Agent (uploader and reference). NEVER put a PartnerAgent id here — it's an Agent FK.
+                uploaded_by_agent_id: partnerAgentId ? undefined : (agentId || undefined),
                 reference_agent_phone: answers.agent_reference_phone as string | undefined,
                 reference_agent_id: referenceAgentId,
 
-                // Middleman model (2026-04-17) — source partner + owning manager
-                referral_partner_id: resolvedSourcePartnerId,
-                owning_manager_id: owningManagerId,
+                // Middleman model (2026-04-17) — source partner + owning manager.
+                // A partner submitting via the admin wizard is the SOURCE; it routes to their coordinator.
+                referral_partner_id: partnerAgentId || resolvedSourcePartnerId,
+                owning_manager_id: partnerAgentId ? (partnerManagingAgentId ?? owningManagerId) : owningManagerId,
 
-                // Partner uploads via WhatsApp go to pending_approval — coordinator must approve before going live
-                status: source === 'whatsapp' ? 'pending_approval' : 'active',
+                // Partner uploads (WhatsApp OR partner-portal wizard) go to pending_approval —
+                // a coordinator must approve before the listing goes live.
+                status: (partnerAgentId || source === 'whatsapp') ? 'pending_approval' : 'active',
             } as any,
         });
 

@@ -156,6 +156,11 @@ export const updateInventory = async (id: string, data: Record<string, any>) => 
     return res.data;
 };
 
+export const cloneInventory = async (id: string, body: { clear: string[]; copy_media: boolean }) => {
+    const res = await client.post(`/api/inventory/${id}/clone`, body);
+    return res.data as { inventory_id: string; display_id: string | null };
+};
+
 export const deleteInventory = async (id: string) => {
     const res = await client.delete(`/api/inventory/${id}`);
     return res.data;
@@ -168,11 +173,55 @@ export const shareInventory = async (id: string, agent_ids: string[], action: 'a
 
 // Share property to client via WhatsApp + generate link
 export const shareToClient = async (inventoryId: string, data: {
-    client_phone: string;
+    client_phone?: string;   // omit when sharing to a redacted (other-agent) lead…
     client_name?: string;
+    deal_id?: string;        // …and pass deal_id instead — backend resolves the phone server-side
 }) => {
     const res = await client.post(`/api/inventory/${inventoryId}/share-to-client`, data);
     return res.data;
+};
+
+// Find OPEN deals whose demand matches this listing (for the "Match clients" tile button).
+export interface MatchedClient {
+    deal_id: string;
+    contact_phone?: string;       // absent when redacted (lead assigned to another agent, viewer not super_boss)
+    contact_redacted?: boolean;   // true → show name only, no number/call; Share still works via deal_id
+    lead_manager?: string | null; // the agent who manages this lead (shown next to each match)
+    contact_name: string | null;
+    demand_intent: string | null;
+    demand_budget_min: number | null;
+    demand_budget_max: number | null;
+    demand_location: string | null;
+    status: string;
+    score: number;
+    match_reason: string;
+}
+export const getInventoryMatchingClients = async (id: string) => {
+    const res = await client.get(`/api/inventory/${id}/matching-clients`);
+    return res.data as { matches: MatchedClient[]; total_matched: number; inventory_manager?: string | null };
+};
+
+// Unified Contacts directory (Contacts page) — every contact tagged by type, role-scoped.
+export interface DirectoryContact {
+    phone_number: string;
+    name: string | null;
+    email?: string | null;
+    contact_type: string;
+    manager: string | null;
+    last_interaction: string | null;
+    inventory_count: number;
+    demand: { intent: string | null; budget_min: number | null; budget_max: number | null; location: string | null } | null;
+    is_partner: boolean;
+}
+export const getContactsDirectory = async (params?: Record<string, any>) => {
+    const res = await client.get('/api/contacts/directory', { params });
+    return res.data as { data: DirectoryContact[]; total: number; page: number; totalPages: number; type_counts: Record<string, number> };
+};
+
+// Edit a contact's name / phone / email from the Contacts page (cascades to deals + inventory).
+export const updateContactProfile = async (phone: string, data: { name?: string; new_phone?: string; email?: string }) => {
+    const res = await client.patch(`/api/contacts/${encodeURIComponent(phone)}/profile`, data);
+    return res.data as { success: boolean; rekeyed: boolean; new_phone: string };
 };
 
 // Search contact by phone number
@@ -317,6 +366,16 @@ export const markLeadLost = async (phoneNumber: string, reason?: string, note?: 
     };
 };
 
+// 2026-06-15: Set Active-Lead Delay Reason. Persists stagnation_reason + stagnation_set_at.
+// Non-destructive — the lead stays open.
+export const setDelayReason = async (phoneNumber: string, reason: string, note?: string) => {
+    const res = await client.patch(`/api/leads/${phoneNumber}/delay-reason`, { reason, note });
+    return res.data as {
+        success: boolean;
+        contact: { phone_number: string; name: string | null; stagnation_reason: string | null; stagnation_set_at: string | null };
+    };
+};
+
 export const updateContactType = async (phoneNumber: string, contactType: string) => {
     const res = await client.patch(`/api/contacts/${phoneNumber}`, { contact_type: contactType });
     return res.data;
@@ -352,6 +411,12 @@ export const verifyPartner = async (id: string, verify: boolean) => {
 
 export const updatePartnerStatus = async (id: string, status: string) => {
     const res = await client.patch(`/api/partners/${id}/status`, { status });
+    return res.data;
+};
+
+// Promote a partner to COMPANY (gets "My Team") or back to INDIVIDUAL. Team-only endpoint.
+export const updatePartnerCategory = async (id: string, partner_category: 'INDIVIDUAL' | 'COMPANY') => {
+    const res = await client.patch(`/api/partners/${id}/category`, { partner_category });
     return res.data;
 };
 
@@ -650,6 +715,80 @@ export const deleteInventoryDocument = async (inventoryId: string, documentId: s
     return res.data;
 };
 
+// ─── PARTNER TEAMS (2026-07-13) — a partner company manages its OWN sub-agents. ────────────────
+// Owner-only on the server (requirePartnerOwner). The roster returned here holds PartnerAgent ids —
+// NEVER feed it into the internal-team dropdowns (assigned_agent_id etc. are Agent FKs → 500).
+export interface PartnerTeamMember {
+    id: string;
+    name: string;
+    phone_number: string;
+    email: string | null;
+    status: string;
+    created_at: string;
+    assigned_leads: number;
+    assigned_deals: number;
+    assigned_listings: number;
+}
+
+export const getPartnerTeam = async (): Promise<{ members: PartnerTeamMember[] }> => {
+    const res = await client.get('/api/partner/team');
+    return res.data;
+};
+
+export const addPartnerTeamMember = async (payload: { name: string; phone: string; email?: string }) => {
+    const res = await client.post('/api/partner/team', payload);
+    return res.data as PartnerTeamMember;
+};
+
+export const updatePartnerTeamMember = async (
+    subId: string,
+    payload: { status?: 'ACTIVE' | 'SUSPENDED'; name?: string; email?: string },
+) => {
+    const res = await client.patch(`/api/partner/team/${subId}`, payload);
+    return res.data as PartnerTeamMember;
+};
+
+/** Roster for the "Assign to teammate" dropdowns: the owner + their ACTIVE sub-agents. */
+export const getPartnerAssignable = async (): Promise<{ members: Array<{ id: string; name: string; is_owner: boolean }> }> => {
+    const res = await client.get('/api/partner/team/assignable');
+    return res.data;
+};
+
+// Assign one of the partner's OWN rows to one of their OWN sub-agents (null = unassign).
+// These take a PartnerAgent id — NEVER pass one to the internal reassign/transfer endpoints, whose
+// columns are Agent foreign keys.
+export const assignLeadToTeammate = async (phone: string, partner_agent_id: string | null) => {
+    const res = await client.post(`/api/leads/${encodeURIComponent(phone)}/partner-assign`, { partner_agent_id });
+    return res.data;
+};
+export const assignDealToTeammate = async (dealId: string, partner_agent_id: string | null) => {
+    const res = await client.post(`/api/deals/${dealId}/partner-assign`, { partner_agent_id });
+    return res.data;
+};
+export const assignListingToTeammate = async (inventoryId: string, partner_agent_id: string | null) => {
+    const res = await client.post(`/api/inventory/${inventoryId}/partner-assign`, { partner_agent_id });
+    return res.data;
+};
+
+export const renameInventoryDocument = async (inventoryId: string, documentId: string, title: string) => {
+    const res = await client.patch(`/api/inventory/${inventoryId}/documents/${documentId}`, { title });
+    return res.data;
+};
+
+export const shareInventoryDocument = async (
+    inventoryId: string,
+    documentId: string,
+    payload: { contact_phone?: string; email?: string; contact_name?: string; channels?: string[] },
+) => {
+    const res = await client.post(`/api/inventory/${inventoryId}/documents/${documentId}/share`, payload);
+    return res.data as {
+        success: boolean;
+        whatsapp_sent: boolean; whatsapp_error: string | null;
+        email_sent: boolean; email_error: string | null;
+        link: string;
+    };
+};
+
 export const uploadWorkflowMedia = async (files: File[]) => {
     const formData = new FormData();
     files.forEach(f => formData.append('photos', f));
@@ -715,6 +854,43 @@ export const getPropertyTrends = async (params?: { from?: string; to?: string })
 
 export const getFinancialSummary = async (params?: { from?: string; to?: string }) => {
     const res = await client.get('/api/analytics/financial-summary', { params });
+    return res.data;
+};
+
+export const getTeamPerformance = async (params?: { from?: string; to?: string }) => {
+    const res = await client.get('/api/analytics/team-performance', { params });
+    return res.data;
+};
+
+export const getManagementAlerts = async () => {
+    const res = await client.get('/api/analytics/alerts');
+    return res.data;
+};
+
+export const getDistribution = async (params?: { from?: string; to?: string }) => {
+    const res = await client.get('/api/analytics/distribution', { params });
+    return res.data;
+};
+
+export const getSpeedToLead = async (params?: { from?: string; to?: string }) => {
+    const res = await client.get('/api/analytics/speed-to-lead', { params });
+    return res.data;
+};
+
+// Directional weighted-pipeline GCI estimate (Phase 5E) — not a committed forecast; see /gci-forecast.
+export const getGciForecast = async () => {
+    const res = await client.get('/api/analytics/gci-forecast');
+    return res.data;
+};
+
+// Per-manager productivity targets (Phase 5B). Gated server-side on manage_team.
+export const getTeamTargets = async () => {
+    const res = await client.get('/api/team/targets');
+    return res.data;
+};
+
+export const updateTeamTargets = async (targets: { leads: number; appointments: number; inventory: number; conversion_rate: number }) => {
+    const res = await client.put('/api/team/targets', targets);
     return res.data;
 };
 
@@ -987,6 +1163,10 @@ export interface Deal {
         name?: string;
         email?: string;
         contact_type?: string;
+        // Referral partner (the partner agent a lead was added on behalf of) — denormalized on the contact.
+        referral_partner_id?: string | null;
+        referral_partner_name?: string | null;
+        referral_partner_phone?: string | null;
         // Requirements fields (SSOT — fallback source for RequirementsTab)
         intent?: string | null;
         demand_main_category?: string | null;   // = demand_property_type on transaction
@@ -1037,8 +1217,8 @@ export const createDeal = async (data: Record<string, any>) => {
     return res.data;
 };
 
-export const updateDealStatus = async (id: string, status: string, reason?: string) => {
-    const res = await client.patch(`/api/deals/${id}/status`, { status, reason });
+export const updateDealStatus = async (id: string, status: string, reason?: string, final_price?: number) => {
+    const res = await client.patch(`/api/deals/${id}/status`, { status, reason, final_price });
     return res.data;
 };
 
@@ -1122,7 +1302,7 @@ export const reassignDeal = async (dealId: string, agentId: string, reason?: str
 
 export const setDealReminder = async (
     dealId: string,
-    payload: { remind_at: string; note?: string; advance_minutes?: number },
+    payload: { remind_at: string; note?: string; advance_minutes?: number; reason?: string },
 ) => {
     const res = await client.post(`/api/deals/${dealId}/reminder`, payload);
     return res.data;

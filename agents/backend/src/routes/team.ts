@@ -13,7 +13,9 @@ import { ensureOwner } from '../services/ensure_owner';
 import { WhatsAppService } from '../services/whatsapp';
 import { notify } from '../services/notify';
 import { ownershipService } from '../services/ownership_service';
+import { invalidateSubtreeCache } from '../services/analytics_scope';
 import { captureRouteError } from '../utils/capture';
+import { getTargetsForManager, upsertTargets } from '../services/targets';
 
 const whatsappService = new WhatsAppService();
 const ADMIN_PANEL_URL = process.env.ADMIN_PANEL_URL || 'https://admin.realtypandit.in';
@@ -455,6 +457,41 @@ router.get('/members-list', checkPermission('view_inventory'), async (req, res) 
 });
 
 // GET /api/team/members - List all team members
+// GET /api/team/targets - the requesting manager's monthly team targets (or defaults). Phase 5B.
+router.get('/targets', checkPermission('manage_team'), async (req, res) => {
+    try {
+        const tenantId = req.agent?.tenant_id;
+        if (!tenantId) return res.status(400).json({ error: 'Tenant ID required' });
+        const managerId = (req.query.manager_id as string) || req.agent!.id;
+        const targets = await getTargetsForManager(tenantId, managerId);
+        res.json({ manager_agent_id: managerId, targets });
+    } catch (error: any) {
+        captureRouteError(error, req, { route: 'team#get-targets' });
+        res.status(500).json({ error: 'Failed to fetch targets' });
+    }
+});
+
+// PUT /api/team/targets - upsert the requesting manager's monthly team targets. Phase 5B.
+router.put('/targets', checkPermission('manage_team'), async (req, res) => {
+    try {
+        const tenantId = req.agent?.tenant_id;
+        if (!tenantId) return res.status(400).json({ error: 'Tenant ID required' });
+        const managerId = (req.body.manager_id as string) || req.agent!.id;
+        const num = (v: any, d: number) => { const n = Number(v); return isFinite(n) && n >= 0 ? n : d; };
+        const targets = {
+            leads: num(req.body.leads, 30),
+            appointments: num(req.body.appointments, 15),
+            inventory: num(req.body.inventory, 10),
+            conversionRate: num(req.body.conversion_rate ?? req.body.conversionRate, 0.2),
+        };
+        await upsertTargets(tenantId, managerId, targets);
+        res.json({ ok: true, manager_agent_id: managerId, targets });
+    } catch (error: any) {
+        captureRouteError(error, req, { route: 'team#put-targets' });
+        res.status(500).json({ error: 'Failed to save targets' });
+    }
+});
+
 router.get('/members', checkPermission('manage_team'), async (req, res) => {
     try {
         const members = await prisma.agent.findMany({
@@ -545,6 +582,9 @@ router.post('/members', checkPermission('create_agents'), async (req, res) => {
                 role: true, department: true, status: true, created_at: true
             }
         });
+
+        // Hierarchy changed -> drop the analytics visibility-subtree cache for this tenant.
+        invalidateSubtreeCache(req.agent!.tenant_id);
 
         // SSOT: Upsert Contact record for this team member
         const tenant = await prisma.tenant.findUnique({ where: { id: req.agent!.tenant_id } });
@@ -638,6 +678,7 @@ router.get('/members/:id', checkPermission('manage_team'), async (req, res) => {
                 id: true, name: true, email: true, phone: true,
                 role: true, department: true, status: true,
                 last_login_at: true, created_at: true, personal_email: true,
+                nine9acres_email: true, magicbricks_email: true,
                 reports_to: { select: { id: true, name: true, role: true } },
                 subordinates: { select: { id: true, name: true, role: true, department: true, status: true } },
                 _count: { select: { assigned_leads: true } },
@@ -654,7 +695,7 @@ router.get('/members/:id', checkPermission('manage_team'), async (req, res) => {
 // PATCH /api/team/members/:id - Update member details
 router.patch('/members/:id', checkPermission('manage_team'), async (req, res) => {
     const { id } = req.params;
-    const { name, phone, department, role, personal_email, reports_to_id } = req.body;
+    const { name, phone, department, role, personal_email, reports_to_id, nine9acres_email, magicbricks_email } = req.body;
 
     // Role changes: only super_boss
     if (role && req.agent!.role !== 'super_boss') {
@@ -674,6 +715,14 @@ router.patch('/members/:id', checkPermission('manage_team'), async (req, res) =>
         if (personal_email !== undefined) {
             updateData.personal_email = personal_email ? personal_email.trim().toLowerCase() : null;
         }
+        // Portal lead-routing identifiers (2026-06-25) — manager/super_boss enter the email/ID the
+        // member uses on each portal so their listing leads route to them instead of round-robin.
+        if (nine9acres_email !== undefined) {
+            updateData.nine9acres_email = nine9acres_email ? String(nine9acres_email).trim().toLowerCase() : null;
+        }
+        if (magicbricks_email !== undefined) {
+            updateData.magicbricks_email = magicbricks_email ? String(magicbricks_email).trim().toLowerCase() : null;
+        }
         if (reports_to_id !== undefined) updateData.reports_to_id = reports_to_id || null;
 
         const agent = await prisma.agent.update({
@@ -684,6 +733,11 @@ router.patch('/members/:id', checkPermission('manage_team'), async (req, res) =>
                 role: true, department: true, status: true
             }
         });
+
+        // Manager reassignment (or role change) alters the visibility subtree.
+        if (updateData.reports_to_id !== undefined || updateData.role !== undefined) {
+            invalidateSubtreeCache(req.agent!.tenant_id);
+        }
 
         // SSOT: Sync Contact record when phone is updated
         if (updateData.phone) {

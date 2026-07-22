@@ -154,7 +154,7 @@ export default function TermsOfServicePage() {
                                 <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-4">8. Dispute Resolution</h2>
                                 <p className="text-slate-600 dark:text-slate-300 mb-4">In the event of any dispute or claim arising from these Terms or your use of the Platform:</p>
                                 <ul className="space-y-2 text-slate-600 dark:text-slate-300">
-                                    <li><strong>Informal Resolution:</strong> You agree to first contact us at <a href="mailto:support@realtypandit.com" className="text-blue-600 dark:text-blue-400 hover:underline">support@realtypandit.com</a> to attempt to resolve the dispute informally.</li>
+                                    <li><strong>Informal Resolution:</strong> You agree to first contact us at <a href="mailto:support@realtypandit.in" className="text-blue-600 dark:text-blue-400 hover:underline">support@realtypandit.in</a> to attempt to resolve the dispute informally.</li>
                                     <li><strong>Arbitration:</strong> If informal resolution fails, disputes shall be resolved through binding arbitration in accordance with the Arbitration and Conciliation Act, 1996.</li>
                                     <li><strong>Arbitration Location:</strong> Arbitration proceedings shall be conducted in New Delhi, India.</li>
                                     <li><strong>Class Action Waiver:</strong> You agree to resolve disputes on an individual basis and waive any right to participate in class action lawsuits.</li>
@@ -180,7 +180,7 @@ export default function TermsOfServicePage() {
                                             <Mail className="w-5 h-5 text-blue-600 dark:text-blue-400" />
                                             <div>
                                                 <p className="text-sm text-slate-500 dark:text-slate-400">Email</p>
-                                                <a href="mailto:legal@realtypandit.com" className="text-slate-900 dark:text-white font-medium hover:text-blue-600 dark:hover:text-blue-400">legal@realtypandit.com</a>
+                                                <a href="mailto:legal@realtypandit.in" className="text-slate-900 dark:text-white font-medium hover:text-blue-600 dark:hover:text-blue-400">legal@realtypandit.in</a>
                                             </div>
                                         </div>
                                         <div className="flex items-center gap-3">

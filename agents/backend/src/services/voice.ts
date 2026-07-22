@@ -212,14 +212,20 @@ export class VoiceService {
         call_id: string;
         caller_number: string;
         transcript: string;
+        started_at?: string;
+        duration?: number;
     }): Promise<void> {
-        const { call_id, transcript } = params;
+        const { call_id, transcript, started_at, duration } = params;
         // Meta's webhook sends numbers without the "+" prefix (e.g. "919958860411"),
         // but DB records are stored in E.164 form (+91...). Without normalizing,
         // findUnique misses existing contacts and creates duplicate rows with
         // contact_type UNKNOWN, losing team-member / client classifications.
         const caller_number = normalizePhone(params.caller_number) || params.caller_number;
         const now = new Date();
+        // started_at/duration come from the pipecat service's own call-start timestamp;
+        // fall back to today's behavior (both stamps = now, duration 0) if a payload is missing them.
+        const parsedStartedAt = started_at ? new Date(started_at) : now;
+        const safeDuration = typeof duration === 'number' && Number.isFinite(duration) ? duration : 0;
 
         const tenant = await prisma.tenant.findFirst();
         if (!tenant) return;
@@ -247,10 +253,10 @@ export class VoiceService {
                 call_sid: call_id,
                 direction: 'inbound',
                 call_status: 'completed',
-                duration: 0,
+                duration: safeDuration,
                 transcript: transcript,
                 ai_call_summary: transcript.split('\n').slice(-3).join(' '),
-                started_at: now,
+                started_at: parsedStartedAt,
                 ended_at: now,
             }
         });

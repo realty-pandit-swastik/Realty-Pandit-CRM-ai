@@ -5,6 +5,7 @@ import logger from '../utils/logger';
 import { normalizePhone } from '../utils/phone';
 import { sendBuyerConfirmationWhatsApp, sendBuyerConfirmationEmail } from '../services/lead_notifications';
 import { assignViaRoundRobin } from '../services/lead_assignment';
+import { assignContact } from '../services/assign_contact';
 import {
     handleInstagramComment,
     handleInstagramDM,
@@ -219,6 +220,8 @@ async function handleLeadgenEvent(leadData: any): Promise<void> {
                 budget_max: budget ? parseFloat(String(budget).replace(/[^\d.]/g, '')) : null,
                 tenant_id: tenant.id,
                 assigned_agent_id: leadgenAssignedAgentId,
+                // super_boss default so leadgen contacts aren't hidden by the visibility filter. Phase 5C.
+                assignment_method: leadgenAssignedAgentId ? 'other' : undefined,
                 last_channel: 'facebook',
                 last_interaction: new Date(),
                 lead_status: 'warm',
@@ -258,10 +261,7 @@ async function handleLeadgenEvent(leadData: any): Promise<void> {
         if (!agentId) {
             agentId = await assignViaRoundRobin();
             if (agentId) {
-                await prisma.contact.update({
-                    where: { phone_number: phoneNumber },
-                    data: { assigned_agent_id: agentId },
-                });
+                await assignContact(phoneNumber, agentId, 'round_robin');
                 const { createQualifyTask } = await import('../services/workflow_task_service');
                 createQualifyTask({ tenantId: tenant.id, contactPhone: phoneNumber, assignedTo: agentId, source: 'facebook' })
                     .catch(err => logger.warn('[Facebook] Workflow task failed:', (err as Error).message));

@@ -158,6 +158,50 @@ export class AuthService {
         };
     }
 
+    /**
+     * Google sign-in for an EXTERNAL PARTNER AGENT (2026-07-12).
+     * Google has already verified the email; we match it against the partner's email on file and
+     * issue the same admin-recognized `role:'partner'` session the OTP/password logins issue.
+     * (PartnerAgent has no google_refresh_token column, so unlike the team there is no separate
+     * "connect" step — having the email on the partner record IS the link.)
+     */
+    public async loginPartnerByGoogleEmail(googleEmail: string) {
+        const partner = await prisma.partnerAgent.findFirst({
+            where: {
+                status: 'ACTIVE',
+                email: { equals: googleEmail, mode: 'insensitive' },
+            },
+            select: {
+                id: true, name: true, email: true, phone_number: true,
+                partner_category: true, parent_partner_id: true,
+            },
+        });
+        if (!partner) {
+            throw new Error('This Google account is not linked to an active partner agent.');
+        }
+
+        const tenant = await prisma.tenant.findFirst({ select: { id: true } });
+        const token = jwt.sign(
+            {
+                id: partner.id,
+                email: partner.email || '',
+                role: 'partner',
+                tenant_id: tenant?.id,
+                phone: partner.phone_number,
+                partner_category: partner.partner_category,
+                parent_partner_id: partner.parent_partner_id,
+            },
+            JWT_SECRET,
+            { expiresIn: '7d' },
+        );
+
+        return {
+            token,
+            refreshToken: undefined as string | undefined,
+            agent: { id: partner.id, name: partner.name, email: partner.email, role: 'partner' },
+        };
+    }
+
     public verifyToken(token: string): any {
         return jwt.verify(token, JWT_SECRET);
     }

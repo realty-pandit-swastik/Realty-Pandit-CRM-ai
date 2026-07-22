@@ -12,7 +12,7 @@ interface DashboardLayoutProps {
 }
 
 export function DashboardLayout({ activeView, onViewChange, children }: DashboardLayoutProps) {
-    const { agent, logout, hasPermission } = useAuth();
+    const { agent, logout, hasPermission, isPartnerOwner } = useAuth();
     const { theme, toggleTheme } = useTheme();
     const isMobile = useIsMobile();
     const [collapsed, setCollapsed] = useState(false);
@@ -36,6 +36,13 @@ export function DashboardLayout({ activeView, onViewChange, children }: Dashboar
         return () => window.removeEventListener('beforeinstallprompt', handler);
     }, []);
 
+    // The ONLY nav items an external partner agent may see (see filter below).
+    // 'my-team' is added for a partner COMPANY OWNER only — sub-agents never manage a team.
+    const PARTNER_NAV_ITEMS = new Set([
+        'inventory', 'leads', 'deals', 'my-profile',
+        ...(isPartnerOwner ? ['my-team'] : []),
+    ]);
+
     const navSections = [
         {
             label: "Today's Tasks",
@@ -47,6 +54,7 @@ export function DashboardLayout({ activeView, onViewChange, children }: Dashboar
         {
             label: 'Leads & Deals',
             items: [
+                { id: 'contacts', label: 'Contacts', icon: '\u{1F4C7}', permission: null },
                 { id: 'leads', label: 'Ext. Leads', icon: '\u{1F4E5}', permission: null },
                 // 'buyer-chat' (Buyer Lead chat) removed from nav 2026-06-03 — 0 bookings ever,
                 // redundant with '+ Add Lead'. Engine + route kept (WhatsApp buyer bot uses it).
@@ -65,7 +73,7 @@ export function DashboardLayout({ activeView, onViewChange, children }: Dashboar
         {
             label: 'Communication',
             items: [
-                { id: 'chats', label: 'Chats', icon: '\u{1F4AC}', permission: null },
+                // Standalone Chats removed (2026-06-19) — chat now lives inside each lead/deal.
                 { id: 'emails', label: 'Emails', icon: '\u{1F4E7}', permission: null },
                 { id: 'calls', label: 'Call Log', icon: '\u{1F4DE}', permission: null },
             ],
@@ -74,6 +82,8 @@ export function DashboardLayout({ activeView, onViewChange, children }: Dashboar
             label: 'Team',
             items: [
                 { id: 'my-profile', label: 'My Profile', icon: '\u{1F464}', permission: null },
+                // Partner COMPANY OWNER only — their own sub-agents. Never shown to internal staff.
+                { id: 'my-team', label: 'My Team', icon: '\u{1F465}', permission: null, partnerOnly: true },
                 { id: 'partners', label: 'Partner Agents', icon: '\u{1F91D}', permission: 'manage_agents' },
                 { id: 'team', label: 'Team', icon: '\u{1F465}', permission: 'manage_agents' },
             ],
@@ -134,10 +144,10 @@ export function DashboardLayout({ activeView, onViewChange, children }: Dashboar
                             <h2 style={{ color: 'var(--text-primary)', margin: 0, fontSize: '18px', whiteSpace: 'nowrap' }}>Realty Pandit</h2>
                             <p style={{ color: 'var(--text-muted)', margin: '4px 0 0', fontSize: '12px' }}>Dashboard</p>
                         </div>
-                        {!isMobile && <NotificationBell onNavigate={(url) => { if (url.startsWith('#/')) onViewChange(url.replace('#/', '').split('?')[0]); }} />}
+                        {!isMobile && agent?.role !== 'partner' && <NotificationBell onNavigate={(url) => { if (url.startsWith('#/')) onViewChange(url.replace('#/', '').split('?')[0]); }} />}
                     </div>
                 )}
-                {collapsed && !isMobile && (
+                {collapsed && !isMobile && agent?.role !== 'partner' && (
                     <NotificationBell onNavigate={(url) => { if (url.startsWith('#/')) onViewChange(url.replace('#/', '').split('?')[0]); }} />
                 )}
                 {isMobile ? (
@@ -160,9 +170,17 @@ export function DashboardLayout({ activeView, onViewChange, children }: Dashboar
             {/* Navigation */}
             <nav ref={navRef} aria-label="Main navigation" onKeyDown={handleNavKeyDown} style={{ flex: 1, padding: '8px 8px', overflowX: 'hidden', overflowY: 'auto' }}>
                 {navSections.map(section => {
+                    // PARTNER-SCOPED NAV (2026-07-12): an external partner agent logs into this same app
+                    // but may only ever see Inventory / their Leads / their Deals / their Profile.
+                    // (The real boundary is the backend default-deny guard — this just hides the rest.)
+                    const isPartner = agent?.role === 'partner';
                     const sectionItems = section.items.filter(
-                        item => (item.permission === null || hasPermission(item.permission))
-                            && (!(item as any).superBossOnly || agent?.role === 'super_boss')
+                        item => isPartner
+                            ? PARTNER_NAV_ITEMS.has(item.id)
+                            // Internal staff: normal permission gating, and NEVER partner-only items.
+                            : !(item as any).partnerOnly
+                                && (item.permission === null || hasPermission(item.permission))
+                                && (!(item as any).superBossOnly || agent?.role === 'super_boss')
                     );
                     if (sectionItems.length === 0) return null;
                     return (
@@ -322,7 +340,7 @@ export function DashboardLayout({ activeView, onViewChange, children }: Dashboar
                     >{'\u2630'}</button>
                     <h2 style={{ color: 'var(--text-primary)', margin: 0, fontSize: '16px' }}>Realty Pandit</h2>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                        <NotificationBell onNavigate={(url) => { if (url.startsWith('#/')) onViewChange(url.replace('#/', '').split('?')[0]); }} />
+                        {agent?.role !== 'partner' && <NotificationBell onNavigate={(url) => { if (url.startsWith('#/')) onViewChange(url.replace('#/', '').split('?')[0]); }} />}
                         <button
                             onClick={toggleTheme}
                             aria-label="Toggle dark mode"

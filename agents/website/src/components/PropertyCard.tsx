@@ -44,11 +44,16 @@ export default function PropertyCard({ property, index = 0 }: { property: Proper
                                 {property.category}
                             </span>
                         </div>
-                        {(property.renovated || property.pre_rented) && (
+                        {(property.renovated || property.pre_rented || property.roof_rights) && (
                             <div className="absolute bottom-3 left-3 flex flex-wrap gap-1.5">
                                 {property.renovated && (
                                     <span className="rounded-full px-3 py-1 text-xs font-semibold bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800 shadow-sm">
                                         Newly Renovated
+                                    </span>
+                                )}
+                                {property.roof_rights && (
+                                    <span className="rounded-full px-3 py-1 text-xs font-semibold bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400 border border-amber-200 dark:border-amber-800 shadow-sm">
+                                        Roof Rights
                                     </span>
                                 )}
                                 {property.pre_rented && (() => {

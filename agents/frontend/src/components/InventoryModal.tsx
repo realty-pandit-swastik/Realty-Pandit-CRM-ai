@@ -6,8 +6,9 @@ import AddressFields, { type AddressValue, inferAddressLayout } from './AddressF
 import DuplicateAddressWarning from './DuplicateAddressWarning';
 import { ContactSearchField, type SelectedContact } from './ContactSearchField';
 import { PartnerSourceAutocomplete, type SourcePartnerValue } from './PartnerSourceAutocomplete';
-import { getTaxonomyTree } from '../api/client';
+import { getTaxonomyTree, cloneInventory } from '../api/client';
 import { useConfirm } from '../contexts/ConfirmContext';
+import { useAuth } from '../contexts/AuthContext';
 
 interface InventoryModalProps {
     isOpen: boolean;
@@ -49,8 +50,10 @@ function buildPreRentedExtras(pr: PreRentedValue, intent: any): Record<string, s
 export const InventoryModal: React.FC<InventoryModalProps> = ({ isOpen, onClose, onCreated, onEditInventory }) => {
     const wf = useWorkflow();
     const confirm = useConfirm();
+    const { agent } = useAuth();
     const [phase, setPhase] = useState<ModalPhase>('contact');
     const [sourceContact, setSourceContact] = useState<SelectedContact | null>(null);
+    const [sourceError, setSourceError] = useState<string | null>(null);
     const [keyHolderMode, setKeyHolderMode] = useState<'search' | null>(null);
     const [keyHolderPhone, setKeyHolderPhone] = useState<string | null>(null);
     const [ownerHoldsKey, setOwnerHoldsKey] = useState(false);
@@ -60,6 +63,11 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({ isOpen, onClose,
     const [sourcePartner, setSourcePartner] = useState<SourcePartnerValue>({});
     // Pre-rented (pre-lease) — captured on the confirm step, only for for-sale listings.
     const [preRented, setPreRented] = useState<PreRentedValue>({ pre_rented: false, rent: '' });
+    // Task 4b: clone-this-listing checklist (which unit-level fields the agent will re-enter).
+    const [showCloneChecklist, setShowCloneChecklist] = useState(false);
+    const [cloneOpts, setCloneOpts] = useState({ unit: true, floor: true, price: true, photos: false });
+    const [cloning, setCloning] = useState(false);
+    const [cloneError, setCloneError] = useState<string | null>(null);
 
     // Body scroll lock
     useEffect(() => {
@@ -128,10 +136,17 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({ isOpen, onClose,
     }, [keyHolderPhone, wf.currentStep?.id, wf.stepLoading]);
 
     const handleContactSelected = useCallback((contact: SelectedContact) => {
+        // (2026-06-20) A team member may NOT list their OWN number as the owner/partner source.
+        const d10 = (p?: string | null) => (p || '').replace(/\D/g, '').slice(-10);
+        if (agent?.phone && contact.phone && d10(contact.phone) === d10(agent.phone)) {
+            setSourceError('You cannot use your own number as the property owner or partner agent. Select the owner (their direct number) or the partner agent — not yourself.');
+            return;
+        }
+        setSourceError(null);
         setSourceContact(contact);
         setPrefilling(false);
         setPhase('prefilling');
-    }, []);
+    }, [agent]);
 
     const handleClose = useCallback(async () => {
         if (phase === 'workflow' || phase === 'confirm') {
@@ -176,6 +191,44 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({ isOpen, onClose,
         setKeyHolderPhone(null);
         setOwnerHoldsKey(false);
     }, [wf]);
+
+    // Task 4a: "Add another — same owner". Keep sourceContact (the owner just used), reset the
+    // wizard, and re-enter the prefill phase so the prefilling effect re-feeds role/phone/name —
+    // the user skips contact entry and lands straight in the property steps for the same owner.
+    const handleAddNewSameOwner = useCallback(() => {
+        setKeyHolderMode(null);
+        setKeyHolderPhone(null);
+        setOwnerHoldsKey(false);
+        setPrefilling(false);
+        wf.reset();
+        setPhase('prefilling');
+    }, [wf]);
+
+    // Task 4b: clone the just-saved listing — clears the ticked unit-level fields, copies building +
+    // features (+ owner), then opens Edit on the new clone so the agent fills the differing fields.
+    const handleClone = useCallback(async () => {
+        if (!wf.inventoryId || cloning) return;
+        setCloning(true);
+        setCloneError(null);
+        try {
+            const clear: string[] = [];
+            if (cloneOpts.unit) clear.push('flat_no', 'plot_no');
+            if (cloneOpts.floor) clear.push('floor_number', 'floor_label', 'display_floor');
+            if (cloneOpts.price) clear.push('price', 'customer_price', 'display_price');
+            const res = await cloneInventory(wf.inventoryId, { clear, copy_media: cloneOpts.photos });
+            setShowCloneChecklist(false);
+            if (onEditInventory && res.inventory_id) {
+                onEditInventory(res.inventory_id);
+            } else {
+                onCreated();
+                handleClose();
+            }
+        } catch (e: any) {
+            setCloneError(e?.response?.data?.error || 'Failed to clone the listing. Please try again.');
+        } finally {
+            setCloning(false);
+        }
+    }, [wf.inventoryId, cloning, cloneOpts, onEditInventory, onCreated]);
 
     const handleStartEnrichment = useCallback(() => {
         wf.startEnrichment();
@@ -248,6 +301,11 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({ isOpen, onClose,
                                 </p>
                             </div>
                             <ContactSearchField onContactSelected={handleContactSelected} />
+                            {sourceError && (
+                                <div style={{ marginTop: 12, padding: '10px 12px', borderRadius: 8, backgroundColor: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.4)', color: '#ef4444', fontSize: 13, lineHeight: 1.4 }}>
+                                    ⚠ {sourceError}
+                                </div>
+                            )}
                         </div>
                     )}
 
@@ -374,8 +432,18 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({ isOpen, onClose,
                                 </button>
                             </div>
 
-                            <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
-                                <button style={styles.secondaryBtn} onClick={handleAddNew}>Add New Inventory</button>
+                            <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', flexWrap: 'wrap' }}>
+                                {sourceContact && (
+                                    <button style={styles.primaryBtn} onClick={handleAddNewSameOwner}>
+                                        + Add another &mdash; same owner{sourceContact.name ? ` (${sourceContact.name})` : sourceContact.phone ? ` (${sourceContact.phone})` : ''}
+                                    </button>
+                                )}
+                                {wf.inventoryId && (
+                                    <button style={styles.secondaryBtn} onClick={() => setShowCloneChecklist(true)}>
+                                        Clone this listing
+                                    </button>
+                                )}
+                                <button style={styles.secondaryBtn} onClick={handleAddNew}>Add new &mdash; different owner</button>
                                 {onEditInventory && wf.inventoryId && (
                                     <button style={styles.secondaryBtn} onClick={() => { onEditInventory(wf.inventoryId); }}>
                                         Edit Details
@@ -384,6 +452,36 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({ isOpen, onClose,
                                 <button style={{ ...styles.secondaryBtn, background: 'transparent' }} onClick={() => { onCreated(); handleClose(); }}>
                                     Back to List
                                 </button>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Task 4b: Clone checklist overlay */}
+                    {showCloneChecklist && (
+                        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px' }} onClick={() => !cloning && setShowCloneChecklist(false)}>
+                            <div style={{ background: 'var(--bg-primary)', borderRadius: '14px', padding: '24px', maxWidth: '440px', width: '100%', border: '1px solid var(--border-secondary)', boxShadow: '0 20px 60px rgba(0,0,0,0.35)' }} onClick={e => e.stopPropagation()}>
+                                <h3 style={{ fontSize: '17px', fontWeight: 700, color: 'var(--text-primary)', margin: '0 0 6px' }}>Clone this listing</h3>
+                                <p style={{ fontSize: '13px', color: 'var(--text-muted)', margin: '0 0 16px', lineHeight: 1.5 }}>
+                                    The same building &amp; features are copied. Tick what differs for the new unit &mdash; those fields start blank and the Edit screen opens so you can fill them in (including a different owner if needed).
+                                </p>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '18px' }}>
+                                    {([
+                                        { key: 'unit', label: "I'll re-enter the unit / flat number" },
+                                        { key: 'floor', label: "I'll re-enter the floor" },
+                                        { key: 'price', label: "I'll re-enter the price" },
+                                        { key: 'photos', label: 'Also copy the photos' },
+                                    ] as const).map(opt => (
+                                        <label key={opt.key} style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '14px', color: 'var(--text-primary)', cursor: 'pointer' }}>
+                                            <input type="checkbox" checked={(cloneOpts as any)[opt.key]} onChange={e => setCloneOpts(o => ({ ...o, [opt.key]: e.target.checked }))} />
+                                            {opt.label}
+                                        </label>
+                                    ))}
+                                </div>
+                                {cloneError && <p style={{ color: '#ef4444', fontSize: '13px', margin: '0 0 14px' }}>{cloneError}</p>}
+                                <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+                                    <button style={{ ...styles.secondaryBtn, background: 'transparent' }} onClick={() => setShowCloneChecklist(false)} disabled={cloning}>Cancel</button>
+                                    <button style={styles.primaryBtn} onClick={handleClone} disabled={cloning}>{cloning ? 'Cloning…' : 'Clone & edit new unit'}</button>
+                                </div>
                             </div>
                         </div>
                     )}
@@ -1208,10 +1306,9 @@ function DocumentUpload({ value, documentTypes, onSubmit, onUpload }: {
                 <select value={docType} onChange={e => setDocType(e.target.value)} style={{ ...styles.input, flex: 1 }}>
                     {documentTypes.map(dt => <option key={dt.value} value={dt.value}>{dt.label}</option>)}
                 </select>
-                <input type="text" value={title} onChange={e => setTitle(e.target.value)} placeholder="Title" style={{ ...styles.input, flex: 1 }} />
                 <button style={styles.secondaryBtn} onClick={() => inputRef.current?.click()} disabled={uploading}>{uploading ? '...' : '+ Upload'}</button>
             </div>
-            <input ref={inputRef} type="file" accept="application/pdf,image/*,.doc,.docx,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" style={{ display: 'none' }} onChange={e => handleFile(e.target.files)} />
+            <input ref={inputRef} type="file" accept="application/pdf,image/*,.doc,.docx,.xls,.xlsx,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" style={{ display: 'none' }} onChange={e => handleFile(e.target.files)} />
             {uploadError && <div style={{ padding: '12px', marginBottom: '12px', backgroundColor: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '8px', color: '#ef4444', fontSize: '14px' }}>{uploadError}</div>}
             {docs.length > 0 && (
                 <div style={{ marginBottom: '12px' }}>
@@ -1253,6 +1350,8 @@ function AddressBlockField({ value, onSubmit, addressConfig }: {
         apartment_name: value?.apartment_name || '',
         flat_no: value?.flat_no || '',
         floor_number: value?.floor_number ?? '',
+        floor_label: value?.floor_label ?? '',
+        display_floor: value?.display_floor ?? '',
         total_floors: value?.total_floors ?? '',
         plot_no: value?.plot_no || '',
         latitude: value?.latitude,

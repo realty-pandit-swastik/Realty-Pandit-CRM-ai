@@ -30,6 +30,7 @@ interface Props {
     interactions: Interaction[];
     onReportNoShow: () => void;
     onMarkLeadLost?: () => void;
+    onSetDelayReason?: () => void;
     onUpdateContactType?: (phone: string, type: string) => void;
 }
 
@@ -52,7 +53,7 @@ const formatDateSeparator = (dateStr: string) => {
     return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' });
 };
 
-export const ChatView: React.FC<Props> = ({ contact, interactions, onReportNoShow, onMarkLeadLost, onUpdateContactType }) => {
+export const ChatView: React.FC<Props> = ({ contact, interactions, onReportNoShow, onMarkLeadLost, onSetDelayReason, onUpdateContactType }) => {
     const score = contact.lead_score;
     const displayName = contact.name || contact.phone_number;
 
@@ -123,6 +124,21 @@ export const ChatView: React.FC<Props> = ({ contact, interactions, onReportNoSho
                     >
                         🚨 No-Show
                     </button>
+                    {onSetDelayReason && contact.lead_status !== 'lost' && (
+                        <button
+                            onClick={onSetDelayReason}
+                            style={{
+                                padding: '7px 14px',
+                                backgroundColor: 'var(--warning-bg)', color: 'var(--warning-text)',
+                                border: '1px solid #f59e0b', borderRadius: '8px',
+                                cursor: 'pointer', fontWeight: 600, fontSize: '12px',
+                                whiteSpace: 'nowrap',
+                            }}
+                            title="Record why this active lead hasn't converted yet (delay reason)."
+                        >
+                            ⏳ Delay Reason
+                        </button>
+                    )}
                     {onMarkLeadLost && contact.lead_status !== 'lost' && (
                         <button
                             onClick={onMarkLeadLost}

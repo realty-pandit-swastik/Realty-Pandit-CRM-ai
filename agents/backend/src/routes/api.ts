@@ -47,6 +47,97 @@ router.get('/contacts', async (req, res) => {
     }
 });
 
+// GET /contacts/directory — unified, paginated, role-scoped Contacts page (2026-06-20).
+// Every contact tagged by type (Buyer/Tenant/Landlord/Partner/Builder/…), with the assigned
+// manager, their inventory count (owned listings) OR demand summary, and last activity.
+router.get('/contacts/directory', async (req, res) => {
+    try {
+        const agentRole = req.agent!.role;
+        const agentId = req.agent!.id;
+        const tenantId = req.agent!.tenant_id;
+        const visibilityFilter = await buildFullContactVisibilityFilter(agentId, agentRole);
+
+        const page = Math.max(1, parseInt(String(req.query.page)) || 1);
+        const limit = Math.min(50, Math.max(1, parseInt(String(req.query.limit)) || 25));
+        const type = req.query.type ? String(req.query.type) : null;
+        const search = req.query.search ? String(req.query.search).trim() : '';
+
+        // AND-compose so we never clobber an OR inside the visibility filter.
+        const baseAnd: any[] = [visibilityFilter];
+        const where: any = { tenant_id: tenantId, AND: [...baseAnd] };
+        if (type) where.AND.push({ contact_type: type });
+        if (search) {
+            const digits = search.replace(/\D/g, '');
+            where.AND.push({
+                OR: [
+                    { name: { contains: search, mode: 'insensitive' } },
+                    ...(digits ? [{ phone_number: { contains: digits } }] : []),
+                ],
+            });
+        }
+
+        // Type tab-counts respect visibility but NOT the type/search narrowing.
+        const typeCountsRaw = await prisma.contact.groupBy({
+            by: ['contact_type'],
+            where: { tenant_id: tenantId, AND: [...baseAnd] },
+            _count: { _all: true },
+        });
+        const type_counts: Record<string, number> = {};
+        for (const t of typeCountsRaw) type_counts[t.contact_type || 'UNKNOWN'] = t._count._all;
+
+        const [contacts, total] = await Promise.all([
+            prisma.contact.findMany({
+                where,
+                orderBy: { updated_at: 'desc' },
+                skip: (page - 1) * limit,
+                take: limit,
+                select: {
+                    phone_number: true, name: true, email: true, contact_type: true, intent: true,
+                    budget_min: true, budget_max: true, preferred_location: true,
+                    lead_type: true, last_interaction: true, updated_at: true,
+                    referral_partner_id: true,
+                    assigned_agent: { select: { name: true } },
+                },
+            }),
+            prisma.contact.count({ where }),
+        ]);
+
+        // Batched: how many listings each contact OWNS (owner_phone == their phone).
+        const phones = contacts.map((c: { phone_number: string }) => c.phone_number);
+        const invGroups = phones.length
+            ? await prisma.inventory.groupBy({ by: ['owner_phone'], where: { owner_phone: { in: phones } }, _count: { _all: true } })
+            : [];
+        const invByPhone: Record<string, number> = {};
+        for (const g of invGroups) if (g.owner_phone) invByPhone[g.owner_phone] = g._count._all;
+
+        const data = contacts.map((c: any) => ({
+            phone_number: c.phone_number,
+            name: c.name,
+            email: c.email || null,
+            contact_type: c.contact_type || 'UNKNOWN',
+            manager: c.assigned_agent?.name || null,
+            last_interaction: c.last_interaction || c.updated_at,
+            inventory_count: invByPhone[c.phone_number] || 0,
+            // Demand returned whenever there IS a requirement signal — independent of the type tag — so
+            // a contact who is BOTH a buyer and an owner shows both facets (bifurcation, 2026-06-20).
+            demand: (c.intent || c.budget_min != null || c.budget_max != null || c.preferred_location)
+                ? {
+                    intent: c.intent || null,
+                    budget_min: c.budget_min != null ? Number(c.budget_min) : null,
+                    budget_max: c.budget_max != null ? Number(c.budget_max) : null,
+                    location: c.preferred_location || null,
+                }
+                : null,
+            is_partner: c.contact_type === 'PARTNER_AGENT',
+        }));
+
+        res.json({ data, total, page, totalPages: Math.ceil(total / limit), type_counts });
+    } catch (error) {
+        captureRouteError(error, req, { route: 'api#contacts-directory' });
+        res.status(500).json({ error: (error as Error).message });
+    }
+});
+
 // GET /contacts/:phone/interactions — Role-scoped: non-super_boss can only view their assigned contacts' interactions
 router.get('/contacts/:phone/interactions', async (req, res) => {
     const { phone } = req.params;
@@ -110,6 +201,71 @@ router.patch('/contacts/:phone', async (req, res) => {
         res.json(updated);
     } catch (error) {
         captureRouteError(error, req, { route: 'api#3' });
+        res.status(500).json({ error: (error as Error).message });
+    }
+});
+
+// PATCH /contacts/:phone/profile — edit a contact's name / phone / email from the Contacts page
+// (2026-06-20). Name cascades via syncContactName (contacts + inventory snapshots); phone re-keys
+// via the DB's ON UPDATE CASCADE FKs (deals, inventory.owner_phone, interactions, …) so the change
+// reflects in the Deal Pipeline + connected inventory. Partner agents + team members are managed on
+// their OWN pages and are NOT editable here.
+router.patch('/contacts/:phone/profile', async (req, res) => {
+    try {
+        const { phone } = req.params;
+        const agentRole = req.agent!.role;
+        const agentId = req.agent!.id;
+        const { name, new_phone, email } = req.body || {};
+
+        const contact = await prisma.contact.findUnique({
+            where: { phone_number: phone },
+            select: { phone_number: true, name: true, contact_type: true, assigned_agent_id: true },
+        });
+        if (!contact) return res.status(404).json({ error: 'Contact not found' });
+
+        if (contact.contact_type === 'PARTNER_AGENT' || contact.contact_type === 'MANAGEMENT') {
+            return res.status(403).json({ error: `${contact.contact_type === 'PARTNER_AGENT' ? 'Partner agents' : 'Team members'} are edited on their own page, not here.` });
+        }
+        // Access (mirrors /contacts/:phone/interactions): employee = own, manager = team, super_boss = all.
+        if (agentRole === 'employee' && contact.assigned_agent_id !== agentId) {
+            return res.status(403).json({ error: 'Access denied: contact not assigned to you' });
+        }
+        if (agentRole === 'manager') {
+            const subs = await prisma.agent.findMany({ where: { reports_to_id: agentId }, select: { id: true } });
+            const ok = [agentId, ...subs.map((s: { id: string }) => s.id)];
+            if (!contact.assigned_agent_id || !ok.includes(contact.assigned_agent_id)) {
+                return res.status(403).json({ error: 'Access denied: contact not in your team' });
+            }
+        }
+
+        let targetPhone = contact.phone_number;
+        if (new_phone && String(new_phone).trim()) {
+            const np = normalizePhone(String(new_phone));
+            if (!np) return res.status(400).json({ error: 'Enter a valid phone number' });
+            if (np !== contact.phone_number) {
+                const taken = await prisma.contact.findUnique({ where: { phone_number: np }, select: { phone_number: true } });
+                if (taken) return res.status(409).json({ error: 'Another contact already uses that number — merging contacts is not supported here.' });
+                targetPhone = np;
+            }
+        }
+
+        await prisma.$transaction(async (tx) => {
+            // Re-key FIRST — the single UPDATE cascades to all 23 child FKs (deals/inventory/chats).
+            if (targetPhone !== contact.phone_number) {
+                await tx.$executeRaw`UPDATE contacts SET phone_number = ${targetPhone}, updated_at = now() WHERE phone_number = ${contact.phone_number}`;
+            }
+            if (email !== undefined) {
+                await tx.contact.update({ where: { phone_number: targetPhone }, data: { email: email ? String(email).trim() : null } });
+            }
+            if (name !== undefined && (name || null) !== (contact.name || null)) {
+                await syncContactName(tx, targetPhone, contact.name, name ? String(name).trim() : null);
+            }
+        });
+
+        const updated = await prisma.contact.findUnique({ where: { phone_number: targetPhone } });
+        res.json({ success: true, contact: updated, rekeyed: targetPhone !== contact.phone_number, new_phone: targetPhone });
+    } catch (error) {
+        captureRouteError(error, req, { route: 'api#contact-profile-edit' });
         res.status(500).json({ error: (error as Error).message });
     }
 });
@@ -670,6 +826,45 @@ router.patch('/partners/:id/commission', checkPermission('manage_agents'), async
         res.json({ success: true, partner });
     } catch (error) {
         captureRouteError(error, req, { route: 'api#16' });
+        res.status(500).json({ error: (error as Error).message });
+    }
+});
+
+// PATCH /api/partners/:id/category - promote a partner to COMPANY (they get "My Team") or back to INDIVIDUAL.
+// TEAM ONLY — 'manage_agents' is a permission partners do NOT have, and this is not in PARTNER_ALLOWLIST.
+// Self-registration always lands INDIVIDUAL by design; a partner can never self-grant team powers.
+router.patch('/partners/:id/category', checkPermission('manage_agents'), async (req, res) => {
+    const id = String(req.params.id);
+    const { partner_category } = req.body;
+
+    if (!['INDIVIDUAL', 'COMPANY'].includes(partner_category)) {
+        return res.status(400).json({ error: 'Invalid partner_category. Use: INDIVIDUAL, COMPANY' });
+    }
+
+    try {
+        const target = await prisma.partnerAgent.findUnique({
+            where: { id },
+            select: { id: true, name: true, parent_partner_id: true, _count: { select: { sub_agents: true } } },
+        });
+        if (!target) return res.status(404).json({ error: 'Partner not found' });
+
+        // A sub-agent can never become a company owner — that would create a second level of hierarchy,
+        // and partnerIdsWithSubAgents() is deliberately ONE level deep.
+        if (partner_category === 'COMPANY' && target.parent_partner_id) {
+            return res.status(400).json({ error: 'This partner is a team member of another partner and cannot be made a company.' });
+        }
+        // Demoting an owner who still has members would strand them (they'd stay visible to nobody's roster).
+        if (partner_category === 'INDIVIDUAL' && target._count.sub_agents > 0) {
+            return res.status(400).json({
+                error: `${target.name} still has ${target._count.sub_agents} team member(s). Remove them first.`,
+            });
+        }
+
+        const partner = await prisma.partnerAgent.update({ where: { id }, data: { partner_category } });
+        logger.info(`[PartnerCategory] ${req.agent?.id} set ${id} (${target.name}) -> ${partner_category}`);
+        res.json({ success: true, partner });
+    } catch (error) {
+        captureRouteError(error, req, { route: 'api#partner-category' });
         res.status(500).json({ error: (error as Error).message });
     }
 });

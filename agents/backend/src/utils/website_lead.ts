@@ -12,6 +12,7 @@
 
 import prisma from '../db';
 import { resolveStoredContactPhone } from './phone';
+import type { AssignmentMethod } from '../services/assign_contact';
 
 export interface InventoryForRouting {
     assigned_agent_id: string | null;
@@ -26,6 +27,9 @@ export interface ResolvedHandler {
     isNew: boolean;
     /** The agent who should own + be notified for this lead. */
     handlerId: string | null;
+    /** Phase 5C — how the handler was chosen for a NEW lead: 'uploader' (inventory manager) or
+     * 'other' (super_boss fallback). null for existing leads (keep-same, no fresh write). */
+    handlerMethod: AssignmentMethod | null;
 }
 
 /**
@@ -40,20 +44,24 @@ export async function resolveWebsiteLeadHandler(phone: string, property: Invento
         select: { phone_number: true, assigned_agent_id: true, owning_manager_id: true, demand_taxonomy_node_id: true },
     });
 
-    let handlerId: string | null =
-        existing?.assigned_agent_id
-        ?? existing?.owning_manager_id
-        ?? property.assigned_agent_id
-        ?? property.owning_manager_id
-        ?? property.uploaded_by_agent_id
-        ?? null;
+    // Same precedence chain as before (first non-null wins) — behaviour unchanged; Phase 5C additionally
+    // records HOW the handler was chosen. existing.* branches are keep-same (public.ts writes on CREATE
+    // only), so they carry no fresh method; property.* → 'uploader'; super_boss fallback → 'other'.
+    let handlerId: string | null = null;
+    let handlerMethod: AssignmentMethod | null = null;
+    if (existing?.assigned_agent_id) { handlerId = existing.assigned_agent_id; }
+    else if (existing?.owning_manager_id) { handlerId = existing.owning_manager_id; }
+    else if (property.assigned_agent_id) { handlerId = property.assigned_agent_id; handlerMethod = 'uploader'; }
+    else if (property.owning_manager_id) { handlerId = property.owning_manager_id; handlerMethod = 'uploader'; }
+    else if (property.uploaded_by_agent_id) { handlerId = property.uploaded_by_agent_id; handlerMethod = 'uploader'; }
 
     if (!handlerId) {
         const sb = await prisma.agent.findFirst({ where: { role: 'super_boss', status: 'active' }, select: { id: true } });
         handlerId = sb?.id ?? null;
+        if (handlerId) handlerMethod = 'other';
     }
 
-    return { storedPhone, existing, isNew: !existing, handlerId };
+    return { storedPhone, existing, isNew: !existing, handlerId, handlerMethod };
 }
 
 function bhkFromSpecs(specs: any): string | undefined {

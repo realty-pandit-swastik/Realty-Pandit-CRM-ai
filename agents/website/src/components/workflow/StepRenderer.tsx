@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import type { WorkflowStepDef, WorkflowStepOption, WorkflowDocType } from '@/lib/api';
 import { getStates } from '@/lib/api';
+import { FLOOR_PRESETS } from '@/lib/floor';
 import { GooglePlacesInput, type PlaceResult } from './GooglePlacesInput';
 
 interface AddressConfig {
@@ -844,6 +845,8 @@ function AddressBlockInput({ value, onSubmit, addressConfig }: {
 
     const [flatNo, setFlatNo] = useState(value?.flat_no || '');
     const [floorNumber, setFloorNumber] = useState(value?.floor_number || '');
+    // Named floor levels (Ground/Upper Ground/Basement/Stilt). When set, floor_number holds the sort key.
+    const [floorLabel, setFloorLabel] = useState(value?.floor_label || '');
     const [plotNo, setPlotNo] = useState(value?.plot_no || '');
     const [apartmentName, setApartmentName] = useState(value?.apartment_name || '');
     const [locality, setLocality] = useState(value?.locality || '');
@@ -884,7 +887,7 @@ function AddressBlockInput({ value, onSubmit, addressConfig }: {
     const validate = useCallback(() => {
         const errs: Record<string, string> = {};
         if (showFlatNo && !flatNo.trim()) errs.flat_no = `${flatNoLabel} is required`;
-        if (showFloorNumber && !floorNumber.trim()) errs.floor_number = 'Floor No is required';
+        if (showFloorNumber && !String(floorNumber).trim() && !floorLabel.trim()) errs.floor_number = 'Floor is required';
         if (apartmentRequired && !apartmentName.trim()) errs.apartment_name = `${apartmentLabel} is required`;
         if (plotNoRequired && !plotNo.trim()) errs.plot_no = `${plotNoLabel} is required`;
         if (!locality.trim()) errs.locality = 'Locality is required';
@@ -893,14 +896,15 @@ function AddressBlockInput({ value, onSubmit, addressConfig }: {
         if (!pincode.trim() || !/^[1-9][0-9]{5}$/.test(pincode.trim())) errs.pincode = 'Valid 6-digit pincode required';
         setErrors(errs);
         return Object.keys(errs).length === 0;
-    }, [flatNo, floorNumber, apartmentName, plotNo, locality, city, state, pincode,
+    }, [flatNo, floorNumber, floorLabel, apartmentName, plotNo, locality, city, state, pincode,
         showFlatNo, showFloorNumber, apartmentRequired, plotNoRequired, flatNoLabel, apartmentLabel, plotNoLabel]);
 
     const handleSubmit = useCallback(() => {
         if (!validate()) return;
         const result: Record<string, any> = {};
         if (showFlatNo && flatNo.trim()) result.flat_no = flatNo.trim();
-        if (showFloorNumber && floorNumber.trim()) result.floor_number = floorNumber.trim();
+        if (showFloorNumber && String(floorNumber).trim()) result.floor_number = String(floorNumber).trim();
+        if (showFloorNumber && floorLabel.trim()) result.floor_label = floorLabel.trim();
         if (showPlotNo && plotNo.trim()) result.plot_no = plotNo.trim();
         if (showApartmentName && apartmentName.trim()) result.apartment_name = apartmentName.trim();
         result.locality = locality.trim();
@@ -923,7 +927,7 @@ function AddressBlockInput({ value, onSubmit, addressConfig }: {
         if (longitude != null) result.longitude = longitude;
 
         onSubmit(result);
-    }, [flatNo, floorNumber, plotNo, apartmentName, locality, city, state, pincode, fullAddress, latitude, longitude,
+    }, [flatNo, floorNumber, floorLabel, plotNo, apartmentName, locality, city, state, pincode, fullAddress, latitude, longitude,
         showFlatNo, showFloorNumber, showPlotNo, showApartmentName, validate, onSubmit]);
 
     const inputCls = 'w-full px-4 py-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white placeholder-slate-400 focus:ring-2 focus:ring-emerald-500 outline-none text-sm';
@@ -961,8 +965,20 @@ function AddressBlockInput({ value, onSubmit, addressConfig }: {
                     )}
                     {showFloorNumber && (
                         <div>
-                            <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1 block">Floor No *</label>
-                            <input type="text" value={floorNumber} onChange={e => setFloorNumber(e.target.value)} placeholder="e.g. 5" className={`${inputCls} ${errors.floor_number ? 'border-red-500' : ''}`} />
+                            <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1 block">Floor *</label>
+                            <div className="flex flex-wrap gap-1.5 mb-2">
+                                {FLOOR_PRESETS.map(p => {
+                                    const active = floorLabel === p.label;
+                                    return (
+                                        <button type="button" key={p.label}
+                                            onClick={() => { if (active) { setFloorLabel(''); setFloorNumber(''); } else { setFloorLabel(p.label); setFloorNumber(String(p.sort)); } }}
+                                            className={`px-2.5 py-1 rounded-lg text-xs font-semibold border ${active ? 'bg-emerald-500 text-white border-emerald-500' : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-700'}`}>
+                                            {p.label}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                            <input type="number" value={floorLabel ? '' : floorNumber} onChange={e => { setFloorNumber(e.target.value); setFloorLabel(''); }} placeholder="or a number — e.g. 3, or -1" className={`${inputCls} ${errors.floor_number ? 'border-red-500' : ''}`} />
                             {errors.floor_number && <p className={errCls}>{errors.floor_number}</p>}
                         </div>
                     )}

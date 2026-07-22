@@ -81,6 +81,9 @@ export function DealWorkspace({
     const phone = rawPhone.replace(/\D/g, '');
     const customerTel = toDialablePhone(rawPhone);
     const coordinatorTel = toDialablePhone((deal.coordinator as any)?.phone);
+    // Referral partner (the partner agent this lead was added on behalf of) — denormalized on the contact.
+    const partnerTel = toDialablePhone((deal.demand_contact as any)?.referral_partner_phone);
+    const partnerName = (deal.demand_contact as any)?.referral_partner_name as string | undefined;
     const stageColor = stageColors[deal.status] || '#6b7280';
 
     const tabs: { key: Tab; label: string }[] = [
@@ -174,6 +177,17 @@ export function DealWorkspace({
                                 <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Unassigned</div>
                             )}
                         </div>
+
+                        {/* Partner block (top-right) — call the partner agent this lead was added on behalf of */}
+                        {partnerTel && (
+                            <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                                <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>🤝 Partner</div>
+                                {partnerName && <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>{partnerName}</div>}
+                                <a href={`tel:${partnerTel}`} title={`Call partner ${partnerName || ''} ${partnerTel}`} style={{ fontSize: 11, color: '#7c3aed', textDecoration: 'none', fontWeight: 700 }}>
+                                    📞 Call partner
+                                </a>
+                            </div>
+                        )}
 
                         {/* Close */}
                         <button onClick={onClose} aria-label="Close" style={{

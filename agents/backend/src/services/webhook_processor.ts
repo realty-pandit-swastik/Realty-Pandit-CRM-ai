@@ -24,6 +24,9 @@ import { BuyerWhatsAppAdapter } from '../workflows/buyer_whatsapp_adapter';
 import { builderOnboardingWorkflow } from '../workflows/builder_onboarding';
 import { agentOnboardingWorkflow } from '../workflows/agent_onboarding';
 import { ensureDealForLead } from './ensure_deal';
+import { sendBuyerConfirmationWhatsApp } from './lead_notifications';
+import { MatchingEngine, buildMatchCriteriaFromLead } from './matching_engine';
+import { isSupplyIntent } from '../utils/intent_signals';
 import prisma from '../db';
 import logger from '../utils/logger';
 import { normalizePhone } from '../utils/phone';
@@ -130,12 +133,24 @@ async function processInboundMessageInner(data: InboundMessageData): Promise<voi
         });
         logger.info(`[SSOT] Created new contact: ${from} → ${contact.contact_type}${identified ? ` (from ${identified.source_table})` : ''}`);
 
+        // Greet a genuinely-organic first-time WhatsApp contact (2026-07-13) — every OTHER
+        // intake path (manual/99acres/website/MagicBricks/housing/Facebook) already sends
+        // this via sendBuyerConfirmationWhatsApp; this was the one path with no greeting at
+        // all. Fire-and-forget, matches the pattern used everywhere else it's called.
+        if (['BUYER', 'TENANT', 'UNKNOWN'].includes(contact!.contact_type)) {
+            sendBuyerConfirmationWhatsApp(contact!.phone_number, contact!.name, 'whatsapp')
+                .catch((err) => logger.warn(`[WebhookProcessor] Welcome message failed for ${contact!.phone_number}: ${(err as Error).message}`));
+        }
+
         // LEAD SCORING: Initialize
         await leadScoreService.initScore(contact.phone_number, contact.tenant_id);
 
         // B1: auto-create NEW deal for buyer/tenant/unknown inbound — Stage 1 KRA entry path.
-        // Skip for partner agents, management, builders (they don't need a deal).
-        if (['BUYER', 'TENANT', 'UNKNOWN'].includes(contact.contact_type)) {
+        // Skip for partner agents, management, builders (they don't need a deal). Also skip when the
+        // FIRST message is a SUPPLY offer ("for sale", "I have a property", "rent out"…) — otherwise a
+        // seller gets a demand deal + buyer cards (real-chat F6); supply is routed to the inventory
+        // workflow below instead.
+        if (['BUYER', 'TENANT', 'UNKNOWN'].includes(contact.contact_type) && !isSupplyIntent(text)) {
             ensureDealForLead({
                 contactPhone: contact.phone_number,
                 source: 'whatsapp',
@@ -311,6 +326,107 @@ How can I help you find your perfect property today? 🏡`;
         logger.warn('[WebhookProcessor] Frustration check failed:', frErr);
     }
 
+    // ─── 3a-bis. POST-VISIT FEEDBACK (VS4-2): reply to the cron's "visit kaisi rahi?" prompt ───
+    // runPostVisitFollowup asks how the visit went while the deal is still VISIT_SCHEDULED with a
+    // PAST appointment — so without this, that reply hits the confirm/cancel menu and is misread.
+    // If a recent post_visit_followup marker exists for this contact and no outcome is logged yet,
+    // treat the FIRST reply as feedback. Human-in-the-loop: a 👍 raises a negotiation task for the
+    // coordinator (it does NOT auto-advance the deal to NEGOTIATION). 🔎 shares more, 🚫 reschedules.
+    try {
+        const recentPrompt = await prisma.interaction.findFirst({
+            where: {
+                phone_number: from, event_type: 'post_visit_followup', direction: 'outbound',
+                created_at: { gte: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000) },
+            },
+            orderBy: { created_at: 'desc' },
+            select: { metadata: true, created_at: true },
+        });
+        const pvDealId = (recentPrompt?.metadata as any)?.deal_id;
+        if (recentPrompt && pvDealId) {
+            const alreadyHandled = await prisma.interaction.findFirst({
+                where: { phone_number: from, event_type: 'post_visit_feedback', created_at: { gte: recentPrompt.created_at } },
+                select: { id: true },
+            });
+            const pvDeal = alreadyHandled ? null : await prisma.transaction.findUnique({
+                where: { id: pvDealId },
+                select: {
+                    id: true, status: true, ai_paused: true, visit_outcome: true, tenant_id: true,
+                    coordinator: { select: { id: true, name: true, phone: true } },
+                    demand_contact: { select: { name: true } },
+                },
+            });
+            if (pvDeal && pvDeal.status === 'VISIT_SCHEDULED' && !pvDeal.ai_paused && !pvDeal.visit_outcome) {
+                const raw = text || '';
+                // Order matters: check "didn't happen" before "positive" so "nahi ho payi" can't be
+                // mis-read as positive. Emojis (👍/🔎/🚫) are the strongest signal.
+                const didntHappen = /🚫|nahi\s*ho\s*pa|nahi\s*hui|visit\s*nahi|could\s*n'?t|did\s*n'?t|reschedul|postpone|\bcancel|nahi\s*ja\s*pa/i.test(raw);
+                const wantsMore = /🔎|aur\s*(option|propert|dikha|ghar|flat)|more\s*option|other\s*(option|propert)|dusr|doosr|kuch\s*aur|\balag/i.test(raw);
+                const positive = /👍|pasand|acch|achhi|achi|badhiya|good|great|liked|love|interested|negotiat|\bhaan\b|\byes\b|\bsahi\b/i.test(raw);
+                const cust = pvDeal.demand_contact?.name || '';
+                let sentiment: 'positive' | 'want_more' | 'didnt_happen' | null = null;
+
+                if (didntHappen) {
+                    sentiment = 'didnt_happen';
+                    // Reset the open appointment to awaiting-slot so the next day/time is captured (VS-5 routing).
+                    try {
+                        const appt = await prisma.appointment.findFirst({
+                            where: { transaction_id: pvDeal.id, status: { notIn: ['cancelled', 'completed', 'no_show'] } },
+                            orderBy: { scheduled_at: 'desc' }, select: { id: true },
+                        });
+                        if (appt) await prisma.appointment.update({ where: { id: appt.id }, data: { status: 'requested' } });
+                    } catch { /* best-effort */ }
+                    await whatsappService.sendTemplate(from, 'rp_visit_availability', {}).catch(() => {});
+                } else if (wantsMore) {
+                    sentiment = 'want_more';
+                    await whatsappService.sendText(from, `🔎 Bilkul ${cust}! Main aapko aur options bhejta hoon.`).catch(() => {});
+                    import('./property_sharing').then(({ shareNextProperty }) => shareNextProperty(pvDeal.id).catch(() => {})).catch(() => {});
+                } else if (positive) {
+                    sentiment = 'positive';
+                    await prisma.transaction.update({ where: { id: pvDeal.id }, data: { client_interest_level: 'Hot', last_team_action_at: new Date() } }).catch(() => {});
+                    await whatsappService.sendText(from, `🎉 Bahut badhiya ${cust}! Hamari team aapse aage ki baat (price/negotiation) ke liye turant sampark karegi.`).catch(() => {});
+                }
+
+                if (sentiment) {
+                    if (pvDeal.coordinator?.id) {
+                        const taskTitle = sentiment === 'positive'
+                            ? `💰 Customer liked the property — start negotiation: ${cust || from}`
+                            : sentiment === 'want_more'
+                                ? `🔎 Customer wants more options — review matches: ${cust || from}`
+                                : `🗓️ Visit didn't happen — reschedule: ${cust || from}`;
+                        await prisma.task.create({
+                            data: {
+                                title: taskTitle,
+                                description: `Post-visit reply: "${raw.slice(0, 200)}". Deal ${pvDeal.id}.`,
+                                contact_phone: from, deal_id: pvDeal.id, assigned_to: pvDeal.coordinator.id,
+                                priority: sentiment === 'positive' ? 'HIGH' : 'MEDIUM', status: 'TODO', task_type: 'GENERAL',
+                                due_date: new Date(Date.now() + (sentiment === 'positive' ? 2 : 6) * 60 * 60 * 1000),
+                            },
+                        }).catch(e => logger.warn('[PostVisitFeedback] task create failed:', (e as Error).message));
+                        try {
+                            const { notify } = await import('./notify');
+                            notify('task_assigned',
+                                [{ id: pvDeal.coordinator.id, type: 'agent', phone: pvDeal.coordinator.phone ?? undefined, name: pvDeal.coordinator.name ?? undefined }],
+                                { title: taskTitle, due_date: sentiment === 'positive' ? 'now' : 'today' });
+                        } catch { /* notify is best-effort */ }
+                    }
+                    // Dedup marker — only the FIRST reply to the prompt is treated as feedback.
+                    await prisma.interaction.create({
+                        data: {
+                            tenant_id: pvDeal.tenant_id, phone_number: from, channel: 'whatsapp',
+                            direction: 'inbound', event_type: 'post_visit_feedback',
+                            content: raw.slice(0, 500), metadata: { deal_id: pvDeal.id, sentiment },
+                        },
+                    }).catch(() => {});
+                    logger.info(`[WebhookProcessor] Post-visit feedback (${sentiment}) from ${from} on deal ${pvDeal.id}`);
+                    return; // claimed — don't fall through to the confirm/cancel menu or router
+                }
+                // ambiguous reply → fall through to normal handling (no marker written, can retry)
+            }
+        }
+    } catch (pvErr) {
+        logger.warn('[WebhookProcessor] post-visit feedback handling failed:', (pvErr as Error).message);
+    }
+
     // ─── 3b. PIPELINE DEAL: Active NEW/QUALIFIED deal → qualify + send property card ────
     // Per KRA Stage 1 Area 6: any positive WhatsApp reply qualifies the lead.
     // Per KRA Stage 2 Area 1: on QUALIFIED entry, send first property card immediately.
@@ -331,24 +447,32 @@ How can I help you find your perfect property today? 🏡`;
 
         if (activeDeal) {
             // ── 3b.1 Closing signal detection (Hindi/English/Hinglish) ──
-            const closingSignalPatterns = [
+            // Split into two DISTINCT meanings (2026-07-13) — these used to share one
+            // pattern array and one hardcoded reply, so a lead saying "not interested,
+            // close my query" got told "congratulations on finalizing!". Same ON_HOLD +
+            // task handling for both, but different copy and a correct lost_reason.
+            const finalizedElsewherePatterns = [
                 /humne\s*(le|li|liya|li\s*hai|kha?ri?d)/i,
                 /already\s*(bought|got|taken|purchased|finalized|done)/i,
-                /\bnot\s*interested\b/i,
-                /\bno\s*(thanks|thank\s*you|thanx)\b/i,
-                /\bmat\s*bhejo\b/i,
-                /\bstop\s*(messages?|messaging|sending)\b/i,
-                /\bunsubscribe\b/i,
                 /property\s*mil\s*(gayi|gaya|gay[ai])/i,
                 /property\s*(le?\s*li|li\s*hai|kha?ri?d\s*li)/i,
                 /(flat|ghar|makan)\s*(le?\s*li|li\s*hai|le\s*liya|kha?ri?d\s*liya)/i,
                 /(buy|kha?ri?d)\s*kar\s*li/i,
                 /book\s*kar\s*li/i,
             ];
-            const isClosingSignal = closingSignalPatterns.some(re => re.test(text || ''));
+            const withdrawingPatterns = [
+                /\bnot\s*interested\b/i,
+                /\bno\s*(thanks|thank\s*you|thanx)\b/i,
+                /\bmat\s*bhejo\b/i,
+                /\bstop\s*(messages?|messaging|sending)\b/i,
+                /\bunsubscribe\b/i,
+            ];
+            const isFinalizedElsewhere = finalizedElsewherePatterns.some(re => re.test(text || ''));
+            const isWithdrawing = withdrawingPatterns.some(re => re.test(text || ''));
+            const isClosingSignal = isFinalizedElsewhere || isWithdrawing;
 
             if (isClosingSignal) {
-                logger.info(`[WebhookProcessor] Closing signal detected from ${from} on deal ${activeDeal.id}: "${text}"`);
+                logger.info(`[WebhookProcessor] Closing signal (${isFinalizedElsewhere ? 'finalized-elsewhere' : 'withdrawing'}) detected from ${from} on deal ${activeDeal.id}: "${text}"`);
 
                 // Move deal to ON_HOLD + pause AI
                 try {
@@ -373,7 +497,9 @@ How can I help you find your perfect property today? 🏡`;
                     if (leadMgr) {
                         await prisma.task.create({
                             data: {
-                                title: `Verify closure: ${contact.name || from} indicated they bought elsewhere`,
+                                title: isFinalizedElsewhere
+                                    ? `Verify closure: ${contact.name || from} indicated they bought elsewhere`
+                                    : `Lead withdrew: ${contact.name || from} is no longer interested`,
                                 description: `Customer message: "${text}". Deal moved to ON_HOLD + AI paused. Verify and decide CLOSED_LOST or reopen.`,
                                 contact_phone: from,
                                 assigned_to: leadMgr.id,
@@ -388,8 +514,11 @@ How can I help you find your perfect property today? 🏡`;
                     logger.warn(`[WebhookProcessor] Failed to create closure task: ${(taskErr as Error).message}`);
                 }
 
-                // Polite acknowledgement (within 24h window since they just messaged)
-                const closingAck = 'Samajh gaya. Aapki property finalize karne ke liye congratulations! 🏡 Hum aage bhi kuch achhi opportunities aane par share karenge. Dhanyawad! 🙏';
+                // Polite acknowledgement — congratulate on a genuine finalize-elsewhere,
+                // but don't congratulate someone who's simply withdrawing/not interested.
+                const closingAck = isFinalizedElsewhere
+                    ? 'Samajh gaya. Aapki property finalize karne ke liye congratulations! 🏡 Hum aage bhi kuch achhi opportunities aane par share karenge. Dhanyawad! 🙏'
+                    : 'Samajh gaya, koi baat nahi 🙏 Aapko is baare mein aur messages nahi karenge. Agar future mein kabhi zaroorat ho to hum yahin hain. Dhanyawad!';
                 await whatsappService.sendText(from, closingAck);
 
                 await prisma.interaction.create({
@@ -400,7 +529,7 @@ How can I help you find your perfect property today? 🏡`;
                         direction: 'inbound',
                         event_type: 'closing_signal',
                         content: text,
-                        metadata: { deal_id: activeDeal.id, action: 'on_hold' },
+                        metadata: { deal_id: activeDeal.id, action: 'on_hold', reason: isFinalizedElsewhere ? 'PURCHASED_ELSEWHERE' : 'NOT_INTERESTED' },
                     },
                 });
                 // Log the ack as outbound too — keeps R4 / the safety-net
@@ -417,9 +546,85 @@ How can I help you find your perfect property today? 🏡`;
                 }).catch(() => {});
                 await prisma.contact.update({
                     where: { phone_number: from },
-                    data: { last_channel: 'whatsapp', last_interaction: new Date() },
+                    data: {
+                        last_channel: 'whatsapp',
+                        last_interaction: new Date(),
+                        lost_reason: isFinalizedElsewhere ? 'PURCHASED_ELSEWHERE' : 'NOT_INTERESTED',
+                        lost_at: new Date(),
+                    },
                 });
                 return;
+            }
+
+            // ── 3b.1b Video request — share the current best match's video link directly ──
+            // (2026-07-13) Previously unhandled entirely: a buyer asking "send the video" got
+            // either silence or the generic safety-net ack, never an actual video. English +
+            // Hindi/Hinglish phrasing, same array-of-regex style as closingSignalPatterns above.
+            const videoRequestPatterns = [
+                /\bvideo\b/i,
+                /\breel\b/i,
+                /\bwalkthrough\b/i,
+                /\bvideo\s*(bhej|dikhao|dikha\s*do|bhejo|bhejiye)/i,
+                /\bclip\b/i,
+            ];
+            const isVideoRequest = videoRequestPatterns.some(re => re.test(text || ''));
+
+            if (isVideoRequest) {
+                logger.info(`[WebhookProcessor] Video request detected from ${from} on deal ${activeDeal.id}: "${text}"`);
+                try {
+                    const engine = new MatchingEngine();
+                    const dealSchema = ((activeDeal as any).demand_schema_values ?? {}) as Record<string, any>;
+                    const bhkRaw = dealSchema.bhk != null ? String(dealSchema.bhk) : null;
+                    const bhkMatch = bhkRaw?.match(/\d+/)?.[0];
+                    const criteria = buildMatchCriteriaFromLead({
+                        intent: (activeDeal as any).demand_intent === 'rent_lease' ? 'rent'
+                            : (activeDeal as any).demand_intent === 'rent' ? 'rent'
+                            : (activeDeal as any).demand_intent === 'buy' ? 'buy'
+                            : (activeDeal.demand_budget_max && Number(activeDeal.demand_budget_max) < 200000) ? 'rent'
+                            : 'buy',
+                        demand_type_slug: null,
+                        type_id: (contact as any).type_id || null,
+                        sub_category_id: (contact as any).sub_category_id || null,
+                        category_id: (contact as any).category_id || null,
+                        budget_min: activeDeal.demand_budget_min,
+                        budget_max: activeDeal.demand_budget_max,
+                        preferred_location: activeDeal.demand_location || (contact as any).preferred_location || null,
+                        preferred_lat: (contact as any).preferred_lat ?? null,
+                        preferred_lng: (contact as any).preferred_lng ?? null,
+                        demand_bhk: bhkMatch ? parseInt(bhkMatch, 10) : null,
+                        demand_taxonomy_node_id: (activeDeal as any).demand_taxonomy_node_id ?? (contact as any).demand_taxonomy_node_id ?? null,
+                        demand_schema_values: (activeDeal as any).demand_schema_values ?? (contact as any).demand_schema_values ?? null,
+                    });
+                    const matches = await engine.findMatches(criteria, 1);
+                    const best = matches[0];
+                    const VIDEO_MIN_MATCH_SCORE = 50;
+
+                    if (best && (best as any).match_score >= VIDEO_MIN_MATCH_SCORE) {
+                        const inv = await prisma.inventory.findUnique({
+                            where: { id: best.id },
+                            select: { video_urls: true, display_id: true },
+                        });
+                        if (inv?.video_urls?.length) {
+                            const link = `https://www.realtypandit.in/properties/${inv.display_id || best.id}`;
+                            const videoReply = `🎥 Yahan video dekhiye:\n${link}`;
+                            await whatsappService.sendText(from, videoReply);
+                            await prisma.interaction.create({
+                                data: {
+                                    tenant_id: contact.tenant_id, phone_number: from, channel: 'whatsapp',
+                                    direction: 'outbound', event_type: 'message', content: videoReply,
+                                    metadata: { deal_id: activeDeal.id, inventory_id: best.id, video_request: true },
+                                },
+                            }).catch(() => {});
+                            logger.info(`[WebhookProcessor] Video link sent to ${from} for inventory ${best.id}`);
+                            return;
+                        }
+                    }
+                    logger.info(`[WebhookProcessor] Video request from ${from} — no video-having match found; falling through`);
+                } catch (videoErr) {
+                    logger.warn(`[WebhookProcessor] Video-request handling failed for ${from}: ${(videoErr as Error).message}`);
+                }
+                // No video-having match → don't reply here; fall through to conversational/generic
+                // handling below, and the wrapper-level safety net covers true silence.
             }
 
             // ── 3b.2 Conversational intent — fall through to message_router for real reply ──
@@ -432,6 +637,14 @@ How can I help you find your perfect property today? 🏡`;
                 logger.info(`[WebhookProcessor] Conversational message from ${from} on deal ${activeDeal.id} — routing to message_router`);
                 // Fall through to step 6 (message router) — do NOT return here.
             } else {
+                // F6 backstop: a SHORT supply offer ("property for sale") on a stray demand deal would
+                // otherwise get qualified + card-spammed — redirect to listing intake instead. (Long
+                // supply messages are already caught above as conversational.) (F6, 2026-06-21)
+                if (isSupplyIntent(text)) {
+                    await whatsappService.sendText(from, `🙏 Lagta hai aap property *bech* ya *rent pe de* rahe hain. Apni property ki detail (type, location, area, price) bhej dijiye — main turant list kar deta hoon.`);
+                    await prisma.contact.update({ where: { phone_number: from }, data: { last_channel: 'whatsapp', last_interaction: new Date() } });
+                    return;
+                }
                 // ── 3b.3 Generic / requirement message → (capture any new requirement) qualify + auto-share ──
                 // P1 (2026-06-11): a SHORT message on an active deal used to go straight to a blind
                 // next-card, silently dropping stated requirements like "1 bhk" / "Vaishali" / "rent"
@@ -446,6 +659,7 @@ How can I help you find your perfect property today? 🏡`;
                     const dealData: any = {};
                     if (reqSlots.location) dealData.demand_location = reqSlots.location;
                     if (reqSlots.intent) dealData.demand_intent = reqSlots.intent === 'rent' ? 'rent_lease' : 'buy';
+                    if (reqSlots.budget) dealData.demand_budget_max = reqSlots.budget;
                     if (reqSlots.bhk) {
                         // Re-read the deal's current schema fresh so we merge (not clobber) other keys
                         // (amenities/furnishing/…) the in-scope activeDeal may not have loaded.
@@ -465,6 +679,7 @@ How can I help you find your perfect property today? 🏡`;
                             const cData: any = {};
                             if (reqSlots.location) cData.preferred_location = reqSlots.location;
                             if (reqSlots.intent) cData.intent = reqSlots.intent;
+                            if (reqSlots.budget) cData.budget_max = reqSlots.budget;
                             if (Object.keys(cData).length > 0) {
                                 await prisma.contact.update({ where: { phone_number: from }, data: cData });
                             }
@@ -473,23 +688,50 @@ How can I help you find your perfect property today? 🏡`;
                             logger.error('[WebhookProcessor] Requirement capture update failed:', err);
                         }
                     }
+                    // Residential/commercial: resolve the stated type → contact.category_id so the
+                    // re-matched card respects res-vs-com (the type slug itself is not matched — see
+                    // property_sharing which reads contact.category_id). (A1, 2026-06-21)
+                    if (reqSlots.type) {
+                        const { applyDemandCategoryFromType } = await import('../utils/demand_capture');
+                        await applyDemandCategoryFromType(from, reqSlots.type);
+                    }
                 }
+
+                // Deterministic qualify + anti-spam (F2, 2026-06-21): do NOT auto-qualify on a bare
+                // "hi"/"ok" and do NOT fire a card on every reply. Qualify only when the deal has
+                // enough (location+budget); share a card only on a NEW requirement or an explicit
+                // "more" — otherwise ask for the missing detail / acknowledge.
+                const capturedThisTurn = Object.keys(reqSlots).length > 0;
+                const wantsMore = /\b(more|next|aur|aur dikhao|dusr[ae]|other|others|alternate|dikhao|dikha do|aur batao)\b/i.test(text || '');
+                const dealNow = await prisma.transaction.findUnique({
+                    where: { id: activeDeal.id },
+                    select: { demand_location: true, demand_budget_max: true },
+                });
+                const hasEnough = !!dealNow?.demand_location && !!dealNow?.demand_budget_max;
+                const { shareNextProperty } = await import('./property_sharing');
 
                 if (activeDeal.status === 'NEW') {
-                    const { transitionTransaction } = await import('./transaction_state_machine');
-                    const { TransactionStatus } = await import('@prisma/client');
-                    await transitionTransaction(
-                        activeDeal.id,
-                        TransactionStatus.QUALIFIED,
-                        from,
-                        'whatsapp',
-                        { notes: 'Customer engaged via WhatsApp — auto-qualified' },
-                    );
-                    logger.info(`[WebhookProcessor] Deal ${activeDeal.id} qualified via WhatsApp reply from ${from}`);
+                    if (hasEnough) {
+                        const { transitionTransaction } = await import('./transaction_state_machine');
+                        const { TransactionStatus } = await import('@prisma/client');
+                        await transitionTransaction(activeDeal.id, TransactionStatus.QUALIFIED, from, 'whatsapp',
+                            { notes: 'Customer provided enough requirement (location+budget) via WhatsApp' });
+                        logger.info(`[WebhookProcessor] Deal ${activeDeal.id} qualified (location+budget) from ${from}`);
+                        await shareNextProperty(activeDeal.id);
+                    } else {
+                        const miss: string[] = [];
+                        if (!dealNow?.demand_location) miss.push('location (jaise: Vaishali, Sector 62 Noida)');
+                        if (!dealNow?.demand_budget_max) miss.push('budget');
+                        await whatsappService.sendText(from, `🙏 Thodi aur detail bata dijiye — ${miss.join(' aur ')}? Phir aapke liye best matching properties turant bhejta hoon.`);
+                    }
+                } else {
+                    // QUALIFIED: share only on a NEW requirement or an explicit "more" — not on chit-chat.
+                    if (capturedThisTurn || wantsMore) {
+                        await shareNextProperty(activeDeal.id);
+                    } else {
+                        await whatsappService.sendText(from, `🙏 Ji bataiye — in properties mein se koi pasand aayi, ya koi aur requirement hai? (location / budget / BHK bata sakte hain)`);
+                    }
                 }
-
-                const { shareNextProperty } = await import('./property_sharing');
-                await shareNextProperty(activeDeal.id);
 
                 await prisma.interaction.create({
                     data: {
@@ -536,10 +778,15 @@ How can I help you find your perfect property today? 🏡`;
             return;
         }
 
-        // Check if message triggers a new inventory workflow
-        if (['LANDLORD', 'PARTNER_AGENT', 'REAL_ESTATE_BUILDER', 'MANAGEMENT'].includes(contact.contact_type)) {
+        // Check if message triggers a new inventory workflow. UNKNOWN added (F6): a brand-new contact
+        // OFFERING a property must be able to enter the seller/inventory flow (previously excluded, so
+        // a seller fell through to the buyer card path). For UNKNOWN we require an explicit
+        // supply-intent signal (not the broad inventory keywords, which a buyer might also use).
+        if (['LANDLORD', 'PARTNER_AGENT', 'REAL_ESTATE_BUILDER', 'MANAGEMENT', 'UNKNOWN'].includes(contact.contact_type)) {
             const lowerText = normalizedText;
-            const isInventoryTrigger = INVENTORY_TRIGGER_WORDS.some(kw => lowerText.includes(kw));
+            const isInventoryTrigger = contact.contact_type === 'UNKNOWN'
+                ? isSupplyIntent(text)
+                : INVENTORY_TRIGGER_WORDS.some(kw => lowerText.includes(kw));
             if (isInventoryTrigger) {
                 logger.info(`[WebhookProcessor] Starting inventory workflow v2 for ${from} (trigger: "${text}")`);
                 await workflowAdapter.startSession(from);
@@ -844,8 +1091,13 @@ How can I help you find your perfect property today? 🏡`;
 // See docs/plans/2026-05-19-report-cadence-and-bot-reply.md
 
 const AUTORESPONDER_RE = /thank you for contacting|please let us know how we can help|do not reply|automated message|out of office|this is an automated|auto[- ]?reply/i;
-const SAFETYNET_SKIP_RE = /^\s*(confirm|confirmed|reschedule|cancel|stop|unsubscribe|mat\s*bhejo)\s*$/i;
+export const SAFETYNET_SKIP_RE = /^\s*(confirm|confirmed|reschedule|cancel|stop|unsubscribe|mat\s*bhejo)\s*$/i;
 const EXTERNAL_TYPES = ['BUYER', 'TENANT', 'LANDLORD', 'UNKNOWN'];
+// Partner agents get the same never-silent guarantee as external clients (2026-07-13):
+// they were previously excluded outright, so a partner's button-tap or message could
+// go unanswered forever. MANAGEMENT stays excluded — that's the owner's own number,
+// correctly exempt from bot auto-replies.
+export const SAFETYNET_COVERED_TYPES = [...EXTERNAL_TYPES, 'PARTNER_AGENT'];
 // Specialised handlers that legitimately own a turn without an outbound row.
 const CLAIMED_EVENT_TYPES = ['workflow_message', 'workflow_start', 'workflow_error', 'authentication_confirmed', 'closing_signal'];
 
@@ -887,41 +1139,69 @@ export async function processInboundMessage(data: InboundMessageData): Promise<v
             where: { phone_number: from },
             select: { tenant_id: true, contact_type: true, assigned_agent_id: true, name: true },
         });
-        if (!contact || !EXTERNAL_TYPES.includes(String(contact.contact_type))) return;
+        if (!contact || !SAFETYNET_COVERED_TYPES.includes(String(contact.contact_type))) return;
 
-        const ack = "🙏 Got it — thank you for your message. A team member will assist you shortly.";
-        await whatsappService.sendText(from, ack).catch(() => {});
-        await prisma.interaction.create({
-            data: {
-                tenant_id: contact.tenant_id, phone_number: from, channel: 'whatsapp',
-                direction: 'outbound', event_type: 'message', content: ack,
-            },
-        }).catch(() => {});
-
-        // Assign a follow-up to the lead's agent (else a super_boss).
-        let assignee = contact.assigned_agent_id;
-        if (!assignee) {
-            const sb = await prisma.agent.findFirst({
-                where: { role: 'super_boss', status: 'active' }, select: { id: true },
-            });
-            assignee = sb?.id || null;
-        }
-        if (assignee) {
-            await prisma.task.create({
-                data: {
-                    title: `Unanswered WhatsApp: ${contact.name || from}`,
-                    description: `Bot did not reply to: "${text.slice(0, 200)}". Auto-acknowledged; please follow up.`,
-                    contact_phone: from,
-                    assigned_to: assignee,
-                    priority: 'HIGH',
-                    status: 'TODO',
-                    task_type: 'CALLBACK',
-                    due_date: new Date(Date.now() + 60 * 60 * 1000),
-                },
-            }).catch((e) => logger.warn(`[SafetyNet] task create failed: ${(e as Error).message}`));
-        }
-        logger.warn(`[SafetyNet] No reply for external client ${from} ("${text.slice(0, 60)}") → acked + assigned ${assignee || 'NONE'}`);
+        await sendSafetyNetAck(from, contact, text);
     } catch (netErr) {
         logger.error(`[WebhookProcessor] Safety-net error for ${from}: ${(netErr as Error)?.message}`);
     }
+}
+
+type SafetyNetContact = {
+    tenant_id: string;
+    contact_type: string;
+    assigned_agent_id: string | null;
+    name: string | null;
+};
+
+/**
+ * Shared ack + follow-up-task logic for a contact the bot has gone silent on.
+ * Called from the inline post-turn guard above AND from the scheduled backstop
+ * sweep (`whatsapp-safety-net-sweep`, scheduled_worker.ts) — 146 confirmed-stale
+ * messages in a 60-day audit showed the inline guard alone doesn't catch every
+ * silent case, so a periodic sweep re-checks for anything it missed.
+ */
+export async function sendSafetyNetAck(from: string, contact: SafetyNetContact, text: string): Promise<void> {
+    const isPartner = contact.contact_type === 'PARTNER_AGENT';
+    const ack = isPartner
+        ? "🙏 Noted — our listings team will follow up shortly."
+        : "🙏 Got it — thank you for your message. A team member will assist you shortly.";
+    await whatsappService.sendText(from, ack).catch(() => {});
+    await prisma.interaction.create({
+        data: {
+            tenant_id: contact.tenant_id, phone_number: from, channel: 'whatsapp',
+            direction: 'outbound', event_type: 'message', content: ack,
+        },
+    }).catch(() => {});
+
+    // Assign a follow-up: partners route to whoever manages that partner relationship,
+    // everyone else to the lead's own agent — both fall back to a super_boss.
+    let assignee = contact.assigned_agent_id;
+    if (isPartner) {
+        const pa = await prisma.partnerAgent.findUnique({
+            where: { phone_number: from }, select: { managing_agent_id: true },
+        });
+        assignee = pa?.managing_agent_id || null;
+    }
+    if (!assignee) {
+        const sb = await prisma.agent.findFirst({
+            where: { role: 'super_boss', status: 'active' }, select: { id: true },
+        });
+        assignee = sb?.id || null;
+    }
+    if (assignee) {
+        await prisma.task.create({
+            data: {
+                title: `Unanswered WhatsApp${isPartner ? ' (Partner)' : ''}: ${contact.name || from}`,
+                description: `Bot did not reply to: "${text.slice(0, 200)}". Auto-acknowledged; please follow up.`,
+                contact_phone: from,
+                assigned_to: assignee,
+                priority: 'HIGH',
+                status: 'TODO',
+                task_type: 'CALLBACK',
+                due_date: new Date(Date.now() + 60 * 60 * 1000),
+            },
+        }).catch((e) => logger.warn(`[SafetyNet] task create failed: ${(e as Error).message}`));
+    }
+    logger.warn(`[SafetyNet] No reply for ${isPartner ? 'partner' : 'external client'} ${from} ("${text.slice(0, 60)}") → acked + assigned ${assignee || 'NONE'}`);
 }

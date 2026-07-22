@@ -35,6 +35,7 @@ export const updateDealStatusSchema = z.object({
         required_error: 'Status is required',
     }),
     reason: z.string().max(1000).optional(),
+    final_price: z.number().positive().optional(), // agreed price, persisted on CLOSED_WON (NEG-2)
 });
 
 export const createDealQuerySchema = z.object({

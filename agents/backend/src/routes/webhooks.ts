@@ -108,6 +108,21 @@ router.post('/whatsapp', async (req, res) => {
         logger.info('[Webhook] CALL RAW:', JSON.stringify(req.body, null, 2));
     }
 
+    // Delivery-status callbacks (sent / delivered / read / failed). Meta sends one per
+    // outbound message. These were being discarded entirely, so a message Meta ACCEPTED
+    // but never DELIVERED looked identical to a success: the send logged fine, the
+    // Interaction row was written, and the customer got nothing. Log them so a delivery
+    // failure is visible instead of silent.
+    if (changeValue?.statuses) {
+        for (const s of changeValue.statuses) {
+            if (s.status === 'failed') {
+                logger.error(`[WA-Delivery] FAILED → ${s.recipient_id}: ${JSON.stringify(s.errors || [])}`);
+            } else {
+                logger.info(`[WA-Delivery] ${s.status} → ${s.recipient_id}`);
+            }
+        }
+    }
+
     // ─── WhatsApp Calling API: forward raw webhook to Pipecat ────────────────
     // Pipecat's WhatsAppClient owns the full call flow: HMAC verify, WebRTC
     // setup, pre_accept + accept via Graph API, media.  We just proxy the raw
@@ -295,11 +310,11 @@ router.post('/internal/call-ended', async (req, res) => {
     res.sendStatus(200);
 
     try {
-        const { call_id, caller_number, transcript, source } = req.body;
+        const { call_id, caller_number, transcript, started_at, duration, source } = req.body;
         if (source !== 'pipecat' || !caller_number) return;
 
         logger.info(`[Internal] Saving Pipecat call record for ${caller_number}`);
-        await voiceService.savePipecatCallRecord({ call_id, caller_number, transcript });
+        await voiceService.savePipecatCallRecord({ call_id, caller_number, transcript, started_at, duration });
 
         // Dynamic language learning for internal team members
         await updateAgentLanguagePreference(caller_number, transcript ?? '');

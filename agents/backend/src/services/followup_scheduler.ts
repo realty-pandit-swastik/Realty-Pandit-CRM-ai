@@ -6,6 +6,7 @@ import { WhatsAppService } from './whatsapp';
 import { SessionTracker } from './session_tracker';
 import { PendingMessageQueue } from './pending_message_queue';
 import { isQuietHours } from '../utils/quiet_hours';
+import { isLlmFallback } from '../utils/intent_signals';
 import logger from '../utils/logger';
 
 const FOLLOWUP_HOURS = 48;
@@ -139,18 +140,31 @@ export class FollowupScheduler {
                                 }
                             });
                             if (!existingCallTask) {
-                                await prisma.task.create({
-                                    data: {
-                                        title: `📞 Call ${contact.name || contact.phone_number} — not responding on WhatsApp (${Math.round(daysSilent)}d)`,
-                                        description: `Contact has not replied on WhatsApp for ${Math.round(daysSilent)} days. Last stated location: ${contact.preferred_location || 'unknown'}. Please call directly to check interest.`,
-                                        contact_phone: contact.phone_number,
-                                        assigned_to: contact.assigned_agent_id || undefined,
-                                        priority: 'HIGH',
-                                        status: 'TODO',
-                                        task_type: 'QUALIFY_LEAD',
-                                        due_date: new Date(Date.now() + 24 * 60 * 60 * 1000),
-                                    }
-                                });
+                                // (2026-06-23) Task.assigned_to is REQUIRED — passing `undefined` for an
+                                // unassigned contact threw "assigned_to is missing" EVERY HOUR (the failed
+                                // create never deduped, so it retried forever). Route an unassigned silent
+                                // lead's call task to an active super_boss so it isn't lost.
+                                let assignee: string | null = contact.assigned_agent_id;
+                                if (!assignee) {
+                                    const boss = await prisma.agent.findFirst({ where: { role: 'super_boss', status: 'active' }, select: { id: true } });
+                                    assignee = boss?.id ?? null;
+                                }
+                                if (assignee) {
+                                    await prisma.task.create({
+                                        data: {
+                                            title: `📞 Call ${contact.name || contact.phone_number} — not responding on WhatsApp (${Math.round(daysSilent)}d)`,
+                                            description: `Contact has not replied on WhatsApp for ${Math.round(daysSilent)} days. Last stated location: ${contact.preferred_location || 'unknown'}. Please call directly to check interest.`,
+                                            contact_phone: contact.phone_number,
+                                            assigned_to: assignee,
+                                            priority: 'HIGH',
+                                            status: 'TODO',
+                                            task_type: 'QUALIFY_LEAD',
+                                            due_date: new Date(Date.now() + 24 * 60 * 60 * 1000),
+                                        }
+                                    });
+                                } else {
+                                    logger.warn(`[FollowupScheduler] ${contact.phone_number} silent ${Math.round(daysSilent)}d but unassigned + no active super_boss — call task skipped`);
+                                }
                             }
                             logger.info(`[FollowupScheduler] ${contact.phone_number} (${contact.name}) silent ${Math.round(daysSilent)}d — skipping AI message, phone task created`);
                             continue;
@@ -158,6 +172,12 @@ export class FollowupScheduler {
                     }
 
                     const followupMessage = await this.generateFollowUp(contact);
+                    // Never send an LLM holding/error line ("experiencing high traffic") as a proactive
+                    // followup — it leaked to clients (real-chat F7-A). Skip silently if the LLM failed.
+                    if (followupMessage && isLlmFallback(followupMessage)) {
+                        logger.warn(`[FollowupScheduler] LLM fallback text suppressed for ${contact.phone_number} — skipping followup`);
+                        continue;
+                    }
                     if (followupMessage) {
                         // Hybrid approach: check 24h session window
                         const sessionActive = await SessionTracker.isSessionActive(contact.phone_number);

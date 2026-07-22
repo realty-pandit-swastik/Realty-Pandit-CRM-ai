@@ -23,6 +23,14 @@ Update procedure when WHATSAPP_TOKEN expires: see [`whatsapp-token-rotation.md`]
 3. **Wait for status:** templates show `PENDING` for minutes to days. Re-fetch via `GET /v17.0/<WABA_ID>/message_templates`.
 4. **Update registry key when approved:** if you had to bump a `_v2`/`_v3` suffix to bypass the category lock, update the `name:` field in `whatsapp_templates.ts` to match the new Meta name.
 
+## Graph-API submission gotchas (observed 2026-06-18)
+
+When submitting via `POST /<WABA>/message_templates` (Graph API, not the UI):
+
+- **Body must NOT end on a variable placeholder.** A body ending `…here:\n{{4}}` is rejected with `code=100 subcode=2388299 "Invalid parameter"` (no detail). Fix: always put a static trailing line after the last `{{N}}`. Submitting `rp_team_new_inventory` failed this way; appending `\n\nOpen Realty Pandit to see full details. 🙏` after `{{4}}` passed. (All approved templates with a link var — e.g. v5 cards' `{{7}}` — have text after the var.)
+- **Meta classifies by CONTENT, not the category you submit.** A promotional CTA + a property link auto-flips the template to **MARKETING** even when you submit `category: 'UTILITY'`. `rp_team_new_inventory` ("Share it with your matching clients" + listing link) approved as MARKETING despite a UTILITY submission. For UTILITY, keep copy strictly transactional/system-notification — no "share", "check out", or marketing CTA. (MARKETING then silently drops to STOP-opted recipients per the trap below — for an internal staff broadcast that meant the WhatsApp leg was dropped entirely; see PROJECT_STATUS "Inventory epic D".)
+- Submit script pattern: `backend/src/scripts/submit_*_template.js` (standalone `node`, reads `.env`, `require('dotenv')`). For TEXT-body templates no header handle is needed; for DOCUMENT/IMAGE headers you must first resumable-upload a sample to get a `header_handle` (see the brochure script's `getDocumentHandle`).
+
 ## Category lock — 4-week trap
 
 When you submit a template under category X and Meta later flags it as the wrong category (or you submitted wrong), Meta locks that exact template name from re-categorization for **4 weeks**. The only way around is to delete + recreate with a new versioned name (`_v2`, `_v3`, …).

@@ -50,7 +50,7 @@ export default function ContactPage() {
                                 <div>
                                     <h3 className="text-white font-semibold mb-1">Email</h3>
                                     <p className="text-gray-400 text-sm">For business inquiries and partnerships</p>
-                                    <p className="text-purple-400 mt-1">info@realtypandit.com</p>
+                                    <p className="text-purple-400 mt-1">info@realtypandit.in</p>
                                 </div>
                             </div>
 

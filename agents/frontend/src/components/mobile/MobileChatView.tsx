@@ -6,6 +6,7 @@ interface MobileChatViewProps {
     interactions: any[];
     onReportNoShow: () => void;
     onMarkLeadLost?: () => void;
+    onSetDelayReason?: () => void;
     onUpdateContactType: (phone: string, type: string) => void;
 }
 
@@ -13,7 +14,7 @@ const TYPE_LABEL: Record<string, string> = {
     BUYER: 'Buyer', TENANT: 'Tenant', LANDLORD: 'Landlord', PARTNER_AGENT: 'Partner', REAL_ESTATE_BUILDER: 'Builder', MANAGEMENT: 'Team', UNKNOWN: 'Unknown',
 };
 
-export function MobileChatView({ contact, interactions, onReportNoShow, onMarkLeadLost, onUpdateContactType }: MobileChatViewProps) {
+export function MobileChatView({ contact, interactions, onReportNoShow, onMarkLeadLost, onSetDelayReason, onUpdateContactType }: MobileChatViewProps) {
     const [showActions, setShowActions] = useState(false);
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -64,6 +65,12 @@ export function MobileChatView({ contact, interactions, onReportNoShow, onMarkLe
                         style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '8px 12px', textAlign: 'left', color: '#f87171', fontSize: '13px', borderRadius: '6px' }}>
                         Report No-Show
                     </button>
+                    {onSetDelayReason && contact.lead_status !== 'lost' && (
+                        <button onClick={() => { onSetDelayReason(); setShowActions(false); }}
+                            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '8px 12px', textAlign: 'left', color: '#fbbf24', fontSize: '13px', borderRadius: '6px', fontWeight: 600 }}>
+                            ⏳ Set Delay Reason
+                        </button>
+                    )}
                     {onMarkLeadLost && contact.lead_status !== 'lost' && (
                         <button onClick={() => { onMarkLeadLost(); setShowActions(false); }}
                             style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '8px 12px', textAlign: 'left', color: '#fca5a5', fontSize: '13px', borderRadius: '6px', fontWeight: 600 }}>

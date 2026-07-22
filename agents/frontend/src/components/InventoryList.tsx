@@ -1,7 +1,7 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 
-import { getInventory, getInventoryItem, updateInventory, deleteInventory, approveInventory, rejectInventory, getCategoryTree, getStates, getTeamMembers, getTeamMembersList, uploadInventoryImages, deleteInventoryMedia, transferInventory, uploadInventoryDocument, deleteInventoryDocument, getNodeFields } from '../api/client';
+import { getPartnerAssignable, assignListingToTeammate, getInventory, getInventoryItem, updateInventory, deleteInventory, approveInventory, rejectInventory, getCategoryTree, getStates, getTeamMembers, getTeamMembersList, uploadInventoryImages, deleteInventoryMedia, transferInventory, uploadInventoryDocument, deleteInventoryDocument, renameInventoryDocument, shareInventoryDocument, getNodeFields } from '../api/client';
 import client from '../api/client';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
@@ -10,8 +10,11 @@ import { InventoryModal } from './InventoryModal';
 import { InventoryDetailView } from './InventoryDetailView';
 import ParkingListField from './ParkingListField';
 import TaxonomyCascade from './TaxonomyCascade';
+import { CopyChip } from './CopyChip';
 import AddressFields, { inferAddressLayout } from './AddressFields';
 import { toDialablePhone } from '../lib/phone';
+import { relativeAge } from '../lib/age';
+import { MatchClientsModal } from './inventory/MatchClientsModal';
 import { GooglePlacesInput } from './GooglePlacesInput';
 import ShareToClientModal from './ShareToClientModal';
 import { buildWhatsAppShareText } from '../lib/buildWhatsAppShareText';
@@ -114,8 +117,21 @@ function EditContactSection({ label, color, currentPhone, currentName, onContact
     );
 }
 
-export const InventoryList: React.FC = () => {
-    const { hasPermission } = useAuth();
+interface InventoryListProps {
+    /** Pre-applied filter when opened via a dashboard drill-through (2026-07-16), e.g. { status: 'active' }. */
+    initialFilter?: Record<string, string> | null;
+    /** Called once on mount after a drill filter is consumed, so the caller can clear its one-shot state. */
+    onFilterConsumed?: () => void;
+}
+
+export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onFilterConsumed }) => {
+    const { hasPermission, agent, isPartnerOwner } = useAuth();
+    // The partner owner's OWN sub-agents. Deliberately NOT agentsList — that feeds transfer/assign
+    // controls whose columns are Agent FKs; a PartnerAgent id there is a FK violation.
+    const [partnerRoster, setPartnerRoster] = useState<Array<{ id: string; name: string; is_owner: boolean }>>([]);
+    // External partner agent (2026-07-12): shares this screen but sees a redacted, scoped catalogue and
+    // must NOT get team-only affordances (approve/reject/transfer/assign).
+    const isPartner = agent?.role === 'partner';
     const { showToast } = useToast();
     const confirm = useConfirm();
     const [inventory, setInventory] = useState<any[]>([]);
@@ -131,13 +147,22 @@ export const InventoryList: React.FC = () => {
 
     // Filters
     const [filterIntent, setFilterIntent] = useState('');
+    const [filterBrowseAll, setFilterBrowseAll] = useState(false);
     const [filterState, setFilterState] = useState('');
     const [filterType, setFilterType] = useState('');
-    const [filterStatus, setFilterStatus] = useState('');
+    const [filterStatus, setFilterStatus] = useState(initialFilter?.status ?? '');
     const [filterAgent, setFilterAgent] = useState('');
     const [searchQuery, setSearchQuery] = useState('');
-    const [filterLocation, setFilterLocation] = useState('');
+    const [filterLocation, setFilterLocation] = useState(initialFilter?.location ?? '');
+    const [filterPriceMin, setFilterPriceMin] = useState(''); // budget/price range filter (#3, 2026-06-28)
+    const [filterPriceMax, setFilterPriceMax] = useState('');
+    const [filterRoofRights, setFilterRoofRights] = useState(false); // roof-rights filter (2026-06-28)
     const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    // Request sequencing (2026-07-15): filter changes fire overlapping loadInventory() fetches
+    // (e.g. drilling a taxonomy branch then ticking a leaf). Without this, a slower earlier
+    // response could land last and overwrite the correct newest-filter results — which is why
+    // selecting "Builder Flat (Front)" could still show "(Back)". Only the newest request applies.
+    const loadReqIdRef = useRef(0);
 
     // ── Filter sheet state (v2 redesign) ──
     const [showFilterSheet, setShowFilterSheet] = useState(false);
@@ -151,10 +176,18 @@ export const InventoryList: React.FC = () => {
     });
     const [filterListingSource, setFilterListingSource] = useState('');
     const [filterDataSource, setFilterDataSource] = useState('');
-    const [filterDaysInSystem, setFilterDaysInSystem] = useState(0);
+    const [filterDaysInSystem, setFilterDaysInSystem] = useState(initialFilter?.days ? Number(initialFilter.days) : 0);
     const [filterDaysNoVisit, setFilterDaysNoVisit] = useState(0);
     const [filterFloors, setFilterFloors] = useState<string[]>([]); // floor_number tokens ('0'..'4','5plus')
     const [taxonomyTree, setTaxonomyTree] = useState<any[]>([]);
+
+    // Drill-through one-shot (2026-07-16): if opened pre-filtered from a dashboard tile, the filter
+    // is seeded into the filter useState above on mount; signal the parent so it clears its one-shot
+    // state (a later manual visit to Inventory then starts clean).
+    useEffect(() => {
+        if (initialFilter && onFilterConsumed) onFilterConsumed();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     // Fetch filter counts when filter panel opens
     useEffect(() => {
@@ -230,6 +263,15 @@ export const InventoryList: React.FC = () => {
     const [docUploading, setDocUploading] = useState(false);
     const [newDocType, setNewDocType] = useState('other');
     const [newDocTitle, setNewDocTitle] = useState('');
+    // Inline document rename (name docs AFTER upload — no name prompt during upload). (2026-07-09)
+    const [renamingDocId, setRenamingDocId] = useState<string | null>(null);
+    const [renameValue, setRenameValue] = useState('');
+    // Share a document to a contact via WhatsApp + email (link). (2026-07-09, #8)
+    const [sharingDocId, setSharingDocId] = useState<string | null>(null);
+    const [sharePhone, setSharePhone] = useState('');
+    const [shareEmail, setShareEmail] = useState('');
+    const [shareName, setShareName] = useState('');
+    const [shareBusy, setShareBusy] = useState(false);
     const docUploadRef = useRef<HTMLInputElement>(null);
 
     // Call dropdown state
@@ -238,11 +280,21 @@ export const InventoryList: React.FC = () => {
     // Multi-select state
     const [selectionMode, setSelectionMode] = useState(false);
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+    // Bulk reassign (#4, 2026-06-28)
+    const [showReassignModal, setShowReassignModal] = useState(false);
+    const [reassignTarget, setReassignTarget] = useState('');
+    const [reassigning, setReassigning] = useState(false);
+    const [reassignMsg, setReassignMsg] = useState('');
+    const [matchInvId, setMatchInvId] = useState<string | null>(null);
     const [showBatchShareModal, setShowBatchShareModal] = useState(false);
     const [batchShareContact, setBatchShareContact] = useState<{ phone_number: string; name: string | null } | null>(null);
     const [batchShareLoading, setBatchShareLoading] = useState(false);
     const [batchShareResults, setBatchShareResults] = useState<{ id: string; title: string; status: 'sent' | 'already_shared' | 'error'; message: string; link?: string }[]>([]);
     const [batchShareMode, setBatchShareMode] = useState<'direct' | 'dealer' | null>(null);
+    // Post-send personal-share (2026-06-27): after the v5 card is sent, the user can also forward
+    // the PDF/link from their own number. PDF branding follows the recipient: partner→brandless, direct→branded.
+    const [postPdfBusy, setPostPdfBusy] = useState(false);
+    const [postLinkCopied, setPostLinkCopied] = useState(false);
     const [batchContactSearch, setBatchContactSearch] = useState('');
     const [batchContactResults, setBatchContactResults] = useState<{ phone_number: string; name: string | null }[]>([]);
     const [batchContactSearching, setBatchContactSearching] = useState(false);
@@ -264,7 +316,7 @@ export const InventoryList: React.FC = () => {
 
     useEffect(() => {
         loadInventory();
-    }, [currentPage, filterIntent, filterState, filterType, filterStatus, filterAgent, filterLocation, filterTaxonomy, filterLocationSelection, filterListingSource, filterDataSource, filterDaysInSystem, filterDaysNoVisit, filterFloors]);
+    }, [currentPage, filterIntent, filterBrowseAll, filterState, filterType, filterStatus, filterAgent, filterLocation, filterPriceMin, filterPriceMax, filterRoofRights, filterTaxonomy, filterLocationSelection, filterListingSource, filterDataSource, filterDaysInSystem, filterDaysNoVisit, filterFloors]);
 
     // Close call dropdown on outside click
     useEffect(() => {
@@ -280,16 +332,22 @@ export const InventoryList: React.FC = () => {
             if (Array.isArray(data)) setStatesList(data.map((s: any) => s.name || s));
             else if (data?.states) setStatesList(data.states.map((s: any) => s.name || s));
         }).catch(() => {});
-        getTeamMembers().then(data => {
-            const members = Array.isArray(data) ? data : data?.data || data?.members || [];
-            setAgentsList(members.map((m: any) => ({ id: m.id, name: m.name, role: m.role })));
-        }).catch(() => {
-            // Fallback for employees who lack manage_team permission
-            getTeamMembersList().then(data => {
-                const members = Array.isArray(data) ? data : [];
+        // Partners must never see the internal team roster (and the endpoint 403s for them anyway).
+        if (isPartnerOwner) {
+            getPartnerAssignable().then(r => setPartnerRoster(r.members || [])).catch(() => {});
+        }
+        if (!isPartner) {
+            getTeamMembers().then(data => {
+                const members = Array.isArray(data) ? data : data?.data || data?.members || [];
                 setAgentsList(members.map((m: any) => ({ id: m.id, name: m.name, role: m.role })));
-            }).catch(() => {});
-        });
+            }).catch(() => {
+                // Fallback for employees who lack manage_team permission
+                getTeamMembersList().then(data => {
+                    const members = Array.isArray(data) ? data : [];
+                    setAgentsList(members.map((m: any) => ({ id: m.id, name: m.name, role: m.role })));
+                }).catch(() => {});
+            });
+        }
         getCategoryTree().then(data => {
             setClassTree({
                 categories: data?.categories || [],
@@ -317,10 +375,12 @@ export const InventoryList: React.FC = () => {
     }, [searchQuery]);
 
     const loadInventory = async () => {
+        const myReqId = ++loadReqIdRef.current;
         try {
             setLoading(true);
             const params: Record<string, any> = { page: currentPage, limit: pageSize };
             if (filterIntent) params.intent = filterIntent;
+            if (filterBrowseAll) params.all = 'true';
             if (filterState) params.state = filterState;
             if (filterType) params.category = filterType;
             if (filterStatus) params.status = filterStatus;
@@ -328,6 +388,9 @@ export const InventoryList: React.FC = () => {
             if (searchQuery.trim()) params.search = searchQuery.trim();
             if (filterTaxonomy.bhk.length > 0) params.bhk = filterTaxonomy.bhk.join(',');
             if (filterLocation.trim()) params.location = filterLocation.trim();
+            if (filterPriceMin.trim()) params.price_min = filterPriceMin.trim();
+            if (filterPriceMax.trim()) params.price_max = filterPriceMax.trim();
+            if (filterRoofRights) params.roof_rights = 'true';
             if (filterTaxonomy.nodeIds.length > 0) params.taxonomy_node_ids = filterTaxonomy.nodeIds.join(',');
             if (filterListingSource) params.listing_source = filterListingSource;
             if (filterDataSource) params.data_source = filterDataSource;
@@ -339,6 +402,9 @@ export const InventoryList: React.FC = () => {
             if (filterDaysNoVisit > 0) params.days_no_visit = String(filterDaysNoVisit);
 
             const res = await getInventory(params);
+            // Stale-response guard: a newer loadInventory() started while this fetch was in
+            // flight → discard this result so it can't overwrite the newest filter's data.
+            if (myReqId !== loadReqIdRef.current) return;
             // Support both paginated { data, total } and legacy array responses
             if (res && res.data && Array.isArray(res.data)) {
                 setInventory(res.data);
@@ -352,8 +418,12 @@ export const InventoryList: React.FC = () => {
         } catch (err) {
             console.error(err);
         } finally {
-            setLoading(false);
-            setInitialLoad(false);
+            // Only the newest request clears the loading state (an older one bailing out above
+            // must not flip loading off while the newest is still running).
+            if (myReqId === loadReqIdRef.current) {
+                setLoading(false);
+                setInitialLoad(false);
+            }
         }
     };
 
@@ -454,6 +524,41 @@ export const InventoryList: React.FC = () => {
         window.open(`https://wa.me/${tel}?text=${encodeURIComponent(text)}`, '_blank');
     };
 
+    // Post-send: download the PDF of the just-shared properties — branding follows the recipient
+    // (partner agent → brandless/no-RP-logo, direct client → branded RP template).
+    const handlePostSharePdf = async () => {
+        const ids = batchShareResults.map(r => r.id);
+        if (ids.length === 0) return;
+        setPostPdfBusy(true);
+        try {
+            const variant = batchShareMode === 'dealer' ? 'brandless' : 'branded';
+            const res = await client.post('/api/inventory/share-pdf', { inventory_ids: ids, variant }, { responseType: 'blob' });
+            const url = URL.createObjectURL(new Blob([res.data], { type: 'application/pdf' }));
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `realty-pandit-${variant}-${ids.length === 1 ? ids[0].slice(0, 8) : ids.length + 'props'}.pdf`;
+            document.body.appendChild(a); a.click(); document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        } catch (err: any) {
+            alert(err?.response?.data?.error || 'Failed to generate PDF');
+        } finally {
+            setPostPdfBusy(false);
+        }
+    };
+
+    // Post-send: copy the property link(s) of the just-shared properties to the clipboard.
+    const handlePostShareLink = async () => {
+        const links = batchShareResults.filter(r => r.link).map(r => r.link as string);
+        if (links.length === 0) return;
+        try {
+            await navigator.clipboard.writeText(links.join('\n'));
+            setPostLinkCopied(true);
+            setTimeout(() => setPostLinkCopied(false), 1800);
+        } catch {
+            alert('Could not copy the link');
+        }
+    };
+
     const clearFilters = () => {
         setFilterIntent('');
         setFilterState('');
@@ -463,10 +568,12 @@ export const InventoryList: React.FC = () => {
         setSearchQuery('');
         setFilterTaxonomy({ nodeIds: [], bhk: [] });
         setFilterLocation('');
+        setFilterPriceMin(''); setFilterPriceMax('');
+        setFilterRoofRights(false);
         setCurrentPage(1);
     };
 
-    const hasActiveFilters = filterIntent || filterState || filterType || filterStatus || filterAgent || searchQuery.trim() || filterTaxonomy.nodeIds.length > 0 || filterTaxonomy.bhk.length > 0 || filterLocation.trim();
+    const hasActiveFilters = filterIntent || filterState || filterType || filterStatus || filterAgent || searchQuery.trim() || filterTaxonomy.nodeIds.length > 0 || filterTaxonomy.bhk.length > 0 || filterLocation.trim() || filterPriceMin.trim() || filterPriceMax.trim() || filterRoofRights;
 
     const activeInventoryFilterCount = [
         filterIntent,
@@ -559,6 +666,8 @@ export const InventoryList: React.FC = () => {
             // Address
             flat_no: item.flat_no || '',
             floor_number: item.floor_number ?? '',
+            floor_label: item.floor_label ?? '',
+            display_floor: item.display_floor ?? '',
             total_floors: item.total_floors ?? '',
             plot_no: item.plot_no || '',
             apartment_name: item.apartment_name || '',
@@ -590,6 +699,7 @@ export const InventoryList: React.FC = () => {
             shared_with_ids: item.shared_with_ids || [],
             // Renovation
             renovated: item.renovated || false,
+            roof_rights: item.roof_rights || false,
             // Pre-rented (pre-lease)
             pre_rented: item.pre_rented || false,
             pre_rented_monthly_rent: item.pre_rented_monthly_rent != null ? String(item.pre_rented_monthly_rent) : '',
@@ -998,6 +1108,22 @@ export const InventoryList: React.FC = () => {
                         Clear
                     </button>
                 )}
+                {/* Browse all (2026-06-27) — default view is your team's listings; this widens to the
+                    whole catalog (owner contact + exact unit redacted for listings outside your team). */}
+                <button
+                    type="button"
+                    onClick={() => { setFilterBrowseAll(m => !m); setCurrentPage(1); }}
+                    title="Browse the whole catalog to match a client (details outside your team are redacted)"
+                    style={{
+                        padding: '10px 14px', borderRadius: '12px', cursor: 'pointer', flexShrink: 0,
+                        border: filterBrowseAll ? '1.5px solid #22c55e' : '1px solid var(--border-secondary)',
+                        backgroundColor: filterBrowseAll ? '#22c55e' : 'var(--bg-secondary)',
+                        color: filterBrowseAll ? '#fff' : 'var(--text-secondary)',
+                        fontWeight: 600, fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px',
+                    }}
+                >
+                    🌐 Browse all
+                </button>
                 <button
                     type="button"
                     onClick={() => setShowFilterSheet(true)}
@@ -1270,7 +1396,7 @@ export const InventoryList: React.FC = () => {
                                             </div>
                                             <div>
                                                 <label htmlFor="inv-floor" style={s.editLabel}>Floor</label>
-                                                <input id="inv-floor" style={s.editInput} type="number" value={editData.floor_number} onChange={e => setEditData({ ...editData, floor_number: e.target.value })} placeholder="e.g. 3" />
+                                                <input id="inv-floor" style={s.editInput} type="number" value={editData.floor_label ? '' : editData.floor_number} onChange={e => setEditData({ ...editData, floor_number: e.target.value, floor_label: '' })} placeholder={editData.floor_label ? `${editData.floor_label} (clear to set a number)` : 'e.g. 3, or -1'} />
                                             </div>
                                             <div>
                                                 <label htmlFor="inv-total-floors" style={s.editLabel}>Total Floors</label>
@@ -1460,6 +1586,8 @@ export const InventoryList: React.FC = () => {
                                                 <span style={{ fontWeight: 700, fontSize: '14px', color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '300px' }}>
                                                     {item.taxonomy_node?.name || item.flat_property_type?.name || item.property_type_link?.name || item.type?.replace(/_/g, ' ') || 'Property'}
                                                 </span>
+                                                {/* #1 (2026-07-01): click-to-copy inventory code (RP-…) for fast paste into search. */}
+                                                <CopyChip text={item.display_id} size="xs" />
                                                 <span style={{
                                                     fontSize: '11px', padding: '2px 8px', borderRadius: '10px', fontWeight: 600,
                                                     ...(item.intent === 'sell' ? { backgroundColor: '#312e81', color: '#818cf8' } :
@@ -1479,6 +1607,9 @@ export const InventoryList: React.FC = () => {
                                                 )}
                                                 {item.renovated && (
                                                     <span style={{ fontSize: 10, background: 'rgba(34,197,94,0.12)', color: '#22c55e', borderRadius: 4, padding: '1px 6px', fontWeight: 700 }}>🔨 Renovated</span>
+                                                )}
+                                                {item.roof_rights && (
+                                                    <span style={{ fontSize: 10, background: 'rgba(245,158,11,0.12)', color: '#f59e0b', borderRadius: 4, padding: '1px 6px', fontWeight: 700 }}>🏠 Roof rights</span>
                                                 )}
                                                 {item.pre_rented && (
                                                     <span style={{ fontSize: 10, background: 'rgba(59,130,246,0.12)', color: '#3b82f6', borderRadius: 4, padding: '1px 6px', fontWeight: 700 }}>
@@ -1529,6 +1660,44 @@ export const InventoryList: React.FC = () => {
                                                 })()}
                                             </div>
 
+                                            {/* Age + source (owner/dealer) — name shown to all; the number lives in the
+                                                gated "Call" dropdown below (redacted for non-handling agents). */}
+                                            <div style={{ display: 'flex', gap: '12px', fontSize: '12px', color: 'var(--text-secondary)', flexWrap: 'wrap', marginBottom: '8px', alignItems: 'center' }}>
+                                                {item.mine && (
+                                                    <span style={{ fontSize: '11px', fontWeight: 700, color: '#22c55e', backgroundColor: 'rgba(34,197,94,0.15)', padding: '2px 8px', borderRadius: '6px' }} title="You uploaded or are assigned this listing">⭐ Yours</span>
+                                                )}
+                                                {item.needs_owner_fix && (
+                                                    <span style={{ fontSize: '11px', fontWeight: 700, color: '#f59e0b', backgroundColor: 'rgba(245,158,11,0.18)', padding: '2px 8px', borderRadius: '6px' }} title="The owner number is a team member's own number — edit and add the real owner's name & number">⚠ Add owner details</span>
+                                                )}
+                                                {relativeAge(item.created_at) && (
+                                                    <span style={{ color: 'var(--text-muted)' }} title="Listed">🕐 {relativeAge(item.created_at)}</span>
+                                                )}
+                                                {item.source && (
+                                                    <span>
+                                                        {item.source.type === 'DEALER' ? '🤝 Dealer' : item.source.type === 'AGENT_OWNER' ? '👤 Owner (agent)' : '👤 Owner'}
+                                                        {item.source.name ? `: ${item.source.name}` : ''}
+                                                    </span>
+                                                )}
+                                            </div>
+
+                                            {/* Engagement counts — shares / website views / visits (scheduled · visited) */}
+                                            {item.stats && (
+                                                <div style={{ display: 'flex', gap: '14px', fontSize: '12px', color: 'var(--text-muted)', flexWrap: 'wrap', marginBottom: '8px' }}>
+                                                    <span title="Times shared with clients">📤 {item.stats.shares} shared</span>
+                                                    <span title="Website views by clients">👁 {item.stats.views} views</span>
+                                                    <span title="Site visits: scheduled · visited">📅 {item.stats.visits_scheduled} sched · {item.stats.visits_done} visited</span>
+                                                </div>
+                                            )}
+
+                                            {/* Match clients (find buyers) for this listing */}
+                                            <button
+                                                type="button"
+                                                onClick={(e) => { e.stopPropagation(); setMatchInvId(item.id); }}
+                                                style={{ alignSelf: 'flex-start', display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 12px', borderRadius: 8, border: '1px solid rgba(59,130,246,0.4)', background: 'rgba(59,130,246,0.12)', color: '#3b82f6', fontSize: 12, fontWeight: 600, cursor: 'pointer', marginBottom: 8 }}
+                                            >
+                                                🔍 Match Clients
+                                            </button>
+
                                             {/* Row 4: Completion Bar */}
                                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
                                                 <div style={{ flex: 1, height: '6px', borderRadius: '3px', backgroundColor: 'var(--bg-primary)', maxWidth: '200px' }}>
@@ -1559,7 +1728,7 @@ export const InventoryList: React.FC = () => {
                                             {/* Row 5: Action Buttons */}
                                             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'center' }} onClick={e => e.stopPropagation()}>
                                                 {/* Call Button */}
-                                                {(item.uploader_phone || item.owner_phone || item.key_holder_phone) && (
+                                                {item.can_edit && (item.uploader_phone || item.owner_phone || item.key_holder_phone) && (
                                                     <div style={{ position: 'relative', display: 'inline-block' }}>
                                                         <button
                                                             style={{ ...s.actionBtn, color: '#22d3ee', borderColor: '#22d3ee' }}
@@ -1600,7 +1769,16 @@ export const InventoryList: React.FC = () => {
                                                         )}
                                                     </div>
                                                 )}
-                                                {hasPermission('edit_inventory') && item.status === 'pending_approval' && (
+                                                {/* Call Manager — dials the assigned inventory manager (falls back to uploader agent) */}
+                                                {toDialablePhone(item.assigned_agent?.phone || item.uploaded_by_agent?.phone) && (
+                                                    <a
+                                                        href={`tel:${toDialablePhone(item.assigned_agent?.phone || item.uploaded_by_agent?.phone)}`}
+                                                        style={{ ...s.actionBtn, color: '#38bdf8', borderColor: '#38bdf8', textDecoration: 'none' }}
+                                                        onClick={e => e.stopPropagation()}
+                                                        title={`Call inventory manager: ${item.assigned_agent?.name || item.uploaded_by_agent?.name || ''}`}
+                                                    >&#9742; Manager</a>
+                                                )}
+                                                {!isPartner && hasPermission('edit_inventory') && item.status === 'pending_approval' && (
                                                     <>
                                                         <button
                                                             style={{ ...s.actionBtn, color: '#34d399', borderColor: '#34d399' }}
@@ -1622,12 +1800,12 @@ export const InventoryList: React.FC = () => {
                                                         >Reject</button>
                                                     </>
                                                 )}
-                                                <button style={{ ...s.actionBtn, color: '#22c55e', borderColor: '#22c55e' }} onClick={() => setShareOptionsItem(item)}>Share</button>
+                                                <button style={{ ...s.actionBtn, color: '#22c55e', borderColor: '#22c55e' }} onClick={() => { setSelectedIds(new Set([item.id])); setShowBatchShareModal(true); }}>Share</button>
                                                 <button style={{ ...s.actionBtn, color: '#8b5cf6', borderColor: '#8b5cf6' }} onClick={() => setBookVisitItem(item)}>Visit</button>
-                                                {hasPermission('edit_inventory') && (
+                                                {hasPermission('edit_inventory') && item.can_edit && (
                                                     <button style={{ ...s.actionBtn, color: 'var(--text-link)', borderColor: 'var(--text-link)' }} onClick={() => handleEdit(item)}>Edit</button>
                                                 )}
-                                                {hasPermission('edit_inventory') && item.status !== 'pending_approval' && (
+                                                {hasPermission('edit_inventory') && item.can_edit && item.status !== 'pending_approval' && (
                                                     <button
                                                         style={{ ...s.actionBtn, color: item.status === 'active' ? '#f59e0b' : '#10b981' }}
                                                         onClick={async () => {
@@ -1852,6 +2030,15 @@ export const InventoryList: React.FC = () => {
                                     {editItem?.upload_source && !editItem?.uploaded_by_agent && !editItem?.uploader_name && (
                                         <span style={{ color: 'var(--text-muted)' }}>Source: {editItem.upload_source}</span>
                                     )}
+                                    {toDialablePhone(editItem?.assigned_agent?.phone || editItem?.uploaded_by_agent?.phone) && (
+                                        <a
+                                            href={`tel:${toDialablePhone(editItem.assigned_agent?.phone || editItem.uploaded_by_agent?.phone)}`}
+                                            style={{ color: '#38bdf8', textDecoration: 'none' }}
+                                            title="Call inventory manager"
+                                        >
+                                            <span style={{ color: 'var(--text-muted)' }}>Manager:</span> &#9742; {editItem.assigned_agent?.name || editItem.uploaded_by_agent?.name || 'Call'}
+                                        </a>
+                                    )}
                                 </div>
                             </div>
                             <button
@@ -2024,6 +2211,35 @@ export const InventoryList: React.FC = () => {
                                             </div>
                                         </button>
                                     </div>
+                                    <div style={{ gridColumn: '1 / -1' }}>
+                                        <label style={s.editLabel}>Roof Rights</label>
+                                        <button
+                                            onClick={() => setEditData((p: any) => ({ ...p, roof_rights: !p.roof_rights }))}
+                                            style={{
+                                                display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 14px',
+                                                borderRadius: '8px', cursor: 'pointer', width: '100%', textAlign: 'left',
+                                                border: editData.roof_rights ? '1.5px solid #f59e0b' : '1px solid var(--border-secondary)',
+                                                backgroundColor: editData.roof_rights ? 'rgba(245,158,11,0.08)' : 'var(--bg-secondary)',
+                                            }}
+                                        >
+                                            <div style={{
+                                                width: '20px', height: '20px', borderRadius: '4px', flexShrink: 0,
+                                                border: editData.roof_rights ? '2px solid #f59e0b' : '2px solid var(--border-secondary)',
+                                                backgroundColor: editData.roof_rights ? '#f59e0b' : 'transparent',
+                                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                            }}>
+                                                {editData.roof_rights && <span style={{ color: '#fff', fontSize: '12px', lineHeight: 1 }}>✓</span>}
+                                            </div>
+                                            <div>
+                                                <div style={{ fontSize: '13px', fontWeight: 600, color: editData.roof_rights ? '#f59e0b' : 'var(--text-secondary)' }}>
+                                                    {editData.roof_rights ? 'Roof rights included ✓' : 'Mark roof rights'}
+                                                </div>
+                                                <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                                                    {editData.roof_rights ? 'Will show "Roof rights" badge on website' : 'Listing includes rights to the roof'}
+                                                </div>
+                                            </div>
+                                        </button>
+                                    </div>
                                     {/* Pre-rented (pre-lease) — only for FOR-SALE listings */}
                                     {editData.intent === 'sell' && (
                                         <div style={{ gridColumn: '1 / -1' }}>
@@ -2159,6 +2375,8 @@ export const InventoryList: React.FC = () => {
                                         apartment_name: editData.apartment_name || '',
                                         flat_no: editData.flat_no || '',
                                         floor_number: editData.floor_number ?? '',
+                                        floor_label: editData.floor_label ?? '',
+                                        display_floor: editData.display_floor ?? '',
                                         total_floors: editData.total_floors ?? '',
                                         plot_no: editData.plot_no || '',
                                         latitude: (editData.latitude === '' || editData.latitude == null) ? undefined : Number(editData.latitude),
@@ -2357,11 +2575,8 @@ export const InventoryList: React.FC = () => {
                                                     <option value="other">Other</option>
                                                 </select>
                                             </div>
-                                            <div>
-                                                <label style={s.editLabel}>Title / Label</label>
-                                                <input style={s.editInput} value={newDocTitle} onChange={e => setNewDocTitle(e.target.value)} placeholder="e.g. NOC from Builder" />
-                                            </div>
                                         </div>
+                                        <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '8px' }}>Uploads are named from the file — rename any document below with ✏️.</div>
                                         <input
                                             ref={docUploadRef}
                                             type="file"
@@ -2407,7 +2622,8 @@ export const InventoryList: React.FC = () => {
                                                 const isPdf = doc.mime_type === 'application/pdf';
                                                 const isImage = doc.mime_type?.startsWith('image/');
                                                 return (
-                                                    <div key={doc.id} style={{
+                                                    <div key={doc.id} style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                                    <div style={{
                                                         display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 12px',
                                                         borderRadius: '8px', border: '1px solid var(--border-secondary)', backgroundColor: 'var(--bg-primary)',
                                                     }}>
@@ -2417,9 +2633,25 @@ export const InventoryList: React.FC = () => {
                                                         </span>
                                                         {/* Info */}
                                                         <div style={{ flex: 1, minWidth: 0 }}>
-                                                            <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                                                {doc.title || doc.file_name}
-                                                            </div>
+                                                            {renamingDocId === doc.id ? (
+                                                                <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                                                                    <input autoFocus style={{ ...s.editInput, fontSize: '13px', padding: '4px 8px' }} value={renameValue}
+                                                                        onChange={e => setRenameValue(e.target.value)}
+                                                                        onKeyDown={e => { if (e.key === 'Escape') setRenamingDocId(null); }} />
+                                                                    <button style={{ ...s.smallBtn, color: '#22c55e', borderColor: '#22c55e' }} onClick={async () => {
+                                                                        const t = renameValue.trim();
+                                                                        if (!t || !editingId) { setRenamingDocId(null); return; }
+                                                                        try { const upd = await renameInventoryDocument(editingId, doc.id, t); setEditDocuments(prev => prev.map((d: any) => d.id === doc.id ? { ...d, title: upd.title } : d)); }
+                                                                        catch (err: any) { showToast(err.response?.data?.error || 'Rename failed', 'error'); }
+                                                                        setRenamingDocId(null);
+                                                                    }}>✓</button>
+                                                                    <button style={s.smallBtn} onClick={() => setRenamingDocId(null)}>✕</button>
+                                                                </div>
+                                                            ) : (
+                                                                <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                                                    {doc.title || doc.file_name}
+                                                                </div>
+                                                            )}
                                                             <div style={{ display: 'flex', gap: '6px', alignItems: 'center', marginTop: '2px' }}>
                                                                 <span style={{ fontSize: '11px', padding: '1px 6px', borderRadius: '4px', backgroundColor: 'rgba(99,102,241,0.1)', color: '#818cf8' }}>
                                                                     {DOC_TYPE_LABELS[doc.doc_type] || doc.doc_type}
@@ -2437,6 +2669,12 @@ export const InventoryList: React.FC = () => {
                                                             </div>
                                                         </div>
                                                         {/* Actions */}
+                                                        <button style={s.smallBtn} title="Rename document"
+                                                            onClick={() => { setRenamingDocId(doc.id); setRenameValue(doc.title || doc.file_name || ''); }}
+                                                        >✏️</button>
+                                                        <button style={{ ...s.smallBtn, color: '#22c55e', borderColor: '#22c55e' }} title="Share this document to a contact"
+                                                            onClick={() => { setSharingDocId(sharingDocId === doc.id ? null : doc.id); setSharePhone(''); setShareEmail(''); setShareName(''); }}
+                                                        >Share</button>
                                                         <a
                                                             href={doc.file_url}
                                                             target="_blank"
@@ -2457,6 +2695,50 @@ export const InventoryList: React.FC = () => {
                                                             }}
                                                         >Delete</button>
                                                     </div>
+                                                    {sharingDocId === doc.id && (
+                                                        <div style={{
+                                                            display: 'flex', flexDirection: 'column', gap: '8px', padding: '10px 12px',
+                                                            borderRadius: '8px', border: '1px dashed var(--border-secondary)', backgroundColor: 'var(--bg-secondary)',
+                                                        }}>
+                                                            <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                                                                Send <b>{doc.title || doc.file_name}</b> to a contact as a link.
+                                                            </div>
+                                                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                                                                <input style={{ ...s.editInput, fontSize: '13px', padding: '6px 10px', flex: '1 1 130px' }}
+                                                                    placeholder="Name (optional)" value={shareName} onChange={e => setShareName(e.target.value)} />
+                                                                <input style={{ ...s.editInput, fontSize: '13px', padding: '6px 10px', flex: '1 1 150px' }}
+                                                                    placeholder="WhatsApp phone" value={sharePhone} onChange={e => setSharePhone(e.target.value)} />
+                                                                <input style={{ ...s.editInput, fontSize: '13px', padding: '6px 10px', flex: '1 1 180px' }}
+                                                                    placeholder="Email (optional)" value={shareEmail} onChange={e => setShareEmail(e.target.value)} />
+                                                            </div>
+                                                            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                                                                <button style={{ ...s.smallBtn, color: '#22c55e', borderColor: '#22c55e', opacity: shareBusy ? 0.5 : 1 }}
+                                                                    disabled={shareBusy || (!sharePhone.trim() && !shareEmail.trim())}
+                                                                    onClick={async () => {
+                                                                        if (!editingId) return;
+                                                                        setShareBusy(true);
+                                                                        try {
+                                                                            const r = await shareInventoryDocument(editingId, doc.id, {
+                                                                                contact_phone: sharePhone.trim() || undefined,
+                                                                                email: shareEmail.trim() || undefined,
+                                                                                contact_name: shareName.trim() || undefined,
+                                                                            });
+                                                                            const parts: string[] = [];
+                                                                            if (sharePhone.trim()) parts.push(r.whatsapp_sent ? 'WhatsApp sent' : `WhatsApp failed${r.whatsapp_error ? ' (' + r.whatsapp_error + ')' : ''}`);
+                                                                            if (shareEmail.trim()) parts.push(r.email_sent ? 'Email sent' : `Email failed${r.email_error ? ' (' + r.email_error + ')' : ''}`);
+                                                                            showToast(parts.join(' · ') || 'Nothing sent', r.success ? 'success' : 'error');
+                                                                            if (r.success) setSharingDocId(null);
+                                                                        } catch (err: any) {
+                                                                            showToast(err.response?.data?.error || 'Failed to share', 'error');
+                                                                        }
+                                                                        setShareBusy(false);
+                                                                    }}
+                                                                >{shareBusy ? 'Sending…' : 'Send'}</button>
+                                                                <button style={s.smallBtn} onClick={() => setSharingDocId(null)}>Cancel</button>
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                    </div>
                                                 );
                                             })}
                                         </div>
@@ -2467,15 +2749,50 @@ export const InventoryList: React.FC = () => {
                             {/* ── Tab: Assignment ── */}
                             {editTab === 'assignment' && (
                                 <div>
-                                    {/* Assigned To */}
-                                    <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-link)', marginBottom: '12px', borderBottom: '1px solid var(--border-secondary)', paddingBottom: '4px' }}>Assigned To</div>
-                                    <div style={{ marginBottom: '24px' }}>
-                                        <select style={s.editInput} value={editData.assigned_agent_id || ''} onChange={e => setEditData({ ...editData, assigned_agent_id: e.target.value })}>
-                                            <option value="">Not Assigned</option>
-                                            {agentsList.map((a: any) => <option key={a.id} value={a.id}>{a.name} ({a.role})</option>)}
-                                        </select>
-                                        <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>The primary agent handling this property. Changes are saved when you click Save.</div>
-                                    </div>
+                                    {/* Assigned To — INTERNAL STAFF ONLY. assigned_agent_id is an Agent FK;
+                                        a PartnerAgent id here is a FK violation, so partners never see this. */}
+                                    {!isPartner && (
+                                        <>
+                                            <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-link)', marginBottom: '12px', borderBottom: '1px solid var(--border-secondary)', paddingBottom: '4px' }}>Assigned To</div>
+                                            <div style={{ marginBottom: '24px' }}>
+                                                <select style={s.editInput} value={editData.assigned_agent_id || ''} onChange={e => setEditData({ ...editData, assigned_agent_id: e.target.value })}>
+                                                    <option value="">Not Assigned</option>
+                                                    {agentsList.map((a: any) => <option key={a.id} value={a.id}>{a.name} ({a.role})</option>)}
+                                                </select>
+                                                <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>The primary agent handling this property. Changes are saved when you click Save.</div>
+                                            </div>
+                                        </>
+                                    )}
+
+                                    {/* PARTNER COMPANY OWNER — assign to one of THEIR OWN sub-agents. Saves immediately. */}
+                                    {isPartnerOwner && (
+                                        <>
+                                            <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-link)', marginBottom: '12px', borderBottom: '1px solid var(--border-secondary)', paddingBottom: '4px' }}>Assign to teammate</div>
+                                            <div style={{ marginBottom: '24px' }}>
+                                                <select
+                                                    style={s.editInput}
+                                                    value={editData.partner_assignee_id || ''}
+                                                    onChange={async e => {
+                                                        const val = e.target.value;
+                                                        const prev = editData.partner_assignee_id || '';
+                                                        setEditData({ ...editData, partner_assignee_id: val });
+                                                        try {
+                                                            await assignListingToTeammate(editData.id, val || null);
+                                                            showToast(val ? `Assigned to ${partnerRoster.find(m => m.id === val)?.name}.` : 'Unassigned.', 'success');
+                                                            loadInventory();
+                                                        } catch (err: any) {
+                                                            setEditData({ ...editData, partner_assignee_id: prev });
+                                                            showToast(err.response?.data?.error || 'Could not assign this listing.', 'error');
+                                                        }
+                                                    }}
+                                                >
+                                                    <option value="">Not Assigned</option>
+                                                    {partnerRoster.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                                                </select>
+                                                <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>Only your own team members appear here. Saved immediately.</div>
+                                            </div>
+                                        </>
+                                    )}
 
                                     {/* Shared With */}
                                     <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-link)', marginBottom: '12px', borderBottom: '1px solid var(--border-secondary)', paddingBottom: '4px' }}>Shared With</div>
@@ -2504,8 +2821,8 @@ export const InventoryList: React.FC = () => {
                                         </div>
                                     </div>
 
-                                    {/* Transfer */}
-                                    {hasPermission('transfer_inventory') && (
+                                    {/* Transfer — team-only; never shown to an external partner. */}
+                                    {!isPartner && hasPermission('transfer_inventory') && (
                                         <div>
                                             <div style={{ fontSize: '13px', fontWeight: 700, color: '#f87171', marginBottom: '8px', borderBottom: '1px solid var(--border-secondary)', paddingBottom: '4px' }}>Transfer Ownership</div>
                                             <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '12px' }}>
@@ -2603,9 +2920,55 @@ export const InventoryList: React.FC = () => {
                         }}
                     >📲 Share via WhatsApp</button>
                     <button
+                        onClick={() => { setShowReassignModal(true); setReassignTarget(''); setReassignMsg(''); }}
+                        style={{ padding: '8px 18px', borderRadius: '8px', fontSize: '13px', fontWeight: 700, cursor: 'pointer', backgroundColor: '#8b5cf6', border: 'none', color: '#fff' }}
+                    >🔄 Reassign</button>
+                    <button
                         onClick={() => { setSelectedIds(new Set()); setSelectionMode(false); }}
                         style={{ padding: '8px 14px', borderRadius: '8px', fontSize: '12px', cursor: 'pointer', border: '1px solid var(--border-secondary)', backgroundColor: 'transparent', color: 'var(--text-muted)' }}
                     >Cancel</button>
+                </div>
+            )}
+
+            {/* Bulk reassign modal (#4) → POST /inventory/bulk-transfer */}
+            {showReassignModal && (
+                <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 2100, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                    onMouseDown={e => { if (e.target === e.currentTarget && !reassigning) setShowReassignModal(false); }}>
+                    <div style={{ backgroundColor: 'var(--bg-primary)', borderRadius: '14px', padding: '24px', width: '400px', maxWidth: '90vw' }}>
+                        <div style={{ fontSize: '16px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '8px' }}>
+                            🔄 Reassign {selectedIds.size} listing{selectedIds.size === 1 ? '' : 's'}
+                        </div>
+                        <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '16px' }}>
+                            Transfer the selected propert{selectedIds.size === 1 ? 'y' : 'ies'} to another team member — they become the assigned agent.
+                        </div>
+                        <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)' }}>Assign to</label>
+                        <select value={reassignTarget} onChange={e => setReassignTarget(e.target.value)} disabled={reassigning}
+                            style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', marginTop: '6px', marginBottom: '16px', border: '1px solid var(--border-secondary)', backgroundColor: 'var(--bg-secondary)', color: 'var(--text-primary)', fontSize: '13px' }}>
+                            <option value="">Select an agent…</option>
+                            {agentsList.map((a: any) => <option key={a.id} value={a.id}>{a.name}{a.role ? ` (${a.role})` : ''}</option>)}
+                        </select>
+                        {reassignMsg && <div style={{ fontSize: '12px', color: reassignMsg.startsWith('✅') ? '#22c55e' : '#ef4444', marginBottom: '12px' }}>{reassignMsg}</div>}
+                        <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+                            <button disabled={reassigning} onClick={() => setShowReassignModal(false)}
+                                style={{ padding: '8px 16px', borderRadius: '8px', fontSize: '13px', cursor: 'pointer', border: '1px solid var(--border-secondary)', backgroundColor: 'transparent', color: 'var(--text-muted)' }}>Cancel</button>
+                            <button disabled={reassigning || !reassignTarget} onClick={async () => {
+                                if (!reassignTarget) return;
+                                setReassigning(true); setReassignMsg('');
+                                try {
+                                    const res = await client.post('/api/inventory/bulk-transfer', { ids: Array.from(selectedIds), to_agent_id: reassignTarget });
+                                    const n = res.data?.transferred ?? 0;
+                                    setReassignMsg(`✅ Reassigned ${n} listing${n === 1 ? '' : 's'}.`);
+                                    await loadInventory();
+                                    setTimeout(() => { setShowReassignModal(false); setSelectedIds(new Set()); setSelectionMode(false); }, 1200);
+                                } catch (err: any) {
+                                    setReassignMsg(`❌ ${err?.response?.data?.error || 'Reassign failed'}`);
+                                } finally { setReassigning(false); }
+                            }}
+                                style={{ padding: '8px 18px', borderRadius: '8px', fontSize: '13px', fontWeight: 700, cursor: reassignTarget ? 'pointer' : 'not-allowed', backgroundColor: '#8b5cf6', border: 'none', color: '#fff', opacity: reassignTarget && !reassigning ? 1 : 0.5 }}>
+                                {reassigning ? 'Reassigning…' : 'Confirm reassign'}
+                            </button>
+                        </div>
+                    </div>
                 </div>
             )}
 
@@ -2637,12 +3000,19 @@ export const InventoryList: React.FC = () => {
                                 {batchShareResults.some(r => r.link) && (
                                     <div style={{ marginTop: '16px', padding: '12px', borderRadius: '10px', backgroundColor: 'rgba(37,211,102,0.08)', border: '1px solid rgba(37,211,102,0.3)' }}>
                                         <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '8px' }}>
-                                            Want to follow up personally? Send the same {batchShareMode === 'dealer' ? 'brochure links' : 'details'} from your own WhatsApp too.
+                                            Want to follow up personally? Share it yourself too — {batchShareMode === 'dealer' ? 'PDF is unbranded for partners' : 'branded PDF for clients'}.
                                         </div>
-                                        <button
-                                            onClick={handleOwnWhatsAppShare}
-                                            style={{ width: '100%', padding: '10px', borderRadius: '8px', fontWeight: 700, fontSize: '13px', backgroundColor: '#128c7e', color: '#fff', border: 'none', cursor: 'pointer' }}
-                                        >📱 Also share from my WhatsApp</button>
+                                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px' }}>
+                                            <button onClick={handleOwnWhatsAppShare}
+                                                style={{ padding: '10px 6px', borderRadius: '8px', fontWeight: 700, fontSize: '12px', backgroundColor: '#128c7e', color: '#fff', border: 'none', cursor: 'pointer' }}
+                                            >📱 My WhatsApp</button>
+                                            <button onClick={handlePostSharePdf} disabled={postPdfBusy}
+                                                style={{ padding: '10px 6px', borderRadius: '8px', fontWeight: 700, fontSize: '12px', backgroundColor: '#ef4444', color: '#fff', border: 'none', cursor: postPdfBusy ? 'wait' : 'pointer', opacity: postPdfBusy ? 0.7 : 1 }}
+                                            >📄 {postPdfBusy ? '…' : 'PDF'}</button>
+                                            <button onClick={handlePostShareLink}
+                                                style={{ padding: '10px 6px', borderRadius: '8px', fontWeight: 700, fontSize: '12px', backgroundColor: '#3b82f6', color: '#fff', border: 'none', cursor: 'pointer' }}
+                                            >🔗 {postLinkCopied ? 'Copied' : 'Link'}</button>
+                                        </div>
                                     </div>
                                 )}
                                 <button
@@ -2745,6 +3115,10 @@ export const InventoryList: React.FC = () => {
                 />
             )}
 
+            {matchInvId && (
+                <MatchClientsModal inventoryId={matchInvId} onClose={() => setMatchInvId(null)} />
+            )}
+
             {/* Add Inventory Modal */}
             <InventoryModal
                 isOpen={showAddForm}
@@ -2801,13 +3175,63 @@ export const InventoryList: React.FC = () => {
                                 setFilterLocationSelection({ label: '', lat: null, lng: null, radiusKm: 2 });
                                 setFilterDaysInSystem(0); setFilterDaysNoVisit(0);
                                 setFilterFloors([]);
+                                setFilterPriceMin(''); setFilterPriceMax('');
+                                setFilterRoofRights(false);
                                 setFilterAgent('');
                             }} style={{ background: 'none', border: 'none', color: 'var(--text-link)', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}>
                                 Clear All
                             </button>
                         </div>
 
+                        {/* Text location search — matches the stored property address (locality/area/city),
+                            no geocoding needed so it finds listings without lat/lng too. Wired to
+                            filterLocation → params.location → findInventoryIdsByAddress. (2026-06-26) */}
+                        <FilterSection title="Location (locality / area / city)" defaultOpen={false} badge={filterLocation.trim() ? 1 : 0}>
+                            <input
+                                value={filterLocation}
+                                onChange={e => setFilterLocation(e.target.value)}
+                                placeholder="e.g. Vaishali, Sector 4, Ghaziabad"
+                                style={{
+                                    width: '100%', padding: '9px 12px', borderRadius: '10px',
+                                    border: '1px solid var(--border-secondary)', backgroundColor: 'var(--bg-primary)',
+                                    color: 'var(--text-primary)', fontSize: '13px', boxSizing: 'border-box',
+                                }}
+                            />
+                            <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>
+                                Searches the property address. For radius / near-me, use the map location below.
+                            </div>
+                        </FilterSection>
+
+                        {/* Budget / price range (#3, 2026-06-28) → params.price_min/price_max → inventory.price */}
+                        <FilterSection title="Budget (price range ₹)" defaultOpen={false} badge={(filterPriceMin.trim() || filterPriceMax.trim()) ? 1 : 0}>
+                            <div style={{ display: 'flex', gap: '8px' }}>
+                                <input type="number" inputMode="numeric" value={filterPriceMin} onChange={e => setFilterPriceMin(e.target.value)} placeholder="Min ₹"
+                                    style={{ width: '100%', padding: '9px 12px', borderRadius: '10px', border: '1px solid var(--border-secondary)', backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)', fontSize: '13px', boxSizing: 'border-box' }} />
+                                <input type="number" inputMode="numeric" value={filterPriceMax} onChange={e => setFilterPriceMax(e.target.value)} placeholder="Max ₹"
+                                    style={{ width: '100%', padding: '9px 12px', borderRadius: '10px', border: '1px solid var(--border-secondary)', backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)', fontSize: '13px', boxSizing: 'border-box' }} />
+                            </div>
+                            <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>
+                                Filters by the property's asking price (₹). E.g. 5000000 to 10000000.
+                            </div>
+                        </FilterSection>
+
                         <FilterLocationSection value={filterLocationSelection} onChange={setFilterLocationSelection} />
+
+                        {/* Roof rights filter (2026-06-28) → params.roof_rights → inventory.roof_rights */}
+                        <FilterSection title="Roof rights" defaultOpen={false} badge={filterRoofRights ? 1 : 0}>
+                            <button type="button" onClick={() => setFilterRoofRights(v => !v)}
+                                style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 14px', borderRadius: '8px', cursor: 'pointer', width: '100%', textAlign: 'left',
+                                    border: filterRoofRights ? '1.5px solid #f59e0b' : '1px solid var(--border-secondary)',
+                                    backgroundColor: filterRoofRights ? 'rgba(245,158,11,0.08)' : 'var(--bg-secondary)' }}>
+                                <div style={{ width: '20px', height: '20px', borderRadius: '4px', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                    border: filterRoofRights ? '2px solid #f59e0b' : '2px solid var(--border-secondary)', backgroundColor: filterRoofRights ? '#f59e0b' : 'transparent' }}>
+                                    {filterRoofRights && <span style={{ color: '#fff', fontSize: '12px', lineHeight: 1 }}>✓</span>}
+                                </div>
+                                <div style={{ fontSize: '13px', fontWeight: 600, color: filterRoofRights ? '#f59e0b' : 'var(--text-secondary)' }}>
+                                    {filterRoofRights ? 'Only listings with roof rights' : 'Show only roof-rights listings'}
+                                </div>
+                            </button>
+                        </FilterSection>
 
                         <FilterSection title="Listing Source" defaultOpen={false} badge={filterListingSource ? 1 : 0}>
                             <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>

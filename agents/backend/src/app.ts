@@ -14,6 +14,7 @@ import authRoutes from './routes/auth';
 import publicRoutes from './routes/public';
 import externalLeadRoutes from './routes/external_leads';
 import agentRoutes from './routes/agent';
+import partnerTeamRoutes from './routes/partner_team';
 import builderRoutes from './routes/builder'; // PHASE 14: Builder Backend API
 import nineNineAcresRoutes from './integrations/99acres';
 import magicBricksRoutes from './integrations/magicbricks';
@@ -49,6 +50,7 @@ import internalToolsRouter from './routes/internal_tools'; // Panditji voice bot
 import { loginLimiter, authLimiter, publicLimiter, webhookLimiter, externalLimiter, agentLimiter, apiLimiter, workflowLimiter, chatLimiter } from './middleware/rate_limit';
 import { csrfMiddleware } from './middleware/csrf';
 import { requestLogger } from './middleware/request_logger';
+import logger from './utils/logger';
 import { errorHandler } from './middleware/error_handler';
 import * as SentrySDK from '@sentry/node';
 import swaggerUi from 'swagger-ui-express';
@@ -253,8 +255,30 @@ app.use('/api/taxonomy', apiLimiter, adminTaxonomyRouter); // Taxonomy admin —
 app.use('/api/workflow', workflowLimiter, workflowRoutes); // Unified Inventory Workflow (high volume: 2 calls per step)
 app.use('/api/chat', chatLimiter, chatWorkflowRoutes); // Chat-based Inventory Workflow
 
-// Agent Routes (agent JWT auth)
-app.use('/agent', agentLimiter, agentRoutes);
+// Partner TEAMS (2026-07-13): a partner company manages its own sub-agents. Under /api so it sits
+// behind authMiddleware + the PARTNER_ALLOWLIST default-deny backbone (unlike the retired /agent/*).
+app.use('/api/partner', apiLimiter, partnerTeamRoutes);
+
+// ─── Partner (external agent) routes ────────────────────────────────────────
+// SECURITY (2026-07-13): routes/agent.ts guards itself with its OWN `authenticateAgent`, NOT
+// `authMiddleware` — so it has no role check and, critically, NO partner default-deny allow-list.
+// It reads the same `rp_access_token` cookie, so every authenticated /agent/* route (/agent/team,
+// /agent/deals, /agent/inventory, /agent/leads, /agent/commissions…) was a SECOND, ungoverned door
+// into partner data, sitting outside the allow-list that protects everything else.
+//
+// The old partner-portal SPA that consumed those routes was deleted; partners now use the admin app.
+// The only /agent endpoints still in use are the PUBLIC sign-in ones (LoginPage.tsx) plus public
+// self-registration. Everything else is retired with 410 Gone — a one-line, instantly-revertable
+// change that closes the hole today and turns "is this route dead?" into a production observation:
+// watch the 410 counter; if it stays at zero, delete the authenticated half of routes/agent.ts.
+const AGENT_PUBLIC_PATHS = /^\/(login-otp|verify-otp|login-password|register)(\/|$)/;
+app.use('/agent', agentLimiter, (req, res, next) => {
+    if (AGENT_PUBLIC_PATHS.test(req.path)) return next();
+    logger.warn(`[AgentRetired] 410 for ${req.method} /agent${req.path}`);
+    return res.status(410).json({
+        error: 'The partner portal API has been retired. Partners now use the admin app.',
+    });
+}, agentRoutes);
 
 // Builder Routes (builder JWT auth) - PHASE 14
 app.use('/builder', agentLimiter, builderRoutes);

@@ -177,10 +177,15 @@ export const GooglePlacesInput: React.FC<GooglePlacesInputProps> = ({
             }
 
             // Latest-ref calls — always the freshest parent handlers.
-            // All modes emit the full formatted address so the input shows what was
-            // picked (Society/Locality/City). Falls back to place.name for rare picks
-            // that have no formatted_address.
-            onChangeRef.current(full_address || place.name || '');
+            // For establishment (society/building) picks, show the BUILDING NAME the user chose
+            // (2026-07-15) — Google's formatted_address for a POI is the street address and
+            // usually omits the name, so showing it made the name "disappear" on select. Other
+            // modes (City/Locality) keep the formatted address. Falls back the other way for
+            // rare picks missing one field.
+            const displayText = modeRef.current === 'establishment'
+                ? (place.name || full_address || '')
+                : (full_address || place.name || '');
+            onChangeRef.current(displayText);
             onPlaceRef.current({ sub_locality, locality, district, state, pincode, full_address, country, latitude, longitude, name, city, viewport });
         });
 

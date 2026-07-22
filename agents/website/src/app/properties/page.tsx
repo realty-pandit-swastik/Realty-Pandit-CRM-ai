@@ -53,6 +53,7 @@ function PropertiesContent() {
         rooms: searchParams.get('rooms') || '',
         facing: searchParams.get('facing') || '',
         age: searchParams.get('age') || '',
+        roof_rights: searchParams.get('roof_rights') || '',
         sort: searchParams.get('sort') || 'newest',
         page: parseInt(searchParams.get('page') || '1'),
     });
@@ -72,6 +73,7 @@ function PropertiesContent() {
                 if (filters.rooms) params.rooms = filters.rooms;
                 if (filters.facing) params.facing = filters.facing;
                 if (filters.age) params.age = filters.age;
+                if (filters.roof_rights) params.roof_rights = filters.roof_rights;
                 if (filters.sort) params.sort = filters.sort;
                 params.page = filters.page;
 
@@ -174,7 +176,7 @@ function PropertiesContent() {
     const clearFilters = (tab?: 'rent' | 'resale' | 'projects') => {
         const cleared = {
             location: '', city: '', taxonomy_node_id: '', intent: '', price_min: '', price_max: '',
-            furnishing: '', amenities: '', bhk: '', rooms: '', facing: '', age: '',
+            furnishing: '', amenities: '', bhk: '', rooms: '', facing: '', age: '', roof_rights: '',
             sort: 'newest', page: 1,
         };
         setFilters(cleared);
@@ -184,7 +186,7 @@ function PropertiesContent() {
     const hasActiveFilters = !!(
         filters.location || filters.taxonomy_node_id || filters.price_min || filters.price_max ||
         filters.furnishing || filters.amenities || filters.bhk || filters.rooms ||
-        filters.facing || filters.age
+        filters.facing || filters.age || filters.roof_rights
     );
 
     const pageHeading = activeTab === 'rent' ? 'Properties for Rent' :

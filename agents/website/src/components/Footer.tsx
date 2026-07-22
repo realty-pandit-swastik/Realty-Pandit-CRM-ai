@@ -90,7 +90,7 @@ export default function Footer() {
                                 <Phone className="w-4 h-4 text-blue-400" /> {COMPANY_PHONE_DISPLAY}
                             </div>
                             <div className="flex items-center gap-2">
-                                <Mail className="w-4 h-4 text-blue-400" /> info@realtypandit.com
+                                <Mail className="w-4 h-4 text-blue-400" /> info@realtypandit.in
                             </div>
                             <div className="flex items-start gap-2">
                                 <MapPin className="w-4 h-4 mt-0.5 text-blue-400" /> India

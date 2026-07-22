@@ -106,8 +106,15 @@ router.get('/google/callback', async (req, res) => {
         try {
             result = await authService.loginByGoogleEmail(email);
         } catch {
-            // Not linked / inactive — send them back to phone login with a note.
-            return res.redirect(`${ADMIN_PANEL_URL}/?login_error=google_unlinked`);
+            // Not a team member — try an external PARTNER agent whose email matches this
+            // Google-verified address (2026-07-12). Issues a role:'partner' session.
+            try {
+                result = await authService.loginPartnerByGoogleEmail(email);
+                logger.info(`[Auth] Google sign-in OK for PARTNER ${result.agent.id} (${email})`);
+            } catch {
+                // Not linked / inactive — send them back to phone login with a note.
+                return res.redirect(`${ADMIN_PANEL_URL}/?login_error=google_unlinked`);
+            }
         }
 
         setAuthCookies(res, result.token, result.refreshToken);
@@ -199,6 +206,32 @@ router.get('/csrf', authMiddleware, (req, res) => {
 // GET /auth/me - Get current user info
 router.get('/me', authMiddleware, async (req, res) => {
     try {
+        // Partner branch (2026-07-12): a partner token identifies a PartnerAgent, not an Agent.
+        // Return an Agent-shaped payload with role:'partner' so the admin SPA renders a scoped identity.
+        if (req.agent!.role === 'partner') {
+            const p = await prisma.partnerAgent.findUnique({
+                where: { id: req.agent!.id },
+                include: { managing_agent: { select: { name: true, phone: true, email: true } } },
+            });
+            if (!p) return res.status(404).json({ error: 'Partner not found' });
+            return res.json({
+                id: p.id,
+                name: p.name,
+                email: p.email,
+                phone: p.phone_number,
+                role: 'partner',
+                status: p.status,
+                tenant_id: req.agent!.tenant_id,
+                partner_category: p.partner_category,
+                parent_partner_id: p.parent_partner_id,
+                business_name: p.business_name,
+                coordinator: p.managing_agent
+                    ? { name: p.managing_agent.name, phone: p.managing_agent.phone, email: p.managing_agent.email }
+                    : null,
+                permissions: getAllPermissions('partner'),
+            });
+        }
+
         const agent = await prisma.agent.findUnique({
             where: { id: req.agent!.id },
             select: {

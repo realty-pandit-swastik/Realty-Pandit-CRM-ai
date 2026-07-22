@@ -111,6 +111,23 @@ function extractBhkInt(specs: any): number | null {
 }
 
 /**
+ * Infer the inventory CATEGORY ('residential' | 'commercial') a demand implies from its shape,
+ * for the fallback where the demand has NO precise classification (no sub_category / category /
+ * taxonomy node). Residential requirements carry demand_schema_values.bhk; commercial carry .rooms.
+ * Used to stop a residential BHK client from seeing shops/showrooms (and vice-versa). (2026-07-08)
+ * Returns null when the shape gives no clear signal → no category filter is applied.
+ */
+function inferDemandCategory(criteria: MatchCriteria): 'residential' | 'commercial' | null {
+    const dsv = criteria.demand_schema_values;
+    if (dsv && typeof dsv === 'object') {
+        if (dsv.bhk != null && dsv.bhk !== '') return 'residential';
+        if (dsv.rooms != null && dsv.rooms !== '') return 'commercial';
+    }
+    if (criteria.bhk != null) return 'residential'; // legacy single BHK implies residential
+    return null;
+}
+
+/**
  * Build a short, human-readable "why it matched" string for a result row, used by the
  * deal Match & Share UI. Pure display — derived from the same criteria/specs the scorer uses.
  */
@@ -307,6 +324,10 @@ export class MatchingEngine {
         // Category-level demand (no legacy ids) → hard-filter by the expanded taxonomy node set so a
         // "Commercial" deal can't match residential inventory.
         else if (criteria.taxonomy_node_id_list?.length) where.taxonomy_node_id = { in: criteria.taxonomy_node_id_list };
+        // Residential/commercial fallback (2026-07-08): no precise classification, but the demand shape
+        // implies a category (bhk→residential, rooms→commercial) → constrain inventory.category so a
+        // residential BHK client never sees shops/showrooms (and vice-versa).
+        else { const c = inferDemandCategory(criteria); if (c) where.category = c; }
         // BHK is a scoring factor by default. budget tolerance is ±30% UNLESS budget_hard.
         // Fix D (2026-06-12): never surface ₹0 / missing-price inventory as a customer card — it
         // renders as "₹0" and looks broken (audit found ₹0 sends). Require price>0 ALWAYS; the
@@ -368,10 +389,15 @@ export class MatchingEngine {
         // BHK multi-select hard filter (deal Match & Share). Applied INSIDE this radius pass so
         // radius escalation still works (a radius that yields 0 in-BHK matches expands further).
         // Properties with no readable BHK are kept (don't penalise sparse specs).
-        if (criteria.bhk_list?.length) {
+        // Hard-filter by the requested BHK(s): the multi-select list (deal Match & Share) OR the
+        // single demand BHK (chat/contact). Was list-only — a chat lead's single demand_bhk was a
+        // scoring factor only, so a "3 BHK" seeker still got 1BHK cards (real-chat F2). Properties
+        // with no readable BHK are kept (don't penalise sparse specs). (F2, 2026-06-21)
+        const bhkFilter = criteria.bhk_list?.length ? criteria.bhk_list : (criteria.bhk ? [criteria.bhk] : null);
+        if (bhkFilter?.length) {
             filtered = filtered.filter(({ prop }) => {
                 const b = extractBhkInt(prop.specs);
-                return b == null || criteria.bhk_list!.includes(b);
+                return b == null || bhkFilter!.includes(b);
             });
         }
 
@@ -421,7 +447,14 @@ export class MatchingEngine {
             } as MatchedProperty & { distance_km: number };
         });
 
+        // When a BHK filter is active, rank listings with no recorded BHK last (kept + flagged).
+        const bhkActive = !!(criteria.bhk_list?.length || criteria.bhk);
         scored.sort((a: any, b: any) => {
+            if (bhkActive) {
+                const au = extractBhkInt(a.specs) == null ? 1 : 0;
+                const bu = extractBhkInt(b.specs) == null ? 1 : 0;
+                if (au !== bu) return au - bu;
+            }
             if (Math.abs(b.match_score - a.match_score) > 5) return b.match_score - a.match_score;
             return a.distance_km - b.distance_km; // Tiebreak: closer first
         });
@@ -475,6 +508,12 @@ export class MatchingEngine {
                 { property_type_link: { name: { contains: criteria.property_type, mode: 'insensitive' } } },
                 { category: { contains: criteria.property_type, mode: 'insensitive' } },
             ];
+        } else {
+            // Residential/commercial fallback (2026-07-08): no precise classification, but the demand
+            // shape implies a category (bhk→residential, rooms→commercial) → constrain inventory.category
+            // so a residential BHK client never sees shops/showrooms (and vice-versa).
+            const c = inferDemandCategory(criteria);
+            if (c) where.category = c;
         }
 
         // BHK is a scoring factor only — not a hard WHERE filter (most inventory lacks specs.bedrooms)
@@ -546,11 +585,17 @@ export class MatchingEngine {
             });
         }
 
-        // BHK multi-select hard filter (deal Match & Share). Keep properties with no readable BHK.
-        if (criteria.bhk_list?.length) {
+        // BHK hard filter (F2 + strict fix 2026-07-08): exclude listings whose BHK is
+        // KNOWN-and-wrong. Applies to the multi-select list (deal Match & Share) OR the single
+        // demand BHK (chat / contact / AI buyer / WhatsApp). The text path previously honored
+        // ONLY bhk_list, so a no-geo buyer's stored BHK never constrained results — a 4-BHK
+        // seeker got 1/2/3-BHK cards. Mirror the geo path (searchPropertiesByRadius). Listings
+        // with no readable BHK are KEPT (ranked last below + flagged 'BHK not specified' in the UI).
+        const bhkFilter = criteria.bhk_list?.length ? criteria.bhk_list : (criteria.bhk ? [criteria.bhk] : null);
+        if (bhkFilter?.length) {
             candidates = candidates.filter(prop => {
                 const b = extractBhkInt(prop.specs);
-                return b == null || criteria.bhk_list!.includes(b);
+                return b == null || bhkFilter!.includes(b);
             });
         }
 
@@ -600,8 +645,17 @@ export class MatchingEngine {
             } as MatchedProperty;
         });
 
-        // Sort by composite score (descending)
-        scored.sort((a, b) => b.match_score - a.match_score);
+        // Sort by composite score (descending). When a BHK filter is active, push listings with
+        // no recorded BHK BELOW the known-BHK matches (kept, but ranked last — 2026-07-08).
+        const bhkActive = !!(criteria.bhk_list?.length || criteria.bhk);
+        scored.sort((a, b) => {
+            if (bhkActive) {
+                const au = extractBhkInt(a.specs) == null ? 1 : 0;
+                const bu = extractBhkInt(b.specs) == null ? 1 : 0;
+                if (au !== bu) return au - bu;
+            }
+            return b.match_score - a.match_score;
+        });
 
         // Return top N
         const results = scored.slice(0, limit);

@@ -5,7 +5,9 @@ import { EmailAccountCard } from './EmailAccountCard';
 import { GoogleAccountCard } from './GoogleAccountCard';
 import { useToast } from '../contexts/ToastContext';
 import { useConfirm } from '../contexts/ConfirmContext';
-import client, { getTeamMemberProfile, updateTeamMemberManager, setMemberPassword, resendSetupLink } from '../api/client';
+import client, { getTeamMemberProfile, updateTeamMemberManager, setMemberPassword, resendSetupLink, getUserPerformance, getSpeedToLead } from '../api/client';
+import { RankedBars } from './dashboard/analytics/charts';
+import { formatNum, formatINR, formatMins } from './dashboard/analytics/clay';
 
 interface MemberProfile {
     id: string;
@@ -13,6 +15,8 @@ interface MemberProfile {
     email: string;
     phone?: string;
     personal_email?: string;
+    nine9acres_email?: string;
+    magicbricks_email?: string;
     role: string;
     department?: string;
     status: string;
@@ -40,6 +44,22 @@ const ROLE_COLORS: Record<string, string> = {
     super_boss: '#ef4444', manager: '#f59e0b', employee: '#22c55e',
 };
 
+// Phase 5D — productivity category → colour (mirrors UserPerformanceDashboard).
+const catColor = (cat: string): string =>
+    cat === 'Excellent' ? '#22c55e' : cat === 'Good' ? '#3b82f6' : cat === 'Average' ? '#f59e0b' : '#ef4444';
+
+interface AgentPerf {
+    agent_id: string;
+    productivity_score: number;
+    productivity_category: string;
+    leads_assigned: number;
+    deals_closed: number;
+    revenue_generated: number;
+    commission?: number;
+    components?: { leads: number; conversion: number; appointments: number; inventory: number };
+    avg_response_min?: number | null;
+}
+
 export function TeamMemberProfile({
     memberId,
     onBack,
@@ -59,7 +79,7 @@ export function TeamMemberProfile({
 
     // Edit details state
     const [editMode, setEditMode] = useState(false);
-    const [editForm, setEditForm] = useState({ name: '', phone: '', department: '', role: '', personal_email: '' });
+    const [editForm, setEditForm] = useState({ name: '', phone: '', department: '', role: '', personal_email: '', nine9acres_email: '', magicbricks_email: '' });
     const [editLoading, setEditLoading] = useState(false);
     const [editError, setEditError] = useState('');
 
@@ -76,11 +96,39 @@ export function TeamMemberProfile({
     const [pwdError, setPwdError] = useState('');
     const [showPwdPanel, setShowPwdPanel] = useState(false);
 
+    // Performance scorecard (Phase 5D) — evaluators only.
+    const [perf, setPerf] = useState<AgentPerf | null>(null);
+    const [perfLoaded, setPerfLoaded] = useState(false);
+
     const isSuperBoss = agent?.role === 'super_boss';
+    const isManager = agent?.role === 'manager';
     const isSelf = agent?.id === memberId;
     const canManage = isSuperBoss && !isSelf;
+    // Portal lead-routing emails are editable by manager + super_boss (and self) — broader than canManage. (2026-06-25)
+    const canEditDetails = canManage || isSelf || (isManager && !isSelf);
 
     useEffect(() => { load(); }, [memberId]);
+
+    // Fetch the member's productivity row (role-scoped server-side) + response time. Phase 5D.
+    useEffect(() => {
+        if (!(isSuperBoss || isManager)) { setPerfLoaded(true); return; }
+        let cancelled = false;
+        setPerfLoaded(false);
+        const to = new Date();
+        const from = new Date(to.getTime() - 30 * 24 * 60 * 60 * 1000);
+        const range = { from: from.toISOString(), to: to.toISOString() };
+        Promise.all([
+            getUserPerformance(range).catch(() => ({ performance: [] })),
+            getSpeedToLead(range).catch(() => ({ by_agent: [] })),
+        ]).then(([up, stl]) => {
+            if (cancelled) return;
+            const row = ((up?.performance || []) as AgentPerf[]).find((r) => r.agent_id === memberId) || null;
+            const stlRow = ((stl?.by_agent || []) as Array<{ agent_id: string; avg_minutes: number }>).find((s) => s.agent_id === memberId);
+            setPerf(row ? { ...row, avg_response_min: stlRow?.avg_minutes ?? null } : null);
+            setPerfLoaded(true);
+        });
+        return () => { cancelled = true; };
+    }, [memberId, isSuperBoss, isManager]);
 
     const load = async () => {
         setLoading(true);
@@ -110,6 +158,8 @@ export function TeamMemberProfile({
             department: profile.department || '',
             role: profile.role,
             personal_email: profile.personal_email || '',
+            nine9acres_email: profile.nine9acres_email || '',
+            magicbricks_email: profile.magicbricks_email || '',
         });
         setEditMode(true);
         setEditError('');
@@ -127,6 +177,10 @@ export function TeamMemberProfile({
             if (isSuperBoss && editForm.role !== profile.role) payload.role = editForm.role;
             const portalClean = editForm.personal_email.trim().toLowerCase();
             if (portalClean !== (profile.personal_email || '')) payload.personal_email = portalClean;
+            const acres99Clean = editForm.nine9acres_email.trim().toLowerCase();
+            if (acres99Clean !== (profile.nine9acres_email || '')) payload.nine9acres_email = acres99Clean;
+            const mbClean = editForm.magicbricks_email.trim().toLowerCase();
+            if (mbClean !== (profile.magicbricks_email || '')) payload.magicbricks_email = mbClean;
 
             if (Object.keys(payload).length > 0) {
                 await client.patch(`/api/team/members/${memberId}`, payload);
@@ -276,6 +330,48 @@ export function TeamMemberProfile({
                 </div>
             </div>
 
+            {/* ─── Performance scorecard (Phase 5D) — evaluators only ──── */}
+            {(isSuperBoss || isManager) && perfLoaded && (
+                <div style={{ backgroundColor: 'var(--bg-secondary)', borderRadius: '12px', padding: '20px', marginBottom: '16px', border: '1px solid var(--border-secondary)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '8px' }}>
+                        <h3 style={{ margin: 0, fontSize: '15px', color: 'var(--text-primary)' }}>
+                            Performance <span style={{ color: 'var(--text-muted)', fontSize: '12px', fontWeight: 400 }}>· last 30 days</span>
+                        </h3>
+                        {perf && (
+                            <span style={{ fontSize: '12px', fontWeight: 700, color: catColor(perf.productivity_category), backgroundColor: catColor(perf.productivity_category) + '1a', borderRadius: '8px', padding: '4px 10px' }}>
+                                {formatNum(perf.productivity_score)} · {perf.productivity_category}
+                            </span>
+                        )}
+                    </div>
+                    {perf ? (
+                        <>
+                            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(4, 1fr)', gap: '12px', marginBottom: '16px' }}>
+                                <StatPill label="Deals" value={formatNum(perf.deals_closed)} color="#22c55e" />
+                                <StatPill label="Revenue" value={formatINR(perf.revenue_generated)} color="#f59e0b" />
+                                <StatPill label="Commission" value={formatINR(perf.commission ?? 0)} color="#8b5cf6" />
+                                <StatPill label="Avg Response" value={formatMins(perf.avg_response_min)} color="#06b6d4" />
+                            </div>
+                            {perf.components && (
+                                <>
+                                    <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '10px' }}>Score Composition (0–100 each)</div>
+                                    <RankedBars
+                                        rows={[
+                                            { label: 'Leads', count: perf.components.leads },
+                                            { label: 'Conversion', count: perf.components.conversion },
+                                            { label: 'Appointments', count: perf.components.appointments },
+                                            { label: 'Inventory', count: perf.components.inventory },
+                                        ]}
+                                        color="#8b5cf6"
+                                    />
+                                </>
+                            )}
+                        </>
+                    ) : (
+                        <div style={{ color: 'var(--text-muted)', fontSize: '13px' }}>No performance data for this member in the last 30 days.</div>
+                    )}
+                </div>
+            )}
+
             {/* ─── Email Sending Account (self only, T9b) ──────────────── */}
             {isSelf && <EmailAccountCard isMobile={isMobile} />}
 
@@ -286,7 +382,7 @@ export function TeamMemberProfile({
             <div style={{ backgroundColor: 'var(--bg-secondary)', borderRadius: '12px', padding: '20px', marginBottom: '16px', border: '1px solid var(--border-secondary)' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
                     <span style={{ fontWeight: 600, fontSize: '14px', color: 'var(--text-primary)' }}>Profile Details</span>
-                    {(canManage || isSelf) && !editMode && (
+                    {canEditDetails && !editMode && (
                         <button onClick={startEdit} style={smallBtnStyle('#3b82f6')}>✏️ Edit</button>
                     )}
                 </div>
@@ -331,7 +427,26 @@ export function TeamMemberProfile({
                             </Field>
                         )}
 
-                        <Field label="Portal Account Email" hint="Gmail used on 99acres / MagicBricks / Housing — routes leads to this member" wide>
+                        <Field label="99acres Email" hint="The Gmail this member uses on 99acres — routes their 99acres listing leads to them">
+                            <input
+                                type="email"
+                                value={editForm.nine9acres_email}
+                                onChange={e => setEditForm({ ...editForm, nine9acres_email: e.target.value })}
+                                placeholder="their-99acres-email@gmail.com"
+                                style={inputStyle}
+                            />
+                        </Field>
+
+                        <Field label="MagicBricks Email / ID" hint="The email or <phone>@timesgroup.com this member uses on MagicBricks — routes their MagicBricks leads to them">
+                            <input
+                                value={editForm.magicbricks_email}
+                                onChange={e => setEditForm({ ...editForm, magicbricks_email: e.target.value })}
+                                placeholder="their-mb-email@gmail.com"
+                                style={inputStyle}
+                            />
+                        </Field>
+
+                        <Field label="Portal Email (general / Housing)" hint="Fallback portal Gmail — used for Housing and when the portal-specific fields above aren't set" wide>
                             <input
                                 type="email"
                                 value={editForm.personal_email}
@@ -357,9 +472,21 @@ export function TeamMemberProfile({
                         <InfoRow label="Department" value={DEPARTMENTS.find(d => d.value === profile.department)?.label || '—'} />
                         <InfoRow label="Role" value={profile.role.replace('_', ' ')} />
                         <InfoRow
-                            label="Portal Account Email"
+                            label="99acres Email"
+                            value={profile.nine9acres_email || '—'}
+                            hint="99acres lead routing"
+                            highlight={!!profile.nine9acres_email}
+                        />
+                        <InfoRow
+                            label="MagicBricks Email / ID"
+                            value={profile.magicbricks_email || '—'}
+                            hint="MagicBricks lead routing"
+                            highlight={!!profile.magicbricks_email}
+                        />
+                        <InfoRow
+                            label="Portal Email (general)"
                             value={profile.personal_email || '—'}
-                            hint="99acres / MagicBricks / Housing routing"
+                            hint="Housing + fallback routing"
                             highlight={!!profile.personal_email}
                         />
                     </div>

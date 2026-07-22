@@ -412,6 +412,28 @@ export const TEMPLATE_REGISTRY: Record<string, TemplateDefinition> = {
         ],
     },
 
+    // NEG-3 (2026-06-23) — owner/seller-side negotiation + close notifications (pending Meta approval).
+    rp_negotiation_seller: {
+        name: 'rp_negotiation_seller',
+        category: 'UTILITY',
+        language: 'en',
+        body: '🤝 Namaste {{1}}! Aapki {{2}} property ke liye ek buyer ke saath negotiation chal rahi hai. Hamaari team aapse jald hi price aur terms confirm karne ke liye sampark karegi.',
+        params: [
+            { key: 'owner_name', example: 'Rajesh' },
+            { key: 'property', example: '3BHK, Sector 150 Noida' },
+        ],
+    },
+    rp_deal_closed_seller: {
+        name: 'rp_deal_closed_seller',
+        category: 'UTILITY',
+        language: 'en',
+        body: '🎉 Badhaai {{1}}! Aapki {{2}} property ka deal final ho gaya hai. Hamaari team aapse aage ki formalities ke liye jald sampark karegi. Dhanyavaad!',
+        params: [
+            { key: 'owner_name', example: 'Rajesh' },
+            { key: 'property', example: '3BHK, Sector 150 Noida' },
+        ],
+    },
+
     rp_tx_visit_buyer: {
         name: 'rp_tx_visit_buyer',
         category: 'UTILITY',
@@ -572,6 +594,36 @@ export const TEMPLATE_REGISTRY: Record<string, TemplateDefinition> = {
     // ═══════════════════════════════════════════════════════════════
     // MARKETING TEMPLATES (5)
     // ═══════════════════════════════════════════════════════════════
+
+    // #7 (2026-07-01): team alert when a new listing is added — already APPROVED on Meta as
+    // rp_team_new_inventory (MARKETING). {{1}}=property {{2}}=location {{3}}=price {{4}}=share link.
+    rp_team_new_inventory: {
+        name: 'rp_team_new_inventory',
+        category: 'MARKETING',
+        language: 'en',
+        body: '🆕 New property added to Realty Pandit inventory:\n\n🏠 {{1}}\n📍 {{2}}\n💰 {{3}}\n\nShare it with your matching clients:\n{{4}}\n\nOpen Realty Pandit to see full details. 🙏',
+        params: [
+            { key: 'property', example: '3BHK Flat' },
+            { key: 'location', example: 'Vaishali, Ghaziabad' },
+            { key: 'price', example: '85 Lakh' },
+            { key: 'link', example: 'https://www.realtypandit.in/properties/RP-GZB-RES-20766' },
+        ],
+    },
+
+    // #8 (2026-07-09): share an inventory document (Sale Deed, brochure, cost sheet, …) to a
+    // contact as a link. Submitted to Meta as rp_document_share (UTILITY, PENDING → check status).
+    // {{1}}=document title {{2}}=property {{3}}=public view/download link.
+    rp_document_share: {
+        name: 'rp_document_share',
+        category: 'UTILITY',
+        language: 'en',
+        body: '📄 Document shared by Realty Pandit:\n\n*{{1}}*\nProperty: {{2}}\n\nView or download here:\n{{3}}\n\nThank you for choosing Realty Pandit. 🙏',
+        params: [
+            { key: 'title', example: 'Sale Deed' },
+            { key: 'property', example: '3BHK Flat, Vaishali' },
+            { key: 'link', example: 'https://api.realtypandit.in/uploads/properties/…/documents/deed.pdf' },
+        ],
+    },
 
     rp_whatsapp_invite: {
         name: 'rp_whatsapp_invite_v2',

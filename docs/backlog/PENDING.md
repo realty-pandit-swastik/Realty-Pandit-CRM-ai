@@ -9,6 +9,9 @@
 | 790 contacts have no Deal | Should we retroactively backfill Deals from existing Contacts? Or leave only forward-going Contacts to create Deals? |
 | Phase 9 — property cards | Design/scope decision needed |
 | Phase 10 — digest | Design/scope decision needed |
+| **Dashboard 5C — confirm 2 pre-existing routing behaviours** | The Phase-5C adversarial review flagged (independent of the `assignment_method` instrumentation) two real routing changes vs an older baseline: (a) the MagicBricks push cascade (sub_user→listing agent; unmatched sub_user→manager pool), (b) the 2026-07-12 partner-creator `resolvedAgentId` (partner-role actors' new leads → the partner's managing agent). Both are dated/guarded features — confirm they are intended. |
+| **Dashboard 5E — tune Pipeline Outlook stage-probabilities** | The directional GCI panel (Team Performance) uses industry-generic close-probabilities `NEW 5% / QUALIFIED 15% / VISIT_SCHEDULED 30% / VISITED 45% / NEGOTIATION 65% / ON_HOLD 10%` — NOT derivable from history (only 2 closed-won deals ever). Tune to Sunny's real felt conversion-by-stage if desired → `backend/src/utils/gci.ts` `STAGE_PROBABILITY`. |
+| **Commission ledger empty → no *real* GCI forecast** | `DealCommissionEntry` = 0 rows and closed deals carry no `commission_amount` (2 closed-won ever). Dashboard 5E shipped a DIRECTIONAL weighted-pipeline as a result. To upgrade to a true GCI forecast, start capturing per-deal commission (rate + amount) at close; then `/api/analytics/gci-forecast` can regress real numbers instead of assuming 2%. |
 
 ## Blocked on Meta
 

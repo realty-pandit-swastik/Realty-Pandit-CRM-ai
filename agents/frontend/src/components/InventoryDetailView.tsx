@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import client from '../api/client';
 import { toDialablePhone } from '../lib/phone';
+import { getDisplayFloor } from '../lib/floor';
 import { useAuth } from '../contexts/AuthContext';
 
 /**
@@ -85,7 +86,7 @@ export function InventoryDetailView({ inventoryId, onClose, onEdit }: Props) {
     else if (specs.bhk != null) specRows.push(['Configuration', `${specs.bhk} BHK`]);
     if (specs.area) specRows.push(['Area', `${specs.area} ${specs.area_unit || 'sq ft'}`]);
     if (specs.bathrooms != null) specRows.push(['Bathrooms', String(specs.bathrooms)]);
-    if (inv?.floor_number != null) specRows.push(['Floor', `${inv.floor_number}${specs.floors ? ` of ${specs.floors}` : ''}`]);
+    { const _fl = getDisplayFloor(inv); if (_fl) specRows.push(['Floor', `${_fl}${specs.floors ? ` of ${specs.floors}` : ''}`]); }
     for (const [k, v] of Object.entries(specs)) {
         if (HIDE_KEYS.has(k) || ['bhk', 'rooms', 'area', 'bathrooms', 'floors'].includes(k)) continue;
         if (v == null || v === '' || Array.isArray(v) || typeof v === 'object') continue;
@@ -110,7 +111,7 @@ export function InventoryDetailView({ inventoryId, onClose, onEdit }: Props) {
                 <div style={{ position: 'sticky', top: 0, zIndex: 2, background: C.panel, display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 18px', borderBottom: `1px solid ${C.line}` }}>
                     <h3 style={{ margin: 0, fontSize: 16, color: C.text }}>Property Details</h3>
                     <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                        {canEdit && onEdit && (
+                        {canEdit && inv?.can_edit && onEdit && (
                             <button onClick={onEdit} style={{ background: 'rgba(96,165,250,0.15)', border: '1px solid #60a5fa', color: '#60a5fa', borderRadius: 8, padding: '6px 14px', fontSize: 13, cursor: 'pointer', fontWeight: 600 }}>✏️ Edit</button>
                         )}
                         <button onClick={onClose} style={{ background: 'none', border: 'none', color: C.sub, fontSize: 22, cursor: 'pointer', lineHeight: 1 }}>✕</button>

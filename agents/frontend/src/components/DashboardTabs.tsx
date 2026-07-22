@@ -1,31 +1,40 @@
 import React, { useState } from 'react';
+import { useAuth } from '../contexts/AuthContext';
 import { MainDashboard } from './dashboard/MainDashboard';
-import { MarketTrendsDashboard } from './dashboard/MarketTrendsDashboard';
+import { LeadIntelligenceDashboard } from './dashboard/LeadIntelligenceDashboard';
 import { UserPerformanceDashboard } from './dashboard/UserPerformanceDashboard';
-import { LeadSourcesDashboard } from './dashboard/LeadSourcesDashboard';
 import { PropertyAnalyticsDashboard } from './dashboard/PropertyAnalyticsDashboard';
-
-const TABS = [
-  { id: 'main', label: 'Main Dashboard', icon: '📊' },
-  { id: 'market', label: 'Market Trends', icon: '📈' },
-  { id: 'users', label: 'User Performance', icon: '👥' },
-  { id: 'sources', label: 'Lead Sources', icon: '🎯' },
-  { id: 'property', label: 'Property Analytics', icon: '🏠' },
-];
+import { TeamPerformanceDashboard } from './dashboard/TeamPerformanceDashboard';
 
 export const DashboardTabs: React.FC = () => {
   const [activeTab, setActiveTab] = useState('main');
+  const { agent } = useAuth();
+  const isEmployee = agent?.role === 'employee';
+  // Team Performance rolls individuals up into teams — only meaningful for someone
+  // who manages people. Backend also 403s employees on /team-performance.
+  const canSeeTeams = agent?.role === 'manager' || agent?.role === 'super_boss';
+
+  // All dashboard data is role-scoped on the backend (super_boss=org, manager=team,
+  // employee=self). For an employee the "User Performance" view contains only their
+  // own row, so it reads as "My Performance".
+  const TABS = [
+    { id: 'main', label: 'Main Dashboard', icon: '📊' },
+    { id: 'lead-intel', label: 'Lead Intelligence', icon: '🎯' },
+    { id: 'users', label: isEmployee ? 'My Performance' : 'User Performance', icon: '👥' },
+    ...(canSeeTeams ? [{ id: 'teams', label: 'Team Performance', icon: '🏆' }] : []),
+    { id: 'property', label: 'Property Analytics', icon: '🏠' },
+  ];
 
   const renderContent = () => {
     switch (activeTab) {
       case 'main':
         return <MainDashboard />;
-      case 'market':
-        return <MarketTrendsDashboard />;
+      case 'lead-intel':
+        return <LeadIntelligenceDashboard />;
       case 'users':
         return <UserPerformanceDashboard />;
-      case 'sources':
-        return <LeadSourcesDashboard />;
+      case 'teams':
+        return canSeeTeams ? <TeamPerformanceDashboard /> : <MainDashboard />;
       case 'property':
         return <PropertyAnalyticsDashboard />;
       default:

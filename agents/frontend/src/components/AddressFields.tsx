@@ -20,6 +20,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { GooglePlacesInput, type PlaceResult, type ViewportBox } from './GooglePlacesInput';
 import { loadGoogleMaps } from '../lib/loadGoogleMaps';
+import { FLOOR_PRESETS } from '../lib/floor';
 
 export type AddressLayout = 'flat' | 'house' | 'plot' | 'commercial';
 
@@ -33,6 +34,11 @@ export interface AddressValue {
     apartment_name?: string;
     flat_no?: string;
     floor_number?: string | number;
+    /** Named display floor (Ground/Upper Ground/Basement/Stilt). Authoritative for display;
+     *  floor_number is the numeric sort key. Empty = plain numeric floor. */
+    floor_label?: string;
+    /** Optional buyer-facing display override (website + sharing). Internal floor stays the real one. */
+    display_floor?: string;
     /** Kept for back-compat with the workflow commit reader; AddressFields doesn't
      *  render Total Floors (captured by the taxonomy `floors` field on the Specs tab). */
     total_floors?: string | number;
@@ -234,10 +240,12 @@ export default function AddressFields({
 
     const onSociety = (p: PlaceResult) => {
         set({
-            // Store the FULL picked string so storage matches what the user sees in the
-            // Society input (GooglePlacesInput now emits full_address for establishment
-            // picks too). Falls back to short name, then to whatever was already there.
-            apartment_name: p.full_address || p.name || value.apartment_name,
+            // Store the BUILDING NAME (2026-07-15): prefer p.name (the establishment/society
+            // name, e.g. "Amrapali Sapphire") over p.full_address — Google's formatted_address
+            // for a POI is the street address and usually omits the name, so the old
+            // full_address-first order silently discarded the building name. The full address
+            // still lives in the dedicated full_address field below.
+            apartment_name: p.name || p.full_address || value.apartment_name,
             pincode: value.pincode || p.pincode,
             // Building pin is CANONICAL — overwrite any coarser locality pin
             latitude: p.latitude ?? value.latitude,
@@ -339,7 +347,23 @@ export default function AddressFields({
                             ) : (
                                 <>
                                     <div><label style={lStyle}>{unitLabel}</label><input style={iStyle} value={value.flat_no || ''} onChange={e => set({ flat_no: e.target.value })} placeholder="e.g. A-1201" /></div>
-                                    <div><label style={lStyle}>Floor</label><input style={iStyle} type="number" value={value.floor_number ?? ''} onChange={e => set({ floor_number: e.target.value })} placeholder="e.g. 3" /></div>
+                                    <div>
+                                        <label style={lStyle}>Floor</label>
+                                        <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap', marginBottom: '5px' }}>
+                                            {FLOOR_PRESETS.map(p => {
+                                                const active = String(value.floor_label || '') === p.label;
+                                                return (
+                                                    <button type="button" key={p.label}
+                                                        onClick={() => set(active ? { floor_label: '', floor_number: '' } : { floor_label: p.label, floor_number: p.sort })}
+                                                        style={{ padding: '5px 9px', borderRadius: '8px', fontSize: '11px', fontWeight: 600, cursor: 'pointer', border: active ? '1px solid var(--accent-primary)' : '1px solid var(--border-secondary)', background: active ? 'var(--accent-primary)' : 'var(--bg-primary)', color: active ? '#fff' : 'var(--text-primary)' }}>
+                                                        {p.label}
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                        <input style={iStyle} type="number" value={value.floor_label ? '' : (value.floor_number ?? '')} onChange={e => set({ floor_number: e.target.value, floor_label: '' })} placeholder="or a floor number — e.g. 3, or -1 for lower basement" />
+                                    </div>
+                                    <div><label style={lStyle}>Display floor <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>(optional — shown on website &amp; when sharing)</span></label><input style={iStyle} value={value.display_floor || ''} onChange={e => set({ display_floor: e.target.value })} placeholder="e.g. Ground, Lower Ground, 2nd" /></div>
                                     {/* Plot/Khasra optional — some apartment registries DO record one; honour it if user provides. */}
                                     <div><label style={lStyle}>Plot / Khasra No (optional)</label><input style={iStyle} value={value.plot_no || ''} onChange={e => set({ plot_no: e.target.value })} placeholder="e.g. Plot 42 / Khasra 1234" /></div>
                                 </>

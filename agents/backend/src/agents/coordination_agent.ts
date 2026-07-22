@@ -86,9 +86,13 @@ export class CoordinationAgent implements BaseAgent {
         if (currentTransaction.status === 'VISIT_SCHEDULED') {
             const existingAppt = await prisma.appointment.findFirst({
                 where: { transaction_id: currentTransaction.id },
-                orderBy: { created_at: 'desc' }, select: { id: true },
+                orderBy: { created_at: 'desc' }, select: { id: true, status: true },
             });
-            if (!existingAppt) {
+            // No appointment yet, OR one awaiting a (new) slot — 'requested' (never slotted, VS-2) or
+            // 'rescheduled' (reschedule asked, awaiting a new time, VS-5) → treat THIS message as the
+            // availability reply so the customer's day/time is captured + slot-fills the same row
+            // (instead of dead-ending: rescheduled appts otherwise fire no reminders + lose calendar).
+            if (!existingAppt || existingAppt.status === 'requested' || existingAppt.status === 'rescheduled') {
                 return this.handleVisitAvailabilityReply(context);
             }
         }
@@ -215,13 +219,8 @@ export class CoordinationAgent implements BaseAgent {
                 scheduled_at,
                 source: 'whatsapp_ai',
                 assigned_to_agent_id: (contact as any).assigned_agent_id ?? undefined,
+                transaction_id: deal.id, // find-or-update the deal's provisional 'requested' appointment + link it
             });
-            // Link the appointment to the deal — createPropertyVisitAppointment links property +
-            // contact but NOT the transaction, and Confirm/Reschedule/Cancel query by transaction_id.
-            if (appt?.id) {
-                await prisma.appointment.update({ where: { id: appt.id }, data: { transaction_id: deal.id } })
-                    .catch((e) => logger.warn('[CoordinationAgent] link appt->deal failed:', e));
-            }
             await this.notifyUploader(propertyId, contact, parsed).catch((e) => logger.warn('[CoordinationAgent] uploader notify failed:', e));
             logger.info(`[CoordinationAgent] Booked visit for deal ${deal.id} at ${scheduled_at.toISOString()} (${parsed.dateISO} ${parsed.slot})`);
             return {
@@ -259,7 +258,10 @@ export class CoordinationAgent implements BaseAgent {
         if (!currentTransaction) return { action: 'reply', reply_script: 'No active appointment to confirm.' };
 
         const appointment = await prisma.appointment.findFirst({
-            where: { transaction_id: currentTransaction.id, status: { in: ['scheduled', 'rescheduled'] } },
+            // Find ANY non-terminal appointment (scheduled/confirmed/rescheduled) — was a narrow
+            // status set that disagreed across confirm/reschedule/cancel, so a valid appointment
+            // (e.g. 'rescheduled') reported "I don't see a visit" (real-chat F4 contradiction). (2026-06-21)
+            where: { transaction_id: currentTransaction.id, status: { notIn: ['cancelled', 'completed', 'no_show'] } },
             orderBy: { scheduled_at: 'desc' },
         });
 
@@ -280,7 +282,7 @@ export class CoordinationAgent implements BaseAgent {
         if (!currentTransaction) return { action: 'reply', reply_script: 'No active appointment to reschedule.' };
 
         const appointment = await prisma.appointment.findFirst({
-            where: { transaction_id: currentTransaction.id, status: { in: ['scheduled', 'confirmed'] } },
+            where: { transaction_id: currentTransaction.id, status: { notIn: ['cancelled', 'completed', 'no_show'] } },
             orderBy: { scheduled_at: 'desc' },
         });
 
@@ -288,7 +290,7 @@ export class CoordinationAgent implements BaseAgent {
             await this.coordinate({ appointment_id: appointment.id, action: 'handle_reschedule', initiated_by: contact.phone_number });
             return {
                 action: 'reply',
-                reply_script: 'Reschedule request noted! Our team will coordinate a new time with all parties and get back to you shortly.',
+                reply_script: 'Theek hai! 🗓️ Naya *din aur time* bata dijiye (jaise "Kal shaam 5 baje" ya "Saturday 11 AM") — main turant reschedule kar deta hoon.',
                 quality_hint: 'confident',
             };
         }
@@ -301,7 +303,7 @@ export class CoordinationAgent implements BaseAgent {
         if (!currentTransaction) return { action: 'reply', reply_script: 'No active appointment to cancel.' };
 
         const appointment = await prisma.appointment.findFirst({
-            where: { transaction_id: currentTransaction.id, status: { in: ['scheduled', 'confirmed'] } },
+            where: { transaction_id: currentTransaction.id, status: { notIn: ['cancelled', 'completed', 'no_show'] } },
             orderBy: { scheduled_at: 'desc' },
         });
 
@@ -499,25 +501,11 @@ Please be present at the property for the visit.`;
             data: { status: 'confirmed', confirmation_received: true },
         });
 
-        // Transition Transaction → VISITED when appointment is confirmed
-        // (Visit confirmed by both parties = visit effectively completed/happening)
-        if (appointment.transaction_id) {
-            try {
-                const tx = await prisma.transaction.findUnique({ where: { id: appointment.transaction_id } });
-                if (tx && tx.status === 'VISIT_SCHEDULED') {
-                    await transitionTransaction(
-                        appointment.transaction_id,
-                        TransactionStatus.VISITED,
-                        'system:coordination_agent',
-                        'whatsapp',
-                        { trigger: 'appointment_confirmed', appointment_id: appointment.id },
-                    );
-                    logger.info(`[CoordinationAgent] Transaction ${appointment.transaction_id.substring(0, 8)} → VISITED (appointment confirmed)`);
-                }
-            } catch (txErr) {
-                logger.error('[CoordinationAgent] TX transition to VISITED failed (non-blocking):', txErr);
-            }
-        }
+        // VS-3 (2026-06-22): confirmation = the visit is CONFIRMED, NOT yet visited. We used to
+        // auto-transition VISIT_SCHEDULED→VISITED here — but that marked a deal "visited" hours/days
+        // BEFORE the visit actually happened, and dropped it from the 2h reminder. The deal now
+        // advances to VISITED only AFTER the visit time (the post-visit-followup cron) or when a human
+        // submits the visit outcome. We leave the appointment as 'confirmed' and the deal in VISIT_SCHEDULED.
 
         return { success: true, buyer_notified: buyerNotified, seller_notified: sellerNotified, status: 'both_confirmed' };
     }

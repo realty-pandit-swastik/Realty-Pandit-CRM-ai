@@ -142,6 +142,8 @@ export interface Property {
     description?: string | null;
     furnishing?: string | null;
     floor_number?: number | null;
+    floor_label?: string | null;
+    display_floor?: string | null;
     total_floors?: number | null;
     facing?: string | null;
     property_age?: string | null;
@@ -152,6 +154,7 @@ export interface Property {
     apartment_name?: string | null;
     is_enriched?: boolean;
     renovated?: boolean;
+    roof_rights?: boolean;
     pre_rented?: boolean;
     pre_rented_monthly_rent?: number | string | null;
     district?: string | null;

@@ -183,7 +183,8 @@ export default function LeadWorkflowPage() {
 
     // Auto-refresh every 30s
     useEffect(() => {
-        const interval = setInterval(fetchData, 30000);
+        // Skip the background refresh when the tab isn't focused, so it never reloads mid-work. (2026-07-09)
+        const interval = setInterval(() => { if (document.hidden) return; fetchData(); }, 30000);
         return () => clearInterval(interval);
     }, [fetchData]);
 

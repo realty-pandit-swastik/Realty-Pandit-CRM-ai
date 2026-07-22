@@ -812,12 +812,11 @@ function DocumentUpload({ value, documentTypes, onSubmit, onUpload }: {
                 <select value={docType} onChange={e => setDocType(e.target.value)} style={{ ...s.input, flex: 1 }}>
                     {documentTypes.map(dt => <option key={dt.value} value={dt.value}>{dt.label}</option>)}
                 </select>
-                <input type="text" value={title} onChange={e => setTitle(e.target.value)} placeholder="Title" style={{ ...s.input, flex: 1 }} />
                 <button style={s.secondaryBtn} onClick={() => inputRef.current?.click()} disabled={uploading}>
                     {uploading ? '...' : '+ Upload'}
                 </button>
             </div>
-            <input ref={inputRef} type="file" accept="application/pdf,image/*,.doc,.docx,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" style={{ display: 'none' }} onChange={e => handleFile(e.target.files)} />
+            <input ref={inputRef} type="file" accept="application/pdf,image/*,.doc,.docx,.xls,.xlsx,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" style={{ display: 'none' }} onChange={e => handleFile(e.target.files)} />
             {uploadError && (
                 <div style={{ padding: '12px', marginBottom: '12px', backgroundColor: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.3)', borderRadius: '8px', color: '#ef4444', fontSize: '14px' }}>
                     {uploadError}
@@ -867,6 +866,8 @@ function AddressBlockField({ value, onSubmit, addressConfig }: {
         apartment_name: value?.apartment_name || '',
         flat_no: value?.flat_no || '',
         floor_number: value?.floor_number ?? '',
+        floor_label: value?.floor_label ?? '',
+        display_floor: value?.display_floor ?? '',
         total_floors: value?.total_floors ?? '',
         plot_no: value?.plot_no || '',
         latitude: value?.latitude,

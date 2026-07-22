@@ -9,7 +9,10 @@ import ShareToClientModal from '../ShareToClientModal';
 import BookVisitModal from '../BookVisitModal';
 import { InventoryDetailView } from '../InventoryDetailView';
 import { toDialablePhone } from '../../lib/phone';
+import { relativeAge } from '../../lib/age';
+import { MatchClientsModal } from '../inventory/MatchClientsModal';
 import { pickSpecChips } from '../../lib/specChips';
+import { CopyChip } from '../CopyChip';
 import { buildWhatsAppShareText } from '../../lib/buildWhatsAppShareText';
 import {
     FilterSection,
@@ -43,7 +46,7 @@ const INTENT_COLORS: Record<string, { bg: string; color: string }> = {
 };
 
 export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryListProps) {
-    const { hasPermission, agent } = useAuth();
+    const { hasPermission } = useAuth();
     const { showToast } = useToast();
     const confirm = useConfirm();
     const [items, setItems] = useState<any[]>([]);
@@ -52,11 +55,14 @@ export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryLis
     const [totalPages, setTotalPages] = useState(1);
     const [totalCount, setTotalCount] = useState(0);
     const [filterIntent, setFilterIntent] = useState('');
+    const [filterBrowseAll, setFilterBrowseAll] = useState(false);
     const [filterStatus, setFilterStatus] = useState('');
     const [search, setSearch] = useState('');
     const [showFilterSheet, setShowFilterSheet] = useState(false);
     const [filterTaxonomy, setFilterTaxonomy] = useState<TaxonomySelection>({ nodeIds: [], bhk: [] });
     const [filterLocationSelection, setFilterLocationSelection] = useState<LocationSelection>({ label: '', lat: null, lng: null, radiusKm: 2 });
+    const [filterLocation, setFilterLocation] = useState(''); // text address search (2026-06-26)
+    const [filterCounts, setFilterCounts] = useState<any>(null); // per-filter counts for the sheet
     const [filterListingSource, setFilterListingSource] = useState('');
     const [filterDataSource, setFilterDataSource] = useState('');
     const [filterDaysInSystem, setFilterDaysInSystem] = useState(0);
@@ -65,7 +71,19 @@ export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryLis
     const [taxonomyTree, setTaxonomyTree] = useState<any[]>([]);
     const [filterAgent, setFilterAgent] = useState('');
     const [agentsList, setAgentsList] = useState<any[]>([]);
+    // Budget + roof-rights filters (#3 + roof, 2026-06-28)
+    const [filterPriceMin, setFilterPriceMin] = useState('');
+    const [filterPriceMax, setFilterPriceMax] = useState('');
+    const [filterRoofRights, setFilterRoofRights] = useState(false);
+    // Bulk reassign (#4, 2026-06-28)
+    const [showReassignModal, setShowReassignModal] = useState(false);
+    const [reassignTarget, setReassignTarget] = useState('');
+    const [reassigning, setReassigning] = useState(false);
+    const [reassignMsg, setReassignMsg] = useState('');
     const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+    // Request sequencing (2026-07-15): overlapping filter fetches — only the newest applies,
+    // so a slower earlier response can't overwrite the correct filtered results.
+    const loadReqIdRef = useRef(0);
     const [shareItem, setShareItem] = useState<any>(null);
     const [bookVisitItem, setBookVisitItem] = useState<any>(null);
     const [activeSheetItem, setActiveSheetItem] = useState<any>(null);
@@ -74,6 +92,7 @@ export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryLis
     const [selectionMode, setSelectionMode] = useState(false);
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
     const [viewItem, setViewItem] = useState<any>(null);
+    const [matchInvId, setMatchInvId] = useState<string | null>(null);
     const [showBatchShareModal, setShowBatchShareModal] = useState(false);
     const [batchShareContact, setBatchShareContact] = useState<{ phone_number: string; name: string | null } | null>(null);
     const [batchShareLoading, setBatchShareLoading] = useState(false);
@@ -98,7 +117,20 @@ export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryLis
         }).catch(() => {});
     }, []);
 
-    useEffect(() => { loadData(); }, [page, filterIntent, filterStatus, filterAgent, filterTaxonomy, filterLocationSelection, filterListingSource, filterDataSource, filterDaysInSystem, filterDaysNoVisit, filterFloors]);
+    useEffect(() => { loadData(); }, [page, filterIntent, filterBrowseAll, filterStatus, filterAgent, filterTaxonomy, filterLocation, filterLocationSelection, filterListingSource, filterDataSource, filterDaysInSystem, filterDaysNoVisit, filterFloors, filterPriceMin, filterPriceMax, filterRoofRights]);
+
+    // Per-filter counts for the filter sheet (mirrors the desktop list). (2026-06-26)
+    useEffect(() => {
+        if (!showFilterSheet) return;
+        client.get('/api/inventory/filter-counts').then(res => setFilterCounts(res.data)).catch(() => {});
+    }, [showFilterSheet]);
+    const getCount = (field: string, value: string | number): string => {
+        if (!filterCounts) return '';
+        const arr = filterCounts[field];
+        if (!Array.isArray(arr)) return '';
+        const m = arr.find((c: any) => String(c.value) === String(value));
+        return m ? ` (${m.count})` : '';
+    };
 
     useEffect(() => {
         if (searchTimer.current) clearTimeout(searchTimer.current);
@@ -125,13 +157,16 @@ export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryLis
     }, [batchContactSearch]);
 
     const loadData = async () => {
+        const myReqId = ++loadReqIdRef.current;
         try {
             setLoading(true);
             const params: Record<string, any> = { page, limit: 15 };
             if (filterIntent) params.intent = filterIntent;
+            if (filterBrowseAll) params.all = 'true';
             if (filterStatus) params.status = filterStatus;
             if (filterAgent) params.agent_id = filterAgent;
             if (search.trim()) params.search = search.trim();
+            if (filterLocation.trim()) params.location = filterLocation.trim();
             if (filterTaxonomy.nodeIds.length > 0) params.taxonomy_node_ids = filterTaxonomy.nodeIds.join(',');
             if (filterTaxonomy.bhk.length > 0) params.bhk = filterTaxonomy.bhk.join(',');
             if (filterListingSource) params.listing_source = filterListingSource;
@@ -142,7 +177,12 @@ export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryLis
             if (filterDaysInSystem > 0) params.days_in_system = String(filterDaysInSystem);
             if (filterFloors.length > 0) params.floors = filterFloors.join(',');
             if (filterDaysNoVisit > 0) params.days_no_visit = String(filterDaysNoVisit);
+            if (filterPriceMin.trim()) params.price_min = filterPriceMin.trim();
+            if (filterPriceMax.trim()) params.price_max = filterPriceMax.trim();
+            if (filterRoofRights) params.roof_rights = 'true';
             const res = await getInventory(params);
+            // Discard a stale response if a newer filter fetch has started since.
+            if (myReqId !== loadReqIdRef.current) return;
             if (res?.data && Array.isArray(res.data)) {
                 setItems(res.data);
                 setTotalPages(res.totalPages || 1);
@@ -153,7 +193,7 @@ export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryLis
                 setTotalCount(res.length);
             }
         } catch (e) { console.error(e); }
-        finally { setLoading(false); }
+        finally { if (myReqId === loadReqIdRef.current) setLoading(false); }
     };
 
     const titleFor = (invId: string) => {
@@ -230,7 +270,34 @@ export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryLis
         window.open(`https://wa.me/${tel}?text=${encodeURIComponent(text)}`, '_blank');
     };
 
+    // Post-send personal share (2026-06-27): PDF branding follows the recipient (partner→brandless, direct→branded).
+    const [postPdfBusy, setPostPdfBusy] = useState(false);
+    const [postLinkCopied, setPostLinkCopied] = useState(false);
+    const handlePostSharePdf = async () => {
+        const ids = batchShareResults.map(r => r.id);
+        if (ids.length === 0) return;
+        setPostPdfBusy(true);
+        try {
+            const variant = batchShareMode === 'dealer' ? 'brandless' : 'branded';
+            const res = await client.post('/api/inventory/share-pdf', { inventory_ids: ids, variant }, { responseType: 'blob' });
+            const url = URL.createObjectURL(new Blob([res.data], { type: 'application/pdf' }));
+            const a = document.createElement('a');
+            a.href = url; a.download = `realty-pandit-${variant}-${ids.length === 1 ? ids[0].slice(0, 8) : ids.length + 'props'}.pdf`;
+            document.body.appendChild(a); a.click(); document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        } catch (err: any) {
+            alert(err?.response?.data?.error || 'Failed to generate PDF');
+        } finally { setPostPdfBusy(false); }
+    };
+    const handlePostShareLink = async () => {
+        const links = batchShareResults.filter(r => r.link).map(r => r.link as string);
+        if (links.length === 0) return;
+        try { await navigator.clipboard.writeText(links.join('\n')); setPostLinkCopied(true); setTimeout(() => setPostLinkCopied(false), 1800); }
+        catch { alert('Could not copy the link'); }
+    };
+
     const activeSheetFilterCount = (
+        (filterLocation.trim() ? 1 : 0) +
         (filterLocationSelection.lat !== null ? 1 : 0) +
         (filterTaxonomy.nodeIds.length > 0 ? 1 : 0) +
         (filterTaxonomy.bhk.length > 0 ? 1 : 0) +
@@ -239,7 +306,9 @@ export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryLis
         (filterAgent ? 1 : 0) +
         (filterDaysInSystem > 0 ? 1 : 0) +
         (filterDaysNoVisit > 0 ? 1 : 0) +
-        (filterFloors.length > 0 ? 1 : 0)
+        (filterFloors.length > 0 ? 1 : 0) +
+        ((filterPriceMin.trim() || filterPriceMax.trim()) ? 1 : 0) +
+        (filterRoofRights ? 1 : 0)
     );
 
     const chips = [
@@ -265,6 +334,11 @@ export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryLis
                 />
             </div>
 
+            {/* Total inventory count — always visible (2026-06-26) */}
+            <div style={{ padding: '0 16px 4px', fontSize: '12px', color: 'var(--text-muted)', fontWeight: 600 }}>
+                {totalCount} {totalCount === 1 ? 'property' : 'properties'}
+            </div>
+
             {/* Filter Chips + Toggle */}
             <div style={{ padding: '0 16px 4px', display: 'flex', gap: '8px', overflowX: 'auto', alignItems: 'center' }}>
                 {chips.map(chip => (
@@ -279,6 +353,18 @@ export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryLis
                         {chip.label}
                     </button>
                 ))}
+                {/* Browse all (2026-06-27) — default is your team's listings; this widens to the whole
+                    catalog (details outside your team redacted). */}
+                <button onClick={() => { setFilterBrowseAll(m => !m); setPage(1); }}
+                    style={{
+                        flexShrink: 0, padding: '6px 14px', borderRadius: '20px',
+                        border: filterBrowseAll ? '1px solid #22c55e' : '1px solid var(--border-secondary)',
+                        backgroundColor: filterBrowseAll ? '#22c55e' : 'var(--bg-secondary)',
+                        color: filterBrowseAll ? '#fff' : 'var(--text-secondary)',
+                        fontSize: '13px', fontWeight: 600, cursor: 'pointer',
+                    }}>
+                    🌐 Browse all
+                </button>
                 <button onClick={() => setShowFilterSheet(true)}
                     style={{
                         flexShrink: 0, padding: '6px 14px', borderRadius: '20px',
@@ -376,8 +462,26 @@ export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryLis
                                                 }}>
                                                     {item.status}
                                                 </span>
+                                                {relativeAge(item.created_at) && (
+                                                    <span style={{ fontSize: '10px', color: 'var(--text-muted)', backgroundColor: 'var(--bg-primary)', padding: '2px 7px', borderRadius: '6px' }} title="Listed">
+                                                        🕐 {relativeAge(item.created_at)}
+                                                    </span>
+                                                )}
+                                                {item.mine && (
+                                                    <span style={{ fontSize: '10px', fontWeight: 700, color: '#22c55e', backgroundColor: 'rgba(34,197,94,0.15)', padding: '2px 7px', borderRadius: '6px' }} title="You uploaded or are assigned this listing">
+                                                        ⭐ Yours
+                                                    </span>
+                                                )}
+                                                {item.needs_owner_fix && (
+                                                    <span style={{ fontSize: '10px', fontWeight: 700, color: '#f59e0b', backgroundColor: 'rgba(245,158,11,0.18)', padding: '2px 7px', borderRadius: '6px' }} title="The owner number is a team member's own number — edit and add the real owner's name & number">
+                                                        ⚠ Add owner
+                                                    </span>
+                                                )}
                                                 {item.lead_reference?.startsWith('NEEDS_REVIEW') && (
                                                     <span style={{ fontSize: 10, background: 'rgba(239,68,68,0.15)', color: '#f87171', borderRadius: 4, padding: '2px 6px', fontWeight: 700 }}>Needs Review</span>
+                                                )}
+                                                {item.roof_rights && (
+                                                    <span style={{ fontSize: 10, background: 'rgba(245,158,11,0.15)', color: '#f59e0b', borderRadius: 4, padding: '2px 6px', fontWeight: 700 }}>🏠 Roof rights</span>
                                                 )}
                                             </div>
                                             <div style={{ fontWeight: 600, fontSize: '13px', color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
@@ -386,6 +490,8 @@ export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryLis
                                             <div style={{ fontSize: '11px', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                                 {location}
                                             </div>
+                                            {/* #1 (2026-07-01): click-to-copy inventory code (mobile). */}
+                                            {item.display_id && <div style={{ marginTop: 4 }}><CopyChip text={item.display_id} size="xs" /></div>}
                                         </div>
                                     </div>
 
@@ -434,6 +540,29 @@ export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryLis
                                         );
                                     })()}
 
+                                    {/* Source (owner/dealer) + name (all) + contact (assigned manager + super_boss only, via item.source.phone) */}
+                                    {item.source && (
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', color: 'var(--text-secondary)', flexWrap: 'wrap' }}>
+                                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                                                {item.source.type === 'DEALER' ? '🤝 Dealer' : item.source.type === 'AGENT_OWNER' ? '👤 Owner (agent)' : '👤 Owner'}
+                                                {item.source.name ? `: ${item.source.name}` : ''}
+                                            </span>
+                                            {toDialablePhone(item.source.phone) && (
+                                                <a href={`tel:${toDialablePhone(item.source.phone)}`} onClick={(e) => e.stopPropagation()} title="Call source" style={{ color: '#22c55e', textDecoration: 'none', fontWeight: 700 }}>📞 Call</a>
+                                            )}
+                                        </div>
+                                    )}
+
+                                    {/* Engagement counts — shares / website views / visits (scheduled·visited) */}
+                                    {item.stats && (
+                                        <div style={{ display: 'flex', gap: '12px', fontSize: '11px', color: 'var(--text-muted)', flexWrap: 'wrap' }}>
+                                            <span title="Times shared with clients">📤 {item.stats.shares}</span>
+                                            <span title="Website views by clients">👁 {item.stats.views}</span>
+                                            <span title="Site visits: scheduled · visited">📅 {item.stats.visits_scheduled}·{item.stats.visits_done}</span>
+                                        </div>
+                                    )}
+
+
                                     {/* Completion Bar */}
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                                         <div style={{ flex: 1, height: '4px', borderRadius: '2px', backgroundColor: 'var(--bg-primary)', maxWidth: '140px' }}>
@@ -449,10 +578,21 @@ export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryLis
                                         }}>
                                             {item.completion_pct || 0}%
                                         </span>
-                                        {item.uploaded_by_agent?.name && (
-                                            <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
-                                                by {item.uploaded_by_agent.name}
-                                            </span>
+                                        {(item.assigned_agent?.name || item.uploaded_by_agent?.name) && (
+                                            toDialablePhone(item.assigned_agent?.phone || item.uploaded_by_agent?.phone) ? (
+                                                <a
+                                                    href={`tel:${toDialablePhone(item.assigned_agent?.phone || item.uploaded_by_agent?.phone)}`}
+                                                    onClick={(e) => e.stopPropagation()}
+                                                    title="Call inventory manager"
+                                                    style={{ fontSize: '10px', color: '#38bdf8', textDecoration: 'none', fontWeight: 700 }}
+                                                >
+                                                    🧑‍💼 {item.assigned_agent?.name || item.uploaded_by_agent?.name} 📞
+                                                </a>
+                                            ) : (
+                                                <span style={{ fontSize: '10px', color: 'var(--text-muted)' }} title="Inventory manager">
+                                                    🧑‍💼 {item.assigned_agent?.name || item.uploaded_by_agent?.name}
+                                                </span>
+                                            )
                                         )}
                                     </div>
                                 </div>
@@ -505,6 +645,9 @@ export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryLis
                     onEdit={() => { const it = viewItem; setViewItem(null); onEditItem(it); }}
                 />
             )}
+            {matchInvId && (
+                <MatchClientsModal inventoryId={matchInvId} onClose={() => setMatchInvId(null)} />
+            )}
 
             {/* Floating action bar — appears when items are selected */}
             {selectionMode && selectedIds.size > 0 && (
@@ -524,9 +667,58 @@ export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryLis
                     >📲 Share</button>
                     <button
                         type="button"
+                        onClick={() => { setShowReassignModal(true); setReassignTarget(''); setReassignMsg(''); }}
+                        style={{ padding: '10px 16px', borderRadius: '8px', fontSize: '14px', fontWeight: 700, cursor: 'pointer', backgroundColor: '#8b5cf6', border: 'none', color: '#fff' }}
+                    >🔄 Reassign</button>
+                    <button
+                        type="button"
                         onClick={() => { setSelectedIds(new Set()); setSelectionMode(false); }}
                         style={{ padding: '10px 14px', borderRadius: '8px', fontSize: '13px', cursor: 'pointer', border: '1px solid var(--border-secondary)', backgroundColor: 'transparent', color: 'var(--text-muted)' }}
                     >Cancel</button>
+                </div>
+            )}
+
+            {/* Bulk reassign bottom sheet (#4) → POST /inventory/bulk-transfer */}
+            {showReassignModal && (
+                <div style={{ position: 'fixed', inset: 0, backgroundColor: 'var(--sheet-backdrop)', zIndex: 2100 }}
+                    onClick={() => { if (!reassigning) setShowReassignModal(false); }}>
+                    <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: 'var(--bg-secondary)', borderRadius: '20px 20px 0 0', padding: '0 0 32px', boxShadow: '0 -8px 40px rgba(0,0,0,0.25)', animation: 'slide-up-in 250ms cubic-bezier(0.34,1.2,0.64,1) forwards' }}
+                        onClick={e => e.stopPropagation()}>
+                        <div style={{ display: 'flex', justifyContent: 'center', padding: '12px 0 8px' }}>
+                            <div style={{ width: '40px', height: '4px', borderRadius: '2px', backgroundColor: 'var(--border-secondary)' }} />
+                        </div>
+                        <div style={{ padding: '0 20px 8px', fontSize: '16px', fontWeight: 700, color: 'var(--text-primary)' }}>
+                            🔄 Reassign {selectedIds.size} listing{selectedIds.size === 1 ? '' : 's'}
+                        </div>
+                        <div style={{ padding: '0 20px 16px', fontSize: '12px', color: 'var(--text-muted)' }}>
+                            Transfer the selected propert{selectedIds.size === 1 ? 'y' : 'ies'} to another team member — they become the assigned agent.
+                        </div>
+                        <div style={{ padding: '0 20px' }}>
+                            <select value={reassignTarget} onChange={e => setReassignTarget(e.target.value)} disabled={reassigning}
+                                style={{ width: '100%', padding: '12px', borderRadius: '8px', fontSize: '14px', border: '1px solid var(--border-secondary)', backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)', boxSizing: 'border-box', marginBottom: '12px' }}>
+                                <option value="">Select an agent…</option>
+                                {agentsList.map((a: any) => <option key={a.id} value={a.id}>{a.name}{a.role ? ` (${a.role})` : ''}</option>)}
+                            </select>
+                            {reassignMsg && <div style={{ fontSize: '12px', color: reassignMsg.startsWith('✅') ? '#22c55e' : '#ef4444', marginBottom: '12px' }}>{reassignMsg}</div>}
+                            <button type="button" disabled={reassigning || !reassignTarget}
+                                onClick={async () => {
+                                    if (!reassignTarget) return;
+                                    setReassigning(true); setReassignMsg('');
+                                    try {
+                                        const res = await client.post('/api/inventory/bulk-transfer', { ids: Array.from(selectedIds), to_agent_id: reassignTarget });
+                                        const n = res.data?.transferred ?? 0;
+                                        setReassignMsg(`✅ Reassigned ${n} listing${n === 1 ? '' : 's'}.`);
+                                        await loadData();
+                                        setTimeout(() => { setShowReassignModal(false); setSelectedIds(new Set()); setSelectionMode(false); }, 1200);
+                                    } catch (err: any) {
+                                        setReassignMsg(`❌ ${err?.response?.data?.error || 'Reassign failed'}`);
+                                    } finally { setReassigning(false); }
+                                }}
+                                style={{ width: '100%', padding: '14px', borderRadius: '10px', fontWeight: 700, fontSize: '15px', backgroundColor: '#8b5cf6', color: '#fff', border: 'none', cursor: reassignTarget ? 'pointer' : 'not-allowed', opacity: reassignTarget && !reassigning ? 1 : 0.5 }}>
+                                {reassigning ? 'Reassigning…' : 'Confirm reassign'}
+                            </button>
+                        </div>
+                    </div>
                 </div>
             )}
 
@@ -569,13 +761,19 @@ export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryLis
                                     {batchShareResults.some(r => r.link) && (
                                         <div style={{ marginTop: '16px', padding: '12px', borderRadius: '10px', backgroundColor: 'rgba(37,211,102,0.08)', border: '1px solid rgba(37,211,102,0.3)' }}>
                                             <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '8px' }}>
-                                                Want to follow up personally? Send the same {batchShareMode === 'dealer' ? 'brochure links' : 'details'} from your own WhatsApp too.
+                                                Want to follow up personally? Share it yourself too — {batchShareMode === 'dealer' ? 'PDF is unbranded for partners' : 'branded PDF for clients'}.
                                             </div>
-                                            <button
-                                                type="button"
-                                                onClick={handleOwnWhatsAppShare}
-                                                style={{ width: '100%', padding: '12px', borderRadius: '10px', fontWeight: 700, fontSize: '14px', backgroundColor: '#128c7e', color: '#fff', border: 'none', cursor: 'pointer' }}
-                                            >📱 Also share from my WhatsApp</button>
+                                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px' }}>
+                                                <button type="button" onClick={handleOwnWhatsAppShare}
+                                                    style={{ padding: '11px 6px', borderRadius: '10px', fontWeight: 700, fontSize: '12px', backgroundColor: '#128c7e', color: '#fff', border: 'none', cursor: 'pointer' }}
+                                                >📱 My WhatsApp</button>
+                                                <button type="button" onClick={handlePostSharePdf} disabled={postPdfBusy}
+                                                    style={{ padding: '11px 6px', borderRadius: '10px', fontWeight: 700, fontSize: '12px', backgroundColor: '#ef4444', color: '#fff', border: 'none', cursor: postPdfBusy ? 'wait' : 'pointer', opacity: postPdfBusy ? 0.7 : 1 }}
+                                                >📄 {postPdfBusy ? '…' : 'PDF'}</button>
+                                                <button type="button" onClick={handlePostShareLink}
+                                                    style={{ padding: '11px 6px', borderRadius: '10px', fontWeight: 700, fontSize: '12px', backgroundColor: '#3b82f6', color: '#fff', border: 'none', cursor: 'pointer' }}
+                                                >🔗 {postLinkCopied ? 'Copied' : 'Link'}</button>
+                                            </div>
                                         </div>
                                     )}
                                     <button
@@ -696,9 +894,10 @@ export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryLis
                             </div>
                         </div>
 
-                        {/* Call Owner/Key Holder — privacy-gated: only super_boss + manager see direct
-                            owner/key-holder contact; others coordinate through their inventory manager. */}
-                        {(agent?.role === 'super_boss' || agent?.role === 'manager') && (toDialablePhone(activeSheetItem.uploader_phone) || toDialablePhone(activeSheetItem.owner_phone) || toDialablePhone(activeSheetItem.key_holder_phone)) && (
+                        {/* Call Owner/Dealer/Key Holder — privacy-gated (point 6): only the listing's
+                            ASSIGNED inventory manager + super_boss (can_edit) see the direct number;
+                            everyone else coordinates through the assigned manager. */}
+                        {activeSheetItem.can_edit && (toDialablePhone(activeSheetItem.uploader_phone) || toDialablePhone(activeSheetItem.owner_phone) || toDialablePhone(activeSheetItem.key_holder_phone)) && (
                             <>
                                 {toDialablePhone(activeSheetItem.uploader_phone) && (
                                     <a
@@ -742,10 +941,19 @@ export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryLis
                         {/* Share Listing */}
                         <button
                             type="button"
-                            onClick={() => { setShareItem(activeSheetItem); setActiveSheetItem(null); }}
+                            onClick={() => { setSelectedIds(new Set([activeSheetItem.id])); setShowBatchShareModal(true); setBatchShareResults([]); setBatchShareContact(null); setBatchContactSearch(''); setActiveSheetItem(null); }}
                             style={{ display: 'block', width: '100%', padding: '16px 24px', backgroundColor: 'transparent', border: 'none', borderBottom: '1px solid var(--border-primary)', color: 'var(--text-primary)', fontSize: '15px', textAlign: 'left', cursor: 'pointer', fontWeight: 500 }}
                         >
                             📤 Share Listing
+                        </button>
+
+                        {/* Match Clients (moved off the tile, 2026-06-19 — fixes the tap-bubbles-to-sheet bug) */}
+                        <button
+                            type="button"
+                            onClick={() => { setMatchInvId(activeSheetItem.id); setActiveSheetItem(null); }}
+                            style={{ display: 'block', width: '100%', padding: '16px 24px', backgroundColor: 'transparent', border: 'none', borderBottom: '1px solid var(--border-primary)', color: 'var(--text-primary)', fontSize: '15px', textAlign: 'left', cursor: 'pointer', fontWeight: 500 }}
+                        >
+                            🔍 Match Clients
                         </button>
 
                         {/* Schedule Visit */}
@@ -757,17 +965,19 @@ export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryLis
                             📍 Schedule Visit
                         </button>
 
-                        {/* Edit */}
-                        <button
-                            type="button"
-                            onClick={() => { onEditItem(activeSheetItem); setActiveSheetItem(null); }}
-                            style={{ display: 'block', width: '100%', padding: '16px 24px', backgroundColor: 'transparent', border: 'none', borderBottom: '1px solid var(--border-primary)', color: 'var(--text-primary)', fontSize: '15px', textAlign: 'left', cursor: 'pointer', fontWeight: 500 }}
-                        >
-                            ✏️ Edit Property
-                        </button>
+                        {/* Edit — only the assigned inventory manager + super_boss (point 3) */}
+                        {activeSheetItem.can_edit && (
+                            <button
+                                type="button"
+                                onClick={() => { onEditItem(activeSheetItem); setActiveSheetItem(null); }}
+                                style={{ display: 'block', width: '100%', padding: '16px 24px', backgroundColor: 'transparent', border: 'none', borderBottom: '1px solid var(--border-primary)', color: 'var(--text-primary)', fontSize: '15px', textAlign: 'left', cursor: 'pointer', fontWeight: 500 }}
+                            >
+                                ✏️ Edit Property
+                            </button>
+                        )}
 
-                        {/* Deactivate — ownership guard from Task 4 */}
-                        {hasPermission('edit_inventory') && (activeSheetItem.uploaded_by_agent?.id === agent?.id || agent?.role === 'super_boss' || agent?.role === 'manager') && (
+                        {/* Deactivate — same lock as Edit (assigned manager + super_boss) */}
+                        {hasPermission('edit_inventory') && activeSheetItem.can_edit && (
                             <button
                                 type="button"
                                 onClick={async () => {
@@ -821,14 +1031,33 @@ export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryLis
                             <button type="button" onClick={() => {
                                 setFilterListingSource(''); setFilterDataSource('');
                                 setFilterTaxonomy({ nodeIds: [], bhk: [] });
+                                setFilterLocation('');
                                 setFilterLocationSelection({ label: '', lat: null, lng: null, radiusKm: 2 });
                                 setFilterDaysInSystem(0); setFilterDaysNoVisit(0);
                                 setFilterFloors([]);
                                 setFilterAgent('');
+                                setFilterPriceMin(''); setFilterPriceMax(''); setFilterRoofRights(false);
                             }} style={{ background: 'none', border: 'none', color: 'var(--text-link)', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}>
                                 Clear All
                             </button>
                         </div>
+
+                        {/* Text address search (locality/area/city) — finds listings without lat/lng too. (2026-06-26) */}
+                        <FilterSection title="Location (locality / area / city)" defaultOpen={false} badge={filterLocation.trim() ? 1 : 0}>
+                            <input
+                                value={filterLocation}
+                                onChange={e => setFilterLocation(e.target.value)}
+                                placeholder="e.g. Vaishali, Sector 4, Ghaziabad"
+                                style={{
+                                    width: '100%', padding: '9px 12px', borderRadius: '10px',
+                                    border: '1px solid var(--border-secondary)', backgroundColor: 'var(--bg-primary)',
+                                    color: 'var(--text-primary)', fontSize: '13px', boxSizing: 'border-box',
+                                }}
+                            />
+                            <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>
+                                Searches the property address. For near-me radius, use the map location below.
+                            </div>
+                        </FilterSection>
 
                         <FilterLocationSection value={filterLocationSelection} onChange={setFilterLocationSelection} />
 
@@ -842,7 +1071,7 @@ export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryLis
                                     <button key={opt.value} type="button"
                                         onClick={() => setFilterListingSource(filterListingSource === opt.value ? '' : opt.value)}
                                         className={`chip ${filterListingSource === opt.value ? 'chip-active' : 'chip-inactive'}`}>
-                                        {opt.label}
+                                        {opt.label}{getCount('ownership_type', opt.value)}
                                     </button>
                                 ))}
                             </div>
@@ -854,10 +1083,28 @@ export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryLis
                                     <button key={opt.value} type="button"
                                         onClick={() => setFilterIntent(filterIntent === opt.value ? '' : opt.value)}
                                         className={`chip ${filterIntent === opt.value ? 'chip-active' : 'chip-inactive'}`}>
-                                        {opt.label}
+                                        {opt.label}{getCount('intent', opt.value)}
                                     </button>
                                 ))}
                             </div>
+                        </FilterSection>
+
+                        {/* Budget (price range ₹) — #3 2026-06-28 */}
+                        <FilterSection title="Budget (price range ₹)" defaultOpen={false} badge={(filterPriceMin.trim() || filterPriceMax.trim()) ? 1 : 0}>
+                            <div style={{ display: 'flex', gap: '8px' }}>
+                                <input type="number" inputMode="numeric" value={filterPriceMin} onChange={e => setFilterPriceMin(e.target.value)} placeholder="Min ₹"
+                                    style={{ width: '100%', padding: '9px 12px', borderRadius: '10px', border: '1px solid var(--border-secondary)', backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)', fontSize: '13px', boxSizing: 'border-box' }} />
+                                <input type="number" inputMode="numeric" value={filterPriceMax} onChange={e => setFilterPriceMax(e.target.value)} placeholder="Max ₹"
+                                    style={{ width: '100%', padding: '9px 12px', borderRadius: '10px', border: '1px solid var(--border-secondary)', backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)', fontSize: '13px', boxSizing: 'border-box' }} />
+                            </div>
+                        </FilterSection>
+
+                        {/* Roof rights — #3 2026-06-28 */}
+                        <FilterSection title="Roof rights" defaultOpen={false} badge={filterRoofRights ? 1 : 0}>
+                            <button type="button" onClick={() => setFilterRoofRights(v => !v)}
+                                className={`chip ${filterRoofRights ? 'chip-active' : 'chip-inactive'}`}>
+                                {filterRoofRights ? '✓ Only roof-rights listings' : 'Show only roof-rights listings'}
+                            </button>
                         </FilterSection>
 
                         <FilterTaxonomySection
@@ -906,7 +1153,7 @@ export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryLis
                                     <button key={opt.value} type="button"
                                         onClick={() => setFilterDataSource(filterDataSource === opt.value ? '' : opt.value)}
                                         className={`chip ${filterDataSource === opt.value ? 'chip-active' : 'chip-inactive'}`}>
-                                        {opt.label}
+                                        {opt.label}{getCount('data_source', opt.value)}
                                     </button>
                                 ))}
                             </div>

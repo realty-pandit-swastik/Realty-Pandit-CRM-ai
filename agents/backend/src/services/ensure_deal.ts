@@ -21,6 +21,7 @@ import prisma from '../db';
 import logger from '../utils/logger';
 import { TransactionStatus, TransactionType } from '@prisma/client';
 import { assignViaRoundRobin, assignViaManagerRoundRobin } from './lead_assignment';
+import { assignContact } from './assign_contact';
 // foldLegacyDemand import retired in Phase 5 — Contact now carries the
 // canonical demand_taxonomy_node_id + demand_schema_values directly.
 
@@ -115,10 +116,9 @@ export async function ensureDealForLead(args: EnsureDealArgs): Promise<EnsureDea
             ? await assignViaRoundRobin()
             : await assignViaManagerRoundRobin();
         if (assignedAgentId) {
-            await prisma.contact.update({
-                where: { phone_number: args.contactPhone },
-                data: { assigned_agent_id: assignedAgentId },
-            });
+            // Both branches above are round-robin (employee pool vs manager pool) — the method is
+            // 'round_robin' either way; only the agent pool differs. Phase 5C.
+            await assignContact(args.contactPhone, assignedAgentId, 'round_robin');
         }
     }
 

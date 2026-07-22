@@ -27,6 +27,10 @@ describe('transitionTransaction — same-stage no-op', () => {
 
     it('still throws on a genuinely invalid transition (NEW → CLOSED_WON)', async () => {
         (prisma.transaction.findUnique as any).mockResolvedValue({ id: 't2', status: TransactionStatus.NEW });
-        await expect(transitionTransaction('t2', TransactionStatus.CLOSED_WON, 'agent1')).rejects.toThrow(/Invalid transition/);
+        const promise = transitionTransaction('t2', TransactionStatus.CLOSED_WON, 'agent1');
+        await expect(promise).rejects.toThrow(/Invalid transition/);
+        // GlitchTip #97: it's a typed 400 ValidationError now, so routes return 400 (not 500)
+        // and captureRouteError skips it. (2026-06-25)
+        await expect(promise).rejects.toMatchObject({ statusCode: 400 });
     });
 });

@@ -18,6 +18,7 @@ import { authMiddleware } from '../middleware/auth';
 import logger from '../utils/logger';
 import prisma from '../db';
 import { captureRouteError } from '../utils/capture';
+import { AppError } from '../middleware/error_handler';
 
 const router = Router();
 const engine = new WorkflowEngine();
@@ -276,6 +277,9 @@ router.post('/commit', async (req: Request, res: Response) => {
         // Bug fix 2026-05-12: previously only read Bearer, which broke every admin
         // submit since the admin frontend uses cookies, not Bearer tokens.
         let agentId: string | undefined;
+        // 2026-07-12: an external PARTNER agent may submit through the same admin wizard. Their token
+        // carries role:'partner' and a PartnerAgent id — which must NOT be treated as an Agent id.
+        let partnerAgentId: string | undefined;
         const cookieToken: string | undefined = req.cookies?.['rp_access_token'];
         const authHeader = req.headers.authorization;
         const bearerToken = authHeader?.startsWith('Bearer ') ? authHeader.split(' ')[1] : undefined;
@@ -284,7 +288,11 @@ router.post('/commit', async (req: Request, res: Response) => {
         if (token) {
             try {
                 const decoded: any = jwt.verify(token, process.env.JWT_SECRET || process.env.AGENT_JWT_SECRET || 'secret');
-                if (decoded?.id) agentId = decoded.id;
+                if (decoded?.role === 'partner') {
+                    if (decoded?.id) partnerAgentId = decoded.id;
+                } else if (decoded?.id) {
+                    agentId = decoded.id;
+                }
             } catch {
                 // Invalid/expired token. Public users (web/whatsapp/voice) don't need auth.
                 // Admin must reject to avoid NULL uploaded_by_agent_id in DB.
@@ -294,18 +302,23 @@ router.post('/commit', async (req: Request, res: Response) => {
             }
         }
 
-        // Admin submissions always require an authenticated agent
-        if (source === 'admin' && !agentId) {
+        // Admin submissions always require an authenticated identity — a team agent OR a partner.
+        if (source === 'admin' && !agentId && !partnerAgentId) {
             return res.status(401).json({ error: 'Session expired. Please refresh the page and try again.' });
         }
 
         // Inject _source for engine to read
         if (!answers._source) answers._source = source;
 
-        const result = await engine.commit(answers, source, agentId);
+        const result = await engine.commit(answers, source, agentId, partnerAgentId);
         res.status(201).json({ success: true, ...result });
     } catch (err) {
         captureRouteError(err, req, { route: 'workflow#8' });
+        // Business-rule rejections (e.g. own-number owner guard) carry their own 4xx
+        // status — return that, not a blanket 500. (2026-06-25, fixes #105/#16)
+        if (err instanceof AppError) {
+            return res.status(err.statusCode).json({ error: err.message });
+        }
         logger.error('[Workflow] commit error', err);
         res.status(500).json({ error: (err as Error).message || 'Failed to commit inventory' });
     }

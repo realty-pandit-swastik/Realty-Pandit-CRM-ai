@@ -1,8 +1,9 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { getContacts, getInteractions, updateContactType, reportNoShow, markLeadLost } from './api/client';
+import { getContacts, getInteractions, updateContactType, reportNoShow, markLeadLost, setDelayReason } from './api/client';
 import { useAuth } from './contexts/AuthContext';
 import { useIsMobile } from './hooks/useIsMobile';
+import { onDrill } from './lib/drill';
 import { ToastProvider, useToast } from './contexts/ToastContext';
 import { ToastContainer } from './components/ui/Toast';
 import { ConfirmProvider, ConfirmDialogRoot, useConfirm } from './contexts/ConfirmContext';
@@ -17,10 +18,12 @@ import { PropertyLiveStatus } from './components/PropertyLiveStatus';
 import { DashboardTabs } from './components/DashboardTabs';
 import { TeamManagement } from './components/TeamManagement';
 import { MyProfile } from './components/MyProfile';
+import { MyTeam } from './components/MyTeam';
 import { PartnerManagement } from './components/PartnerManagement';
 import { PropertyTaxonomy } from './components/PropertyTaxonomy';
 import { ReportsView } from './components/ReportsView';
 import { ExternalLeads } from './components/ExternalLeads';
+import { ContactsPage } from './components/ContactsPage';
 import { BuyerChatWorkflowPanel } from './components/BuyerChatWorkflow';
 import { CalendarView } from './components/CalendarView';
 import { EmailManagement } from './components/EmailManagement';
@@ -28,12 +31,13 @@ import { QADashboard } from './components/QADashboard';
 import { AgentLogs } from './components/AgentLogs';
 import { AgentOverride } from './components/AgentOverride';
 import WorkflowBuilder from './components/WorkflowBuilder';
+import { MarkLostModal } from './components/MarkLostModal';
+import { DelayReasonModal } from './components/DelayReasonModal';
 import MarketingCampaign from './components/MarketingCampaign';
 import TaskBoard from './components/TaskBoard';
 import DealPipeline from './components/DealPipeline';
 import CallLog from './components/CallLog';
 import AdvancedAnalytics from './components/AdvancedAnalytics';
-import VoiceCommands from './components/VoiceCommands';
 import { ErrorBoundary } from './components/ErrorBoundary';
 // Mobile components
 import { MobileLayout } from './components/mobile/MobileLayout';
@@ -188,6 +192,10 @@ function WelcomePanel({ contacts, agentName, onSelect }: WelcomePanelProps) {
   );
 }
 
+// The ONLY views an external partner agent may mount. 'my-team' is further gated to a partner
+// COMPANY OWNER by the nav (and by the server). Module scope so the effect below can't hit a TDZ.
+const PARTNER_VIEWS = ['inventory', 'leads', 'deals', 'my-profile', 'my-team'];
+
 // ─── Main App ──────────────────────────────────────────────────────────────────
 function App() {
   const { agent, loading, sessionExpired, dismissSessionExpired } = useAuth();
@@ -198,11 +206,17 @@ function App() {
   // Deep link: ?deal=<id> opens the Deal Pipeline straight to that deal (from Google
   // Calendar/Task new-lead notifications). Consumed by DealPipeline via initialDealId.
   const [deepLinkDealId, setDeepLinkDealId] = useState<string | null>(null);
+  // Drill-through (2026-07-16): a one-shot pre-filter passed to InventoryList when a dashboard
+  // tile is clicked. Cleared once consumed so a later manual Inventory visit starts clean.
+  const [drillFilter, setDrillFilter] = useState<Record<string, string> | null>(null);
+  const [leadsFilter, setLeadsFilter] = useState<Record<string, string> | null>(null);
   const viewRef = useRef(view);
   useEffect(() => { viewRef.current = view; }, [view]);
   const [contacts, setContacts] = useState<any[]>([]);
   const [contactsLoading, setContactsLoading] = useState(true);
   const [selectedPhone, setSelectedPhone] = useState<string | null>(null);
+  const [lostModalPhone, setLostModalPhone] = useState<string | null>(null);
+  const [delayModalPhone, setDelayModalPhone] = useState<string | null>(null);
   const [interactions, setInteractions] = useState<any[]>([]);
   // Mobile-specific state
   const [mobileEditItem, setMobileEditItem] = useState<any>(null);
@@ -253,8 +267,25 @@ function App() {
     window.history.replaceState({}, '', window.location.pathname + (qs ? `?${qs}` : ''));
   }, []);
 
+  // Drill-through (2026-07-16): dashboard tiles dispatch an rp:drill event → open the matching
+  // list. Inventory receives a one-shot pre-filter; other entities just navigate (their own
+  // filter injection lands in their phase). onDrill returns its unsubscribe as the effect cleanup.
+  useEffect(() => onDrill(({ entity, filter }) => {
+    if (entity === 'inventory') setDrillFilter(filter ?? null);
+    if (entity === 'leads') setLeadsFilter(filter ?? null);
+    setView(entity);
+  }), []);
+
+  // PARTNER-SCOPED MODE (2026-07-12): an external partner agent shares this app but may only use
+  // Inventory / their Leads / their Deals / Profile. Land them on Inventory and skip the team-wide
+  // contacts fetch (the backend default-deny guard 403s it anyway).
   useEffect(() => {
-    if (agent) loadContacts();
+    if (!agent) return;
+    if (agent.role === 'partner') {
+      setView(v => (PARTNER_VIEWS.includes(v) ? v : 'inventory'));
+      return;
+    }
+    loadContacts();
   }, [agent]);
 
   useEffect(() => {
@@ -307,33 +338,32 @@ function App() {
 
   // 2026-05-12: Mark Lead Lost — sets contact.lead_status=lost + lifecycle=CLOSED_LOST
   // and auto-closes any active deals tied to this contact.
-  const handleMarkLeadLost = async () => {
+  // Opens the structured Mark-Lost modal (mandatory reason dropdown).
+  const handleMarkLeadLost = () => {
     if (!selectedPhone) return;
-    // Two-step confirm with reason capture
-    const reasonOptions = [
-      'just_browsing', 'wrong_number', 'spam', 'budget_mismatch',
-      'already_bought', 'duplicate', 'partner_agent', 'other',
-    ];
-    const reasonRaw = window.prompt(
-      `Reason for marking ${selectedPhone} as LOST?\n\nOne of: ${reasonOptions.join(', ')}\n(Press Cancel to abort.)`,
-      'just_browsing',
-    );
-    if (!reasonRaw) return;
-    const reason = reasonRaw.trim().toLowerCase();
-    const note = window.prompt('Optional note (or leave blank):', '') || undefined;
-    const ok = await confirm(
-      `Mark ${selectedPhone} as LOST?\n\nThis will close the lead AND auto-close any active deals for them. This action is reversible by reopening individual deals.`,
-    );
-    if (!ok) return;
-    try {
-      const result = await markLeadLost(selectedPhone, reason, note);
-      await loadContacts();
-      const dealMsg = result.deals_closed > 0 ? ` and ${result.deals_closed} deal${result.deals_closed === 1 ? '' : 's'}` : '';
-      showToast(`Lead marked LOST${dealMsg}.`, 'success');
-    } catch (err: any) {
-      console.error('Failed to mark lead lost', err);
-      showToast(err?.response?.data?.error || 'Failed to mark lead lost', 'error');
-    }
+    setLostModalPhone(selectedPhone);
+  };
+
+  // Performs the API call from the modal; throws on failure so the modal shows the error.
+  const submitMarkLost = async (reason: string, note?: string) => {
+    if (!lostModalPhone) return;
+    const result = await markLeadLost(lostModalPhone, reason, note);
+    await loadContacts();
+    const dealMsg = result.deals_closed > 0 ? ` and ${result.deals_closed} deal${result.deals_closed === 1 ? '' : 's'}` : '';
+    showToast(`Lead marked LOST${dealMsg}.`, 'success');
+  };
+
+  // Opens the Set-Delay-Reason modal (mandatory reason dropdown) for an active lead.
+  const handleSetDelayReason = () => {
+    if (!selectedPhone) return;
+    setDelayModalPhone(selectedPhone);
+  };
+
+  const submitDelayReason = async (reason: string, note?: string) => {
+    if (!delayModalPhone) return;
+    await setDelayReason(delayModalPhone, reason, note);
+    await loadContacts();
+    showToast('Delay reason saved.', 'success');
   };
 
   // ─── Mobile: Navigation + Browser History (hooks MUST be before early returns) ──
@@ -411,6 +441,11 @@ function App() {
 
   const selectedContact = contacts.find(c => c.phone_number === selectedPhone);
 
+  // PARTNER-SCOPED: never mount a team-only view — not even for the render before the effect above
+  // redirects (which would fire team API calls and 403). Everything renders off `safeView`.
+  const isPartnerUser = agent.role === 'partner';
+  const safeView = isPartnerUser && !PARTNER_VIEWS.includes(view) ? 'inventory' : view;
+
   // ─── Mobile Layout ──────────────────────────────────────────────────────────
   if (isMobile) {
     const backBarStyle = {
@@ -423,7 +458,7 @@ function App() {
     } as const;
 
     const renderMobileContent = () => {
-      switch (view) {
+      switch (safeView) {
         case 'dashboard':
           return <DashboardTabs />;
         case 'chats':
@@ -442,6 +477,7 @@ function App() {
                   interactions={interactions}
                   onReportNoShow={handleReportNoShow}
                   onMarkLeadLost={handleMarkLeadLost}
+                  onSetDelayReason={handleSetDelayReason}
                   onUpdateContactType={handleUpdateContactType}
                 />
               </>
@@ -496,6 +532,8 @@ function App() {
           return <MobileCalendar />;
         case 'my-profile':
           return <MobileScrollWrapper><MyProfile isMobile /></MobileScrollWrapper>;
+        case 'my-team':
+          return <MobileScrollWrapper><MyTeam /></MobileScrollWrapper>;
         case 'team':
           return <MobileTeamView />;
         case 'property-map':
@@ -507,11 +545,13 @@ function App() {
         case 'calls':
           return <MobileScrollWrapper><CallLog /></MobileScrollWrapper>;
         case 'leads':
-          return <MobileScrollWrapper><ExternalLeads isMobile={true} /></MobileScrollWrapper>;
+          return <MobileScrollWrapper><ExternalLeads isMobile={true} initialFilter={leadsFilter} onFilterConsumed={() => setLeadsFilter(null)} /></MobileScrollWrapper>;
         case 'buyer-chat':
           return <MobileScrollWrapper><BuyerChatWorkflowPanel onBack={() => setView('dashboard')} /></MobileScrollWrapper>;
         case 'partners':
           return <MobileScrollWrapper><PartnerManagement /></MobileScrollWrapper>;
+        case 'contacts':
+          return <MobileScrollWrapper><ContactsPage /></MobileScrollWrapper>;
         case 'taxonomy':
           return <MobileScrollWrapper><PropertyTaxonomy /></MobileScrollWrapper>;
         case 'reports':
@@ -549,9 +589,26 @@ function App() {
       <ErrorBoundary>
         <ConfirmProvider>
           <ToastProvider>
-            <MobileLayout activeView={view} onViewChange={handleMobileNav}>
+            <MobileLayout activeView={safeView} onViewChange={handleMobileNav}>
               <ErrorBoundary>{renderMobileContent()}</ErrorBoundary>
             </MobileLayout>
+            {lostModalPhone && (
+              <MarkLostModal
+                phone={lostModalPhone}
+                name={contacts.find((c) => c.phone_number === lostModalPhone)?.name}
+                onSubmit={submitMarkLost}
+                onClose={() => setLostModalPhone(null)}
+              />
+            )}
+            {delayModalPhone && (
+              <DelayReasonModal
+                phone={delayModalPhone}
+                name={contacts.find((c) => c.phone_number === delayModalPhone)?.name}
+                current={contacts.find((c) => c.phone_number === delayModalPhone)?.stagnation_reason}
+                onSubmit={submitDelayReason}
+                onClose={() => setDelayModalPhone(null)}
+              />
+            )}
             <ToastContainer />
             <ConfirmDialogRoot />
           </ToastProvider>
@@ -562,7 +619,7 @@ function App() {
 
   // ─── Desktop Layout ─────────────────────────────────────────────────────────
   const renderContent = () => {
-    switch (view) {
+    switch (safeView) {
       case 'dashboard':
         return <DashboardTabs />;
       case 'chats':
@@ -579,6 +636,7 @@ function App() {
                 interactions={interactions}
                 onReportNoShow={handleReportNoShow}
                 onMarkLeadLost={handleMarkLeadLost}
+                onSetDelayReason={handleSetDelayReason}
                 onUpdateContactType={handleUpdateContactType}
               />
             ) : (
@@ -597,21 +655,25 @@ function App() {
       case 'calls':
         return <CallLog />;
       case 'inventory':
-        return <InventoryList />;
+        return <InventoryList initialFilter={drillFilter} onFilterConsumed={() => setDrillFilter(null)} />;
       case 'property-map':
         return <PropertyMapView />;
       case 'live-status':
         return <PropertyLiveStatus />;
       case 'leads':
-        return <ExternalLeads />;
+        return <ExternalLeads initialFilter={leadsFilter} onFilterConsumed={() => setLeadsFilter(null)} />;
       case 'buyer-chat':
         return <BuyerChatWorkflowPanel onBack={() => setView('dashboard')} />;
       case 'my-profile':
         return <MyProfile />;
+      case 'my-team':
+        return <MyTeam />;
       case 'team':
         return <TeamManagement />;
       case 'partners':
         return <PartnerManagement />;
+      case 'contacts':
+        return <ContactsPage />;
       case 'taxonomy':
         return <PropertyTaxonomy />;
       case 'reports':
@@ -651,10 +713,26 @@ function App() {
           >
             Skip to main content
           </a>
-          <DashboardLayout activeView={view} onViewChange={setView}>
+          <DashboardLayout activeView={safeView} onViewChange={setView}>
             <ErrorBoundary>{renderContent()}</ErrorBoundary>
           </DashboardLayout>
-          <VoiceCommands onNavigate={setView} currentView={view} />
+          {lostModalPhone && (
+            <MarkLostModal
+              phone={lostModalPhone}
+              name={contacts.find((c) => c.phone_number === lostModalPhone)?.name}
+              onSubmit={submitMarkLost}
+              onClose={() => setLostModalPhone(null)}
+            />
+          )}
+          {delayModalPhone && (
+            <DelayReasonModal
+              phone={delayModalPhone}
+              name={contacts.find((c) => c.phone_number === delayModalPhone)?.name}
+              current={contacts.find((c) => c.phone_number === delayModalPhone)?.stagnation_reason}
+              onSubmit={submitDelayReason}
+              onClose={() => setDelayModalPhone(null)}
+            />
+          )}
           <ToastContainer />
           <ConfirmDialogRoot />
         </ToastProvider>

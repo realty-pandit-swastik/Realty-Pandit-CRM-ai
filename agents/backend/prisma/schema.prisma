@@ -56,23 +56,23 @@ model Contact {
   contact_type ContactType @default(UNKNOWN)
 
   // Qualification Data
-  intent               String? // buy, sell, rent, commercial
-  property_type        String? // flat, house, plot
-  budget_min           Decimal?
-  budget_max           Decimal?
-  preferred_location   String?
+  intent             String? // buy, sell, rent, commercial
+  property_type      String? // flat, house, plot
+  budget_min         Decimal?
+  budget_max         Decimal?
+  preferred_location String?
   // Demand columns DROPPED Phase 5 (2026-05-29):
   //   demand_bhk Int? → demand_schema_values.bhk String
   //   demand_main_category String? → derive from demand_taxonomy_node_id
   //   demand_category String? → derive from demand_taxonomy_node_id
   //   demand_type_slug String? → derive from demand_taxonomy_node_id
   //   demand_amenities Json? → demand_schema_values.amenities
-  timeline             String? // immediate, 1-3 months
+  timeline           String? // immediate, 1-3 months
   demand_budget_type String? // one_time (buy), per_month (rent/lease)
 
   // Demand-side unification (2026-05-29) — mirror of inventory.specs + inventory.taxonomy_node_id.
   demand_taxonomy_node_id String? // null = "any property type"
-  demand_schema_values    Json?   // { bhk: "1", amenities: ["Lift","Power Backup"], "age-of-construction": "1-3 years", … }
+  demand_schema_values    Json? // { bhk: "1", amenities: ["Lift","Power Backup"], "age-of-construction": "1-3 years", … }
 
   // Area requirements
   area_min  Float? // Minimum area requirement
@@ -93,6 +93,16 @@ model Contact {
   lifecycle_stage   String  @default("NEW") // NEW, QUALIFIED, MATCHED, VISIT_SCHEDULED, VISITED, NEGOTIATION, CLOSED_WON, CLOSED_LOST
   assigned_agent_id String?
   assigned_agent    Agent?  @relation(fields: [assigned_agent_id], references: [id])
+  // Phase 5C (2026-07-17) — how this contact's agent was chosen (routing method). Nullable; legacy
+  // rows + unassigned contacts stay null. See services/assign_contact.ts for the vocabulary.
+  assignment_method String?
+
+  // Phase 3 (2026-06-14) — structured lost-lead + active-lead-stagnation capture.
+  // Additive nullable columns; values are enum-like strings validated at the API layer.
+  lost_reason       String? // BUDGET | LOCATION | PROPERTY_MISMATCH | NOT_INTERESTED | PURCHASED_ELSEWHERE | NO_RESPONSE | WRONG_NUMBER | DUPLICATE | COMPETITOR | OTHER
+  lost_at           DateTime?
+  stagnation_reason String? // CLIENT_NOT_RESPONDING | BUDGET_APPROVAL | FAMILY_DECISION | PROPERTY_NOT_AVAILABLE | SITE_VISIT_PENDING | LOAN_APPROVAL | DOCUMENTATION | FUTURE_PLAN | NEGOTIATION | OTHER
+  stagnation_set_at DateTime?
 
   // Lead Verification (auto-created for external leads, null for legacy contacts)
   verification_status  String? // UNVERIFIED | VERIFIED | REJECTED | CONVERTED_PARTNER
@@ -103,7 +113,11 @@ model Contact {
 
   // Partner Referral Tracking
   lead_type              String? // DIRECT_OWNER | PARTNER_REFERRAL
-  referral_partner_id    String? // PartnerAgent.id (if registered partner)
+  referral_partner_id    String? // PartnerAgent.id (if registered partner) - WHO BROUGHT the lead (attribution)
+  // PARTNER TEAMS (2026-07-13): WHO IS WORKING the lead - a sub-agent inside the partner's own company.
+  // Bare String, NO FK (mirrors Transaction.demand_handler_id): an orphaned id just stops matching a
+  // sub-agent's scope instead of blocking a delete. NEVER conflate with referral_partner_id (attribution).
+  partner_assignee_id    String? // PartnerAgent.id of the sub-agent this lead is assigned to
   referral_partner_name  String? // Free text name (if unregistered partner)
   referral_partner_phone String? // Phone for retroactive linking when partner registers
 
@@ -116,16 +130,16 @@ model Contact {
   last_wa_inbound DateTime? // Last inbound WhatsApp message timestamp (for 24h session window)
 
   // Meta Ad Attribution (populated when lead comes from Facebook/Instagram ad)
-  meta_ad_id           String? // Facebook ad ID that generated this lead
-  meta_campaign_id     String? // Facebook campaign ID
-  meta_adset_id        String? // Facebook ad set ID
-  meta_campaign_name   String? // Human-readable campaign name (fetched from API)
-  meta_ad_creative     String? // Brief description of ad creative (for AI context)
-  meta_form_id         String? // Lead form ID (for lead ads)
+  meta_ad_id         String? // Facebook ad ID that generated this lead
+  meta_campaign_id   String? // Facebook campaign ID
+  meta_adset_id      String? // Facebook ad set ID
+  meta_campaign_name String? // Human-readable campaign name (fetched from API)
+  meta_ad_creative   String? // Brief description of ad creative (for AI context)
+  meta_form_id       String? // Lead form ID (for lead ads)
 
   // Social Platform IDs (for linking Instagram/Facebook interactions)
-  instagram_scoped_id  String? // Instagram-scoped user ID
-  facebook_scoped_id   String? // Facebook page-scoped user ID
+  instagram_scoped_id String? // Instagram-scoped user ID
+  facebook_scoped_id  String? // Facebook page-scoped user ID
 
   // AI Context
   ai_summary         String? @db.Text
@@ -187,6 +201,10 @@ model Contact {
   @@index([assigned_agent_id])
   @@index([created_by])
   @@index([owning_manager_id])
+  // Hot predicate for the partner lead list, and traversed as a nested relation filter from the
+  // deals OR - it was never indexed. (2026-07-13)
+  @@index([referral_partner_id])
+  @@index([partner_assignee_id])
   @@map("contacts")
 }
 
@@ -359,25 +377,29 @@ model Agent {
   tenant_id String
   tenant    Tenant @relation(fields: [tenant_id], references: [id])
 
-  name           String
-  email          String  @unique
-  phone          String? // Required for new members; nullable for backward compat
-  personal_email String? // Personal Gmail - used for SubUserName matching from 99acres
+  name              String
+  email             String  @unique
+  phone             String? // Required for new members; nullable for backward compat
+  personal_email    String? // Personal Gmail - used for SubUserName matching from 99acres
+  // Portal lead-routing identifiers (2026-06-25) — manager/super_boss enter the email/ID this
+  // member uses on each portal so incoming leads from their listings route to them, not round-robin.
+  nine9acres_email  String? // 99acres SubUserName / portal email (checked first in resolveAgentByEmail)
+  magicbricks_email String? // MagicBricks sub_user value: their MB Gmail OR <phone>@timesgroup.com
 
   // Per-member outbound email config (T9b, 2026-05-16). When set, this agent's
   // emails are sent via their own mailbox (e.g. Outlook/Office365) instead of the
   // shared Postfix relay. App password stored AES-256-GCM encrypted (utils/crypto).
-  email_provider      String?
-  email_smtp_host     String?
-  email_smtp_port     Int?
-  email_smtp_secure   Boolean?
-  email_smtp_username String?
-  email_smtp_password String? // AES-256-GCM ciphertext — never returned to client
-  email_configured_at DateTime?
+  email_provider          String?
+  email_smtp_host         String?
+  email_smtp_port         Int?
+  email_smtp_secure       Boolean?
+  email_smtp_username     String?
+  email_smtp_password     String? // AES-256-GCM ciphertext — never returned to client
+  email_configured_at     DateTime?
   // True once the member has set their OWN @realtypandit.in mailbox password
   // (self-service activation, 2026-05-19). Until then the profile shows
   // "activate your email — set your password" instead of the Outlook config.
-  email_mailbox_activated Boolean @default(false)
+  email_mailbox_activated Boolean   @default(false)
 
   // Per-member Google account link (2026-05-18) — reminders/visits sync to the
   // member's own Google Calendar + Tasks, and Google Sign-In. Refresh token is
@@ -385,13 +407,13 @@ model Agent {
   google_email         String?
   google_refresh_token String? // AES-256-GCM ciphertext — never returned to client
   google_connected_at  DateTime?
-  google_sync_enabled  Boolean  @default(true)
+  google_sync_enabled  Boolean   @default(true)
 
-  role           String  @default("employee") // super_boss, manager, employee
-  department     String? // property_sales, operations, management, software_sales
-  status         String  @default("active")
-  gender             String @default("unknown") // male, female, unknown
-  preferred_language String @default("hi_en")   // hi, en, hi_en — auto-learned from voice calls
+  role               String  @default("employee") // super_boss, manager, employee
+  department         String? // property_sales, operations, management, software_sales
+  status             String  @default("active")
+  gender             String  @default("unknown") // male, female, unknown
+  preferred_language String  @default("hi_en") // hi, en, hi_en — auto-learned from voice calls
 
   // Authentication
   password_hash       String?
@@ -420,15 +442,15 @@ model Agent {
   created_leads            Lead[]          @relation("LeadCreatedBy")
 
   // Ownership relations (2026-04-17 middleman model)
-  owned_contacts           Contact[]       @relation("ContactOwningManager")
-  owned_inventory          Inventory[]     @relation("InventoryOwningManager")
-  owned_transactions       Transaction[]   @relation("TransactionOwningManager")
-  commission_entries_made  DealCommissionEntry[] @relation("CommissionEnteredBy")
-  commission_entries_received DealCommissionEntry[] @relation("CommissionAgentPayee")
-  partner_reassignments_done PartnerReassignmentLog[] @relation("PartnerReassignPerformedBy")
-  partner_reassignments_to   PartnerReassignmentLog[] @relation("PartnerReassignToAgent")
-  team_actions               TeamAction[]             @relation("AgentTeamActions")
-  partner_reassignments_from PartnerReassignmentLog[] @relation("PartnerReassignFromAgent")
+  owned_contacts              Contact[]                @relation("ContactOwningManager")
+  owned_inventory             Inventory[]              @relation("InventoryOwningManager")
+  owned_transactions          Transaction[]            @relation("TransactionOwningManager")
+  commission_entries_made     DealCommissionEntry[]    @relation("CommissionEnteredBy")
+  commission_entries_received DealCommissionEntry[]    @relation("CommissionAgentPayee")
+  partner_reassignments_done  PartnerReassignmentLog[] @relation("PartnerReassignPerformedBy")
+  partner_reassignments_to    PartnerReassignmentLog[] @relation("PartnerReassignToAgent")
+  team_actions                TeamAction[]             @relation("AgentTeamActions")
+  partner_reassignments_from  PartnerReassignmentLog[] @relation("PartnerReassignFromAgent")
 
   created_at       DateTime  @default(now())
   updated_at       DateTime  @updatedAt
@@ -498,13 +520,18 @@ model Inventory {
   // area / area_unit / furnishing / facing / age-of-construction / floors /
   // amenities (array of label strings) / additional-rooms / parking / etc.
   // See PROJECT_STATUS 2026-05-28 "Specs unification" for the dedup history.
-  specs    Json?
+  specs Json?
 
   // Property Details — only non-type-specific scalar fields. furnishing / facing /
   // property_age / total_floors / features were retired in Phase 4 (2026-05-28); they
   // live in specs.* now under canonical taxonomy keys.
-  description  String? @db.Text // Free-text property description
-  floor_number Int?
+  description   String? @db.Text // Free-text property description
+  floor_number  Int? // numeric SORT key (Basement -2, Stilt -1, Ground 0, Upper Ground 1, Nth = N)
+  // Floor display (2026-06-27). floor_label is the authoritative DISPLAY value when the floor is a
+  // named level (Ground/Upper Ground/Basement/Stilt) — falls back to floor_number when null.
+  // display_floor is an optional buyer-facing override (website + share + PDF); falls back to the real floor.
+  floor_label   String?
+  display_floor String?
 
   // Structured Address
   flat_no        String? // "A-1201", "B-304"
@@ -567,6 +594,10 @@ model Inventory {
   // resolved at query time. Matches the pattern on Contact/Lead.referral_partner_id.
   referral_partner_id String?
   referral_partner    PartnerAgent? @relation("InventoryReferralPartner", fields: [referral_partner_id], references: [id])
+  // PARTNER TEAMS (2026-07-13): the sub-agent inside the partner's own company assigned to work this
+  // listing. Bare String, NO FK (deliberately unlike referral_partner_id above) so all three
+  // partner_assignee_id columns share one shape and an orphaned id degrades gracefully.
+  partner_assignee_id String? // PartnerAgent.id of the assigned sub-agent
 
   // Owning manager — the internal agent responsible for this listing's coordination.
   // For partner-referred inventory: inherits from referral_partner.managing_agent_id.
@@ -579,11 +610,12 @@ model Inventory {
   shared_with_ids String[] // Agent IDs this inventory is shared with for collaboration
 
   // --- DISPLAY ID, SLUG & ENRICHMENT (v3 - Shortened Flow) ---
-  display_id     String? @unique // Human-readable ID: RP-DEL-RES-20431
-  slug           String? @unique // SEO-friendly URL slug: 2bhk-flat-sector-150-noida
-  completion_pct Int     @default(0) // How complete is the listing (0-100)
-  is_enriched    Boolean @default(false) // Whether post-save enrichment was done
-  renovated      Boolean @default(false) // Property has been renovated
+  display_id              String?  @unique // Human-readable ID: RP-DEL-RES-20431
+  slug                    String?  @unique // SEO-friendly URL slug: 2bhk-flat-sector-150-noida
+  completion_pct          Int      @default(0) // How complete is the listing (0-100)
+  is_enriched             Boolean  @default(false) // Whether post-save enrichment was done
+  renovated               Boolean  @default(false) // Property has been renovated
+  roof_rights             Boolean  @default(false) // Listing includes rights to the roof (selling point) — 2026-06-28
   // Pre-rented (pre-lease): a FOR-SALE property that already has a sitting tenant paying rent.
   pre_rented              Boolean  @default(false) // For-sale property already tenanted
   pre_rented_monthly_rent Decimal? // Current monthly rent the sitting tenant pays
@@ -620,6 +652,7 @@ model Inventory {
   @@index([shared_with_ids]) // GIN index for array contains queries
   @@index([referral_partner_id])
   @@index([owning_manager_id])
+  @@index([partner_assignee_id])
   @@map("inventory")
 }
 
@@ -674,27 +707,27 @@ model InventoryCounter {
 // over phases 1b-1d. Additive for now; legacy classification stays populated for back-compat.
 // ---------------------------------------------------------
 model TaxonomyNode {
-  id            String         @id @default(uuid())
-  parent_id     String?
-  parent        TaxonomyNode?  @relation("NodeChildren", fields: [parent_id], references: [id])
-  children      TaxonomyNode[] @relation("NodeChildren")
-  name          String
-  slug          String
-  node_kind     String         // CATEGORY | SUBCATEGORY | GROUP | TYPE
-  display_order Int            @default(0)
-  is_active     Boolean        @default(true)
-  labels_json   Json?
+  id                           String         @id @default(uuid())
+  parent_id                    String?
+  parent                       TaxonomyNode?  @relation("NodeChildren", fields: [parent_id], references: [id])
+  children                     TaxonomyNode[] @relation("NodeChildren")
+  name                         String
+  slug                         String
+  node_kind                    String // CATEGORY | SUBCATEGORY | GROUP | TYPE
+  display_order                Int            @default(0)
+  is_active                    Boolean        @default(true)
+  labels_json                  Json?
   // Phase 1d: legacy classification map (back-compat). Lets the add-inventory commit
   // derive the old flat_property_type / category / sub_category for a chosen TYPE node,
   // so matching/search/sharing keep working until Phases 2-5 retire the legacy columns.
   legacy_sub_category_id       String?
   legacy_type_id               String?
   legacy_flat_property_type_id String?
-  node_fields   NodeField[]
-  inventory     Inventory[]
-  contacts      Contact[]
-  created_at    DateTime       @default(now())
-  updated_at    DateTime       @updatedAt
+  node_fields                  NodeField[]
+  inventory                    Inventory[]
+  contacts                     Contact[]
+  created_at                   DateTime       @default(now())
+  updated_at                   DateTime       @updatedAt
 
   @@unique([parent_id, slug])
   @@index([parent_id])
@@ -706,7 +739,7 @@ model FieldDefinition {
   id            String      @id @default(uuid())
   key           String      @unique
   label         String
-  input_type    String      // number | select | multiselect | text | boolean | parking_list
+  input_type    String // number | select | multiselect | text | boolean | parking_list
   options_json  Json?
   unit          String?
   display_order Int         @default(0)
@@ -953,7 +986,7 @@ model PartnerAgent {
   // Mandatory business fields
   business_name       String?
   business_address    String?
-  business_lat        Float?  // geo of the partner's location (Google Places autocomplete) — 2026-06-03
+  business_lat        Float? // geo of the partner's location (Google Places autocomplete) — 2026-06-03
   business_lng        Float?
   registration_number String? // Udyam, GSTIN, etc.
 
@@ -1035,21 +1068,21 @@ model Lead {
 
   // Intent
   intent String? // "buy" | "rent" | null = not yet determined
-  source String @default("manual") // whatsapp, website, 99acres, manual, etc.
+  source String  @default("manual") // whatsapp, website, 99acres, manual, etc.
 
   // Demand Requirements
-  budget_min           Decimal?
-  budget_max           Decimal?
+  budget_min         Decimal?
+  budget_max         Decimal?
   // Demand columns DROPPED Phase 5 (2026-05-29) — see Contact for rationale.
   //   demand_bhk Int? / demand_main_category / demand_type_slug / demand_amenities Json?
-  demand_budget_type   String? // "one_time" | "per_month"
+  demand_budget_type String? // "one_time" | "per_month"
 
   // Demand-side unification (2026-05-29) — see Contact model for rationale.
   demand_taxonomy_node_id String? // null = "any property type"
-  demand_schema_values    Json?   // keyed by FieldDefinition.key
-  area_min             Float?
-  area_max             Float?
-  area_unit            String? // "sqft" | "sqmtr"
+  demand_schema_values    Json? // keyed by FieldDefinition.key
+  area_min                Float?
+  area_max                Float?
+  area_unit               String? // "sqft" | "sqmtr"
 
   // Classification IDs
   category_id     String?
@@ -1322,6 +1355,7 @@ enum AppointmentStatus {
   cancelled
   rescheduled
   no_show
+  requested // visit asked for (card tap) but slot not yet set; excluded from reminders/schedules until slotted then scheduled (QUALIFIED-1, 2026-06-22)
 }
 
 // ---------------------------------------------------------
@@ -1734,6 +1768,10 @@ model Transaction {
   demand_handler_id    String? // PartnerAgent.id or Agent.id (null for DIRECT)
   supply_handler_type  String? // PARTNER, TEAM_MEMBER
   supply_handler_id    String? // PartnerAgent.id or Agent.id
+  // PARTNER TEAMS (2026-07-13): the sub-agent inside the partner's own company who is working this
+  // deal. Bare String, no FK - same pattern as the *_handler_id fields above. Distinct from the
+  // handler/referral fields, which record WHO BROUGHT the business (attribution + commission).
+  partner_assignee_id  String? // PartnerAgent.id of the assigned sub-agent
   coordinator_agent_id String? // Always an internal Agent - the middleman
   deal_scenario        String? // PARTNER_INTERNAL, PARTNER_PARTNER, DIRECT_INTERNAL
 
@@ -1745,10 +1783,10 @@ model Transaction {
   // Demand Requirements Snapshot (from buyer/tenant at creation).
   // Demand columns DROPPED Phase 5 (2026-05-29):
   //   demand_property_type / demand_bedrooms / demand_category / demand_type_slug / demand_amenities
-  demand_location      String? // Preferred locality/city
-  demand_budget_min    Float?
-  demand_budget_max    Float?
-  demand_notes         String? @db.Text
+  demand_location   String? // Preferred locality/city
+  demand_budget_min Float?
+  demand_budget_max Float?
+  demand_notes      String? @db.Text
 
   // PHASE 7: Extended Requirements Snapshot (non-deprecated columns only).
   demand_intent      String? // buy, rent_lease
@@ -1758,13 +1796,13 @@ model Transaction {
 
   // Demand-side unification (2026-05-29) — canonical SoT for type-specific fields.
   demand_taxonomy_node_id String? // null = "any property type"
-  demand_schema_values    Json?   // keyed by FieldDefinition.key
+  demand_schema_values    Json? // keyed by FieldDefinition.key
 
   // Visit Outcome (filled by lead manager on stage VISITED submission)
-  visit_outcome          String? // Property Liked / Want More Properties / Re-match Required / No Show
-  client_interest_level  String? // Hot / Warm / Cold
-  visit_feedback         String? @db.Text // What did client say about the property
-  workflow_round         Int     @default(1) // Increments on each re-visit cycle
+  visit_outcome         String? // Property Liked / Want More Properties / Re-match Required / No Show
+  client_interest_level String? // Hot / Warm / Cold
+  visit_feedback        String? @db.Text // What did client say about the property
+  workflow_round        Int     @default(1) // Increments on each re-visit cycle
 
   // Outcome (filled on close)
   final_price       Float? // Agreed price (on CLOSED_WON)
@@ -1798,7 +1836,7 @@ model Transaction {
   tenant          Tenant     @relation(fields: [tenant_id], references: [id])
 
   logs               TransactionLog[]
-  appointments       Appointment[]          @relation("TransactionAppointments")
+  appointments       Appointment[]         @relation("TransactionAppointments")
   queries            DealQuery[]
   commission_entries DealCommissionEntry[]
   team_actions       TeamAction[]
@@ -1813,6 +1851,7 @@ model Transaction {
   @@index([deal_scenario])
   @@index([demand_handler_type, demand_handler_id])
   @@index([supply_handler_type, supply_handler_id])
+  @@index([partner_assignee_id])
   @@index([owning_manager_id])
   @@map("transactions")
 }
@@ -1838,20 +1877,20 @@ model TransactionLog {
 }
 
 model TeamAction {
-  id             String   @id @default(cuid())
+  id             String @id @default(cuid())
   tenant_id      String
   transaction_id String
   agent_id       String
-  stage          String   // Pipeline stage when action was taken
+  stage          String // Pipeline stage when action was taken
 
   // Action type: CALLED | WHATSAPPED | CONFIRMED_VISIT | SCHEDULED_VISIT |
   //              REMINDER_GIVEN | LOGGED_NOTE | PAUSED_AI | RESUMED_AI |
   //              VISIT_RESCHEDULED | MEETING_BOOKED
-  action_type    String
+  action_type String
 
   // Outcome: connected | no_answer | busy | qualified | scheduled | reminder_given
-  outcome        String?
-  notes          String?  @db.Text
+  outcome String?
+  notes   String? @db.Text
 
   created_at DateTime @default(now())
 
@@ -2472,9 +2511,9 @@ model DealCommissionEntry {
   // Who earned this slice
   party_type       CommissionPartyType
   agent_id         String? // Set when party_type = INTERNAL_AGENT
-  agent            Agent?  @relation("CommissionAgentPayee", fields: [agent_id], references: [id])
+  agent            Agent?              @relation("CommissionAgentPayee", fields: [agent_id], references: [id])
   partner_agent_id String? // Set when party_type = PARTNER_AGENT
-  partner_agent    PartnerAgent? @relation("CommissionPartnerPayee", fields: [partner_agent_id], references: [id])
+  partner_agent    PartnerAgent?       @relation("CommissionPartnerPayee", fields: [partner_agent_id], references: [id])
 
   // Amount + metadata
   amount   Decimal @db.Decimal(12, 2)
@@ -2492,6 +2531,27 @@ model DealCommissionEntry {
   @@map("deal_commission_entries")
 }
 
+// ---------------------------------------------------------
+// PER-MANAGER PRODUCTIVITY TARGETS (2026-07-16 - Phase 5B)
+// Each manager sets monthly targets for their team; scoring falls back to
+// DEFAULT_MONTHLY_TARGETS when a manager has no row. Additive + isolated.
+// ---------------------------------------------------------
+model Target {
+  id               String   @id @default(uuid())
+  tenant_id        String
+  manager_agent_id String // the manager whose team these targets apply to
+  period           String   @default("monthly")
+  leads            Int      @default(30)
+  appointments     Int      @default(15)
+  inventory        Int      @default(10)
+  conversion_rate  Float    @default(0.2)
+  created_at       DateTime @default(now())
+  updated_at       DateTime @updatedAt
+
+  @@unique([tenant_id, manager_agent_id, period])
+  @@map("targets")
+}
+
 enum CommissionPartyType {
   INTERNAL_AGENT
   PARTNER_AGENT
@@ -2503,7 +2563,7 @@ enum CommissionPartyType {
 // Audit trail of super_boss reassigning partner agents between internal managers.
 // ---------------------------------------------------------
 model PartnerReassignmentLog {
-  id               String @id @default(uuid())
+  id               String       @id @default(uuid())
   partner_agent_id String
   partner_agent    PartnerAgent @relation(fields: [partner_agent_id], references: [id])
 

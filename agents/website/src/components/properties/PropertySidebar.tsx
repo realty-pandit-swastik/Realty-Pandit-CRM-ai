@@ -57,6 +57,7 @@ interface FilterState {
     rooms: string;
     facing: string;
     age: string;
+    roof_rights: string;
     sort: string;
     page: number;
     [k: string]: string | number;
@@ -270,6 +271,16 @@ export default function PropertySidebar({
             title: isRent ? 'Monthly Rent' : 'Budget',
             defaultOpen: true,
             content: <BudgetSlider priceMin={filters.price_min} priceMax={filters.price_max} onChange={onFilterChange} isRent={isRent} />,
+        });
+
+        // Roof rights (2026-06-28) — single toggle pill → filters.roof_rights = 'true' | ''
+        items.push({
+            id: 'roof_rights',
+            title: 'Roof Rights',
+            defaultOpen: false,
+            content: (
+                <PillButton label="Has roof rights" active={filters.roof_rights === 'true'} onClick={() => onFilterChange('roof_rights', filters.roof_rights === 'true' ? '' : 'true')} />
+            ),
         });
 
         // Per-type filters when a taxonomy type is selected; otherwise static furnishing + amenities.

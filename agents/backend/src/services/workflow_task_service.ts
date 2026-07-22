@@ -18,7 +18,7 @@ import prisma from '../db';
 import logger from '../utils/logger';
 import { notify, NotifyRecipient } from './notify';
 import { createDeal, CreateDealInput, matchPropertyToDeal } from './deal_service';
-import { transitionTransaction } from './transaction_state_machine';
+import { transitionTransaction, advanceVisitedDeal } from './transaction_state_machine';
 import { MatchingEngine } from './matching_engine';
 import { ensurePartnerAgent } from './partner_auto_create';
 import { TransactionStatus } from '@prisma/client';
@@ -136,6 +136,28 @@ async function createWorkflowTask(params: {
             contact_phone: contactPhone,
             due_date: dueDate.toISOString(),
         });
+    }
+
+    // SLA-breach escalation for SHARE_PROPERTIES: if the share task isn't DONE by its 24h due date,
+    // reassign to super_boss + URGENT (reuses the generic 'task-sla-check' handler). Was a silent
+    // stall — the 5-stage workflow tasks had a due date but no escalation, unlike lead-action tasks. (QUALIFIED-5b)
+    if (taskType === 'SHARE_PROPERTIES') {
+        try {
+            const { scheduledJobsQueue } = await import('../queues/index');
+            await scheduledJobsQueue.add('task-sla-check', {
+                task_id: task.id,
+                contact_phone: contactPhone,
+                original_assignee_id: assignedTo,
+                action: taskType,
+            }, {
+                delay: Math.max(60_000, dueDate.getTime() - Date.now()),
+                attempts: 2,
+                removeOnComplete: true,
+                removeOnFail: { count: 100 },
+            });
+        } catch (err) {
+            logger.warn(`[WorkflowTask] Failed to schedule SHARE_PROPERTIES SLA check: ${(err as Error).message}`);
+        }
     }
 
     logger.info(`[WorkflowTask] Created ${taskType} task ${task.id} for ${contactPhone} (round ${round})`);
@@ -766,11 +788,14 @@ export async function completeVisitFeedbackTask(taskId: string, params: {
     let nextTask: any = undefined;
 
     if (params.nextAction === 'MORE_OPTIONS') {
-        // LOOP BACK to Stage 2 with incremented round
+        // LOOP BACK to Stage 2 with incremented round. (VS4-3, 2026-06-22) Was transitioning to the
+        // deprecated MATCHED state (empty transition list) → it always threw and was swallowed, so the
+        // deal never looped back while a new SHARE_PROPERTIES task spun up (deal/task divergence).
+        // advanceVisitedDeal records VISITED (the visit happened) then lands on QUALIFIED = Stage 2.
         if (dealId) {
             try {
-                await transitionTransaction(dealId, TransactionStatus.MATCHED, params.agentId, 'admin', { reason: 'Client wants more options' });
-            } catch { /* may already be at MATCHED or VISITED, ignore */ }
+                await advanceVisitedDeal(dealId, TransactionStatus.QUALIFIED, params.agentId, 'admin', { reason: 'Client wants more options' });
+            } catch (err) { logger.warn(`[WorkflowTask] More-options loop-back failed: ${(err as Error).message}`); }
         }
 
         // Run new matching. Phase 5: legacy demand_bhk column dropped — derive
@@ -864,7 +889,10 @@ export async function completeVisitFeedbackTask(taskId: string, params: {
                     select: { owner_phone: true },
                 });
                 await matchPropertyToDeal(dealId, params.selectedPropertyId, inv?.owner_phone || null, 'TEAM_MEMBER', params.agentId, params.agentId);
-                await transitionTransaction(dealId, TransactionStatus.NEGOTIATION, params.agentId, 'admin', {
+                // (VS4-3) Route through VISITED — VISIT_SCHEDULED→NEGOTIATION is an invalid transition
+                // (it was throwing here, swallowed by the catch). advanceVisitedDeal records the visit
+                // then lands on NEGOTIATION.
+                await advanceVisitedDeal(dealId, TransactionStatus.NEGOTIATION, params.agentId, 'admin', {
                     selected_property: params.selectedPropertyId,
                 });
             } catch (err) {

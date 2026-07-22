@@ -13,6 +13,10 @@ interface Agent {
     permissions: string[];
     reports_to?: { name: string; email: string } | null;
     subordinates?: { id: string; name: string; email: string; role: string }[];
+    // PARTNER (role === 'partner') — returned by the /auth/me partner branch. (2026-07-13)
+    partner_category?: string | null;   // 'COMPANY' | 'INDIVIDUAL'
+    parent_partner_id?: string | null;  // set ⇒ this partner is a SUB-AGENT of another partner
+    coordinator?: { name: string; phone?: string | null; email?: string | null } | null;
 }
 
 interface AuthContextType {
@@ -26,6 +30,13 @@ interface AuthContextType {
     logout: () => Promise<void>;
     hasPermission: (permission: string) => boolean;
     dismissSessionExpired: () => void;
+    /** External partner agent (not internal staff). */
+    isPartner: boolean;
+    /**
+     * A partner COMPANY OWNER — the only partner who may manage a team and assign work.
+     * Derived ONCE here on purpose: recomputing this per-screen is how the four screens drift apart.
+     */
+    isPartnerOwner: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -145,6 +156,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setSessionExpired(false);
     };
 
+    // Partner identity, derived ONCE (see AuthContextType). A partner OWNER is a COMPANY partner with
+    // no parent — sub-agents are always created INDIVIDUAL + parented, so they can never be owners.
+    const isPartner = agent?.role === 'partner';
+    const isPartnerOwner = isPartner
+        && agent?.partner_category === 'COMPANY'
+        && !agent?.parent_partner_id;
+
     return (
         <AuthContext.Provider value={{
             agent,
@@ -156,6 +174,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             logout,
             hasPermission,
             dismissSessionExpired,
+            isPartner,
+            isPartnerOwner,
         }}>
             {children}
         </AuthContext.Provider>

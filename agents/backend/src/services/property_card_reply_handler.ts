@@ -81,7 +81,7 @@ export async function handlePropertyCardReply(msg: any, from: string): Promise<b
         where: { id: dealId },
         include: {
             demand_contact: { select: { name: true } },
-            coordinator: { select: { phone: true } },
+            coordinator: { select: { id: true, phone: true } },
         },
     });
     if (!deal) {
@@ -172,6 +172,39 @@ export async function handlePropertyCardReply(msg: any, from: string): Promise<b
             }
         } catch (err) {
             logger.warn(`[PropCardReply] Transition to VISIT_SCHEDULED failed:`, (err as Error).message);
+        }
+
+        // Provisional 'requested' appointment so the deal isn't VISIT_SCHEDULED with nothing booked.
+        // The real slot is filled when the customer sends a day/time or a human books (find-or-update);
+        // 'requested' is excluded from the reminder/schedule crons until then. Dup-guarded. (QUALIFIED-1)
+        if (inventoryId) {
+            try {
+                const openAppt = await prisma.appointment.findFirst({
+                    where: { transaction_id: dealId, status: { notIn: ['cancelled', 'completed', 'no_show'] } },
+                    select: { id: true },
+                });
+                if (!openAppt) {
+                    await prisma.appointment.create({
+                        data: {
+                            contact_id: from,
+                            title: `Visit requested — ${requirement}`,
+                            type: 'property_visit',
+                            scheduled_at: new Date(), // placeholder; real slot set on booking
+                            property_id: inventoryId,
+                            transaction_id: dealId,
+                            assigned_to_agent_id: deal.coordinator?.id || null,
+                            status: 'requested',
+                            source: 'whatsapp',
+                            channel: 'whatsapp',
+                            tenant_id: deal.tenant_id,
+                            metadata: { awaiting_slot: true, requested_at: new Date().toISOString() },
+                        },
+                    });
+                    logger.info(`[PropCardReply] Provisional 'requested' appointment created for deal ${dealId}`);
+                }
+            } catch (err) {
+                logger.warn(`[PropCardReply] provisional appointment create failed:`, (err as Error).message);
+            }
         }
 
         // Ask customer for availability; coordinator will confirm slot in CRM.

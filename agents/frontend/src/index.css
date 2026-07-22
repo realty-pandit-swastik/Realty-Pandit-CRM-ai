@@ -23,6 +23,12 @@
   --border-primary: #e2e8f0;
   --border-secondary: #cbd5e1;
 
+  /* Compatibility aliases — several dashboard components + the tab bar reference
+     these legacy names, which were never defined (borders/accents rendered
+     transparent). Map them to the real tokens so every screen gets proper edges. */
+  --border-color: var(--border-secondary);
+  --primary: var(--accent-primary);
+
   --error-bg: #fef2f2;
   --error-text: #dc2626;
   --success-bg: #f0fdf4;
@@ -116,6 +122,10 @@
 
   --border-primary: #1e293b;
   --border-secondary: #334155;
+
+  /* Compatibility aliases (dark) — see :root note above. */
+  --border-color: var(--border-secondary);
+  --primary: var(--accent-primary);
 
   --error-bg: #7f1d1d;
   --error-text: #fca5a5;

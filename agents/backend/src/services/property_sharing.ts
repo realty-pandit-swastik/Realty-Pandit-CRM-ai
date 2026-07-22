@@ -16,11 +16,32 @@ import logger from '../utils/logger';
 import { WhatsAppService } from './whatsapp';
 import { MatchingEngine, buildMatchCriteriaFromLead } from './matching_engine';
 import { checkBudgetSanity, budgetReaskPrompt } from '../utils/budget_sanity';
-import { phoneVariants } from '../utils/phone';
+import { phoneVariants, isPlaceholderPhone } from '../utils/phone';
 import { BROCHURE_TEMPLATE_NAME } from '../config/whatsapp_templates';
 
 const whatsapp = new WhatsAppService();
 const EVT_PROPERTY_SHARED = 'property_shared';
+const RESHARE_WINDOW_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+
+/**
+ * Has this inventory already been shared to this phone number within the window,
+ * regardless of which deal it was shared under? (2026-07-13) Existing dedup was
+ * scoped to a single deal_id's lifetime, so the same listing could get re-sent
+ * hours apart when a direct share and a later matching pass both fired for the
+ * same contact — confirmed in production (same 4 properties re-sent 6h apart).
+ */
+async function wasRecentlyShared(phone: string, inventoryId: string, windowMs: number = RESHARE_WINDOW_MS): Promise<boolean> {
+    const recent = await prisma.interaction.findFirst({
+        where: {
+            phone_number: phone,
+            event_type: EVT_PROPERTY_SHARED,
+            metadata: { path: ['inventory_id'], equals: inventoryId },
+            created_at: { gte: new Date(Date.now() - windowMs) },
+        },
+        select: { id: true },
+    });
+    return Boolean(recent);
+}
 
 // Reuse the SAME public host the v5 card's image header uses (proven Meta-fetchable).
 // NOTE: use the /inventory mount (NOT /api/inventory) — the /api prefix is auth-gated
@@ -88,7 +109,7 @@ export async function shareInventoryBrochure(
  * Share the next un-shared matching property for a deal via WhatsApp.
  * Returns the inventory_id shared, or null if nothing left to share.
  */
-export async function shareNextProperty(dealId: string): Promise<string | null> {
+export async function shareNextProperty(dealId: string, opts?: { bypassPause?: boolean }): Promise<string | null> {
     const deal = await prisma.transaction.findUnique({
         where: { id: dealId },
         include: {
@@ -107,6 +128,14 @@ export async function shareNextProperty(dealId: string): Promise<string | null> 
     });
     if (!deal || !deal.demand_contact?.phone_number) {
         logger.warn(`[PropShare] Deal ${dealId} missing or has no contact phone`);
+        return null;
+    }
+
+    // Honour the AI pause switch at the ONE chokepoint every auto-share flows through — a human
+    // paused the AI to take this deal over personally, so the bot must NOT auto-share (this also
+    // closes the "Next Option" card-tap leak). A human's manual share passes bypassPause. (QUALIFIED-4)
+    if (!opts?.bypassPause && (deal as any).ai_paused) {
+        logger.info(`[PropShare] Deal ${dealId} is ai_paused — skipping auto-share (human is handling it)`);
         return null;
     }
 
@@ -205,7 +234,13 @@ export async function shareNextProperty(dealId: string): Promise<string | null> 
     // conversational AI, Next Option button). Manual deal-workspace share (shareSpecificProperty)
     // intentionally bypasses this — an agent picking a property is an explicit override.
     const MIN_MATCH_SCORE = 50;
-    const next = matches.find((m: any) => !sharedIds.has(m.id) && (m.match_score ?? 0) >= MIN_MATCH_SCORE);
+    let next: any = null;
+    for (const m of matches as any[]) {
+        if (sharedIds.has(m.id) || (m.match_score ?? 0) < MIN_MATCH_SCORE) continue;
+        if (await wasRecentlyShared(deal.demand_contact.phone_number, m.id)) continue;
+        next = m;
+        break;
+    }
     if (!next) {
         // Dedup: if we already sent an exhausted notification for this deal in last 5 minutes,
         // skip silently (race condition between cron broadcast + manual share + inventory verify).
@@ -279,10 +314,26 @@ export async function shareNextProperty(dealId: string): Promise<string | null> 
 export async function shareSpecificProperty(dealId: string, inventoryId: string): Promise<boolean> {
     const deal = await prisma.transaction.findUnique({
         where: { id: dealId },
-        include: { demand_contact: { select: { phone_number: true, name: true } } },
+        include: { demand_contact: { select: { phone_number: true, name: true, referral_partner_id: true } } },
     });
-    if (!deal?.demand_contact?.phone_number) {
-        logger.warn(`[PropShare] Deal ${dealId} missing or has no contact phone`);
+    if (!deal?.demand_contact) {
+        logger.warn(`[PropShare] Deal ${dealId} missing contact`);
+        return false;
+    }
+
+    // #6 (2026-06-28): resolve the recipient. For a partner-referral deal whose buyer phone is still a
+    // PENDING- placeholder, fall back to the partner agent's number so the share still goes out (the
+    // auto-detect below then sends them the brandless brochure). The buyer's real number always wins once set.
+    let recipientPhone = deal.demand_contact.phone_number;
+    if (isPlaceholderPhone(recipientPhone) && deal.demand_contact.referral_partner_id) {
+        const pa = await prisma.partnerAgent.findUnique({
+            where: { id: deal.demand_contact.referral_partner_id },
+            select: { phone_number: true, name: true },
+        });
+        if (pa?.phone_number) recipientPhone = pa.phone_number;
+    }
+    if (!recipientPhone || isPlaceholderPhone(recipientPhone)) {
+        logger.warn(`[PropShare] Deal ${dealId} has no real customer or partner phone to share to`);
         return false;
     }
 
@@ -295,14 +346,23 @@ export async function shareSpecificProperty(dealId: string, inventoryId: string)
         return false;
     }
 
-    // typeName/bhk/society are used in the interaction log below; the actual card is built + sent
-    // by shareInventoryCard (the SAME category-correct v5 template + link the Inventory share uses).
     const typeName = inv.flat_property_type?.name || inv.property_type_link?.name || prettifyType(inv.type);
     const beds = inv.specs?.bhk || inv.specs?.rooms || inv.specs?.bhk_count || inv.specs?.bedrooms || bhkFromSlug(inv.slug);
     const bhk = beds ? `${beds}BHK ${typeName}` : typeName;
     const society = inv.specs?.society_name || inv.locality || inv.city || 'Property';
 
-    const sent = await shareInventoryCard(deal.demand_contact.phone_number, inv);
+    // Manual share is an explicit agent override — warn, don't block, if it's a recent repeat.
+    if (await wasRecentlyShared(recipientPhone, inventoryId)) {
+        logger.warn(`[PropShare] Deal ${dealId} manually re-sharing inventory ${inventoryId} to ${recipientPhone} — already shared within the last 7 days`);
+    }
+
+    // Auto-detect direct customer vs partner agent (same recognition the inventory share uses):
+    // partner ⇒ brandless brochure (PDF), direct ⇒ v5 template card.
+    const { resolveShareMode } = await import('./share_recognition');
+    const { mode, partner } = await resolveShareMode(recipientPhone);
+    const sent = mode === 'dealer'
+        ? (await shareInventoryBrochure(recipientPhone, inv, { index: 0, total: 1 }, partner)).sent
+        : await shareInventoryCard(recipientPhone, inv);
     if (!sent) {
         logger.error(`[PropShare] Failed to send specific property card for deal ${dealId} inv ${inventoryId}`);
         return false;
@@ -311,12 +371,12 @@ export async function shareSpecificProperty(dealId: string, inventoryId: string)
     await prisma.interaction.create({
         data: {
             tenant_id: deal.tenant_id,
-            phone_number: deal.demand_contact.phone_number,
+            phone_number: recipientPhone,
             channel: 'whatsapp',
             direction: 'outbound',
             event_type: EVT_PROPERTY_SHARED,
-            content: `Shared property card (manual): ${bhk} at ${society}`,
-            metadata: { deal_id: dealId, inventory_id: inventoryId, manual: true },
+            content: `Shared property card (manual${mode === 'dealer' ? ', partner brochure' : ''}): ${bhk} at ${society}`,
+            metadata: { deal_id: dealId, inventory_id: inventoryId, manual: true, recipient: mode },
         },
     });
 
@@ -325,7 +385,7 @@ export async function shareSpecificProperty(dealId: string, inventoryId: string)
         data: { last_team_action_at: new Date() },
     });
 
-    logger.info(`[PropShare] Deal ${dealId} → property ${inventoryId} (${bhk} @ ${society}) shared manually`);
+    logger.info(`[PropShare] Deal ${dealId} → property ${inventoryId} (${bhk} @ ${society}) shared manually to ${mode}`);
     return true;
 }
 
@@ -361,7 +421,7 @@ function buildV5Card(inv: any): { template: string; params: Record<string, strin
 
     const typeName = inv.flat_property_type?.name || inv.property_type_link?.name || prettifyType(inv.type);
     const location = [inv.locality, inv.city].filter(Boolean).join(', ') || inv.city || inv.district || inv.full_address || 'Location on request';
-    const price = formatPrice(inv.price, inv.price_unit);
+    const price = formatPrice(inv.price, inv.price_unit, inv.intent);
     const link = `https://www.realtypandit.in/properties/${inv.display_id || inv.id}`;
 
     let p1: string, p4: string, p5: string, p6: string;
@@ -416,7 +476,7 @@ export async function shareInventoryCard(phone: string, inv: any): Promise<boole
             const bhk = beds ? `${beds}BHK ${typeName}` : typeName;
             const society = inv.specs?.society_name || inv.locality || inv.city || 'Property';
             const city = inv.city || inv.district || 'India';
-            const price = formatPrice(inv.price, inv.price_unit);
+            const price = formatPrice(inv.price, inv.price_unit, inv.intent);
             const h1 = inv.specs?.furnishing ? capitalize(inv.specs.furnishing) : (inv.intent === 'rent' ? 'Available Now' : 'Ready to Move');
             const h2 = inv.specs?.floors ? `Floor ${inv.specs.floors}` : (inv.specs?.facing ? `${inv.specs.facing} Facing` : 'Prime Location');
             const h3 = buildAmenityLine(inv.specs?.amenities);
@@ -430,10 +490,13 @@ export async function shareInventoryCard(phone: string, inv: any): Promise<boole
     }
 }
 
-function formatPrice(price: any, unit?: string): string {
+function formatPrice(price: any, unit?: string, intent?: string | null): string {
     if (!price) return 'Price on request';
     const n = Number(price);
     if (!Number.isFinite(n) || n <= 0) return 'Price on request';
+    // Rent → monthly raw rupees ("25,000/month") — never "0.2 Lakh"/"25K". (F5, 2026-06-21)
+    const i = String(intent || '').toLowerCase();
+    if (i === 'rent' || i === 'rent_lease' || i === 'lease') return `${n.toLocaleString('en-IN')}/month`;
     // unit='lakh'|'crore'|'thousand'|null (raw rupees)
     const u = (unit || '').toLowerCase();
     if (u === 'lakh') return `${n % 1 === 0 ? n : n.toFixed(1)} Lakh`;

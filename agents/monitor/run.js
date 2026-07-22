@@ -9,8 +9,15 @@ const BASH_SHELL = process.platform === 'win32'
   ? (require('fs').existsSync('C:/Program Files/Git/bin/bash.exe') ? 'C:/Program Files/Git/bin/bash.exe' : undefined)
   : undefined;
 
+// Use the persistent source key directly. Previously copied to /tmp/rp_key, but on Windows Node's
+// /tmp (C:\tmp) and git-bash ssh's /tmp resolve to different real paths, so `ssh -i /tmp/rp_key`
+// could not find the key → false "Nginx/PM2 CRITICAL" alarms. (2026-06-25; see root memory
+// reference_windows_bash_python_temp_paths)
+const HOME_DIR = process.env.HOME || process.env.USERPROFILE || '';
+const RP_SSH_KEY = path.join(HOME_DIR, '.ssh', 'realty_pandit_key').replace(/\\/g, '/');
+
 const config = {
-  sshKey: '/tmp/rp_key',
+  sshKey: RP_SSH_KEY,
   sshUser: 'root',
   serverIp: '72.62.231.224',
   services: [
@@ -81,27 +88,14 @@ class MonitorAgent {
   }
 
   prepareSSH() {
-    try {
-      // Already copied
-      if (fs.existsSync('/tmp/rp_key')) return true;
-
-      const homeDir = process.env.HOME || process.env.USERPROFILE;
-      const sshKeySource = path.join(homeDir, '.ssh', 'realty_pandit_key');
-      if (fs.existsSync(sshKeySource)) {
-        fs.copyFileSync(sshKeySource, '/tmp/rp_key');
-        fs.chmodSync('/tmp/rp_key', 0o600);
-        return true;
-      }
-      return false;
-    } catch {
-      return false;
-    }
+    // Persistent source key used directly (no fragile /tmp copy). Just verify it exists.
+    return fs.existsSync(config.sshKey);
   }
 
   sshCommand(cmd) {
     try {
       return execSync(
-        `ssh -i ${config.sshKey} -o StrictHostKeyChecking=no -o ConnectTimeout=10 ${config.sshUser}@${config.serverIp} "${cmd}"`,
+        `ssh -i "${config.sshKey}" -o StrictHostKeyChecking=no -o ConnectTimeout=10 ${config.sshUser}@${config.serverIp} "${cmd}"`,
         { encoding: 'utf8', timeout: 30000, stdio: 'pipe', ...(BASH_SHELL ? { shell: BASH_SHELL } : {}) }
       ).trim();
     } catch (e) {

@@ -1,6 +1,6 @@
 {
-  "timestamp": "2026-06-08T18:29:20.803Z",
-  "duration": "9.2s",
+  "timestamp": "2026-06-23T05:27:45.687Z",
+  "duration": "8.6s",
   "task": "Phase A bot fixes deployed: A1 stop free-form to never-replied leads, A2 dedup property_share_exhausted, A3 closing-signal + conversational routing on QUALIFIED deals",
   "summary": {
     "total": 4,
@@ -41,8 +41,8 @@
       "max_time": 5000,
       "description": "/properties loads under 5000ms",
       "passed": true,
-      "message": "/properties loaded in 2674ms (max: 5000ms)",
-      "loadTime": 2674
+      "message": "/properties loaded in 2053ms (max: 5000ms)",
+      "loadTime": 2053
     }
   ]
 }

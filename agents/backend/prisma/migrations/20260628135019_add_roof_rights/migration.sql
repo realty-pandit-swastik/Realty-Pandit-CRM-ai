@@ -1,0 +1,1 @@
+ALTER TABLE "inventory" ADD COLUMN IF NOT EXISTS "roof_rights" BOOLEAN NOT NULL DEFAULT false;

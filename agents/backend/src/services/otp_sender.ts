@@ -30,19 +30,20 @@ export async function sendOtp(params: {
 
     const purposeLabel = purpose === 'login' ? 'Agent login' : 'Password reset';
 
-    const waBody = purpose === 'login'
-        ? `Your Realty Pandit Agent login code is: *${otp}*\n\nValid for ${validMinutes} minutes. Do not share this code.`
-        : `Your Realty Pandit password reset OTP is: *${otp}*\n\nValid for ${validMinutes} minutes. Do not share this with anyone.`;
-
     let whatsappSent = false;
     let emailSent = false;
 
-    // 1. Attempt WhatsApp (primary)
+    // 1. Attempt WhatsApp via the Meta-approved AUTHENTICATION template. Free-form text
+    //    (sendTextStrict) only delivers INSIDE the 24h session window, so OTPs to cold numbers
+    //    (the normal password-reset / login case) silently failed. Approved auth templates deliver
+    //    in or out of the window. login → rp_agent_otp, password_reset → rp_password_reset
+    //    (Meta name rp_password_reset_v2). Both APPROVED. (2026-06-26 OTP-delivery fix.)
+    const otpTemplate = purpose === 'login' ? 'rp_agent_otp' : 'rp_password_reset';
     try {
-        await whatsappService.sendTextStrict(waPhone, waBody);
+        await whatsappService.sendTemplate(waPhone, otpTemplate, { otp });
         whatsappSent = true;
     } catch (err) {
-        logger.error(`[OtpSender] WhatsApp failed for ${phone}: ${(err as Error).message}`);
+        logger.error(`[OtpSender] WhatsApp template "${otpTemplate}" failed for ${phone}: ${(err as Error).message}`);
     }
 
     // 2. Attempt email (secondary) — only if email address exists

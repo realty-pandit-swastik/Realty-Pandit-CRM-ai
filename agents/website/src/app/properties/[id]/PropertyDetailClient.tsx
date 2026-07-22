@@ -7,6 +7,7 @@ import Link from 'next/link';
 import { getPropertyById, getSimilarProperties, getNearbyLandmarks, formatPrice, getMediaUrl, getImageUrls, isVideoUrl, type Property, type Landmark } from '@/lib/api';
 import { formatPropertyTitle, formatAddress, resolveBedroomCount, getAmenities, getTypeLabel, getDisplaySpecs, getRoomLabel } from '@/lib/propertyUtils';
 import { COMPANY_WHATSAPP } from '@/lib/constants';
+import { getDisplayFloor } from '@/lib/floor';
 import PropertyCard from '@/components/PropertyCard';
 import InternalLinks from '@/components/InternalLinks';
 import ScheduleVisitForm from '@/components/property-detail/ScheduleVisitForm';
@@ -294,6 +295,11 @@ export default function PropertyDetailClient({ id }: { id: string }) {
                                             Newly Renovated
                                         </span>
                                     )}
+                                    {property.roof_rights && (
+                                        <span className="px-3 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-700 border border-amber-200 dark:bg-amber-900/40 dark:text-amber-300 dark:border-amber-700">
+                                            Roof Rights
+                                        </span>
+                                    )}
                                     {property.pre_rented && (() => {
                                         const rent = Number(property.pre_rented_monthly_rent) || 0;
                                         const absPrice = (property.price || 0) * (property.price_unit === 'Cr' ? 10000000 : property.price_unit === 'Lakh' ? 100000 : 1);
@@ -398,14 +404,14 @@ export default function PropertyDetailClient({ id }: { id: string }) {
 
                             {/* Property Details Grid — driven by the type's taxonomy specs (furnishing,
                                 facing, age, floors, plot-area, road-facing, ownership, etc. per type) */}
-                            {(displaySpecs.length > 0 || property.floor_number != null || property.apartment_name) && (
+                            {(displaySpecs.length > 0 || getDisplayFloor(property) || property.apartment_name) && (
                                 <div className="mb-8">
                                     <h3 className="text-slate-900 dark:text-white font-semibold text-lg mb-4">Property Details</h3>
                                     <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                                        {property.floor_number != null && (
+                                        {getDisplayFloor(property) && (
                                             <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-4 py-3">
                                                 <div className="text-slate-500 dark:text-slate-400 text-xs uppercase mb-1">Floor</div>
-                                                <div className="text-slate-900 dark:text-white font-medium text-sm">{property.floor_number}{specs.floors ? ` of ${specs.floors}` : ''}</div>
+                                                <div className="text-slate-900 dark:text-white font-medium text-sm">{getDisplayFloor(property)}{specs.floors ? ` of ${specs.floors}` : ''}</div>
                                             </div>
                                         )}
                                         {displaySpecs.map(({ key, label, value }) => (
@@ -492,7 +498,7 @@ export default function PropertyDetailClient({ id }: { id: string }) {
                             {/* Report Listing */}
                             <div className="text-center mb-8">
                                 <button
-                                    onClick={() => window.open(`mailto:support@realtypandit.com?subject=Report%20Listing%20${property.id}&body=I%20would%20like%20to%20report%20this%20property%20listing%20(${window.location.href})%20for%20the%20following%20reason%3A%0A%0A`, '_blank')}
+                                    onClick={() => window.open(`mailto:support@realtypandit.in?subject=Report%20Listing%20${property.id}&body=I%20would%20like%20to%20report%20this%20property%20listing%20(${window.location.href})%20for%20the%20following%20reason%3A%0A%0A`, '_blank')}
                                     className="inline-flex items-center gap-1.5 text-sm text-slate-400 dark:text-slate-500 hover:text-red-500 dark:hover:text-red-400 transition-colors"
                                 >
                                     <Flag className="w-3.5 h-3.5" />

@@ -6,6 +6,7 @@ import logger from '../utils/logger';
 import { normalizePhone } from '../utils/phone';
 import { sendBuyerConfirmationWhatsApp, sendBuyerConfirmationEmail } from '../services/lead_notifications';
 import { assignViaRoundRobin } from '../services/lead_assignment';
+import { assignContact } from '../services/assign_contact';
 
 const router = Router();
 router.use(apiKeyAuth);
@@ -95,10 +96,7 @@ router.post('/webhook', async (req, res) => {
         if (!agentId) {
             agentId = await assignViaRoundRobin();
             if (agentId) {
-                await prisma.contact.update({
-                    where: { phone_number: phoneNumber },
-                    data: { assigned_agent_id: agentId },
-                });
+                await assignContact(phoneNumber, agentId, 'round_robin');
                 // Create workflow qualification task
                 const { createQualifyTask } = await import('../services/workflow_task_service');
                 createQualifyTask({ tenantId: tenant.id, contactPhone: phoneNumber, assignedTo: agentId, source: 'housing' })

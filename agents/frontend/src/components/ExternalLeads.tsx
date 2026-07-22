@@ -1,6 +1,6 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react';
-import client from '../api/client';
+import client, { getPartnerAssignable, assignLeadToTeammate } from '../api/client';
 import { isPlaceholderPhone, isDialablePhone, isValidPhoneInput, toDialablePhone } from '../lib/phone';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
@@ -140,8 +140,8 @@ function channelIcon(ch: string) {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export function ExternalLeads({ isMobile: isMobileProp }: { isMobile?: boolean } = {}) {
-    const { agent, hasPermission } = useAuth();
+export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterConsumed }: { isMobile?: boolean; initialFilter?: Record<string, string> | null; onFilterConsumed?: () => void } = {}) {
+    const { agent, hasPermission, isPartner, isPartnerOwner } = useAuth();
     const { showToast } = useToast();
     const isPrivileged = PRIVILEGED_ROLES.includes(agent?.role ?? '');
     const closingViaPopState = useRef(false);
@@ -190,9 +190,9 @@ export function ExternalLeads({ isMobile: isMobileProp }: { isMobile?: boolean }
         const t = setTimeout(() => setDebouncedSearch(searchQuery.trim()), 350);
         return () => clearTimeout(t);
     }, [searchQuery]);
-    const [statusFilter, setStatusFilter] = useState('');
-    const [sourceFilter, setSourceFilter] = useState('');
-    const [agentFilter, setAgentFilter] = useState('');
+    const [statusFilter, setStatusFilter] = useState(initialFilter?.status ?? '');
+    const [sourceFilter, setSourceFilter] = useState(initialFilter?.source ?? '');
+    const [agentFilter, setAgentFilter] = useState(initialFilter?.agent_id ?? '');
     const [dateFrom, setDateFrom] = useState('');
     const [dateTo, setDateTo] = useState('');
     const [showFilterSheet, setShowFilterSheet] = useState(false);
@@ -202,16 +202,37 @@ export function ExternalLeads({ isMobile: isMobileProp }: { isMobile?: boolean }
     const [locationSelection, setLocationSelection] = useState<LocationSelection>({
         label: '', lat: null, lng: null, radiusKm: 2,
     });
-    const [notContactedDays, setNotContactedDays] = useState(0);
+    const [notContactedDays, setNotContactedDays] = useState(initialFilter?.not_contacted_days ? Number(initialFilter.not_contacted_days) : 0);
     const [noShowcaseDays, setNoShowcaseDays] = useState(0);
+    const [budgetMinFilter, setBudgetMinFilter] = useState(''); // lead budget filter (#3, 2026-06-28)
+    const [budgetMaxFilter, setBudgetMaxFilter] = useState('');
+    // Bulk reassign (#4, 2026-06-28)
+    const [leadSelectMode, setLeadSelectMode] = useState(false);
+    const [selectedLeadPhones, setSelectedLeadPhones] = useState<Set<string>>(new Set());
+    const [showLeadReassign, setShowLeadReassign] = useState(false);
+    const [leadReassignTarget, setLeadReassignTarget] = useState('');
+    const [leadReassigning, setLeadReassigning] = useState(false);
+    const [leadReassignMsg, setLeadReassignMsg] = useState('');
+    const toggleLeadSelect = (phone: string) => setSelectedLeadPhones(prev => { const s = new Set(prev); s.has(phone) ? s.delete(phone) : s.add(phone); return s; });
     // 2026-05-13: active / archived / all — default hides lost+closed so the team
     // only sees workable leads. Recovered via toggle at top of page.
-    const [activeFilter, setActiveFilter] = useState<'active' | 'archived' | 'all'>('active');
+    const [activeFilter, setActiveFilter] = useState<'active' | 'archived' | 'all'>((initialFilter?.active as 'active' | 'archived' | 'all') || 'active');
+
+    // Drill-through one-shot (2026-07-16): opened pre-filtered from a dashboard tile → the filter is
+    // seeded into the useState above on mount; tell the parent to clear its one-shot state so a later
+    // manual visit to Ext. Leads starts clean.
+    useEffect(() => {
+        if (initialFilter && onFilterConsumed) onFilterConsumed();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     // ── Taxonomy tree (new) ──
     const [taxonomyTree, setTaxonomyTree] = useState<any[]>([]);
     // ── Team members ──
     const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
+    // PARTNER TEAMS: the owner's OWN sub-agents. Kept in its own state on purpose — teamMembers
+    // feeds internal controls whose columns are Agent FKs; a PartnerAgent id there = 500.
+    const [partnerRoster, setPartnerRoster] = useState<Array<{ id: string; name: string; is_owner: boolean }>>([]);
 
     // ── Status update ──
     const [updatingPhone, setUpdatingPhone] = useState<string | null>(null);
@@ -244,6 +265,8 @@ export function ExternalLeads({ isMobile: isMobileProp }: { isMobile?: boolean }
     const [savingName, setSavingName] = useState(false);
     const [editLifecycle, setEditLifecycle] = useState('');
     const [editAgent, setEditAgent] = useState('');
+    const [editPartnerAssignee, setEditPartnerAssignee] = useState('');   // PartnerAgent id — NOT an Agent id
+
     // Phase 2 (2026-05-29): inline-form state vars (editBudgetMin/Max, editBhk,
     // editCategoryId/SubCategoryId/TypeId, editIntent, editTimeline, editAreaMin/Max/Unit,
     // editAmenities) all removed — they lived in the now-deleted inline form. The new
@@ -270,6 +293,11 @@ export function ExternalLeads({ isMobile: isMobileProp }: { isMobile?: boolean }
     const [clientSearching, setClientSearching] = useState(false);
     const clientSearchTimer = useRef<any>(null);
     const [preselectedContact, setPreselectedContact] = useState<{ phone_number: string; name: string | null } | null>(null);
+    // Pause the 30s auto-refresh while the user is working (a modal/detail open) or the tab is unfocused. (2026-07-09)
+    const busyRef = useRef(false);
+    useEffect(() => {
+        busyRef.current = !!(showLeadReassign || showCreateModal || leadDetail || selectedPhone || preselectedContact);
+    }, [showLeadReassign, showCreateModal, leadDetail, selectedPhone, preselectedContact]);
     // Partner-referral flow: if the entered client phone matches an existing client, we surface a notice
     // ("Add as Direct Client") — the backend attaches this requirement to that contact instead of 409-ing.
     const [partnerClientMatch, setPartnerClientMatch] = useState<{ phone_number: string; name: string | null } | null>(null);
@@ -326,6 +354,8 @@ export function ExternalLeads({ isMobile: isMobileProp }: { isMobile?: boolean }
                         radius_km: (locationSelection.lat !== null && locationSelection.radiusKm > 0) ? String(locationSelection.radiusKm) : undefined,
                         not_contacted_days: notContactedDays > 0 ? String(notContactedDays) : undefined,
                         no_showcase_days: noShowcaseDays > 0 ? String(noShowcaseDays) : undefined,
+                        budget_min: budgetMinFilter.trim() || undefined,
+                        budget_max: budgetMaxFilter.trim() || undefined,
                         limit: String(pageLimit),
                     },
                 });
@@ -340,16 +370,18 @@ export function ExternalLeads({ isMobile: isMobileProp }: { isMobile?: boolean }
         } finally {
             setLoading(false);
         }
-    }, [sourceFilter, statusFilter, agentFilter, intentFilter, filterTaxonomy, locationSelection, notContactedDays, noShowcaseDays, debouncedSearch, activeFilter, pageLimit]);
+    }, [sourceFilter, statusFilter, agentFilter, intentFilter, filterTaxonomy, locationSelection, notContactedDays, noShowcaseDays, budgetMinFilter, budgetMaxFilter, debouncedSearch, activeFilter, pageLimit]);
 
     useEffect(() => { loadData(); }, [loadData]);
     useEffect(() => {
-        const interval = setInterval(loadData, 30000);
+        const interval = setInterval(() => { if (busyRef.current || document.hidden) return; loadData(); }, 30000);
         return () => clearInterval(interval);
     }, [loadData]);
 
     // ─── Partner-claim approvals queue ───────────────────────────────────────
-    const canApproveClaims = hasPermission('edit_inventory');
+    // NOTE: partners DO have edit_inventory — the permission alone does not exclude them.
+    // The claims queue is ours (approving partner claims about their own leads = conflict of interest).
+    const canApproveClaims = !isPartner && hasPermission('edit_inventory');
     const loadPendingClaims = useCallback(async () => {
         if (!canApproveClaims) return;
         try {
@@ -376,12 +408,13 @@ export function ExternalLeads({ isMobile: isMobileProp }: { isMobile?: boolean }
 
     // Load sync status
     const loadSyncStatus = useCallback(async () => {
+        if (isPartner) return;   // portal-sync is our ops; the endpoint 403s for partners
         try {
             const res = await client.get('/api/integrations/sync-status');
             const acres = res.data?.integrations?.find((i: any) => i.source === '99acres');
             setSyncStatus(acres || null);
         } catch { /* ignore */ }
-    }, []);
+    }, [isPartner]);
 
     useEffect(() => { loadSyncStatus(); }, [loadSyncStatus]);
     useEffect(() => {
@@ -410,10 +443,31 @@ export function ExternalLeads({ isMobile: isMobileProp }: { isMobile?: boolean }
             .catch(() => {});
     }, []);
 
-    // Load team members once
+    // Load the roster once — INTERNAL team for staff, the partner's OWN sub-agents for a partner owner.
+    // A partner must never see our team roster (the endpoint 403s them anyway), and a sub-agent gets
+    // no roster at all because they cannot assign.
     useEffect(() => {
-        client.get('/api/team/members-list').then(r => setTeamMembers(r.data)).catch(() => {});
-    }, []);
+        if (!isPartner) {
+            client.get('/api/team/members-list').then(r => setTeamMembers(r.data)).catch(() => {});
+        } else if (isPartnerOwner) {
+            getPartnerAssignable().then(r => setPartnerRoster(r.members || [])).catch(() => {});
+        }
+    }, [isPartner, isPartnerOwner]);
+
+    /** Assign the open lead to one of the owner's own sub-agents (or unassign). */
+    const handleAssignTeammate = async (phone: string, partnerAgentId: string) => {
+        const prev = editPartnerAssignee;
+        setEditPartnerAssignee(partnerAgentId);
+        try {
+            await assignLeadToTeammate(phone, partnerAgentId || null);
+            const who = partnerRoster.find(m => m.id === partnerAgentId)?.name;
+            showToast(partnerAgentId ? `Assigned to ${who}.` : 'Unassigned.', 'success');
+            loadData();
+        } catch (e: any) {
+            setEditPartnerAssignee(prev);   // roll back the optimistic select
+            showToast(e.response?.data?.error || 'Could not assign this lead.', 'error');
+        }
+    };
 
     // ─── Google Maps Autocomplete Setup ───────────────────────────────────────
 
@@ -535,6 +589,7 @@ export function ExternalLeads({ isMobile: isMobileProp }: { isMobile?: boolean }
             setEditName(d.name || '');
             setEditLifecycle(d.lifecycle_stage || 'NEW');
             setEditAgent(d.assigned_agent_id || '');
+            setEditPartnerAssignee((d as any).partner_assignee_id || '');
             // Phase 2 (2026-05-29): the inline edit form state vars are gone — all
             // requirements now flow through <DemandRequirementsForm> which reads its
             // initial values directly from leadDetail. Preferred lat/lng still need
@@ -559,13 +614,16 @@ export function ExternalLeads({ isMobile: isMobileProp }: { isMobile?: boolean }
             .then(r => setSessionAnswers(r.data.answers || null))
             .catch(() => {});
 
-        // Fetch appointments for visit history tab (non-blocking)
-        setAppointmentsLoading(true);
-        client.get('/api/calendar/appointments', { params: { contact_id: phone } })
-            .then(r => setLeadAppointments(r.data.appointments || []))
-            .catch(() => {})
-            .finally(() => setAppointmentsLoading(false));
-    }, []);
+        // Fetch appointments for visit history tab (non-blocking).
+        // Not allow-listed for partners — skip the call rather than eat a 403.
+        if (!isPartner) {
+            setAppointmentsLoading(true);
+            client.get('/api/calendar/appointments', { params: { contact_id: phone } })
+                .then(r => setLeadAppointments(r.data.appointments || []))
+                .catch(() => {})
+                .finally(() => setAppointmentsLoading(false));
+        }
+    }, [isPartner]);
 
     // Attach autocomplete to slide-over location input after it renders
     useEffect(() => {
@@ -935,6 +993,7 @@ export function ExternalLeads({ isMobile: isMobileProp }: { isMobile?: boolean }
         locationSelection.lat !== null ? '1' : '',
         notContactedDays > 0 ? '1' : '',
         noShowcaseDays > 0 ? '1' : '',
+        (budgetMinFilter.trim() || budgetMaxFilter.trim()) ? '1' : '',
     ].filter(Boolean).length + (filterTaxonomy.nodeIds.length > 0 ? 1 : 0) + (filterTaxonomy.bhk.length > 0 ? 1 : 0);
 
     // 2026-05-13: Server now handles search + status + source + agent + activeFilter.
@@ -1079,6 +1138,17 @@ export function ExternalLeads({ isMobile: isMobileProp }: { isMobile?: boolean }
                                     </span>
                                 )}
                             </button>
+                            {!isPartner && <button
+                                type="button"
+                                onClick={() => { setLeadSelectMode(m => !m); setSelectedLeadPhones(new Set()); }}
+                                style={{
+                                    padding: '10px 14px', borderRadius: '12px', cursor: 'pointer', flexShrink: 0,
+                                    border: leadSelectMode ? '1.5px solid #8b5cf6' : '1px solid var(--border-secondary)',
+                                    backgroundColor: leadSelectMode ? 'rgba(139,92,246,0.12)' : 'var(--bg-secondary)',
+                                    color: leadSelectMode ? '#8b5cf6' : 'var(--text-secondary)',
+                                    fontWeight: 600, fontSize: '13px',
+                                }}
+                            >{leadSelectMode ? `✓ ${selectedLeadPhones.size} Selected` : '☐ Select'}</button>}
                         </div>
 
                         {/* Row 2: Active filter chips (dismissible) */}
@@ -1136,7 +1206,7 @@ export function ExternalLeads({ isMobile: isMobileProp }: { isMobile?: boolean }
                                 )}
                                 <button
                                     type="button"
-                                    onClick={() => { setStatusFilter(''); setSourceFilter(''); setAgentFilter(''); setDateFrom(''); setDateTo(''); setIntentFilter(''); setFilterTaxonomy({ nodeIds: [], bhk: [] }); setLocationSelection({ label: '', lat: null, lng: null, radiusKm: 2 }); setNotContactedDays(0); setNoShowcaseDays(0); }}
+                                    onClick={() => { setStatusFilter(''); setSourceFilter(''); setAgentFilter(''); setDateFrom(''); setDateTo(''); setIntentFilter(''); setFilterTaxonomy({ nodeIds: [], bhk: [] }); setLocationSelection({ label: '', lat: null, lng: null, radiusKm: 2 }); setNotContactedDays(0); setNoShowcaseDays(0); setBudgetMinFilter(''); setBudgetMaxFilter(''); }}
                                     style={{ padding: '4px 10px', borderRadius: '20px', fontSize: '12px', fontWeight: 600, backgroundColor: 'transparent', border: '1px solid var(--border-secondary)', color: 'var(--text-muted)', cursor: 'pointer' }}
                                 >
                                     Clear all
@@ -1181,8 +1251,18 @@ export function ExternalLeads({ isMobile: isMobileProp }: { isMobile?: boolean }
                             >
                                 <span>⚙</span><span>Filters{activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}</span>
                             </button>
+                            {!isPartner && <button
+                                type="button"
+                                onClick={() => { setLeadSelectMode(m => !m); setSelectedLeadPhones(new Set()); }}
+                                style={{
+                                    padding: '7px 14px', borderRadius: 8, cursor: 'pointer', flexShrink: 0, fontWeight: 600, fontSize: 13,
+                                    border: leadSelectMode ? '1.5px solid #8b5cf6' : '1px solid var(--border-secondary)',
+                                    backgroundColor: leadSelectMode ? 'rgba(139,92,246,0.12)' : 'var(--bg-secondary)',
+                                    color: leadSelectMode ? '#8b5cf6' : 'var(--text-secondary)',
+                                }}
+                            >{leadSelectMode ? `✓ ${selectedLeadPhones.size} Selected` : '☐ Select'}</button>}
                             {(searchQuery || activeFilterCount > 0) && (
-                                <button type="button" onClick={() => { setSearchQuery(''); setStatusFilter(''); setSourceFilter(''); setAgentFilter(''); setDateFrom(''); setDateTo(''); setIntentFilter(''); setFilterTaxonomy({ nodeIds: [], bhk: [] }); setLocationSelection({ label: '', lat: null, lng: null, radiusKm: 2 }); setNotContactedDays(0); setNoShowcaseDays(0); }}
+                                <button type="button" onClick={() => { setSearchQuery(''); setStatusFilter(''); setSourceFilter(''); setAgentFilter(''); setDateFrom(''); setDateTo(''); setIntentFilter(''); setFilterTaxonomy({ nodeIds: [], bhk: [] }); setLocationSelection({ label: '', lat: null, lng: null, radiusKm: 2 }); setNotContactedDays(0); setNoShowcaseDays(0); setBudgetMinFilter(''); setBudgetMaxFilter(''); }}
                                     style={{ padding: '6px 12px', borderRadius: 8, border: '1px solid var(--border-secondary)', backgroundColor: 'transparent', color: '#ef4444', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>
                                     Clear
                                 </button>
@@ -1242,8 +1322,8 @@ export function ExternalLeads({ isMobile: isMobileProp }: { isMobile?: boolean }
                                 <LeadCard
                                     key={lead.phone_number}
                                     lead={lead}
-                                    isSelected={selectedPhone === lead.phone_number}
-                                    onSelect={openDetail}
+                                    isSelected={leadSelectMode ? selectedLeadPhones.has(lead.phone_number) : selectedPhone === lead.phone_number}
+                                    onSelect={(phone: string) => { if (leadSelectMode) toggleLeadSelect(phone); else openDetail(phone); }}
                                     onStatusChange={handleStatusChange}
                                     updatingPhone={updatingPhone}
                                     sourceColors={sourceColors}
@@ -1265,6 +1345,7 @@ export function ExternalLeads({ isMobile: isMobileProp }: { isMobile?: boolean }
                         <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '700px' }}>
                             <thead>
                                 <tr style={{ borderBottom: '1px solid var(--border-secondary)' }}>
+                                    {leadSelectMode && <th style={{ padding: '6px 10px', width: '34px' }} />}
                                     {['Name', 'Phone', 'Source', 'Status', 'Assigned to', 'Budget', 'Score', 'Intent', 'Location', 'Date', ''].map(h => (
                                         <th key={h} style={{ textAlign: 'left', padding: '6px 10px', color: 'var(--text-secondary)', fontSize: '10px', fontWeight: 600, textTransform: 'uppercase' }}>{h}</th>
                                     ))}
@@ -1275,8 +1356,15 @@ export function ExternalLeads({ isMobile: isMobileProp }: { isMobile?: boolean }
                                     const score = lead.lead_score?.total_score ?? null;
                                     const isSelected = selectedPhone === lead.phone_number;
                                     return (
-                                        <tr key={lead.phone_number} onClick={() => openDetail(lead.phone_number)}
-                                            style={{ borderBottom: '1px solid var(--bg-primary)', cursor: 'pointer', backgroundColor: isSelected ? 'rgba(59,130,246,0.08)' : undefined }}>
+                                        <tr key={lead.phone_number} onClick={() => { if (leadSelectMode) toggleLeadSelect(lead.phone_number); else openDetail(lead.phone_number); }}
+                                            style={{ borderBottom: '1px solid var(--bg-primary)', cursor: 'pointer', backgroundColor: selectedLeadPhones.has(lead.phone_number) ? 'rgba(139,92,246,0.12)' : isSelected ? 'rgba(59,130,246,0.08)' : undefined }}>
+                                            {leadSelectMode && (
+                                                <td style={compactCell} onClick={e => { e.stopPropagation(); toggleLeadSelect(lead.phone_number); }}>
+                                                    <div style={{ width: 18, height: 18, borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', border: selectedLeadPhones.has(lead.phone_number) ? '2px solid #8b5cf6' : '2px solid var(--border-secondary)', backgroundColor: selectedLeadPhones.has(lead.phone_number) ? '#8b5cf6' : 'transparent' }}>
+                                                        {selectedLeadPhones.has(lead.phone_number) && <span style={{ color: '#fff', fontSize: 11, lineHeight: 1 }}>✓</span>}
+                                                    </div>
+                                                </td>
+                                            )}
                                             <td style={compactCell}>
                                                 <div>
                                                     <span style={{ fontWeight: 500 }}>{lead.name || <span style={{ color: 'var(--text-muted)' }}>—</span>}</span>
@@ -1326,7 +1414,7 @@ export function ExternalLeads({ isMobile: isMobileProp }: { isMobile?: boolean }
                                                             style={{ color: '#22c55e', fontSize: '15px', textDecoration: 'none', lineHeight: 1 }}
                                                             title={`Call client ${toDialablePhone(lead.phone_number)}`}>📞</a>
                                                     )}
-                                                    {lead.lead_type === 'PARTNER_REFERRAL' && toDialablePhone(lead.referral_partner_phone) && (
+                                                    {toDialablePhone(lead.referral_partner_phone) && (
                                                         <a href={`tel:${toDialablePhone(lead.referral_partner_phone)}`}
                                                             style={{ color: '#7c3aed', fontSize: '13px', textDecoration: 'none', lineHeight: 1, whiteSpace: 'nowrap' }}
                                                             title={`Call partner ${lead.referral_partner_name || ''} ${toDialablePhone(lead.referral_partner_phone)}`}>🤝📞</a>
@@ -1379,10 +1467,10 @@ export function ExternalLeads({ isMobile: isMobileProp }: { isMobile?: boolean }
                                             {leadDetail.lead_score && (
                                                 <span style={{ backgroundColor: scoreColor(leadDetail.lead_score.total_score) + '18', color: scoreColor(leadDetail.lead_score.total_score), padding: '2px 8px', borderRadius: '10px', fontSize: '11px', fontWeight: 700 }}>Score: {leadDetail.lead_score.total_score}</span>
                                             )}
-                                            {leadDetail.lead_type === 'PARTNER_REFERRAL' && (
+                                            {(leadDetail.referral_partner_name || toDialablePhone(leadDetail.referral_partner_phone)) && (
                                                 <span style={{ backgroundColor: '#ede9fe', color: '#7c3aed', padding: '2px 8px', borderRadius: '10px', fontSize: '11px', fontWeight: 700 }}>🤝 {leadDetail.referral_partner_name || 'Partner'}</span>
                                             )}
-                                            {leadDetail.lead_type === 'PARTNER_REFERRAL' && toDialablePhone(leadDetail.referral_partner_phone) && (
+                                            {toDialablePhone(leadDetail.referral_partner_phone) && (
                                                 <a href={`tel:${toDialablePhone(leadDetail.referral_partner_phone)}`} title={`Call partner ${toDialablePhone(leadDetail.referral_partner_phone)}`}
                                                     style={{ backgroundColor: '#7c3aed', color: '#fff', padding: '2px 8px', borderRadius: '10px', fontSize: '11px', fontWeight: 700, textDecoration: 'none' }}>📞 Call partner</a>
                                             )}
@@ -1412,7 +1500,8 @@ export function ExternalLeads({ isMobile: isMobileProp }: { isMobile?: boolean }
                                                 {LIFECYCLE_STAGES.map(s => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}
                                             </select>
                                         </div>
-                                        {(isPrivileged || (agent?.id && editAgent === agent.id)) && (
+                                        {/* INTERNAL staff only — this writes assigned_agent_id (an Agent FK). Never for partners. */}
+                                        {!isPartner && (isPrivileged || (agent?.id && editAgent === agent.id)) && (
                                             <div>
                                                 <label style={soLabel}>Assigned Agent</label>
                                                 <select value={editAgent} onChange={e => handleAgentChange(e.target.value)} style={soInput}>
@@ -1422,6 +1511,24 @@ export function ExternalLeads({ isMobile: isMobileProp }: { isMobile?: boolean }
                                                 {!isPrivileged && (
                                                     <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: '4px' }}>You can reassign this lead to another team member.</div>
                                                 )}
+                                            </div>
+                                        )}
+
+                                        {/* PARTNER COMPANY OWNER — assign to one of THEIR OWN sub-agents (partner_assignee_id). */}
+                                        {isPartnerOwner && selectedPhone && (
+                                            <div>
+                                                <label style={soLabel}>Assign to teammate</label>
+                                                <select
+                                                    value={editPartnerAssignee}
+                                                    onChange={e => handleAssignTeammate(selectedPhone, e.target.value)}
+                                                    style={soInput}
+                                                >
+                                                    <option value="">Unassigned</option>
+                                                    {partnerRoster.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                                                </select>
+                                                <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: '4px' }}>
+                                                    Only your team members appear here. They'll see this lead and its deal.
+                                                </div>
                                             </div>
                                         )}
                                     </div>
@@ -1516,8 +1623,8 @@ export function ExternalLeads({ isMobile: isMobileProp }: { isMobile?: boolean }
                                         </button>
                                     </div>
 
-                                    {/* Convert to Partner Agent */}
-                                    {leadDetail.contact_type !== 'PARTNER_AGENT' && (
+                                    {/* Convert to Partner Agent — TEAM ONLY (backend already denies partners) */}
+                                    {!isPartner && leadDetail.contact_type !== 'PARTNER_AGENT' && (
                                         <div>
                                             <button type="button" onClick={() => setShowConvert(true)} style={{
                                                 padding: '7px 12px', fontSize: '12px', fontWeight: 700, borderRadius: 8, cursor: 'pointer',
@@ -1550,6 +1657,44 @@ export function ExternalLeads({ isMobile: isMobileProp }: { isMobile?: boolean }
                                             ))}
                                         </div>
                                     </div>
+
+                                    {/* MagicBricks Source Details */}
+                                    {leadDetail.source === 'magicbricks' && (() => {
+                                        const meta = leadDetail.recent_interactions.find(i => i.channel === 'magicbricks')?.metadata as Record<string, any> | null | undefined;
+                                        if (!meta) return null;
+                                        const listingId = meta.listing_id ? String(meta.listing_id) : null;
+                                        const subUser = meta.sub_user ? String(meta.sub_user) : null;
+                                        if (!listingId && !subUser && !meta.project) return null;
+                                        return (
+                                            <div style={{ backgroundColor: 'var(--bg-secondary)', borderRadius: '10px', padding: '14px', border: '1px solid var(--border-secondary)' }}>
+                                                <label style={{ ...soLabel, marginBottom: '10px' }}>MagicBricks Source Details</label>
+                                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px 16px' }}>
+                                                    {meta.project && <div><div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '2px' }}>Project / Society</div><div style={{ fontSize: '13px', color: 'var(--text-primary)' }}>{meta.project}</div></div>}
+                                                    {meta.city && <div><div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '2px' }}>City</div><div style={{ fontSize: '13px', color: 'var(--text-primary)' }}>{meta.city}</div></div>}
+                                                    {subUser && <div><div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '2px' }}>Listing Agent (sub-user)</div><div style={{ fontSize: '12px', color: 'var(--text-secondary)', wordBreak: 'break-all' }}>{subUser}</div></div>}
+                                                    {listingId && (
+                                                        <div style={{ gridColumn: '1 / -1' }}>
+                                                            <div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '4px' }}>MagicBricks Listing</div>
+                                                            <a
+                                                                href={`https://www.magicbricks.com/propertyDetails/-pdpid-${listingId}`}
+                                                                target="_blank"
+                                                                rel="noopener noreferrer"
+                                                                title="Open the MagicBricks listing this lead enquired on"
+                                                                style={{
+                                                                    display: 'inline-flex', alignItems: 'center', gap: '6px',
+                                                                    padding: '5px 12px', borderRadius: '8px',
+                                                                    backgroundColor: 'rgba(220,38,38,0.1)', color: '#dc2626',
+                                                                    border: '1px solid rgba(220,38,38,0.3)',
+                                                                    fontSize: '12px', fontWeight: 600, fontFamily: 'monospace',
+                                                                    textDecoration: 'none',
+                                                                }}
+                                                            >🔗 Listing #{listingId}</a>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        );
+                                    })()}
 
                                     {/* 99acres Source Details */}
                                     {leadDetail.source === '99acres' && (() => {
@@ -2009,6 +2154,55 @@ export function ExternalLeads({ isMobile: isMobileProp }: { isMobile?: boolean }
             )}
 
             {/* ── Filter Bottom Sheet ── */}
+            {/* Bulk reassign action bar (#4) */}
+            {leadSelectMode && selectedLeadPhones.size > 0 && (
+                <div style={{ position: 'fixed', bottom: '24px', left: '50%', transform: 'translateX(-50%)', backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-secondary)', borderRadius: '12px', padding: '12px 20px', display: 'flex', alignItems: 'center', gap: '12px', boxShadow: '0 8px 32px rgba(0,0,0,0.2)', zIndex: 1000 }}>
+                    <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>{selectedLeadPhones.size} lead{selectedLeadPhones.size === 1 ? '' : 's'} selected</span>
+                    <button onClick={() => { setShowLeadReassign(true); setLeadReassignTarget(''); setLeadReassignMsg(''); }}
+                        style={{ padding: '8px 18px', borderRadius: '8px', fontSize: '13px', fontWeight: 700, cursor: 'pointer', backgroundColor: '#8b5cf6', border: 'none', color: '#fff' }}>🔄 Reassign</button>
+                    <button onClick={() => { setSelectedLeadPhones(new Set()); setLeadSelectMode(false); }}
+                        style={{ padding: '8px 14px', borderRadius: '8px', fontSize: '12px', cursor: 'pointer', border: '1px solid var(--border-secondary)', backgroundColor: 'transparent', color: 'var(--text-muted)' }}>Cancel</button>
+                </div>
+            )}
+
+            {/* Bulk reassign modal (#4) → POST /api/leads/bulk-reassign */}
+            {showLeadReassign && (
+                <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 2100, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                    onMouseDown={e => { if (e.target === e.currentTarget && !leadReassigning) setShowLeadReassign(false); }}>
+                    <div style={{ backgroundColor: 'var(--bg-primary)', borderRadius: '14px', padding: '24px', width: '400px', maxWidth: '90vw' }}>
+                        <div style={{ fontSize: '16px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '8px' }}>🔄 Reassign {selectedLeadPhones.size} lead{selectedLeadPhones.size === 1 ? '' : 's'}</div>
+                        <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '16px' }}>Transfer the selected lead{selectedLeadPhones.size === 1 ? '' : 's'} to another team member — they become the lead owner (and deal coordinator).</div>
+                        <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)' }}>Assign to</label>
+                        <select value={leadReassignTarget} onChange={e => setLeadReassignTarget(e.target.value)} disabled={leadReassigning}
+                            style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', marginTop: '6px', marginBottom: '16px', border: '1px solid var(--border-secondary)', backgroundColor: 'var(--bg-secondary)', color: 'var(--text-primary)', fontSize: '13px' }}>
+                            <option value="">Select an agent…</option>
+                            {teamMembers.map(m => <option key={m.id} value={m.id}>{m.name}{(m as any).role ? ` (${(m as any).role})` : ''}</option>)}
+                        </select>
+                        {leadReassignMsg && <div style={{ fontSize: '12px', color: leadReassignMsg.startsWith('✅') ? '#22c55e' : '#ef4444', marginBottom: '12px' }}>{leadReassignMsg}</div>}
+                        <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+                            <button disabled={leadReassigning} onClick={() => setShowLeadReassign(false)}
+                                style={{ padding: '8px 16px', borderRadius: '8px', fontSize: '13px', cursor: 'pointer', border: '1px solid var(--border-secondary)', backgroundColor: 'transparent', color: 'var(--text-muted)' }}>Cancel</button>
+                            <button disabled={leadReassigning || !leadReassignTarget} onClick={async () => {
+                                if (!leadReassignTarget) return;
+                                setLeadReassigning(true); setLeadReassignMsg('');
+                                try {
+                                    const res = await client.post('/api/leads/bulk-reassign', { phones: Array.from(selectedLeadPhones), agent_id: leadReassignTarget });
+                                    const n = res.data?.reassigned ?? 0;
+                                    setLeadReassignMsg(`✅ Reassigned ${n} lead${n === 1 ? '' : 's'}.`);
+                                    await loadData();
+                                    setTimeout(() => { setShowLeadReassign(false); setSelectedLeadPhones(new Set()); setLeadSelectMode(false); }, 1200);
+                                } catch (err: any) {
+                                    setLeadReassignMsg(`❌ ${err?.response?.data?.error || 'Reassign failed'}`);
+                                } finally { setLeadReassigning(false); }
+                            }}
+                                style={{ padding: '8px 18px', borderRadius: '8px', fontSize: '13px', fontWeight: 700, cursor: leadReassignTarget ? 'pointer' : 'not-allowed', backgroundColor: '#8b5cf6', border: 'none', color: '#fff', opacity: leadReassignTarget && !leadReassigning ? 1 : 0.5 }}>
+                                {leadReassigning ? 'Reassigning…' : 'Confirm reassign'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {showFilterSheet && (
                 <div
                     style={{ position: 'fixed', inset: 0, backgroundColor: 'var(--sheet-backdrop)', zIndex: 900 }}
@@ -2061,6 +2255,19 @@ export function ExternalLeads({ isMobile: isMobileProp }: { isMobile?: boolean }
                                         {opt.label}
                                     </button>
                                 ))}
+                            </div>
+                        </FilterSection>
+
+                        {/* Budget — filters leads by their stated max budget (#3, 2026-06-28) → budget_min/budget_max */}
+                        <FilterSection title="Budget (₹)" defaultOpen={false} badge={(budgetMinFilter.trim() || budgetMaxFilter.trim()) ? 1 : 0}>
+                            <div style={{ display: 'flex', gap: '8px' }}>
+                                <input type="number" inputMode="numeric" value={budgetMinFilter} onChange={e => setBudgetMinFilter(e.target.value)} placeholder="Min ₹"
+                                    style={{ width: '100%', padding: '9px 12px', borderRadius: '10px', border: '1px solid var(--border-secondary)', backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)', fontSize: '13px', boxSizing: 'border-box' }} />
+                                <input type="number" inputMode="numeric" value={budgetMaxFilter} onChange={e => setBudgetMaxFilter(e.target.value)} placeholder="Max ₹"
+                                    style={{ width: '100%', padding: '9px 12px', borderRadius: '10px', border: '1px solid var(--border-secondary)', backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)', fontSize: '13px', boxSizing: 'border-box' }} />
+                            </div>
+                            <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>
+                                Filters leads by their stated max budget (₹).
                             </div>
                         </FilterSection>
 

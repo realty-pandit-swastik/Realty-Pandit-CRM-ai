@@ -6,6 +6,7 @@ import { MapPin, BedDouble, Bath, Maximize, Building2, Camera, CalendarPlus, Mes
 import { formatPrice, getMediaUrl, getImageUrls, timeAgo, type Property } from '@/lib/api';
 import { formatPropertyTitle, formatAddress, getAmenities, getFurnishing, getTotalFloors, amenitySlug } from '@/lib/propertyUtils';
 import { pickSpecChips, canShowPricePerArea } from '@/lib/specChips';
+import { getDisplayFloor } from '@/lib/floor';
 
 const AMENITY_MAP: Record<string, { icon: typeof Car; label: string }> = {
     parking: { icon: Car, label: 'Parking' },
@@ -146,9 +147,9 @@ export default function PropertyListCard({ property, index = 0, onScheduleVisit,
                                 </span>
                             );
                         })}
-                        {property.floor_number != null && (
+                        {getDisplayFloor(property) && (
                             <span className="flex items-center gap-1">
-                                <Building2 className="w-3.5 h-3.5" /> Floor {property.floor_number}{totalFloors != null ? `/${totalFloors}` : ''}
+                                <Building2 className="w-3.5 h-3.5" /> Floor {getDisplayFloor(property)}{totalFloors != null ? `/${totalFloors}` : ''}
                             </span>
                         )}
                     </div>

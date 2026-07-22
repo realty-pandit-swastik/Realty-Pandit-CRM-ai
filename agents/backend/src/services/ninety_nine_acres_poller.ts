@@ -20,6 +20,7 @@ import { isRealEmail } from '../utils/email';
 import { sanitizeName } from '../utils/name_sanitizer';
 import { sendBuyerConfirmationWhatsApp, sendBuyerConfirmationEmail } from './lead_notifications';
 import { assignViaRoundRobin, resolveAgentByEmail } from './lead_assignment';
+import { assignContact, type AssignmentMethod } from './assign_contact';
 import { ensureDealForLead } from './ensure_deal';
 import { notify } from './notify';
 import { alertCritical } from '../utils/alerter';
@@ -603,8 +604,10 @@ export class NinetyNineAcresPoller {
             // This ensures the lead goes to the team member who owns the listing — not round-robin.
             // If sub_user_name is missing or unrecognised, assign to manager for manual review.
             let finalAgentId: string | null = null;
+            let method: AssignmentMethod | null = null;
             if (lead.subUserName) {
                 finalAgentId = await resolveAgentByEmail(lead.subUserName);
+                if (finalAgentId) method = 'sub_user';
             }
             if (!finalAgentId) {
                 // No sub_user_name match — assign to manager (not round-robin)
@@ -616,15 +619,13 @@ export class NinetyNineAcresPoller {
                 });
                 finalAgentId = manager?.id ?? null;
                 if (finalAgentId) {
+                    method = 'manager_review';
                     logger.warn(`[99acres] No sub_user_name match for property ${lead.propertyCode} — assigned to manager for review`);
                 }
             }
 
             if (finalAgentId) {
-                await prisma.contact.update({
-                    where: { phone_number: phoneNumber },
-                    data: { assigned_agent_id: finalAgentId },
-                });
+                await assignContact(phoneNumber, finalAgentId, method);
 
                 // Step 2: Load assigned agent + super_boss for notifications
                 const [assignedAgent, superBoss] = await Promise.all([

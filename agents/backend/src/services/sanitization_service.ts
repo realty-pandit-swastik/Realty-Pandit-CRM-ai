@@ -71,6 +71,23 @@ const PARTNER_HIDDEN_ADDRESS_FIELDS = [
     'longitude',
 ];
 
+// "All inventory visible to all staff" model (2026-06-18): a foreign internal agent (anyone who
+// is NOT the listing's assigned/uploading manager and NOT super_boss) sees the listing WITHOUT
+// owner/key-holder contact or the exact unit (flat_no/plot_no). Pricing (incl. customer_price) and
+// the manager's name+phone are deliberately KEPT so any agent can quote + coordinate the showing.
+const STAFF_HIDDEN_INVENTORY_FIELDS = [
+    // Owner / key-holder contact (relations + scalars)
+    'owner', 'owner_contact', 'contact', 'key_holder', 'key_holder_contact',
+    'owner_phone', 'owner_name', 'owner_email', 'owner_id', 'owner_contact_id',
+    'key_holder_name', 'key_holder_phone', 'key_holder_contact_id',
+    // Source PII — the uploader/dealer NUMBER stays gated to the handling manager + super_boss.
+    // (The displayable owner/dealer NAME is surfaced separately via the computed `source` field,
+    // which carries its own per-viewer phone gate — see the inventory list route.)
+    'uploader_phone', 'uploader_email', 'referral_partner', 'referral_partner_phone',
+    // First address line (exact unit) — locality/society/city/pincode stay visible
+    'flat_no', 'plot_no',
+];
+
 export class SanitizationService {
     /**
      * Strip owner/source fields from an inventory row based on the viewer.
@@ -94,6 +111,37 @@ export class SanitizationService {
     sanitizeInventoryList<T extends Record<string, any>>(rows: T[], viewer: Viewer): T[] {
         if (!Array.isArray(rows)) return rows;
         return rows.map((r) => this.sanitizeInventory(r, viewer));
+    }
+
+    /**
+     * Inventory redaction for the staff-wide visibility model (2026-06-18). The listing's
+     * assigned OR uploading manager + super_boss see everything; every other internal agent
+     * gets the listing minus owner/key-holder contact and flat_no/plot_no (pricing stays visible).
+     * The assigned manager's name+phone (the `assigned_agent` relation) is intentionally kept.
+     */
+    redactInventoryForStaff<T extends Record<string, any>>(
+        row: T,
+        viewer: { agentId?: string | null; isSuperBoss: boolean; teamIds?: string[] },
+    ): T {
+        if (!row) return row;
+        if (viewer.isSuperBoss) return row;
+        // Full detail for the agent's OWN listings AND (for a manager) their TEAM's listings.
+        // teamIds defaults to [agentId], so an employee's behaviour is unchanged.
+        const teamIds = viewer.teamIds && viewer.teamIds.length ? viewer.teamIds : (viewer.agentId ? [viewer.agentId] : []);
+        if (teamIds.includes(row.assigned_agent_id) || teamIds.includes(row.uploaded_by_agent_id)) {
+            return row;
+        }
+        const cleaned: Record<string, any> = { ...row };
+        for (const f of STAFF_HIDDEN_INVENTORY_FIELDS) delete cleaned[f];
+        return cleaned as T;
+    }
+
+    redactInventoryListForStaff<T extends Record<string, any>>(
+        rows: T[],
+        viewer: { agentId?: string | null; isSuperBoss: boolean; teamIds?: string[] },
+    ): T[] {
+        if (!Array.isArray(rows)) return rows;
+        return rows.map((r) => this.redactInventoryForStaff(r, viewer));
     }
 
     /**

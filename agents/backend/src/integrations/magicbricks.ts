@@ -5,7 +5,8 @@ import { apiKeyAuth } from '../middleware/apikey';
 import logger from '../utils/logger';
 import { normalizePhone } from '../utils/phone';
 import { sendBuyerConfirmationWhatsApp, sendBuyerConfirmationEmail } from '../services/lead_notifications';
-import { assignViaRoundRobin, assignViaPropertyUploader } from '../services/lead_assignment';
+import { assignViaRoundRobin, assignViaPropertyUploader, assignViaManagerRoundRobin, resolveAgentByMagicBricksSubUser } from '../services/lead_assignment';
+import { assignContact, type AssignmentMethod } from '../services/assign_contact';
 import { ensureDealForLead } from '../services/ensure_deal';
 import { foldLegacyDemand } from '../utils/demand_canonical';
 import { resolveDemandTaxonomy } from '../utils/demand_taxonomy';
@@ -32,7 +33,7 @@ async function handleMagicBricksPush(req: any, res: any) {
     const {
         api_key, mobile, name, email, msg, project, City, city, isd, dt, source: src,
         looking_for, property_for, property_type, prop_type, bhk, bedroom, unit_type,
-        budget, min_budget, max_budget,
+        budget, min_budget, max_budget, sub_user, listing_id,
     } = params;
 
     // Validate api_key
@@ -90,6 +91,8 @@ async function handleMagicBricksPush(req: any, res: any) {
                     content: msg ? String(msg) : `MagicBricks re-enquiry for ${project || 'property'}`,
                     metadata: {
                         source: 'magicbricks', project, city: City || city,
+                        listing_id: listing_id ?? null,
+                        sub_user: sub_user ?? null,
                         looking_for: looking_for || property_for,
                         property_type: property_type || prop_type,
                         bhk: bhk || bedroom,
@@ -248,6 +251,8 @@ async function handleMagicBricksPush(req: any, res: any) {
                     source: 'magicbricks',
                     project: projectName,
                     city: leadCity,
+                    listing_id: listing_id ?? null,
+                    sub_user: sub_user ?? null,
                     intent,
                     property_type: mappedPropertyType,
                     bhk: bhkValue,
@@ -259,16 +264,32 @@ async function handleMagicBricksPush(req: any, res: any) {
             },
         });
 
-        // Smart assignment: property uploader if project matches, else round-robin
+        // Assignment (mirrors 99acres SubUserName routing):
+        //   1) sub_user → the listing agent. MagicBricks sends "<agent phone>@timesgroup.com".
+        //   2) else project → property uploader (legacy best-effort).
+        //   3) else: if a sub_user WAS present but didn't map (inactive/unknown) → a manager for
+        //      review so the mapping gets fixed; otherwise (no sub_user) keep round-robin so the
+        //      bulk of un-attributed leads aren't all dumped on managers.
         let agentId: string | null = null;
-        if (projectName) {
+        let method: AssignmentMethod | null = null;
+        let subUserUnmatched = false;
+        if (sub_user) {
+            agentId = await resolveAgentByMagicBricksSubUser(String(sub_user));
+            if (agentId) method = 'sub_user'; else subUserUnmatched = true;
+        }
+        if (!agentId && projectName) {
             agentId = await assignViaPropertyUploader(projectName);
+            if (agentId) method = 'uploader';
         }
         if (!agentId) {
-            agentId = await assignViaRoundRobin();
+            agentId = subUserUnmatched ? await assignViaManagerRoundRobin() : await assignViaRoundRobin();
+            if (agentId) method = subUserUnmatched ? 'manager_review' : 'round_robin';
+            if (subUserUnmatched) {
+                logger.warn(`[MagicBricks] sub_user "${sub_user}" did not map to an active agent — routed to a manager for review (${phoneNumber})`);
+            }
         }
         if (agentId) {
-            await prisma.contact.update({ where: { phone_number: phoneNumber }, data: { assigned_agent_id: agentId } });
+            await assignContact(phoneNumber, agentId, method);
             const { createQualifyTask } = await import('../services/workflow_task_service');
             createQualifyTask({ tenantId: tenant.id, contactPhone: phoneNumber, assignedTo: agentId, source: 'magicbricks' })
                 .catch(err => logger.warn('[MagicBricks] Workflow task failed:', (err as Error).message));
@@ -384,17 +405,17 @@ router.post('/webhook', apiKeyAuth, async (req, res) => {
         const isNew = !contact.assigned_agent_id;
         if (isNew) {
             let agentId: string | null = null;
+            let method: AssignmentMethod | null = null;
             if (property_id) {
                 agentId = await assignViaPropertyUploader(property_id);
+                if (agentId) method = 'uploader';
             }
             if (!agentId) {
                 agentId = await assignViaRoundRobin();
+                if (agentId) method = 'round_robin';
             }
             if (agentId) {
-                await prisma.contact.update({
-                    where: { phone_number: phoneNumber },
-                    data: { assigned_agent_id: agentId },
-                });
+                await assignContact(phoneNumber, agentId, method);
                 const { createQualifyTask } = await import('../services/workflow_task_service');
                 createQualifyTask({ tenantId: tenant.id, contactPhone: phoneNumber, assignedTo: agentId, source: 'magicbricks' })
                     .catch(err => logger.warn('[MagicBricks] Workflow task failed:', (err as Error).message));

@@ -37,6 +37,25 @@ export async function sendBuyerConfirmationWhatsApp(
     const refToken = buildRefToken(phone);
     const propertiesLink = `${WEBSITE_URL}/properties?ref=${refToken}`;
 
+    // 2026-07-13: this function was already firing successfully on every intake path
+    // (confirmed via winston logs \u2014 dozens/day, ~0 failures) but never logged an
+    // Interaction row, so it was invisible to conversation audits and the admin timeline.
+    // Both branches below now log one, tagged event_type='lead_welcome' for idempotency
+    // checks elsewhere (see shareInventoryCard's welcome-burst guard).
+    const logWelcomeInteraction = async (content: string) => {
+        try {
+            const contact = await prisma.contact.findUnique({ where: { phone_number: phone }, select: { tenant_id: true } });
+            await prisma.interaction.create({
+                data: {
+                    tenant_id: contact?.tenant_id ?? 'default', phone_number: phone, channel: 'whatsapp',
+                    direction: 'outbound', event_type: 'lead_welcome', content, metadata: { source },
+                },
+            });
+        } catch (logErr) {
+            logger.warn(`[LeadNotify] Failed to log welcome interaction for ${phone}: ${(logErr as Error).message}`);
+        }
+    };
+
     try {
         // Try Meta-approved template first (works outside 24h session window)
         await whatsappService.sendTemplate(waPhone, 'rp_buyer_lead_received', {
@@ -44,6 +63,7 @@ export async function sendBuyerConfirmationWhatsApp(
             link: propertiesLink,
         });
         logger.info(`[LeadNotify] Buyer confirmation template sent to ${phone}`);
+        await logWelcomeInteraction(`Template: rp_buyer_lead_received (name=${displayName}, link=${propertiesLink})`);
         return;
     } catch (err1) {
         logger.warn(`[LeadNotify] rp_buyer_lead_received template failed for ${phone}: ${(err1 as Error).message}`);
@@ -66,6 +86,7 @@ export async function sendBuyerConfirmationWhatsApp(
         ].join('\n');
         await whatsappService.sendText(waPhone, message);
         logger.info(`[LeadNotify] Buyer confirmation plain text sent to ${phone}`);
+        await logWelcomeInteraction(message);
     } catch (err2) {
         logger.warn(`[LeadNotify] Buyer WhatsApp failed for ${phone}: ${(err2 as Error).message}`);
     }

@@ -124,9 +124,10 @@ router.post('/leads', apiKeyAuth, async (req, res) => {
         const isNew = !contact.assigned_agent_id;
         if (isNew) {
             const { assignViaRoundRobin } = await import('../services/lead_assignment');
+            const { assignContact } = await import('../services/assign_contact');
             const agentId = await assignViaRoundRobin();
             if (agentId) {
-                await prisma.contact.update({ where: { phone_number: phone }, data: { assigned_agent_id: agentId } });
+                await assignContact(phone, agentId, 'round_robin');
                 // Create workflow qualification task
                 const { createQualifyTask } = await import('../services/workflow_task_service');
                 createQualifyTask({ tenantId: tenant.id, contactPhone: phone, assignedTo: agentId, source })

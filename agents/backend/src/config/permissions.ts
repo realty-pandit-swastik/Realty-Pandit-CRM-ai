@@ -60,6 +60,22 @@ export const PERMISSIONS: Record<string, string[]> = {
         'act_on_deals',
         'share_inventory',
         'transfer_inventory'
+    ],
+    // 2026-07-12: EXTERNAL PARTNER AGENT. Logs into the same admin app but is locked to
+    // their OWN leads/deals + redacted inventory. These permission strings only pass the
+    // per-route `checkPermission` gates for the actions a partner is allowed; the REAL
+    // boundary is the partner default-deny guard in middleware/auth.ts (a partner token can
+    // reach ONLY an explicit route allow-list) + per-endpoint data scoping + partner
+    // redaction (SanitizationService). Never grant view_reports / manage_agents / manage_team.
+    partner: [
+        'view_inventory',
+        'edit_inventory',      // add/edit their OWN listings (scoped)
+        'share_inventory',     // share their listing / a matched property (redacted, via team)
+        'view_deals',
+        'act_on_deals',        // work their OWN deals (scoped)
+        'view_transactions',
+        'update_lead_status',
+        'edit_contact'         // edit their OWN referred leads (scoped)
     ]
 };
 

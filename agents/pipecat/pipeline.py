@@ -9,6 +9,8 @@ the call ends.
 import asyncio
 import json
 import os
+import time
+from datetime import datetime, timezone
 from pathlib import Path
 
 import httpx
@@ -316,6 +318,7 @@ async def run_pipeline_for_connection(
         context_kwargs["tools"] = tools_schema
     context = LLMContext(**context_kwargs)
     context_aggregator = LLMContextAggregatorPair(context)
+    call_start = time.time()
 
     pipeline = Pipeline([
         transport.input(),
@@ -362,10 +365,10 @@ async def run_pipeline_for_connection(
         )
 
     runner = PipelineRunner()
-    asyncio.create_task(_run_and_notify(runner, task, call_id, caller_number, llm))
+    asyncio.create_task(_run_and_notify(runner, task, call_id, caller_number, context, call_start))
 
 
-async def _run_and_notify(runner, task, call_id, caller_number, llm):
+async def _run_and_notify(runner, task, call_id, caller_number, context, call_start):
     # Lazy import: instrument.py is loaded by main.py at startup; importing
     # here keeps pipeline.py importable in isolation (e.g. tests).
     try:
@@ -385,25 +388,28 @@ async def _run_and_notify(runner, task, call_id, caller_number, llm):
             )
         # Don't re-raise — we still want to attempt transcript persistence below.
     finally:
-        transcript = _extract_transcript(llm)
-        await _notify_call_ended(call_id, caller_number, transcript)
+        transcript = _extract_transcript(context)
+        started_at = datetime.fromtimestamp(call_start, tz=timezone.utc).isoformat()
+        duration = round(time.time() - call_start)
+        await _notify_call_ended(call_id, caller_number, transcript, started_at, duration)
 
 
-def _extract_transcript(llm) -> str:
+def _extract_transcript(context) -> str:
     try:
-        ctx = getattr(llm, "_context", None)
-        if not ctx:
+        if not context:
             return ""
         return "\n".join(
             f"{m['role'].upper()}: {m.get('content', '')}"
-            for m in ctx
+            for m in context.messages
             if m.get("role") in ("user", "assistant")
         )
     except Exception:
         return ""
 
 
-async def _notify_call_ended(call_id: str, caller_number: str, transcript: str) -> None:
+async def _notify_call_ended(
+    call_id: str, caller_number: str, transcript: str, started_at: str, duration: int
+) -> None:
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
             await client.post(
@@ -412,6 +418,8 @@ async def _notify_call_ended(call_id: str, caller_number: str, transcript: str) 
                     "call_id": call_id,
                     "caller_number": caller_number,
                     "transcript": transcript,
+                    "started_at": started_at,
+                    "duration": duration,
                     "source": "pipecat",
                 },
             )

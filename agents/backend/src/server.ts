@@ -77,6 +77,15 @@ const server = app.listen(Number(port), '127.0.0.1', async () => {
             logger.error('[Server] BullMQ worker startup failed, falling back to legacy schedulers:', err);
             startLegacySchedulers();
         }
+
+        // Lead redistribution — 10 aged-dump leads/day to the least-served employees at 08:00 IST.
+        // Self-contained node-cron (independent of BullMQ), primary instance only. (2026-07-09)
+        try {
+            const { startLeadRedistributionCron } = require('./services/lead_redistribution');
+            startLeadRedistributionCron();
+        } catch (e) {
+            logger.error('[Server] lead redistribution cron start failed:', e);
+        }
     } else {
         logger.info(`[Server] Worker instance ${instanceId} — skipping workers (handled by instance 0)`);
     }

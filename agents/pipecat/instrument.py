@@ -86,6 +86,32 @@ def _scrub(obj, depth=0):
 
 
 def _before_send(event, _hint):
+    # (P-D, 2026-06-23) Drop benign asyncio/pipecat teardown noise. These fire when a voice call
+    # disconnects and pipecat cancels its internal processor/observer tasks (SmallWebRTC, Gemini Live,
+    # aggregators) — framework-level cleanup warnings with no user impact, NOT app errors. Captured only
+    # because LoggingIntegration promotes asyncio's logger.error lines to events; without this filter
+    # they flood GlitchTip (~21 such issues) and bury real errors.
+    # "task_manager:cancel_task" added 2026-06-25 (#87): pipecat logs CRITICAL from its own
+    # task_manager when force-cancelling internal tasks on call disconnect — teardown, not an app
+    # error. NOTE: we deliberately do NOT suppress "[Pipeline] runner failed" (#88) — that's a real
+    # per-call pipeline failure worth capturing.
+    _benign = (
+        "Task was destroyed but it is pending",
+        "coroutine ignored GeneratorExit",
+        "task_manager:cancel_task",
+    )
+    _parts = []
+    _le = event.get("logentry") or {}
+    if isinstance(_le, dict) and _le.get("message"):
+        _parts.append(str(_le["message"]))
+    if event.get("message"):
+        _parts.append(str(event["message"]))
+    for _v in ((event.get("exception") or {}).get("values") or []):
+        if isinstance(_v, dict) and _v.get("value"):
+            _parts.append(str(_v["value"]))
+    if any(b in " ".join(_parts) for b in _benign):
+        return None  # drop benign teardown noise
+
     # Scrub request headers
     request = event.get("request") or {}
     headers = request.get("headers")

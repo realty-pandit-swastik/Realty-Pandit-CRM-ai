@@ -95,6 +95,27 @@ async function deleteGoogleArtifacts(
 }
 
 /**
+ * Cancel a reminder's synced Google Calendar event + Google Task immediately —
+ * used when a newer reminder supersedes it (#3, 2026-07-01). Best-effort; nulls
+ * the stored ids on the task so nothing tries to re-touch them.
+ */
+export async function cancelReminderGoogle(taskId: string): Promise<void> {
+    try {
+        const t = await prisma.task.findUnique({ where: { id: taskId }, select: { assigned_to: true, stage_metadata: true } });
+        if (!t) return;
+        const m: any = t.stage_metadata || {};
+        if (!m.google_event_id && !m.google_task_id) return;
+        await deleteGoogleArtifacts(m.google_synced_agent_id || t.assigned_to, { eventId: m.google_event_id, taskId: m.google_task_id });
+        await prisma.task.update({
+            where: { id: taskId },
+            data: { stage_metadata: { ...m, google_event_id: null, google_task_id: null, google_synced_agent_id: null } } as any,
+        });
+    } catch (e) {
+        logger.warn(`[GoogleSync] cancelReminderGoogle(${taskId}) failed:`, (e as any)?.message || e);
+    }
+}
+
+/**
  * Push (or update) the Google Calendar event + Google Task for a REMINDER
  * task. `taskId` is the Task created in the reminder endpoint.
  */
@@ -232,6 +253,50 @@ export async function pushReminderToGoogle(taskId: string): Promise<void> {
         // Never break the reminder flow — this is best-effort.
         captureBackgroundError(err, { source: 'google_sync#pushReminderToGoogle', taskId });
         logger.error(`[GoogleSync] pushReminderToGoogle failed for task ${taskId}:`, err);
+    }
+}
+
+/**
+ * Phase D (2026-06-18) — insert a one-off Google Task into a member's @default
+ * task list (used by the team new-inventory broadcast). Opt-in: silently skips
+ * unless the member connected Google + sync is enabled. Date-only due (Tasks API
+ * ignores time). Best-effort: a dead/insufficient-scope token is wiped + nudged
+ * like the reminder/appointment paths. Returns true only if a task was inserted.
+ *
+ * No idempotency store of its own — callers dedup upstream (the broadcast marker)
+ * so this never double-fires for the same inventory.
+ */
+export async function pushInventoryTaskToGoogle(
+    agentId: string,
+    payload: { title: string; notes: string; dueISO?: string },
+): Promise<boolean> {
+    try {
+        const agent = await prisma.agent.findUnique({
+            where: { id: agentId },
+            select: { google_refresh_token: true, google_sync_enabled: true },
+        });
+        if (!agent?.google_refresh_token || agent.google_sync_enabled === false) return false;
+
+        const auth = getAuthedClient(agent.google_refresh_token);
+        const tasksApi = google.tasks({ version: 'v1', auth });
+        const body: any = { title: payload.title, notes: payload.notes };
+        if (payload.dueISO) body.due = payload.dueISO;
+
+        try {
+            await tasksApi.tasks.insert({ tasklist: '@default', requestBody: body });
+        } catch (err: any) {
+            if (isInvalidGrant(err) || isInsufficientScope(err)) {
+                await handleDeadToken(agentId, 'inventory-task');
+                return false;
+            }
+            throw err;
+        }
+        logger.info(`[GoogleSync] Inventory task → Google for agent ${agentId}`);
+        return true;
+    } catch (err) {
+        captureBackgroundError(err, { source: 'google_sync#pushInventoryTaskToGoogle', agentId });
+        logger.warn(`[GoogleSync] pushInventoryTaskToGoogle(${agentId}) failed:`, (err as any)?.message || err);
+        return false;
     }
 }
 

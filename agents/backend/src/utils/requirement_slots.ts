@@ -17,6 +17,7 @@ export interface ReqSlots {
     bhk?: number;
     type?: string;
     location?: string;
+    budget?: number;
 }
 
 // Multi-word / longer entries first so the longest match wins.
@@ -55,13 +56,41 @@ export function extractReqSlots(rawMsg: string): ReqSlots {
         if (msg.includes(t)) { out.type = t; break; }
     }
 
-    // Location: known area/city (longest first), else a bare "sector N".
+    // Location: known area/city (longest first). Capture a trailing "sector N" so
+    // "noida sector 62" is kept (not collapsed to "noida"); else a bare "sector N".
     for (const a of AREAS) {
-        if (msg.includes(a)) { out.location = a; break; }
+        if (msg.includes(a)) {
+            out.location = a;
+            const after = msg.slice(msg.indexOf(a) + a.length);
+            const sec = after.match(/\s*(?:sector|sec)\s*(\d+)/i);
+            if (sec) out.location = `${a} sector ${sec[1]}`;
+            break;
+        }
     }
     if (!out.location) {
-        const sec = msg.match(/sector\s*\d+/);
+        const sec = msg.match(/sector\s*\d+/i);
         if (sec) out.location = sec[0];
+    }
+
+    // Budget — sale (lakh/cr) or monthly rent (Nk, or a 4-7 digit figure guarded by a budget
+    // CUE so a sector/pincode number isn't mistaken for a budget). Previously absent here, so the
+    // active-deal path (webhook 3b.3) silently dropped a client's stated budget. (2026-06-21)
+    const sale = msg.match(/(\d+\.?\d*)\s*(lakh|lac|crore|cr)\b/i);
+    if (sale) {
+        const v = parseFloat(sale[1]);
+        out.budget = Math.round(sale[2].toLowerCase().startsWith('cr') ? v * 1e7 : v * 1e5);
+    } else {
+        const k = msg.match(/(\d+\.?\d*)\s*k\b/i);
+        if (k) {
+            const v = Math.round(parseFloat(k[1]) * 1000);
+            if (v >= 5000 && v <= 500000) out.budget = v;
+        } else {
+            const cue = /(?:below|under|upto|up\s*to|max|maximum|tak|budget|rent|month|₹|rs\.?)\s*₹?\s*([\d,]{4,7})/i.exec(msg);
+            if (cue) {
+                const v = parseInt(cue[1].replace(/,/g, ''), 10);
+                if (v >= 5000 && v <= 500000) out.budget = v;
+            }
+        }
     }
 
     return out;

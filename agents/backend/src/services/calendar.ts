@@ -276,6 +276,8 @@ export class CalendarService {
         sessionId?: string;
         /** Override the coordinating agent (website lead routing). Defaults to the property's agent. */
         assigned_to_agent_id?: string;
+        /** Deal link — when set, find-or-update the deal's open (e.g. provisional 'requested') appointment instead of creating a duplicate. */
+        transaction_id?: string;
     }): Promise<any> {
         try {
             const { contact_id, property_id, scheduled_at, source, sessionId } = data;
@@ -305,31 +307,40 @@ export class CalendarService {
                 throw new Error('No tenant found');
             }
 
-            // Create appointment
-            const appointment = await prisma.appointment.create({
-                data: {
-                    contact_id,
-                    title: `Property Visit - ${property.type} in ${property.location}`,
-                    description: `Visit scheduled via ${source}`,
-                    type: 'property_visit',
-                    scheduled_at,
-                    duration: 30,
-                    end_time: endTime,
-                    assigned_to_agent_id,
-                    property_id,
-                    location: property.location || undefined,
-                    source,
-                    channel: source.startsWith('website') ? 'website' : 'whatsapp',
-                    status: 'scheduled',
-                    tenant_id: tenant.id,
-                    metadata: sessionId ? { sessionId } : undefined,
-                },
-                include: {
-                    contact: true,
-                    property: true,
-                    assigned_to_agent: true,
-                },
-            });
+            // Create OR slot-fill the appointment. If the deal already has an open appointment
+            // (e.g. the provisional 'requested' one from the Schedule-Visit card tap), UPDATE that
+            // row with the real slot + status 'scheduled' instead of creating a duplicate. (QUALIFIED-1)
+            const baseData = {
+                title: `Property Visit - ${property.type} in ${property.location}`,
+                description: `Visit scheduled via ${source}`,
+                type: 'property_visit' as const,
+                scheduled_at,
+                duration: 30,
+                end_time: endTime,
+                assigned_to_agent_id,
+                property_id,
+                location: property.location || undefined,
+                source,
+                channel: source.startsWith('website') ? 'website' : 'whatsapp',
+                status: 'scheduled' as const,
+                tenant_id: tenant.id,
+            };
+            const existingAppt = data.transaction_id
+                ? await prisma.appointment.findFirst({
+                    where: { transaction_id: data.transaction_id, status: { notIn: ['cancelled', 'completed', 'no_show'] } },
+                    orderBy: { created_at: 'desc' }, select: { id: true, metadata: true },
+                })
+                : null;
+            const appointment = existingAppt
+                ? await prisma.appointment.update({
+                    where: { id: existingAppt.id },
+                    data: { ...baseData, metadata: { ...((existingAppt.metadata as any) || {}), awaiting_slot: false } },
+                    include: { contact: true, property: true, assigned_to_agent: true },
+                })
+                : await prisma.appointment.create({
+                    data: { ...baseData, contact_id, transaction_id: data.transaction_id, metadata: sessionId ? { sessionId } : undefined },
+                    include: { contact: true, property: true, assigned_to_agent: true },
+                });
 
             // Send WhatsApp confirmation to buyer
             await this.sendAppointmentReminder(appointment.id);

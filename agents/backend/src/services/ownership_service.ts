@@ -260,7 +260,7 @@ export class OwnershipService {
                 });
                 const r2 = await (tx as any).contact.updateMany({
                     where: { assigned_agent_id: fromAgentId },
-                    data: { assigned_agent_id: toAgentId },
+                    data: { assigned_agent_id: toAgentId, assignment_method: 'manual' }, // Phase 5C — admin transfer
                 });
                 contactsOwned = r1.count;
                 contactsAssigned = r2.count;

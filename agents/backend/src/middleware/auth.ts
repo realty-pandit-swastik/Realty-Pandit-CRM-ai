@@ -81,6 +81,103 @@ declare global {
  * This lets us migrate clients progressively to HttpOnly cookies without a
  * hard cut-over.
  */
+/**
+ * PARTNER DEFAULT-DENY ALLOW-LIST (2026-07-12).
+ *
+ * An external partner agent (`role: 'partner'`) logs into the SAME admin app but must be
+ * locked to an explicit set of routes. This list is DEFAULT-DENY: a partner token may reach
+ * ONLY the {method, path} patterns below; every other authMiddleware-protected route returns
+ * 403. This is the security backbone — a forgotten/new endpoint can never leak to a partner.
+ * Routes are added here ONE PAGE AT A TIME as each screen's endpoints are partner-hardened
+ * (scoped to the partner's own data + run through the partner redaction).
+ *
+ * `originalUrl` is the full path from the domain root (e.g. `/api/deals/123`).
+ */
+const PARTNER_ALLOWLIST: Array<{ method: string; re: RegExp }> = [
+    // Auth essentials (needed for the SPA to boot + log out).
+    { method: 'GET', re: /^\/auth\/me(\/|$|\?)/ },
+    { method: 'POST', re: /^\/auth\/logout(\/|$|\?)/ },
+    { method: 'GET', re: /^\/auth\/csrf(\/|$|\?)/ },
+    // --- Page 1: Inventory (hardened 2026-07-12) ---
+    // List: partner-scoped (active catalogue + own listings) and partner-redacted in routes/inventory.ts.
+    { method: 'GET', re: /^\/api\/inventory(\?|$)/ },
+    // Single listing by UUID: active-or-own guard + partner redaction. (Named subroutes like
+    // /api/inventory/filter-counts are deliberately NOT matched — UUID only.)
+    { method: 'GET', re: /^\/api\/inventory\/[0-9a-fA-F-]{36}(\?|$)/ },
+    // Add-Property wizard media/doc uploads. (The wizard's step endpoints — definition/next-step/
+    // validate/summary — are public, and /api/workflow/commit does its own token decode where the
+    // partner path is handled: referral_partner_id = partner, owning_manager_id = their coordinator,
+    // status = pending_approval, and NEVER uploaded_by_agent_id.)
+    { method: 'POST', re: /^\/api\/workflow\/upload-media(\?|$)/ },
+    { method: 'POST', re: /^\/api\/workflow\/upload-video(\?|$)/ },
+    { method: 'POST', re: /^\/api\/workflow\/upload-document(\?|$)/ },
+    // Match Clients — scoped in routes/inventory.ts to the partner's OWN leads only (deals they
+    // handle / leads they referred). They can never see a team or other-partner lead here.
+    { method: 'GET', re: /^\/api\/inventory\/[0-9a-fA-F-]{36}\/matching-clients(\?|$)/ },
+    // Share a property to THEIR client. Partner may share any ACTIVE listing or their own; the share
+    // is recorded under their coordinator (PropertyShare.agent_id is an Agent FK).
+    { method: 'POST', re: /^\/api\/inventory\/[0-9a-fA-F-]{36}\/share-to-client(\?|$)/ },
+    { method: 'GET', re: /^\/api\/inventory\/[0-9a-fA-F-]{36}\/share-link(\?|$)/ },
+    // Edit + documents on the partner's OWN listing only — every one of these is additionally guarded by
+    // partnerMayMutateInventory() in routes/inventory.ts (403 unless the listing is theirs).
+    { method: 'PATCH', re: /^\/api\/inventory\/[0-9a-fA-F-]{36}(\?|$)/ },
+    { method: 'POST', re: /^\/api\/inventory\/[0-9a-fA-F-]{36}\/documents(\?|$)/ },
+    { method: 'PATCH', re: /^\/api\/inventory\/[0-9a-fA-F-]{36}\/documents\/[0-9a-fA-F-]{36}(\?|$)/ },
+    { method: 'DELETE', re: /^\/api\/inventory\/[0-9a-fA-F-]{36}\/documents\/[0-9a-fA-F-]{36}(\?|$)/ },
+    { method: 'POST', re: /^\/api\/inventory\/[0-9a-fA-F-]{36}\/documents\/[0-9a-fA-F-]{36}\/share(\?|$)/ },
+    // --- Page 2: Leads (hardened 2026-07-12) ---
+    // Every one of these is additionally scoped/guarded in routes/leads.ts: the list is filtered to
+    // `referral_partner_id in [partner + sub-agents]`, and each per-lead route 403s unless the partner
+    // referred that lead. The phone pattern deliberately matches ONLY phone-shaped params, so team
+    // subroutes (/pending-partner-claims, /bulk-reassign, /by-source, /search-agents…) stay DENIED.
+    // Reassign / assign / bulk-reassign / partner-claims are intentionally NOT allow-listed.
+    { method: 'GET', re: /^\/api\/leads\/recent-external(\?|$)/ },
+    { method: 'GET', re: /^\/api\/leads\/search(\?|$)/ },
+    // A lead key is NOT always a phone — partner-referral leads carry a `PENDING-…` placeholder
+    // (the middleman model withholds the real number). So match any key EXCEPT the named team
+    // subroutes below, which must stay denied (several of them only check `edit_inventory`, which
+    // partners DO have — so the allow-list, not the permission, is what protects them).
+    { method: 'GET', re: /^\/api\/leads\/(?!recent-external|search|by-source|pending-partner-claims|bulk-reassign)[^/?]+(\?|$)/i },
+    { method: 'GET', re: /^\/api\/leads\/(?!recent-external|search|by-source|pending-partner-claims|bulk-reassign)[^/?]+\/(session|score)(\?|$)/i },
+    { method: 'PATCH', re: /^\/api\/leads\/(?!recent-external|search|by-source|pending-partner-claims|bulk-reassign)[^/?]+(\?|$)/i },
+    { method: 'PATCH', re: /^\/api\/leads\/(?!recent-external|search|by-source|pending-partner-claims|bulk-reassign)[^/?]+\/(status|requirements|mark-lost|delay-reason)(\?|$)/i },
+    { method: 'POST', re: /^\/api\/leads\/(?!recent-external|search|by-source|pending-partner-claims|bulk-reassign)[^/?]+\/match(\?|$)/i },
+    // Partner adds their OWN lead — routes/leads.ts forces referral_partner_id = the partner,
+    // lead_type = PARTNER_REFERRAL, and assigns it to their coordinator (Agent FKs).
+    { method: 'POST', re: /^\/api\/leads(\?|$)/ },
+    // --- Page 3: Deal Pipeline (hardened 2026-07-13) ---
+    // Every per-deal route below is additionally guarded by partnerOwnsDealOr403() in routes/deals.ts
+    // (403 unless the deal is theirs: handled by them/their sub-agents, or from a lead they referred).
+    // The list + pipeline stats are scoped via filters.partner_ids in services/deal_service.ts.
+    // NOT allow-listed (team-only): PATCH /:id/reassign, commission-entries, POST /api/deals (create).
+    { method: 'GET', re: /^\/api\/deals(\?|$)/ },
+    { method: 'GET', re: /^\/api\/deals\/pipeline(\?|$)/ },
+    { method: 'POST', re: /^\/api\/deals\/match-counts(\?|$)/ },
+    { method: 'GET', re: /^\/api\/deals\/[0-9a-fA-F-]{36}(\?|$)/ },
+    { method: 'GET', re: /^\/api\/deals\/[0-9a-fA-F-]{36}\/(timeline|queries|matched-inventory|property-shares)(\?|$)/ },
+    { method: 'PATCH', re: /^\/api\/deals\/[0-9a-fA-F-]{36}\/(status|requirements|match)(\?|$)/ },
+    { method: 'POST', re: /^\/api\/deals\/[0-9a-fA-F-]{36}\/(log-call|log-action|reminder|share-properties|share-next-property|book-appointment|visit-outcome|query)(\?|$)/ },
+    // --- Partner Teams (2026-07-13) ---
+    // OWNER-ONLY: each route additionally runs requirePartnerOwner() (ACTIVE + COMPANY + no parent),
+    // so a SUB-AGENT that reaches them still gets 403. The allow-list is the outer fence only.
+    { method: 'GET', re: /^\/api\/partner\/team(\?|$)/ },
+    { method: 'GET', re: /^\/api\/partner\/team\/assignable(\?|$)/ },
+    { method: 'POST', re: /^\/api\/partner\/team(\?|$)/ },
+    { method: 'PATCH', re: /^\/api\/partner\/team\/[0-9a-fA-F-]{36}(\?|$)/ },
+    // Assign a lead / deal / listing to one of the owner's OWN sub-agents (or unassign).
+    // Each runs the entity's ownership guard FIRST, then assertPartnerOwnerCanAssign (ACTIVE COMPANY
+    // OWNER + target must be their own ACTIVE sub-agent). A sub-agent hitting these still 403s.
+    { method: 'POST', re: /^\/api\/leads\/(?!recent-external|search|by-source|pending-partner-claims|bulk-reassign)[^/?]+\/partner-assign(\?|$)/i },
+    { method: 'POST', re: /^\/api\/deals\/[0-9a-fA-F-]{36}\/partner-assign(\?|$)/ },
+    { method: 'POST', re: /^\/api\/inventory\/[0-9a-fA-F-]{36}\/partner-assign(\?|$)/ },
+];
+
+function isPartnerAllowed(req: Request): boolean {
+    const path = (req.originalUrl || req.url).split('?')[0];
+    const method = req.method.toUpperCase();
+    return PARTNER_ALLOWLIST.some(r => r.method === method && r.re.test(path));
+}
+
 export function authMiddleware(req: Request, res: Response, next: NextFunction) {
     // Prefer HttpOnly cookie (set by /auth/login for browser clients)
     const cookieToken: string | undefined = req.cookies?.[ACCESS_TOKEN_COOKIE];
@@ -98,6 +195,10 @@ export function authMiddleware(req: Request, res: Response, next: NextFunction) 
     try {
         const decoded = authService.verifyToken(token);
         req.agent = decoded;
+        // Partner default-deny: partners can reach ONLY the explicit allow-list above.
+        if (decoded.role === 'partner' && !isPartnerAllowed(req)) {
+            return res.status(403).json({ error: 'This section is not available for partner accounts.' });
+        }
         next();
     } catch {
         return res.status(401).json({ error: 'Invalid or expired token' });

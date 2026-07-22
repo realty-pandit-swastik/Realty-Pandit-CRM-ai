@@ -1,250 +1,248 @@
-import React, { useEffect, useState } from 'react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import { getUserPerformance } from '../../api/client';
+import React, { useMemo, useState } from 'react';
+import { getUserPerformance, getDistribution, getManagementAlerts, getSpeedToLead } from '../../api/client';
+import { useAuth } from '../../contexts/AuthContext';
+import { useIsMobile } from '../../hooks/useIsMobile';
+import { ClayCard, SectionLabel, KpiCard, formatNum, formatINR, formatMins } from './analytics/clay';
+import { RangeBar, defaultRange, type DateRange } from './analytics/FilterBar';
+import { Leaderboard, RankedBars, type LeaderRow } from './analytics/charts';
+import { useAsyncData, LoadingState, ErrorState, EmptyState } from './analytics/AsyncState';
+import { TargetsEditor } from './analytics/TargetsEditor';
+import { drillTo } from '../../lib/drill';
+
+interface PerfRow extends LeaderRow {
+  role: string;
+  hot_leads: number;
+  appointments_scheduled: number;
+  appointments_completed: number;
+  inventory_added: number;
+  components?: { leads: number; conversion: number; appointments: number; inventory: number };
+  commission?: number;
+}
+
+type SortKey = 'score' | 'deals' | 'revenue' | 'leads';
+
+const catColor = (cat: string): string =>
+  cat === 'Excellent' ? '#22c55e' : cat === 'Good' ? '#3b82f6' : cat === 'Average' ? '#f59e0b' : '#ef4444';
 
 export const UserPerformanceDashboard: React.FC = () => {
-  const [performance, setPerformance] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [sortBy, setSortBy] = useState<'deals' | 'revenue' | 'leads'>('deals');
+  const { agent, hasPermission } = useAuth();
+  const isMobile = useIsMobile();
+  const [range, setRange] = useState<DateRange>(defaultRange());
+  const [sortBy, setSortBy] = useState<SortKey>('score');
 
-  useEffect(() => {
-    loadData();
-  }, []);
+  const heading = agent?.role === 'employee'
+    ? { title: 'My Performance', sub: 'Your metrics for the selected period' }
+    : agent?.role === 'manager'
+    ? { title: 'Team Performance', sub: "Your team's productivity and conversion" }
+    : { title: 'User Performance', sub: 'Per-agent productivity across the org' };
 
-  const loadData = async () => {
-    try {
-      setLoading(true);
-      const data = await getUserPerformance();
-      setPerformance(data.performance || []);
-    } catch (error) {
-      console.error('Error loading user performance:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const { status, data, reload } = useAsyncData(
+    () => {
+      const fromTo = { from: range.from.toISOString(), to: range.to.toISOString() };
+      const span = range.to.getTime() - range.from.getTime();
+      const prev = { from: new Date(range.from.getTime() - span).toISOString(), to: new Date(range.from.getTime() - 1).toISOString() };
+      return Promise.all([
+        getUserPerformance(fromTo),
+        getUserPerformance(prev),
+        getDistribution(fromTo).catch(() => ({ load: [] })),
+        getManagementAlerts().catch(() => ({ alerts: [] })),
+        getSpeedToLead(fromTo).catch(() => ({ by_agent: [] })),
+      ]).then(([cur, prv, dist, alertsRes, stlRes]) => ({
+        cur: (cur?.performance || []) as PerfRow[],
+        prv: (prv?.performance || []) as PerfRow[],
+        load: (dist?.load || []) as Array<{ agent_id: string; agent_name: string; active_leads: number }>,
+        inactive: ((((alertsRes?.alerts || []) as any[]).find((a) => a.type === 'inactive_agents'))?.count) || 0,
+        stlByAgent: (stlRes?.by_agent || []) as Array<{ agent_id: string; avg_minutes: number; n: number }>,
+      }));
+    },
+    [range.from, range.to],
+    (d) => d.cur.length === 0,
+  );
+  const rows = useMemo<PerfRow[]>(() => data?.cur ?? [], [data]);
+  const prevRows = useMemo<PerfRow[]>(() => data?.prv ?? [], [data]);
+  const load = useMemo(() => data?.load ?? [], [data]);
+  const inactiveCount = data?.inactive ?? 0;
+  const belowTarget = useMemo(() => rows.filter((r) => r.productivity_category === 'Needs Improvement').length, [rows]);
+  const overloaded = useMemo(() => load.filter((l) => l.active_leads > 150).length, [load]);
+  const stlMap = useMemo(() => new Map((data?.stlByAgent ?? []).map((s) => [s.agent_id, s.avg_minutes])), [data]);
+  const slowResponders = useMemo(() => (data?.stlByAgent ?? []).filter((s) => s.avg_minutes > 60).length, [data]);
+  const composition = useMemo(() => {
+    const withComp = rows.filter((r) => r.components);
+    const n = withComp.length || 1;
+    const s = (f: (c: NonNullable<PerfRow['components']>) => number) => Math.round(withComp.reduce((a, r) => a + f(r.components!), 0) / n);
+    return [
+      { label: 'Leads', count: s((c) => c.leads) },
+      { label: 'Conversion', count: s((c) => c.conversion) },
+      { label: 'Appointments', count: s((c) => c.appointments) },
+      { label: 'Inventory', count: s((c) => c.inventory) },
+    ];
+  }, [rows]);
 
-  const formatCurrency = (value: number) => {
-    if (value >= 10000000) return `₹${(value / 10000000).toFixed(1)}Cr`;
-    if (value >= 100000) return `₹${(value / 100000).toFixed(1)}L`;
-    return `₹${value.toLocaleString('en-IN')}`;
-  };
+  const sum = (rs: PerfRow[], f: (r: PerfRow) => number) => rs.reduce((s, r) => s + (f(r) || 0), 0);
+  const avg = (rs: PerfRow[], f: (r: PerfRow) => number) => (rs.length ? sum(rs, f) / rs.length : 0);
+  const delta = (cur: number, prev: number): number | null => (prev > 0 ? ((cur - prev) / prev) * 100 : cur > 0 ? 100 : null);
 
-  const sortedPerformance = [...performance].sort((a, b) => {
+  const totals = useMemo(() => ({
+    leads: sum(rows, (r) => r.leads_assigned),
+    hot: sum(rows, (r) => r.hot_leads),
+    appts: sum(rows, (r) => r.appointments_completed),
+    deals: sum(rows, (r) => r.deals_closed),
+    revenue: sum(rows, (r) => r.revenue_generated),
+    score: avg(rows, (r) => r.productivity_score),
+  }), [rows]);
+  const prevTotals = useMemo(() => ({
+    leads: sum(prevRows, (r) => r.leads_assigned),
+    deals: sum(prevRows, (r) => r.deals_closed),
+    revenue: sum(prevRows, (r) => r.revenue_generated),
+    score: avg(prevRows, (r) => r.productivity_score),
+  }), [prevRows]);
+
+  const dist = useMemo(() => {
+    const d: Record<string, number> = { Excellent: 0, Good: 0, Average: 0, 'Needs Improvement': 0 };
+    rows.forEach((r) => { d[r.productivity_category] = (d[r.productivity_category] || 0) + 1; });
+    return d;
+  }, [rows]);
+
+  const sorted = useMemo(() => [...rows].sort((a, b) => {
     switch (sortBy) {
-      case 'deals':
-        return b.deals_closed - a.deals_closed;
-      case 'revenue':
-        return b.revenue_generated - a.revenue_generated;
-      case 'leads':
-        return b.leads_assigned - a.leads_assigned;
-      default:
-        return 0;
+      case 'deals': return b.deals_closed - a.deals_closed;
+      case 'revenue': return b.revenue_generated - a.revenue_generated;
+      case 'leads': return b.leads_assigned - a.leads_assigned;
+      default: return (b.productivity_score ?? 0) - (a.productivity_score ?? 0);
     }
-  });
+  }), [rows, sortBy]);
 
-  const chartData = sortedPerformance.slice(0, 10).map((p) => ({
-    name: p.agent_name.split(' ')[0], // First name only
-    Leads: p.leads_assigned,
-    Appointments: p.appointments_completed,
-    Deals: p.deals_closed,
-  }));
+  if (status === 'loading') return <LoadingState label="Loading performance…" />;
+  if (status === 'error') return <ErrorState onRetry={reload} />;
+  if (status === 'empty') return <EmptyState icon="👥" title="No performance data yet" hint="Scores appear once agents in your view have activity in the selected period." />;
 
-  if (loading) {
-    return (
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', padding: '40px' }}>
-        <p style={{ color: 'var(--text-secondary)' }}>Loading performance data...</p>
-      </div>
-    );
-  }
+  const pad = isMobile ? 16 : '24px 32px';
+  const th: React.CSSProperties = { padding: '10px 12px', textAlign: 'right', fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', whiteSpace: 'nowrap' };
+  const td: React.CSSProperties = { padding: '11px 12px', fontSize: 13, color: 'var(--text-primary)', textAlign: 'right', whiteSpace: 'nowrap' };
+  const SORTS: Array<{ k: SortKey; label: string }> = [
+    { k: 'score', label: 'Productivity' }, { k: 'deals', label: 'Deals' }, { k: 'revenue', label: 'Revenue' }, { k: 'leads', label: 'Leads' },
+  ];
 
   return (
-    <div style={{ padding: '32px 40px', backgroundColor: 'var(--bg-primary)', overflowY: 'auto' }}>
-      {/* Header */}
-      <div style={{ marginBottom: '24px' }}>
-        <h2 style={{ fontSize: '20px', fontWeight: '600', margin: 0, color: 'var(--text-primary)' }}>
-          User Performance
-        </h2>
-        <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: '4px 0 0' }}>
-          Individual agent metrics and conversion rates
-        </p>
+    <div style={{ flex: 1, overflowY: 'auto', padding: pad, backgroundColor: 'var(--bg-primary)' }}>
+      <div>
+        <h1 style={{ fontSize: isMobile ? 20 : 24, fontWeight: 800, margin: 0, color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>👥 {heading.title}</h1>
+        <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: '4px 0 0' }}>{heading.sub}</p>
       </div>
 
-      {/* Chart */}
-      <div
-        style={{
-          backgroundColor: 'var(--bg-secondary)',
-          borderRadius: '12px',
-          padding: '24px',
-          border: '1px solid var(--border-color)',
-          marginBottom: '24px',
-        }}
-      >
-        <h3 style={{ fontSize: '16px', fontWeight: '600', margin: '0 0 20px', color: 'var(--text-primary)' }}>
-          Top Performers (by activity)
-        </h3>
-        {chartData.length > 0 ? (
-          <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" />
-              <XAxis dataKey="name" stroke="var(--text-secondary)" style={{ fontSize: '12px' }} />
-              <YAxis stroke="var(--text-secondary)" style={{ fontSize: '12px' }} />
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: 'var(--bg-primary)',
-                  border: '1px solid var(--border-color)',
-                  borderRadius: '8px',
-                  color: 'var(--text-primary)',
-                }}
-              />
-              <Legend wrapperStyle={{ fontSize: '14px' }} />
-              <Bar dataKey="Leads" fill="#3b82f6" />
-              <Bar dataKey="Appointments" fill="#8b5cf6" />
-              <Bar dataKey="Deals" fill="#10b981" />
-            </BarChart>
-          </ResponsiveContainer>
-        ) : (
-          <div style={{ textAlign: 'center', padding: '60px 20px', color: 'var(--text-secondary)' }}>
-            No performance data available
+      <RangeBar range={range} onRange={setRange} />
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 18, marginTop: 14 }}>
+        {/* Per-manager targets editor (Phase 5B) — only for users who can manage a team */}
+        {hasPermission('manage_team') && <TargetsEditor onSaved={reload} />}
+
+        {/* Coaching signals */}
+        <div>
+          <SectionLabel icon="⚡">Coaching Signals</SectionLabel>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 'var(--bento-gap)' }}>
+            <KpiCard label="Below Target" value={formatNum(belowTarget)} accent="#ef4444" icon="📉" />
+            <KpiCard label="Inactive Agents" value={formatNum(inactiveCount)} accent="#f59e0b" icon="😴" />
+            <KpiCard label="Overloaded (150+)" value={formatNum(overloaded)} accent="#8b5cf6" icon="🥵" />
+            <KpiCard label="Slow Responders (>1h)" value={formatNum(slowResponders)} accent="#f43f5e" icon="🐌" />
           </div>
-        )}
-      </div>
+        </div>
 
-      {/* Sort Controls */}
-      <div style={{ marginBottom: '16px', display: 'flex', gap: '8px', alignItems: 'center' }}>
-        <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>Sort by:</span>
-        <button
-          onClick={() => setSortBy('deals')}
-          style={{
-            padding: '6px 12px',
-            borderRadius: '6px',
-            border: '1px solid var(--border-color)',
-            backgroundColor: sortBy === 'deals' ? 'var(--primary)' : 'var(--bg-secondary)',
-            color: sortBy === 'deals' ? 'white' : 'var(--text-primary)',
-            cursor: 'pointer',
-            fontSize: '13px',
-          }}
-        >
-          Deals Closed
-        </button>
-        <button
-          onClick={() => setSortBy('revenue')}
-          style={{
-            padding: '6px 12px',
-            borderRadius: '6px',
-            border: '1px solid var(--border-color)',
-            backgroundColor: sortBy === 'revenue' ? 'var(--primary)' : 'var(--bg-secondary)',
-            color: sortBy === 'revenue' ? 'white' : 'var(--text-primary)',
-            cursor: 'pointer',
-            fontSize: '13px',
-          }}
-        >
-          Revenue Generated
-        </button>
-        <button
-          onClick={() => setSortBy('leads')}
-          style={{
-            padding: '6px 12px',
-            borderRadius: '6px',
-            border: '1px solid var(--border-color)',
-            backgroundColor: sortBy === 'leads' ? 'var(--primary)' : 'var(--bg-secondary)',
-            color: sortBy === 'leads' ? 'white' : 'var(--text-primary)',
-            cursor: 'pointer',
-            fontSize: '13px',
-          }}
-        >
-          Leads Assigned
-        </button>
-      </div>
+        {/* KPI strip */}
+        <div>
+          <SectionLabel icon="📊">Team Totals</SectionLabel>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 'var(--bento-gap)' }}>
+            <KpiCard label="Leads" value={formatNum(totals.leads)} delta={delta(totals.leads, prevTotals.leads)} accent="#3b82f6" icon="👥" />
+            <KpiCard label="Deals Closed" value={formatNum(totals.deals)} delta={delta(totals.deals, prevTotals.deals)} accent="#22c55e" icon="✅" />
+            <KpiCard label="Revenue" value={formatINR(totals.revenue)} delta={delta(totals.revenue, prevTotals.revenue)} accent="#f59e0b" icon="₹" />
+            <KpiCard label="Appts Done" value={formatNum(totals.appts)} accent="#06b6d4" icon="📅" />
+            <KpiCard label="Hot Leads" value={formatNum(totals.hot)} accent="#ef4444" icon="🔥" />
+            <KpiCard label="Avg Score" value={Math.round(totals.score)} delta={totals.score - prevTotals.score} deltaSuffix="pt" accent="#8b5cf6" icon="⭐" />
+          </div>
+        </div>
 
-      {/* Performance Table */}
-      <div
-        style={{
-          backgroundColor: 'var(--bg-secondary)',
-          borderRadius: '12px',
-          border: '1px solid var(--border-color)',
-          overflow: 'hidden',
-        }}
-      >
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-          <thead>
-            <tr style={{ backgroundColor: 'var(--bg-primary)', borderBottom: '1px solid var(--border-color)' }}>
-              <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: '12px', fontWeight: '600', color: 'var(--text-secondary)' }}>
-                Agent Name
-              </th>
-              <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: '12px', fontWeight: '600', color: 'var(--text-secondary)' }}>
-                Role
-              </th>
-              <th style={{ padding: '12px 16px', textAlign: 'right', fontSize: '12px', fontWeight: '600', color: 'var(--text-secondary)' }}>
-                Leads
-              </th>
-              <th style={{ padding: '12px 16px', textAlign: 'right', fontSize: '12px', fontWeight: '600', color: 'var(--text-secondary)' }}>
-                Hot Leads
-              </th>
-              <th style={{ padding: '12px 16px', textAlign: 'right', fontSize: '12px', fontWeight: '600', color: 'var(--text-secondary)' }}>
-                Appointments
-              </th>
-              <th style={{ padding: '12px 16px', textAlign: 'right', fontSize: '12px', fontWeight: '600', color: 'var(--text-secondary)' }}>
-                Completed
-              </th>
-              <th style={{ padding: '12px 16px', textAlign: 'right', fontSize: '12px', fontWeight: '600', color: 'var(--text-secondary)' }}>
-                Deals Closed
-              </th>
-              <th style={{ padding: '12px 16px', textAlign: 'right', fontSize: '12px', fontWeight: '600', color: 'var(--text-secondary)' }}>
-                Revenue
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {sortedPerformance.length > 0 ? (
-              sortedPerformance.map((p, idx) => (
-                <tr key={p.agent_id} style={{ borderBottom: idx < sortedPerformance.length - 1 ? '1px solid var(--border-color)' : 'none' }}>
-                  <td style={{ padding: '12px 16px', fontSize: '14px', color: 'var(--text-primary)', fontWeight: '500' }}>
-                    {p.agent_name}
-                  </td>
-                  <td style={{ padding: '12px 16px', fontSize: '13px', color: 'var(--text-secondary)' }}>
-                    <span
-                      style={{
-                        padding: '2px 8px',
-                        borderRadius: '4px',
-                        fontSize: '11px',
-                        fontWeight: '600',
-                        backgroundColor:
-                          p.role === 'super_boss' ? '#fee2e2' : p.role === 'manager' ? '#fef3c7' : '#dcfce7',
-                        color: p.role === 'super_boss' ? '#991b1b' : p.role === 'manager' ? '#92400e' : '#166534',
-                      }}
-                    >
-                      {p.role.replace('_', ' ').toUpperCase()}
-                    </span>
-                  </td>
-                  <td style={{ padding: '12px 16px', fontSize: '14px', color: 'var(--text-primary)', textAlign: 'right' }}>
-                    {p.leads_assigned}
-                  </td>
-                  <td style={{ padding: '12px 16px', fontSize: '14px', color: '#f87171', textAlign: 'right' }}>
-                    {p.hot_leads}
-                  </td>
-                  <td style={{ padding: '12px 16px', fontSize: '14px', color: 'var(--text-primary)', textAlign: 'right' }}>
-                    {p.appointments_scheduled}
-                  </td>
-                  <td style={{ padding: '12px 16px', fontSize: '14px', color: '#10b981', textAlign: 'right' }}>
-                    {p.appointments_completed}
-                  </td>
-                  <td style={{ padding: '12px 16px', fontSize: '14px', color: 'var(--text-primary)', fontWeight: '600', textAlign: 'right' }}>
-                    {p.deals_closed}
-                  </td>
-                  <td style={{ padding: '12px 16px', fontSize: '14px', color: 'var(--text-primary)', fontWeight: '600', textAlign: 'right' }}>
-                    {formatCurrency(p.revenue_generated)}
-                  </td>
+        {/* Score composition */}
+        <ClayCard title="Score Composition" subtitle="Workforce-average of the 4 score components (0–100 each)">
+          <RankedBars rows={composition} color="#8b5cf6" emptyIcon="⭐" emptyText="No scored agents in scope" />
+        </ClayCard>
+
+        {/* Distribution + Leaderboard */}
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'minmax(260px, 340px) 1fr', gap: 14 }}>
+          <ClayCard title="Productivity Mix" subtitle="How the team is distributed">
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {Object.entries(dist).map(([cat, n]) => {
+                const total = rows.length || 1;
+                return (
+                  <div key={cat} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <span style={{ width: 120, fontSize: 12.5, color: 'var(--text-secondary)', flexShrink: 0 }}>{cat}</span>
+                    <div style={{ flex: 1, height: 16, borderRadius: 5, backgroundColor: 'var(--bg-tertiary)', overflow: 'hidden' }}>
+                      <div style={{ width: `${(n / total) * 100}%`, height: '100%', backgroundColor: catColor(cat), borderRadius: 5, transition: 'width 600ms ease' }} />
+                    </div>
+                    <span style={{ width: 28, fontSize: 12, fontWeight: 700, color: 'var(--text-primary)', textAlign: 'right' }}>{n}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </ClayCard>
+          <ClayCard title="Leaderboard" subtitle="Ranked by productivity score">
+            <Leaderboard rows={sorted} />
+          </ClayCard>
+        </div>
+
+        {/* Detailed table */}
+        <ClayCard
+          title="All Agents"
+          subtitle="Full per-agent breakdown"
+          right={
+            <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+              {SORTS.map((s) => (
+                <button key={s.k} onClick={() => setSortBy(s.k)} className={`chip ${sortBy === s.k ? 'chip-active' : 'chip-inactive'}`} style={{ minHeight: 30, fontSize: 12, padding: '4px 10px' }}>{s.label}</button>
+              ))}
+            </div>
+          }
+        >
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 720 }}>
+              <thead>
+                <tr style={{ borderBottom: '1px solid var(--border-primary)' }}>
+                  <th style={{ ...th, textAlign: 'left' }}>Agent</th>
+                  <th style={th}>Leads</th>
+                  <th style={th}>Hot</th>
+                  <th style={th}>Appts</th>
+                  <th style={th}>Done</th>
+                  <th style={th}>Deals</th>
+                  <th style={th}>Revenue</th>
+                  <th style={th}>Commission</th>
+                  <th style={th}>Inventory</th>
+                  <th style={th}>Response</th>
+                  <th style={th}>Score</th>
                 </tr>
-              ))
-            ) : (
-              <tr>
-                <td colSpan={8} style={{ padding: '40px', textAlign: 'center', color: 'var(--text-secondary)' }}>
-                  No performance data available
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+              </thead>
+              <tbody>
+                {sorted.map((p) => (
+                  <tr key={p.agent_id} style={{ borderBottom: '1px solid var(--border-primary)' }}>
+                    <td style={{ ...td, textAlign: 'left', fontWeight: 600, color: '#3b82f6', cursor: 'pointer' }} title="View this agent's leads →" onClick={() => drillTo({ entity: 'leads', filter: { agent_id: p.agent_id } })}>{p.agent_name}</td>
+                    <td style={td}>{formatNum(p.leads_assigned)}</td>
+                    <td style={{ ...td, color: '#ef4444' }}>{formatNum(p.hot_leads)}</td>
+                    <td style={td}>{formatNum(p.appointments_scheduled)}</td>
+                    <td style={{ ...td, color: '#22c55e' }}>{formatNum(p.appointments_completed)}</td>
+                    <td style={{ ...td, fontWeight: 700 }}>{formatNum(p.deals_closed)}</td>
+                    <td style={{ ...td, fontWeight: 700 }}>{formatINR(p.revenue_generated)}</td>
+                    <td style={{ ...td, fontWeight: 700, color: '#f59e0b' }}>{formatINR(p.commission || 0)}</td>
+                    <td style={td}>{formatNum(p.inventory_added)}</td>
+                    <td style={td}>{formatMins(stlMap.get(p.agent_id))}</td>
+                    <td style={td}>
+                      <span style={{ fontWeight: 800, marginRight: 6 }}>{Math.round(p.productivity_score ?? 0)}</span>
+                      <span style={{ fontSize: 10.5, fontWeight: 700, color: catColor(p.productivity_category), backgroundColor: catColor(p.productivity_category) + '1a', borderRadius: 7, padding: '2px 7px' }}>{p.productivity_category}</span>
+                    </td>
+                  </tr>
+                ))}
+                {sorted.length === 0 && (
+                  <tr><td colSpan={11} style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)' }}>No performance data</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </ClayCard>
       </div>
     </div>
   );

@@ -18,6 +18,7 @@ import { TransactionStatus, TransactionType } from '@prisma/client';
 import prisma from '../db';
 import logger from '../utils/logger';
 import { extractReqSlots } from '../utils/requirement_slots';
+import { applyDemandCategoryFromType } from '../utils/demand_capture';
 
 const STATES = {
     INTAKE: 'INTAKE',
@@ -80,6 +81,12 @@ export class SalesAgent implements BaseAgent {
                 }
             }
 
+            // Resolve residential-vs-commercial from the captured type so matching separates the two
+            // worlds — property_sharing reads contact.category_id, not the property_type string. (A1, 2026-06-21)
+            if (extractedData.property_type) {
+                await applyDemandCategoryFromType(contact.phone_number, extractedData.property_type);
+            }
+
             // Infer intent from extracted data if possible (skip LLM call)
             let intent: string;
             if (extractedData.budget_max) {
@@ -131,57 +138,13 @@ export class SalesAgent implements BaseAgent {
                     }
                 }
 
-                // Check if we already have enough data to trigger matching immediately
-                const hasEnoughForMatch = contact.preferred_location || contact.budget_max;
-                if (hasEnoughForMatch) {
-                    logger.info(`[SalesAgent] INTAKE: Enough data for immediate matching (loc: ${contact.preferred_location || 'N/A'}, budget: ${contact.budget_max || 'N/A'}) — skipping LLM response`);
-
-                    // Auto-trigger matching
-                    const matchResult = await this.matchingAgent.handle(context);
-
-                    return {
-                        ...matchResult,
-                        next_state: STATES.QUALIFICATION,
-                        metadata: {
-                            ...txMetadata,
-                            ...matchResult.metadata,
-                            lead_status: 'warm',
-                            intent: intent,
-                            preferred_location: contact.preferred_location,
-                            budget_max: contact.budget_max,
-                            property_type: contact.property_type,
-                        },
-                    };
-                }
-
-                // Not enough data — generate LLM response asking for details
-                const systemPrompt = txMetadata.transaction_id
-                    ? await SystemPromptService.getBuyerPromptWithTransaction(
-                        { lead_status: 'cold', intent, missing_info: 'Budget, Location, Type', language: contact.preferred_language },
-                        currentTransaction || { id: txMetadata.transaction_id, type: intent === 'TENANT' ? 'RENT' : 'SALE', status: 'NEW', demand_contact_id: contact.phone_number },
-                    )
-                    : await SystemPromptService.getBuyerPrompt({
-                        lead_status: 'cold',
-                        intent: intent,
-                        missing_info: 'Budget, Location, Type',
-                    });
-                const reply = await this.llmService.generateResponseWithHistory(
-                    systemPrompt, message, contact.phone_number,
-                );
-
+                // Deterministic qualify: ask for the missing field, read-back when complete,
+                // qualify + share matches only on confirm — no LLM dependency, no card-spam. (F1, 2026-06-21)
+                const detResult = await this.runDeterministicQualification(context, intent);
                 return {
-                    action: 'reply',
-                    reply_script: reply,
+                    ...detResult,
                     next_state: STATES.QUALIFICATION,
-                    quality_hint: 'confident',
-                    metadata: {
-                        ...txMetadata,
-                        lead_status: 'warm',
-                        intent: intent,
-                        preferred_location: contact.preferred_location,
-                        budget_max: contact.budget_max,
-                        property_type: contact.property_type,
-                    },
+                    metadata: { ...txMetadata, ...(detResult.metadata || {}), lead_status: 'warm', intent },
                 };
             }
         }
@@ -208,6 +171,11 @@ export class SalesAgent implements BaseAgent {
                 }
             }
 
+            // Keep residential/commercial in sync if the type changed this turn. (A1, 2026-06-21)
+            if (extractedData.property_type) {
+                await applyDemandCategoryFromType(contact.phone_number, extractedData.property_type);
+            }
+
             // Check if buyer selected a specific property (1, 2, 3)
             const propertyNumber = /^\d$/.test(msg.trim()) ? parseInt(msg.trim()) : null;
             if (propertyNumber) {
@@ -219,71 +187,9 @@ export class SalesAgent implements BaseAgent {
                 return this.matchingAgent.handle(context);
             }
 
-            // AUTO-TRIGGER matching: If buyer has at least location OR budget, search properties
-            const hasLocation = contact.preferred_location;
-            const hasBudget = contact.budget_max;
-            const hasEnoughForMatch = hasLocation || hasBudget;
-
-            if (hasEnoughForMatch) {
-                logger.info(`[SalesAgent] Buyer qualified (location: ${hasLocation || 'N/A'}, budget: ${hasBudget || 'N/A'}) — auto-triggering MatchingAgent`);
-
-                // Update transaction if exists
-                if (currentTransaction && currentTransaction.status === 'NEW') {
-                    try {
-                        await prisma.transaction.update({
-                            where: { id: currentTransaction.id },
-                            data: {
-                                demand_location: contact.preferred_location || currentTransaction.demand_location,
-                                demand_budget_min: contact.budget_min || currentTransaction.demand_budget_min,
-                                demand_budget_max: contact.budget_max || currentTransaction.demand_budget_max,
-                            },
-                        });
-
-                        await transitionTransaction(
-                            currentTransaction.id,
-                            TransactionStatus.QUALIFIED,
-                            contact.phone_number,
-                            context.channel,
-                            { trigger: 'sales_agent_qualifying', contact_data: { property_type: contact.property_type, location: contact.preferred_location } },
-                        );
-                        logger.info(`[SalesAgent] Transaction ${currentTransaction.id.substring(0, 8)} → QUALIFIED`);
-                    } catch (err) {
-                        logger.error('[SalesAgent] Transaction update/transition failed (non-blocking):', err);
-                    }
-                }
-
-                // Run matching and return results directly
-                const matchResult = await this.matchingAgent.handle(context);
-
-                // If properties found, return them. If not, the matchingAgent already has a fallback message.
-                return matchResult;
-            }
-
-            // Not enough data yet — ask for missing info using AI
-            const missingParts: string[] = [];
-            if (!contact.preferred_location) missingParts.push('Location');
-            if (!contact.budget_max) missingParts.push('Budget');
-            if (!contact.property_type) missingParts.push('Property Type');
-
-            const systemPrompt = currentTransaction
-                ? await SystemPromptService.getBuyerPromptWithTransaction(
-                    { lead_status: 'qualifying', intent: contact.intent || 'BUYER', missing_info: missingParts.join(', '), language: contact.preferred_language },
-                    currentTransaction,
-                )
-                : await SystemPromptService.getBuyerPrompt({
-                    lead_status: 'qualifying',
-                    intent: contact.intent || 'BUYER',
-                    missing_info: missingParts.join(', '),
-                });
-            const reply = await this.llmService.generateResponseWithHistory(
-                systemPrompt, message, contact.phone_number,
-            );
-
-            return {
-                action: 'reply',
-                reply_script: reply,
-                quality_hint: 'confident',
-            };
+            // Deterministic qualify (ask → read-back → qualify+match on confirm). See
+            // runDeterministicQualification — no LLM-dependent ask, no qualify-on-"hi". (F1, 2026-06-21)
+            return this.runDeterministicQualification(context, contact.intent || undefined);
         }
 
         // Fallback: Generate AI response for any unhandled state
@@ -303,6 +209,129 @@ export class SalesAgent implements BaseAgent {
         };
     }
 
+    // ─── Deterministic qualification (F1, 2026-06-21) ───────────
+    // Replaces the LLM-dependent "ask for details" + loose "location OR budget → qualify"
+    // logic. Real-chat audit (docs/pipeline-analysis/real-chat-findings.md) showed the bot
+    // deflected ("a team member will assist", LLM-fail leaks) or qualified/card-spammed on a
+    // bare "hi". This is deterministic: ask for the missing field → read-back the full
+    // requirement → qualify + share matches ONLY on the client's confirmation. The LLM is used
+    // only to answer genuine questions, never for the core capture flow (so it can't go silent).
+
+    private isAffirmative(msg: string): boolean {
+        const m = (msg || '').trim().toLowerCase();
+        if (/^(yes|yep|yeah|y|ok|okay|okk|k|haan|haa|haanji|ha|hn|haa?n?ji|sahi|sai|theek|thik|done|sure|confirm(ed)?|correct|right|bilkul|👍|✅)[.! ]*$/i.test(m)) return true;
+        return /\b(haan|yes|sahi hai|sahi h|theek hai|thik hai|bilkul|confirm|dikhao|dikha do|show me|chalega)\b/i.test(m);
+    }
+
+    private missingList(contact: any): string[] {
+        const out: string[] = [];
+        if (!contact.preferred_location) out.push('Location');
+        if (!contact.budget_max) out.push('Budget');
+        if (!contact.property_type && !((contact.demand_schema_values as any)?.bhk)) out.push('Type');
+        return out;
+    }
+
+    private isRentIntent(contact: any): boolean {
+        const i = String(contact.intent || '').toLowerCase();
+        return i.includes('rent') || i === 'tenant';
+    }
+
+    private formatBudget(n: number, rent: boolean): string {
+        if (rent || n < 200000) return `₹${Number(n).toLocaleString('en-IN')}${n < 200000 ? '/month' : ''}`;
+        if (n >= 10000000) return `₹${(n / 10000000).toFixed(2).replace(/\.?0+$/, '')} Cr`;
+        return `₹${Math.round(n / 100000)} Lakh`;
+    }
+
+    private async setAwaitingConfirm(contact: any, val: boolean): Promise<void> {
+        try {
+            const merged = mergeDemandSchemaValues((contact.demand_schema_values as any) ?? null, { awaiting_confirm: val }) ?? {};
+            if (!val) delete (merged as any).awaiting_confirm;
+            await prisma.contact.update({ where: { phone_number: contact.phone_number }, data: { demand_schema_values: merged as any } });
+            contact.demand_schema_values = merged;
+        } catch (err) {
+            logger.warn('[SalesAgent] setAwaitingConfirm failed:', (err as Error).message);
+        }
+    }
+
+    private buildAsk(contact: any): string {
+        const rent = this.isRentIntent(contact);
+        const greet = contact.lead_status === 'cold' ? 'Namaste! 🙏 Main Panditji, aapka property assistant.\n\n' : '';
+        const need = this.missingList(contact);
+        if (!contact.preferred_location && !contact.budget_max) {
+            return `${greet}Aapke liye best ${rent ? 'rental ' : ''}options dhoondhne ke liye bata dijiye:\n📍 *Location* (jaise: Vaishali, Sector 62 Noida)\n💰 *Budget* (jaise: ${rent ? '25,000/month' : '50 lakh'})\n🏷️ *Type* (flat / villa / plot / shop / office)`;
+        }
+        if (!contact.preferred_location) return `${greet}Kaunsi *location* prefer karenge? (jaise: Vaishali, Sector 62 Noida, Indirapuram)`;
+        if (!contact.budget_max) return `${greet}Aapka *budget* kitna hai? (jaise: ${rent ? '20,000–30,000/month' : '50 lakh ya 1 crore'})`;
+        if (need.includes('Type')) return `${greet}Aap *flat* dhoondh rahe hain ya *villa / plot / shop / office*?`;
+        return `${greet}Thodi aur detail bata dijiye taaki main best match bhej sakoon. 🙏`;
+    }
+
+    private buildReadback(contact: any): string {
+        const rent = this.isRentIntent(contact);
+        const parts: string[] = [];
+        const bhk = (contact.demand_schema_values as any)?.bhk;
+        if (bhk) parts.push(`${bhk} BHK`);
+        if (contact.property_type) parts.push(String(contact.property_type));
+        if (contact.preferred_location) parts.push(`📍 ${contact.preferred_location}`);
+        if (contact.budget_max) parts.push(`💰 ${this.formatBudget(Number(contact.budget_max), rent)}`);
+        parts.push(rent ? 'rent ke liye' : 'kharidne ke liye');
+        return `Samajh gaya 🙏 — aap dhoondh rahe hain:\n*${parts.join(' · ')}*\n\nSahi hai? *Haan* bolein to main turant best matching properties bhejta hoon. 🏠`;
+    }
+
+    /** Deterministic capture→ask→read-back→qualify-on-confirm step. Returns the reply. */
+    private async runDeterministicQualification(context: AgentContext, intent?: string): Promise<AgentResponse> {
+        const { contact, message, currentTransaction } = context;
+        const msg = (message || '').toLowerCase().trim();
+
+        const complete = !!contact.preferred_location && !!contact.budget_max;
+        const awaiting = !!((contact.demand_schema_values as any)?.awaiting_confirm);
+        const isQuestion = /\?|\bkya\b|kah[aā]?n|\bkab\b|kaise|kitn[ae]|price|rate|emi|loan|detail|address|metro|parking|broker|owner/i.test(msg);
+
+        // 1) Confirming a read-back + enough data → qualify (if NEW) + share matches (one card).
+        if (awaiting && complete && this.isAffirmative(msg)) {
+            await this.setAwaitingConfirm(contact, false);
+            if (currentTransaction && currentTransaction.status === 'NEW') {
+                try {
+                    await prisma.transaction.update({
+                        where: { id: currentTransaction.id },
+                        data: {
+                            demand_location: contact.preferred_location || currentTransaction.demand_location,
+                            demand_budget_max: contact.budget_max || currentTransaction.demand_budget_max,
+                        },
+                    });
+                    await transitionTransaction(currentTransaction.id, TransactionStatus.QUALIFIED, contact.phone_number, context.channel,
+                        { trigger: 'deterministic_qualify_confirmed', contact_data: { property_type: contact.property_type, location: contact.preferred_location } });
+                    logger.info(`[SalesAgent] ${currentTransaction.id.substring(0, 8)} → QUALIFIED (read-back confirmed)`);
+                } catch (err) { logger.error('[SalesAgent] qualify-on-confirm failed (non-blocking):', err); }
+            }
+            return this.matchingAgent.handle(context);
+        }
+
+        // 2) Already qualified + has criteria → just serve matches (no re-confirm).
+        if (complete && currentTransaction && currentTransaction.status !== 'NEW') {
+            return this.matchingAgent.handle(context);
+        }
+
+        // 3) Genuine question → let the LLM answer it; keep awaiting so a later "haan" still qualifies.
+        if (isQuestion) {
+            const sp = await SystemPromptService.getBuyerPrompt({
+                lead_status: contact.lead_status || 'qualifying', intent: contact.intent || intent || 'BUYER',
+                missing_info: this.missingList(contact).join(', ') || 'none',
+            });
+            const reply = await this.llmService.generateResponseWithHistory(sp, message, contact.phone_number);
+            return { action: 'reply', reply_script: reply, quality_hint: 'confident' };
+        }
+
+        // 4) Complete → deterministic read-back (await confirm). No card yet.
+        if (complete) {
+            await this.setAwaitingConfirm(contact, true);
+            return { action: 'reply', reply_script: this.buildReadback(contact), quality_hint: 'confident', metadata: { stage: 'readback' } };
+        }
+
+        // 5) Incomplete → deterministic ask for the missing field. No card, no LLM, never silent.
+        return { action: 'reply', reply_script: this.buildAsk(contact), quality_hint: 'confident', metadata: { stage: 'intake_ask' } };
+    }
+
     // ─── Buyer Data Extraction ─────────────────────────────────
 
     private extractBuyerData(msg: string, rawMessage: string, contact: any): Record<string, any> {
@@ -317,7 +346,9 @@ export class SalesAgent implements BaseAgent {
                 const amount = msg.includes('k') ? val * 1000 : val;
                 if (amount >= 5000 && amount <= 500000) { // Rent range
                     data.budget_max = amount;
-                    if (!contact.budget_min) data.budget_min = Math.round(amount * 0.7);
+                    // budget_min left UNSET — client stated one (max) figure, not a floor.
+                    // leadToCriteria treats a null budget_min as "no lower bound" → wider, honest
+                    // matching (a ₹50k-max tenant still sees good ₹30k options). (A1, 2026-06-21)
                 }
             }
 
@@ -329,7 +360,7 @@ export class SalesAgent implements BaseAgent {
                     const unit = saleMatch[2].toLowerCase();
                     const amount = unit.startsWith('cr') ? val * 10000000 : val * 100000;
                     data.budget_max = amount;
-                    if (!contact.budget_min) data.budget_min = Math.round(amount * 0.7);
+                    // budget_min left UNSET (see rent branch) — no fabricated 0.7x floor. (A1, 2026-06-21)
                 }
             }
         }

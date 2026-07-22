@@ -5,6 +5,7 @@ import { SystemPromptService } from './system_prompt';
 import { WhatsAppService } from './whatsapp';
 import { TransactionStatus } from '@prisma/client';
 import { isQuietHours } from '../utils/quiet_hours';
+import { isLlmFallback } from '../utils/intent_signals';
 import logger from '../utils/logger';
 
 // ─── Interaction Probability Matrix ─────────────────────────────
@@ -68,20 +69,11 @@ const INTERACTION_MATRIX: Record<string, {
             { action: 'cancel', probability: 15 },
             { action: 'go_silent', probability: 10 },
         ],
-        triggers: [
-            {
-                silenceHours: 24,
-                templateKey: 'tx_reminder_visit_day_before',
-                description: 'Visit reminder (day before)',
-                maxFires: 1,
-            },
-            {
-                silenceHours: 2,
-                templateKey: 'tx_reminder_visit_2h',
-                description: 'Visit reminder (2 hours before)',
-                maxFires: 1,
-            },
-        ],
+        // VS-6 (2026-06-22): visit reminders are owned SOLELY by pipeline_crons.runVisitReminders
+        // (which respects ai_paused + dedups per appointment). These duplicate triggers ignored
+        // ai_paused (so a human-paused deal still got bot reminders) and double-sent the ~2h-out
+        // reminder, so they are retired.
+        triggers: [],
     },
     VISITED: {
         expectedActions: [
@@ -271,6 +263,11 @@ export class InteractionEngine {
             for (const tx of transactions) {
                 if (sent >= MAX_FOLLOWUPS_PER_RUN) break;
 
+                // (VS4-3, 2026-06-22) Respect the human "Pause AI" flag — a paused deal gets NO automated
+                // bot follow-ups (the engine previously ignored ai_paused, so a human takeover could still
+                // be talked over, e.g. the VISITED feedback nudge). pipeline_crons already gate this way.
+                if ((tx as any).ai_paused) continue;
+
                 const rules = InteractionEngine.getTriggerRules(tx.status);
                 if (rules.length === 0) continue;
 
@@ -411,6 +408,11 @@ export class InteractionEngine {
                 // Fallback to LLM-generated message (within session window only)
                 message = await this.generateLLMFollowup(tx, rule) || '';
                 if (!message) return false;
+                // Never send an LLM holding/error line as a followup (real-chat F7-A).
+                if (isLlmFallback(message)) {
+                    logger.warn(`[InteractionEngine] LLM fallback text suppressed for ${phone} (tx ${tx.id}) — skipping followup`);
+                    return false;
+                }
                 await this.whatsappService.sendText(phone, message);
             }
 

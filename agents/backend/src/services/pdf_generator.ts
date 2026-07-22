@@ -18,6 +18,7 @@ import { Readable } from 'stream';
 import * as path from 'path';
 import * as fs from 'fs';
 import logger from '../utils/logger';
+import { getDisplayFloor } from '../utils/floor';
 
 export type PdfVariant = 'branded' | 'brandless';
 
@@ -31,6 +32,8 @@ interface InventoryForPdf {
     features: any;
     furnishing: string | null;
     floor_number: number | null;
+    floor_label?: string | null;
+    display_floor?: string | null;
     total_floors: number | null;
     facing: string | null;
     property_age: string | null;
@@ -121,6 +124,28 @@ function resolveMediaPath(mediaUrl: string): string | null {
 }
 
 /**
+ * Resize + compress a photo for PDF embedding. The originals are 2–3MB each; embedding
+ * them verbatim made brochures ~16MB, which WhatsApp/Meta failed to fetch+re-host as a
+ * document (recipient got a corrupt/empty PDF). Cap at 1400px, JPEG q72 → ~150–300KB,
+ * so a 6-photo brochure lands ~1–2MB. Falls back to the original path on any sharp
+ * failure (doc.image accepts a path too). (2026-06-28)
+ */
+async function resizeImageForPdf(absPath: string): Promise<Buffer | string> {
+    try {
+        // require lazily — keeps the module loadable in environments without sharp.
+        const sharp = require('sharp');
+        return await sharp(absPath)
+            .rotate() // honour EXIF orientation so portrait phone photos aren't sideways
+            .resize({ width: 1400, height: 1400, fit: 'inside', withoutEnlargement: true })
+            .jpeg({ quality: 72 })
+            .toBuffer();
+    } catch (e) {
+        logger.warn(`[PdfGen] image resize failed (${absPath}); embedding original: ${(e as Error).message}`);
+        return absPath;
+    }
+}
+
+/**
  * Build the brandless redacted view of an inventory record.
  * Partner-share privacy rule: the building + locality + city stay VISIBLE (the
  * buyer must know roughly where it is), but the exact unit (flat_no / plot_no),
@@ -195,7 +220,7 @@ export function buildSpecRows(inv: InventoryForPdf): [string, string][] {
     if (s.bathrooms) rows.push(['Bathrooms', String(s.bathrooms)]);
     if (area) rows.push(['Carpet Area', area]);
     if (s.furnishing) rows.push(['Furnishing', s.furnishing]);
-    if (inv.floor_number != null) rows.push(['Floor', s.floors ? `${inv.floor_number} of ${s.floors}` : `${inv.floor_number}`]);
+    { const fl = getDisplayFloor(inv); if (fl) rows.push(['Floor', s.floors ? `${fl} of ${s.floors}` : fl]); }
     if (s.facing) rows.push(['Facing', s.facing]);
     if (age) rows.push(['Property Age', age]);
     return rows;
@@ -240,8 +265,7 @@ function drawFooter(doc: typeof PDFDocument.prototype, inv: InventoryForPdf, opt
     }
 }
 
-function renderOneProperty(doc: typeof PDFDocument.prototype, raw: InventoryForPdf, options: PdfOptions) {
-    const inv = options.variant === 'brandless' ? redactForBrandless(raw) : raw;
+function renderOneProperty(doc: typeof PDFDocument.prototype, inv: InventoryForPdf, imageBuffers: (Buffer | string)[], options: PdfOptions) {
     const specs = inv.specs || {};
 
     // ── DETAILS PAGE (no photo — keeps it clean; photos get their own pages) ────
@@ -302,18 +326,20 @@ function renderOneProperty(doc: typeof PDFDocument.prototype, raw: InventoryForP
     drawFooter(doc, inv, options);
 
     // ── PHOTO PAGES — one photo per near-full page, uniform size ────────────────
-    const mediaPaths = (inv.media_urls || []).map((u) => resolveMediaPath(u)).filter(Boolean) as string[];
-    mediaPaths.forEach((p, i) => {
+    // Photos are pre-resized to compressed JPEG buffers by generateInventoryPdfStream
+    // (originals embedded verbatim produced ~16MB brochures that WhatsApp/Meta could not
+    // fetch+re-host as a document). doc.image() accepts a Buffer or a fallback path.
+    imageBuffers.forEach((img, i) => {
         doc.addPage();
         drawHeaderBar(doc, options);
         try {
-            doc.image(p, 40, 90, { fit: [doc.page.width - 80, doc.page.height - 180], align: 'center', valign: 'center' });
+            doc.image(img, 40, 90, { fit: [doc.page.width - 80, doc.page.height - 180], align: 'center', valign: 'center' });
         } catch (err) {
             logger.warn(`[PdfGen] photo embed failed: ${(err as Error).message}`);
         }
         const fY = doc.page.height - 50;
         doc.rect(0, fY, doc.page.width, 50).fill('#f9fafb');
-        doc.fillColor(MUTED).font(FONT).fontSize(9).text(`Photo ${i + 1} of ${mediaPaths.length}`, 40, fY + 18);
+        doc.fillColor(MUTED).font(FONT).fontSize(9).text(`Photo ${i + 1} of ${imageBuffers.length}`, 40, fY + 18);
         if (inv.display_id) {
             doc.fillColor(MUTED).fontSize(7).font(FONT).text(inv.display_id, doc.page.width - 130, fY + 20, { width: 110, align: 'right' });
         }
@@ -324,10 +350,21 @@ function renderOneProperty(doc: typeof PDFDocument.prototype, raw: InventoryForP
  * Generate a PDF for one or more inventories.
  * Returns a Readable stream the caller can pipe to the HTTP response.
  */
-export function generateInventoryPdfStream(
+export async function generateInventoryPdfStream(
     inventories: InventoryForPdf[],
     options: PdfOptions,
-): NodeJS.ReadableStream {
+): Promise<NodeJS.ReadableStream> {
+    // Pre-resize every photo to a compressed JPEG buffer BEFORE building the doc — pdfkit
+    // renders synchronously, so the (async) sharp work has to finish first. This is what
+    // shrinks the brochure from ~16MB to ~1–2MB. Redaction also happens here so each
+    // inventory is prepared once. (2026-06-28)
+    const prepared = await Promise.all(inventories.map(async (raw) => {
+        const inv = options.variant === 'brandless' ? redactForBrandless(raw) : raw;
+        const paths = (inv.media_urls || []).map((u) => resolveMediaPath(u)).filter(Boolean) as string[];
+        const buffers = await Promise.all(paths.map(resizeImageForPdf));
+        return { inv, buffers };
+    }));
+
     const doc = new PDFDocument({ size: 'A4', margin: 0, autoFirstPage: false });
     registerFonts(doc);
     const stream = doc as unknown as NodeJS.ReadableStream;
@@ -343,7 +380,7 @@ export function generateInventoryPdfStream(
         logger.error('[PdfGen] PDFDocument error:', err);
     });
 
-    inventories.forEach((inv) => renderOneProperty(doc, inv, options));
+    prepared.forEach(({ inv, buffers }) => renderOneProperty(doc, inv, buffers, options));
 
     doc.end();
     return stream;

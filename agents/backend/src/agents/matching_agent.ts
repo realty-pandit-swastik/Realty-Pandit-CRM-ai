@@ -12,6 +12,7 @@
 
 import { BaseAgent, AgentContext, AgentResponse } from './types';
 import { MatchingEngine, MatchCriteria } from '../services/matching_engine';
+import { formatPropertyPrice } from '../utils/format_price';
 import logger from '../utils/logger';
 
 export class MatchingAgent implements BaseAgent {
@@ -243,7 +244,9 @@ export class MatchingAgent implements BaseAgent {
     private async handleMoreResults(context: AgentContext, criteria: MatchCriteria): Promise<AgentResponse> {
         // Get session context for offset
         const offset = context.session?.context?.match_offset || 3;
-        const matches = await this.matchingEngine.findMatches(criteria, 3);
+        // Apply the offset so "more" returns the NEXT set, not the same top-3 (real-chat F7-B:
+        // identical "N Properties Found" cards re-sent). Fetch offset+3 then skip already-shown.
+        const matches = (await this.matchingEngine.findMatches(criteria, offset + 3)).slice(offset);
 
         if (matches.length === 0) {
             return {
@@ -350,9 +353,7 @@ export class MatchingAgent implements BaseAgent {
                 ? specs.amenities.reduce((acc: Record<string, boolean>, label: string) => { acc[label] = true; return acc; }, {})
                 : {};
 
-            const price = prop.price
-                ? `₹${prop.price_unit === 'Crore' || prop.price_unit === 'Cr' ? (Number(prop.price) / 10000000).toFixed(1) + ' Cr' : (Number(prop.price) / 100000).toFixed(1) + ' Lakh'}`
-                : 'Price on request';
+            const price = formatPropertyPrice(prop.price, { intent: prop.intent, unit: prop.price_unit });
 
             let detail = `*🏠 Property Details*\n\n`;
             detail += `*Type:* ${prop.type.toUpperCase()} (${prop.category})\n`;

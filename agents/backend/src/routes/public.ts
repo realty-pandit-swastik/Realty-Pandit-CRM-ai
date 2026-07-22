@@ -50,7 +50,7 @@ router.get('/properties', cache(300), async (req, res) => {
         category_id, sub_category_id, type_id, configuration_id,
         taxonomy_node_id,
         usage_type_id, investment_type_id,
-        price_min, price_max, sort,
+        price_min, price_max, roof_rights, sort,
         furnishing, ownership_type, amenities,
         bhk, rooms, facing, age,
         page = '1', limit = '12'
@@ -151,6 +151,9 @@ router.get('/properties', cache(300), async (req, res) => {
         if (price_max) where.price.lte = parseFloat(price_max as string);
     }
 
+    // Roof rights filter (2026-06-28): only listings that include rights to the roof.
+    if (roof_rights === 'true' || roof_rights === true) where.roof_rights = true;
+
     // 2026-05-13: previously default sort was media_score DESC, which pushed every fresh
     // upload (media_score=0 at create time) to the bottom of the listing page. 265 of 336
     // active inventories had media_score=0 — users complained website never refreshed.
@@ -170,9 +173,9 @@ router.get('/properties', cache(300), async (req, res) => {
                     location: true, price: true, price_unit: true, status: true,
                     intent: true, media_urls: true, created_at: true,
                     display_price: true, city: true, district: true, locality: true,
-                    floor_number: true,
+                    floor_number: true, floor_label: true, display_floor: true,
                     // features/furnishing/total_floors dropped Phase 4 — read from specs.*
-                    apartment_name: true, is_enriched: true, ownership_type: true, renovated: true,
+                    apartment_name: true, is_enriched: true, ownership_type: true, renovated: true, roof_rights: true,
                     pre_rented: true, pre_rented_monthly_rent: true,
                     sub_locality: true,
                     flat_property_type: { select: { name: true, main_category: true } },
@@ -249,10 +252,10 @@ router.get('/properties/:id', cache(300), async (req, res) => {
                 intent: true, media_urls: true, video_urls: true, created_at: true, updated_at: true,
                 owner_phone: true, tenant_id: true,
                 display_price: true, city: true, district: true,
-                description: true, floor_number: true,
+                description: true, floor_number: true, floor_label: true, display_floor: true,
                 // features/furnishing/total_floors/facing/property_age dropped Phase 4 — read from specs.*
                 locality: true, sub_locality: true, state: true, pincode: true, apartment_name: true,
-                latitude: true, longitude: true, renovated: true,
+                latitude: true, longitude: true, renovated: true, roof_rights: true,
                 pre_rented: true, pre_rented_monthly_rent: true,
                 flat_property_type: { select: { name: true, main_category: true } },
                 taxonomy_node: { select: { id: true, name: true, slug: true } },
@@ -784,7 +787,7 @@ router.post('/schedule-visit', validate(scheduleVisitSchema), async (req, res) =
         // Route the lead: EXISTING → their agent; NEW → the inventory manager (assigned
         // agent → owning manager → uploader → super_boss). resolveStoredContactPhone is
         // applied inside so a legacy bare/dash-stored contact is matched, not duplicated.
-        const { storedPhone, isNew, handlerId } = await resolveWebsiteLeadHandler(phone, property || { assigned_agent_id: null, owning_manager_id: null, uploaded_by_agent_id: null });
+        const { storedPhone, isNew, handlerId, handlerMethod } = await resolveWebsiteLeadHandler(phone, property || { assigned_agent_id: null, owning_manager_id: null, uploaded_by_agent_id: null });
 
         // Upsert contact FIRST (contact_id is required for ScheduledVisit). A NEW lead is
         // OWNED by the handler (visible in CRM/PWA) + gets a requirement mirroring the
@@ -806,6 +809,7 @@ router.post('/schedule-visit', validate(scheduleVisitSchema), async (req, res) =
                 last_channel: 'website',
                 last_interaction: new Date(),
                 assigned_agent_id: handlerId,
+                assignment_method: handlerMethod, // Phase 5C — inventory-manager cascade vs super_boss fallback
                 owning_manager_id: handlerId,
                 ...(property ? buildDemandFromInventory(property) : { contact_type: 'BUYER', intent: 'buy' }),
             }
@@ -1132,7 +1136,7 @@ router.get('/properties/:id/ai-description', cache(300), async (req, res) => {
                 // features/furnishing/facing/property_age/total_floors dropped Phase 4 — read from specs.*
                 description: true,
                 apartment_name: true,
-                floor_number: true,
+                floor_number: true, floor_label: true, display_floor: true,
                 property_configuration: { select: { name: true } },
             }
         });
@@ -1162,6 +1166,8 @@ router.get('/properties/:id/ai-description', cache(300), async (req, res) => {
             description: property.description,
             apartment_name: property.apartment_name,
             floor_number: property.floor_number,
+            floor_label: (property as any).floor_label ?? null,
+            display_floor: (property as any).display_floor ?? null,
             total_floors: (property.specs as any)?.floors ?? null,
         }, lang);
 
@@ -1911,7 +1917,7 @@ router.post('/properties/:id/verify-otp', async (req, res) => {
         });
 
         // Route: EXISTING → their agent; NEW → the inventory manager.
-        const { storedPhone, handlerId } = await resolveWebsiteLeadHandler(
+        const { storedPhone, handlerId, handlerMethod } = await resolveWebsiteLeadHandler(
             normalizedPhone,
             inventory || { assigned_agent_id: null, owning_manager_id: null, uploaded_by_agent_id: null }
         );
@@ -1929,6 +1935,7 @@ router.post('/properties/:id/verify-otp', async (req, res) => {
                     last_channel: 'website',
                     last_interaction: new Date(),
                     assigned_agent_id: handlerId,
+                    assignment_method: handlerMethod, // Phase 5C — inventory-manager cascade vs super_boss fallback
                     owning_manager_id: handlerId,
                     ...(inventory ? buildDemandFromInventory(inventory) : { contact_type: 'BUYER', intent: 'buy' }),
                 },
