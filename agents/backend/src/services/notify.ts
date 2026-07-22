@@ -99,13 +99,30 @@ async function _dispatch(
             // WhatsApp
             const waEnabled = prefs?.whatsapp_enabled !== false;
             if (waEnabled && recipient.phone && config.defaultChannels.includes('whatsapp')) {
+                const waTo = normalizePhone(recipient.phone) || recipient.phone;
+                const waMessage = `*${title}*\n\n${body}`;
                 try {
-                    await notificationAgent.send({
-                        to: normalizePhone(recipient.phone) || recipient.phone,
-                        channel: 'whatsapp',
-                        message: `*${title}*\n\n${body}`,
-                        log_interaction: false, // we log our own Notification row
-                    });
+                    if (config.waTemplate) {
+                        // 2026-07-22: staff alerts bounced with 131047 once the recipient's 24h
+                        // window closed. smartSend keeps the richer free-form text inside the
+                        // window and switches to the approved template outside it.
+                        const { SessionTracker } = await import('./session_tracker');
+                        const { WhatsAppService } = await import('./whatsapp');
+                        await SessionTracker.smartSend(
+                            new WhatsAppService(),
+                            waTo,
+                            waMessage,
+                            config.waTemplate.key,
+                            config.waTemplate.params(data),
+                        );
+                    } else {
+                        await notificationAgent.send({
+                            to: waTo,
+                            channel: 'whatsapp',
+                            message: waMessage,
+                            log_interaction: false, // we log our own Notification row
+                        });
+                    }
                     channelsSent.push('whatsapp');
                 } catch (err) {
                     logger.warn(`[Notify] WhatsApp failed for ${event} to ${recipient.id}:`, err);

@@ -11,6 +11,22 @@ export interface NotificationEventConfig {
     defaultChannels: ('whatsapp' | 'email' | 'push')[];
     actionUrl?: (data: Record<string, any>) => string;
     prefKey?: string; // key in event_preferences JSON to check (falls back to category-level)
+    /**
+     * Optional Meta-approved WhatsApp template (2026-07-22).
+     *
+     * Free-form WhatsApp text only delivers inside the 24h customer-service window, which closes
+     * 24h after the RECIPIENT last messaged the bot. For STAFF alerts that means notifications
+     * silently stop for anyone who doesn't chat with the bot daily — after the Jul-13 outage
+     * lapsed every window, 13 of 14 staff stopped receiving lead alerts (error 131047).
+     *
+     * When set, notify() routes through SessionTracker.smartSend: the richer free-form text
+     * inside the window, this approved template outside it. Template params must all be
+     * non-empty, hence the 'N/A' fallbacks (same convention as interaction_engine.ts).
+     */
+    waTemplate?: {
+        key: string;
+        params: (data: Record<string, any>) => Record<string, string>;
+    };
 }
 
 export const NOTIFICATION_EVENTS: Record<string, NotificationEventConfig> = {
@@ -96,6 +112,19 @@ export const NOTIFICATION_EVENTS: Record<string, NotificationEventConfig> = {
         title: (d) => 'New Lead Assigned to You',
         body: (d) => `${d.name || 'A lead'} (${d.phone || ''}) — ${d.property_label || d.source || 'new lead'} assigned to you`,
         defaultChannels: ['whatsapp', 'push'],
+        // Highest-value staff alert — a new lead needs contact within 24h, so it must arrive
+        // even when the agent's session window has closed.
+        waTemplate: {
+            key: 'rp_tx_lead_assigned',
+            params: (d) => ({
+                name: d.name || d.lead_name || 'New lead',
+                property_type: d.property_label || d.property_type || 'N/A',
+                location: d.location || 'N/A',
+                budget: d.budget || 'N/A',
+                type: d.type || 'Sale',
+                source: d.source || 'N/A',
+            }),
+        },
         actionUrl: (d) => `#/leads`,
         prefKey: 'new_lead_notification',
     },
