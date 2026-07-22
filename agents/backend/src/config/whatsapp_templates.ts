@@ -492,6 +492,19 @@ export const TEMPLATE_REGISTRY: Record<string, TemplateDefinition> = {
     // outside the 24h window — unlike the free-form text these alerts used to use,
     // which bounced with 131047 for 33 of 34 staff.
     // NOTE: distinct from rp_executive_reassigned below, which is CUSTOMER-facing.
+    rp_agent_lead_reassigned: {
+        name: 'rp_agent_lead_reassigned',
+        category: 'UTILITY',
+        language: 'en',
+        body: '🔄 Lead reassigned to you\n\n👤 Lead: {{1}}\n📞 Phone: {{2}}\n↪️ From: {{3}}\n📝 Reason: {{4}}\n\nOpen the CRM to take it forward.',
+        params: [
+            { key: 'lead', example: 'Amit Sharma' },
+            { key: 'phone', example: '+919876543210' },
+            { key: 'from', example: 'Hardiq' },
+            { key: 'reason', example: 'Workload balancing' },
+        ],
+    },
+
     rp_agent_deal_reassigned: {
         name: 'rp_agent_deal_reassigned',
         category: 'UTILITY',

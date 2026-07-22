@@ -143,6 +143,16 @@ export const NOTIFICATION_EVENTS: Record<string, NotificationEventConfig> = {
         title: (d) => 'Lead Reassigned to You',
         body: (d) => `${d.lead_name || 'A lead'} (${d.phone || ''}) reassigned to you by ${d.from_agent || 'a team member'}${d.reason ? ' — ' + d.reason : ''}`,
         defaultChannels: ['whatsapp', 'push'],
+        // Approved 2026-07-22 — delivers even when the agent's 24h window has closed.
+        waTemplate: {
+            key: 'rp_agent_lead_reassigned',
+            params: (d) => ({
+                lead: d.lead_name || d.name || 'A lead',
+                phone: d.phone || 'N/A',
+                from: d.from_agent || 'a team member',
+                reason: d.reason || 'N/A',
+            }),
+        },
         actionUrl: (d) => `#/leads`,
         prefKey: 'new_lead_notification',
     },
