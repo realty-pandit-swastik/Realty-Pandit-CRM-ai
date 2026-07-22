@@ -445,32 +445,76 @@ How can I help you find your perfect property today? 🏡`;
             orderBy: { updated_at: 'desc' },
         });
 
-        if (activeDeal) {
-            // ── 3b.1 Closing signal detection (Hindi/English/Hinglish) ──
-            // Split into two DISTINCT meanings (2026-07-13) — these used to share one
-            // pattern array and one hardcoded reply, so a lead saying "not interested,
-            // close my query" got told "congratulations on finalizing!". Same ON_HOLD +
-            // task handling for both, but different copy and a correct lost_reason.
-            const finalizedElsewherePatterns = [
-                /humne\s*(le|li|liya|li\s*hai|kha?ri?d)/i,
-                /already\s*(bought|got|taken|purchased|finalized|done)/i,
-                /property\s*mil\s*(gayi|gaya|gay[ai])/i,
-                /property\s*(le?\s*li|li\s*hai|kha?ri?d\s*li)/i,
-                /(flat|ghar|makan)\s*(le?\s*li|li\s*hai|le\s*liya|kha?ri?d\s*liya)/i,
-                /(buy|kha?ri?d)\s*kar\s*li/i,
-                /book\s*kar\s*li/i,
-            ];
-            const withdrawingPatterns = [
-                /\bnot\s*interested\b/i,
-                /\bno\s*(thanks|thank\s*you|thanx)\b/i,
-                /\bmat\s*bhejo\b/i,
-                /\bstop\s*(messages?|messaging|sending)\b/i,
-                /\bunsubscribe\b/i,
-            ];
-            const isFinalizedElsewhere = finalizedElsewherePatterns.some(re => re.test(text || ''));
-            const isWithdrawing = withdrawingPatterns.some(re => re.test(text || ''));
-            const isClosingSignal = isFinalizedElsewhere || isWithdrawing;
+        // ── 3b.1 Closing signal detection (Hindi/English/Hinglish) ──
+        // Split into two DISTINCT meanings (2026-07-13) — these used to share one
+        // pattern array and one hardcoded reply, so a lead saying "not interested,
+        // close my query" got told "congratulations on finalizing!". Same ON_HOLD +
+        // task handling for both, but different copy and a correct lost_reason.
+        //
+        // OPT-OUT (2026-07-22): this whole block used to live INSIDE `if (activeDeal)`,
+        // so anyone without an open NEW/QUALIFIED deal who asked us to stop was never
+        // even evaluated. Detection now runs first, and a withdrawal is honoured with
+        // or without a deal. Audit that prompted this: 21 people asked us to stop and
+        // ALL 21 kept receiving messages (98 sends) — the behaviour Meta locked the
+        // account for ("Sending spam", 13 Jul).
+        const finalizedElsewherePatterns = [
+            /humne\s*(le|li|liya|li\s*hai|kha?ri?d)/i,
+            /already\s*(bought|got|taken|purchased|finalized|done)/i,
+            /property\s*mil\s*(gayi|gaya|gay[ai])/i,
+            /property\s*(le?\s*li|li\s*hai|kha?ri?d\s*li)/i,
+            /(flat|ghar|makan)\s*(le?\s*li|li\s*hai|le\s*liya|kha?ri?d\s*liya)/i,
+            /(buy|kha?ri?d)\s*kar\s*li/i,
+            /book\s*kar\s*li/i,
+        ];
+        const withdrawingPatterns = [
+            /\bnot\s*interested\b/i,
+            /\bno\s*(thanks|thank\s*you|thanx)\b/i,
+            /\bmat\s*bhejo\b/i,
+            // Negative lookbehind added 2026-07-22: "please dont stop sending options" is a
+            // request to KEEP messaging, but matched "stop sending" and silenced the lead.
+            /(?<!(?:do\s*not|don'?t|dont)\s{0,3})\bstop\s*(messages?|messaging|sending)\b/i,
+            /\bunsubscribe\b/i,
+            // A BARE "stop" is Meta's universal opt-out keyword and matched nothing here —
+            // 23 people sent exactly that. Anchored to the WHOLE message on purpose, so
+            // "stop by the property tomorrow" / "bus stop" / "non-stop" do NOT trip it.
+            /^\s*(stop|stop[.!]|unsubscribe|band\s*karo|bas\s*karo|no\s*more)\s*$/i,
+            /\b(do\s*n[o']?t|dont|don't)\s*(text|message|msg|contact|call)\b/i,
+            /\b(remove|delete)\s*(me|my\s*number)\b/i,
+            /\b(ab|aage)\s*(koi\s*)?(message|msg|sms)\s*(mat|na|nahi)\b/i,
+        ];
+        const isFinalizedElsewhere = finalizedElsewherePatterns.some(re => re.test(text || ''));
+        const isWithdrawing = withdrawingPatterns.some(re => re.test(text || ''));
+        const isClosingSignal = isFinalizedElsewhere || isWithdrawing;
 
+        // No open deal, but they asked us to stop — still honour it. Previously fell
+        // through to the generic bot flow and kept the conversation (and sends) going.
+        if (!activeDeal && isWithdrawing) {
+            logger.info(`[WebhookProcessor] Opt-out (no active deal) from ${from}: "${text}"`);
+            await prisma.interaction.create({
+                data: {
+                    tenant_id: contact.tenant_id,
+                    phone_number: from,
+                    channel: 'whatsapp',
+                    direction: 'inbound',
+                    event_type: 'closing_signal',
+                    content: text,
+                    metadata: { action: 'opt_out', reason: 'NOT_INTERESTED', no_active_deal: true },
+                },
+            }).catch(() => {});
+            const ack = 'Samajh gaya, koi baat nahi 🙏 Aapko is baare mein aur messages nahi karenge. Agar future mein kabhi zaroorat ho to hum yahin hain. Dhanyawad!';
+            await whatsappService.sendText(from, ack).catch(() => {});
+            await prisma.contact.update({
+                where: { phone_number: from },
+                data: { last_channel: 'whatsapp', last_interaction: new Date(), opted_out_at: new Date() },
+            }).catch(() => {});
+            await prisma.transaction.updateMany({
+                where: { demand_contact_id: from, ai_paused: false },
+                data: { ai_paused: true },
+            }).catch(() => {});
+            return;
+        }
+
+        if (activeDeal) {
             if (isClosingSignal) {
                 logger.info(`[WebhookProcessor] Closing signal (${isFinalizedElsewhere ? 'finalized-elsewhere' : 'withdrawing'}) detected from ${from} on deal ${activeDeal.id}: "${text}"`);
 
@@ -551,8 +595,23 @@ How can I help you find your perfect property today? 🏡`;
                         last_interaction: new Date(),
                         lost_reason: isFinalizedElsewhere ? 'PURCHASED_ELSEWHERE' : 'NOT_INTERESTED',
                         lost_at: new Date(),
+                        // Consent, not pipeline outcome (2026-07-22). ONLY a withdrawal opts them
+                        // out — a "purchased elsewhere" is acked with "hum aage bhi achhi
+                        // opportunities share karenge", so suppressing them would break that promise.
+                        ...(isWithdrawing ? { opted_out_at: new Date() } : {}),
                     },
                 });
+
+                // Pause AI on EVERY deal this contact has, not just the active one. ai_paused is
+                // the existing suppression convention (honoured by property_sharing,
+                // inventory_broadcast, pipeline_crons, interaction_engine), and a future deal
+                // would otherwise resume messaging someone who already asked us to stop.
+                if (isWithdrawing) {
+                    await prisma.transaction.updateMany({
+                        where: { demand_contact_id: from, ai_paused: false },
+                        data: { ai_paused: true },
+                    }).catch(() => {});
+                }
                 return;
             }
 

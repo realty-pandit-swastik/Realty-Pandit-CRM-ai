@@ -71,6 +71,9 @@ export class FollowupScheduler {
                     lead_status: { in: ['warm', 'hot'] },
                     contact_type: { in: ['BUYER', 'TENANT', 'LANDLORD'] },
                     last_interaction: { lt: cutoffDate },
+                    // Never follow up with someone who asked us to stop (2026-07-22).
+                    // This service does not honour ai_paused, so it needs its own guard.
+                    opted_out_at: null,
                     // Don't follow up on contacts that already have a pending follow-up task
                     NOT: {
                         tasks: {

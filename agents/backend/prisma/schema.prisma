@@ -101,6 +101,11 @@ model Contact {
   // Additive nullable columns; values are enum-like strings validated at the API layer.
   lost_reason       String? // BUDGET | LOCATION | PROPERTY_MISMATCH | NOT_INTERESTED | PURCHASED_ELSEWHERE | NO_RESPONSE | WRONG_NUMBER | DUPLICATE | COMPETITOR | OTHER
   lost_at           DateTime?
+  /// Consent, NOT sales outcome (2026-07-22). Set when the customer asks us to stop
+  /// ("stop", "unsubscribe", "band karo"...). Suppresses PROACTIVE outbound only —
+  /// replies to messages they start are still allowed. Deliberately separate from
+  /// lost_reason, which is a pipeline field (BUDGET/LOCATION/...) and must not silence anyone.
+  opted_out_at      DateTime?
   stagnation_reason String? // CLIENT_NOT_RESPONDING | BUDGET_APPROVAL | FAMILY_DECISION | PROPERTY_NOT_AVAILABLE | SITE_VISIT_PENDING | LOAN_APPROVAL | DOCUMENTATION | FUTURE_PLAN | NEGOTIATION | OTHER
   stagnation_set_at DateTime?
 

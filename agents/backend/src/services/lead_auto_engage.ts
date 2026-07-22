@@ -30,6 +30,19 @@ const WEBSITE_URL = process.env.WEBSITE_URL || 'https://realtypandit.in';
  * Check if AI should modify this contact's data.
  * Returns false if a team member has already verified/edited the lead.
  */
+/**
+ * Has this contact asked us to stop? (2026-07-22)
+ * Proactive/automated sends must respect it; replies to a message THEY start are fine.
+ * This service does not gate on ai_paused, so the check lives here.
+ */
+async function hasOptedOut(phone: string): Promise<boolean> {
+    const c = await prisma.contact.findUnique({
+        where: { phone_number: phone },
+        select: { opted_out_at: true },
+    }).catch(() => null);
+    return !!c?.opted_out_at;
+}
+
 export async function isAILocked(phone: string): Promise<boolean> {
     const contact = await prisma.contact.findUnique({
         where: { phone_number: phone },
@@ -72,6 +85,10 @@ export async function saveQualificationData(
  * Called when a new lead arrives from WhatsApp, website, or portals.
  */
 export async function createExternalLeadRecord(phone: string, source: string): Promise<void> {
+    if (await hasOptedOut(phone)) {
+        logger.info(`[LeadAutoEngage] ${phone} has opted out — skipping automated engagement`);
+        return;
+    }
     try {
         const tenant = await prisma.tenant.findFirst();
         if (!tenant) return;
@@ -132,6 +149,10 @@ export async function createExternalLeadRecord(phone: string, source: string): P
  * Sends greeting + shows properties immediately. No re-qualification.
  */
 export async function autoEngageInternalLead(phone: string): Promise<void> {
+    if (await hasOptedOut(phone)) {
+        logger.info(`[LeadAutoEngage] ${phone} has opted out — skipping automated engagement`);
+        return;
+    }
     try {
         const contact = await prisma.contact.findUnique({
             where: { phone_number: phone },
