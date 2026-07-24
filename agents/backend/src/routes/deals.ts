@@ -706,6 +706,7 @@ router.get('/:id/matched-inventory', checkPermission('act_on_deals'), async (req
                         // resolved to legacy sub_category_ids (inventory's 100%-populated tier)
         radius_km,      // pin geo search to one radius
         roof_rights,    // 2026-06-28: only listings that include roof rights
+        area_unit, floor_min, floor_max, renovated, pre_leased, // 2026-07-24 Match&Share manual filters
     } = req.query as Record<string, string>;
 
     try {
@@ -786,8 +787,8 @@ router.get('/:id/matched-inventory', checkPermission('act_on_deals'), async (req
         });
 
         // Override area criteria if provided
-        if (area_min) criteria.area_min = parseFloat(area_min);
-        if (area_max) criteria.area_max = parseFloat(area_max);
+        if (area_min && !area_unit) criteria.area_min = parseFloat(area_min);
+        if (area_max && !area_unit) criteria.area_max = parseFloat(area_max);
         if (!area_min && (deal as any).demand_area_min) criteria.area_min = (deal as any).demand_area_min;
         if (!area_max && (deal as any).demand_area_max) criteria.area_max = (deal as any).demand_area_max;
 
@@ -815,12 +816,41 @@ router.get('/:id/matched-inventory', checkPermission('act_on_deals'), async (req
         const matches = await engine.findMatches(criteria, 50);
         // Roof-rights filter (2026-06-28): narrow the matched set to listings that include
         // roof rights. Post-filter by id so the matching engine stays untouched.
+        // Manual Match & Share post-filters (2026-07-24): roof-rights / renovated / pre-leased /
+        // floor range / unit-aware size. Applied by id on the match results so the matching engine
+        // (scoring) stays untouched — these are hard filters the agent toggles, not match signals.
         let matchList = matches;
-        if (roof_rights === 'true' && matches.length) {
-            const ids = matches.map((m: any) => m.id);
-            const rr = await prisma.inventory.findMany({ where: { id: { in: ids }, roof_rights: true }, select: { id: true } });
-            const rrSet = new Set(rr.map((r: any) => r.id));
-            matchList = matches.filter((m: any) => rrSet.has(m.id));
+        {
+            const needArea = !!area_unit && (!!area_min || !!area_max);
+            const needFloor = !!floor_min || !!floor_max;
+            const needFlags = roof_rights === 'true' || renovated === 'true' || pre_leased === 'true';
+            if (matches.length && (needArea || needFloor || needFlags)) {
+                const ids = matches.map((m: any) => m.id);
+                const rows = await prisma.inventory.findMany({
+                    where: { id: { in: ids } },
+                    select: { id: true, roof_rights: true, renovated: true, pre_rented: true, floor_number: true, specs: true },
+                });
+                const lo = area_min ? parseFloat(area_min) : -Infinity;
+                const hi = area_max ? parseFloat(area_max) : Infinity;
+                const fLo = floor_min ? parseInt(floor_min, 10) : -Infinity;
+                const fHi = floor_max ? parseInt(floor_max, 10) : Infinity;
+                const keep = new Set(rows.filter((r: any) => {
+                    if (roof_rights === 'true' && !r.roof_rights) return false;
+                    if (renovated === 'true' && !r.renovated) return false;
+                    if (pre_leased === 'true' && !r.pre_rented) return false;
+                    if (needFloor) { const fn = r.floor_number; if (fn == null || fn < fLo || fn > fHi) return false; }
+                    if (needArea) {
+                        const sp = (r.specs && typeof r.specs === 'object' && !Array.isArray(r.specs)) ? r.specs as any : {};
+                        const a = Number(sp.area);
+                        const u = (sp.area_unit || '').toString();
+                        if (!Number.isFinite(a) || a < lo || a > hi) return false;
+                        if (area_unit === 'sqft') { if (!(u === 'sqft' || u === '')) return false; }
+                        else if (u !== area_unit) return false;
+                    }
+                    return true;
+                }).map((r: any) => r.id));
+                matchList = matches.filter((m: any) => keep.has(m.id));
+            }
         }
         const results = matchList.map((m: any) => ({
             ...m,

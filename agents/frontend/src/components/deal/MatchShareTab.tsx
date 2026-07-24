@@ -269,6 +269,14 @@ export function MatchShareTab({ deal, onShared }: Props) {
     const [radiusKm, setRadiusKm] = useState<number | null>(null); // null = auto-escalate 2→20
     const [location, setLocation] = useState<string>(deal.demand_location || (deal.demand_contact as any)?.preferred_location || '');
     const [roofRights, setRoofRights] = useState<boolean>(false); // roof-rights match filter (2026-06-28)
+    // Manual Match & Share filters (2026-07-24) — hard filters the agent toggles, not match signals.
+    const [areaMin, setAreaMin] = useState<string>('');
+    const [areaMax, setAreaMax] = useState<string>('');
+    const [areaUnit, setAreaUnit] = useState<string>('sqft'); // sqft | sqyd | sqm
+    const [floorMin, setFloorMin] = useState<string>('');
+    const [floorMax, setFloorMax] = useState<string>('');
+    const [renovated, setRenovated] = useState<boolean>(false);
+    const [preLeased, setPreLeased] = useState<boolean>(false);
 
     const [results, setResults] = useState<MatchedProperty[]>([]);
     const [loading, setLoading] = useState(false);
@@ -310,7 +318,7 @@ export function MatchShareTab({ deal, onShared }: Props) {
     const typeGroups = useMemo(() => (categoryNode ? collectTypeGroups(categoryNode) : []), [categoryNode]);
 
     // ── Search ─────────────────────────────────────────────────────────────────
-    type Snapshot = { bhkSet: Set<number>; typeNodeSet: Set<string>; budgetMin: string; budgetMax: string; radiusKm: number | null; location: string; roofRights: boolean };
+    type Snapshot = { bhkSet: Set<number>; typeNodeSet: Set<string>; budgetMin: string; budgetMax: string; radiusKm: number | null; location: string; roofRights: boolean; areaMin: string; areaMax: string; areaUnit: string; floorMin: string; floorMax: string; renovated: boolean; preLeased: boolean };
     const buildParams = (s: Snapshot): Record<string, string> => {
         const p: Record<string, string> = {};
         if (intent) p.intent = intent;
@@ -320,6 +328,15 @@ export function MatchShareTab({ deal, onShared }: Props) {
         if (s.typeNodeSet.size) p.type_node_list = [...s.typeNodeSet].join(',');
         if (s.radiusKm != null) p.radius_km = String(s.radiusKm);
         if (s.roofRights) p.roof_rights = 'true';
+        if (s.areaMin || s.areaMax) {
+            if (s.areaMin) p.area_min = s.areaMin;
+            if (s.areaMax) p.area_max = s.areaMax;
+            p.area_unit = s.areaUnit; // unit set → backend routes to the unit-aware post-filter
+        }
+        if (s.floorMin) p.floor_min = s.floorMin;
+        if (s.floorMax) p.floor_max = s.floorMax;
+        if (s.renovated) p.renovated = 'true';
+        if (s.preLeased) p.pre_leased = 'true';
         // Always send `location` (even empty) so clearing it actually drops the filter — the
         // endpoint only falls back to the deal's stored location when the param is ABSENT.
         p.location = s.location || '';
@@ -327,7 +344,7 @@ export function MatchShareTab({ deal, onShared }: Props) {
     };
 
     const runSearch = useCallback(async (override?: Partial<Snapshot>) => {
-        const snap: Snapshot = { bhkSet, typeNodeSet, budgetMin, budgetMax, radiusKm, location, roofRights, ...override };
+        const snap: Snapshot = { bhkSet, typeNodeSet, budgetMin, budgetMax, radiusKm, location, roofRights, areaMin, areaMax, areaUnit, floorMin, floorMax, renovated, preLeased, ...override };
         setLoading(true);
         setSendResults({});
         try {
@@ -338,7 +355,7 @@ export function MatchShareTab({ deal, onShared }: Props) {
         } finally {
             setLoading(false);
         }
-    }, [deal.id, bhkSet, typeNodeSet, budgetMin, budgetMax, radiusKm, location, roofRights, intent, showToast]);
+    }, [deal.id, bhkSet, typeNodeSet, budgetMin, budgetMax, radiusKm, location, roofRights, areaMin, areaMax, areaUnit, floorMin, floorMax, renovated, preLeased, intent, showToast]);
 
     // First load: once the tree resolves, default-select the deal's own TYPE node and search
     // with it EXPLICITLY (override) — avoids the stale-closure race where the auto-search would
@@ -553,6 +570,17 @@ export function MatchShareTab({ deal, onShared }: Props) {
                 onChangeRadius={changeRadius}
                 onSetLocation={(loc) => { setLocation(loc); runSearch({ location: loc }); }}
                 onToggleRoof={() => { const next = !roofRights; setRoofRights(next); runSearch({ roofRights: next }); }}
+                areaMin={areaMin}
+                areaMax={areaMax}
+                areaUnit={areaUnit}
+                floorMin={floorMin}
+                floorMax={floorMax}
+                renovated={renovated}
+                preLeased={preLeased}
+                onSetArea={(min, max, unit) => { setAreaMin(min); setAreaMax(max); setAreaUnit(unit); runSearch({ areaMin: min, areaMax: max, areaUnit: unit }); }}
+                onSetFloor={(min, max) => { setFloorMin(min); setFloorMax(max); runSearch({ floorMin: min, floorMax: max }); }}
+                onToggleRenovated={() => { const next = !renovated; setRenovated(next); runSearch({ renovated: next }); }}
+                onTogglePreLeased={() => { const next = !preLeased; setPreLeased(next); runSearch({ preLeased: next }); }}
             />
 
             {/* Slim action row — broaden + sort kept off the bar so it stays clean. */}
