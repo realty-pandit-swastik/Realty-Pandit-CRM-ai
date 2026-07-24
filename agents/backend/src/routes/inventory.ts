@@ -498,6 +498,34 @@ router.get('/', authMiddleware, async (req, res) => {
             }
         }
 
+        // Size / area range filter (2026-07-24): area_min / area_max in a chosen unit.
+        // specs.area is a JSON number; units are mixed (sqft/sqm/sqyd + some blank). Raw-SQL id
+        // prefilter (same pattern as proximity below) gives clean numeric + unit matching. When the
+        // unit is sqft we also match rows with no stored unit (154 rows) — most are sqft anyway.
+        {
+            const areaMin = req.query.area_min ? parseFloat(String(req.query.area_min)) : NaN;
+            const areaMax = req.query.area_max ? parseFloat(String(req.query.area_max)) : NaN;
+            const areaUnit = typeof req.query.area_unit === 'string' && req.query.area_unit ? String(req.query.area_unit) : 'sqft';
+            if (!isNaN(areaMin) || !isNaN(areaMax)) {
+                const lo = isNaN(areaMin) ? 0 : areaMin;
+                const hi = isNaN(areaMax) ? Number.MAX_SAFE_INTEGER : areaMax;
+                const unitCond = areaUnit === 'sqft'
+                    ? `(coalesce(specs->>'area_unit','') IN ('sqft',''))`
+                    : `(specs->>'area_unit' = $3)`;
+                const params: any[] = [lo, hi];
+                if (areaUnit !== 'sqft') params.push(areaUnit);
+                const rows = await prisma.$queryRawUnsafe<{ id: string }[]>(
+                    `SELECT id FROM inventory
+                     WHERE specs ? 'area' AND jsonb_typeof(specs->'area')='number'
+                       AND (specs->>'area')::numeric >= $1 AND (specs->>'area')::numeric <= $2
+                       AND ${unitCond}`,
+                    ...params,
+                );
+                const areaIds = rows.map(r => r.id);
+                where.AND = [...(where.AND || []), { id: { in: areaIds } }];
+            }
+        }
+
         // Roof rights filter (2026-06-28): ?roof_rights=true → only listings that include roof rights.
         if (req.query.roof_rights === 'true') where.roof_rights = true;
 

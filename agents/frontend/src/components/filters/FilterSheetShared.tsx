@@ -206,9 +206,12 @@ const RADIUS_OPTIONS = [
 export function FilterLocationSection({
     value,
     onChange,
+    bare = false,
 }: {
     value: LocationSelection;
     onChange: (v: LocationSelection) => void;
+    /** 2026-07-24: render inner only (no own FilterSection) so a caller can merge it into their own 'Location' section. */
+    bare?: boolean;
 }) {
     const inputRef = useRef<HTMLInputElement>(null);
     const acRef = useRef<any>(null);
@@ -256,8 +259,8 @@ export function FilterLocationSection({
 
     const hasLocation = value.lat != null && value.lng != null;
 
-    return (
-        <FilterSection title="Location" defaultOpen={false} badge={hasLocation ? 1 : 0}>
+    const inner = (
+        <>
             <div style={{ position: 'relative', marginBottom: hasLocation ? '10px' : 0 }}>
                 <input
                     ref={inputRef}
@@ -296,7 +299,10 @@ export function FilterLocationSection({
                     </div>
                 </div>
             )}
-        </FilterSection>
+        </>
+    );
+    return bare ? inner : (
+        <FilterSection title="Location" defaultOpen={false} badge={hasLocation ? 1 : 0}>{inner}</FilterSection>
     );
 }
 

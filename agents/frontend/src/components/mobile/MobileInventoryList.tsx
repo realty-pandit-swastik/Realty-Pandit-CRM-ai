@@ -74,6 +74,9 @@ export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryLis
     // Budget + roof-rights filters (#3 + roof, 2026-06-28)
     const [filterPriceMin, setFilterPriceMin] = useState('');
     const [filterPriceMax, setFilterPriceMax] = useState('');
+    const [filterAreaMin, setFilterAreaMin] = useState('');
+    const [filterAreaMax, setFilterAreaMax] = useState('');
+    const [filterAreaUnit, setFilterAreaUnit] = useState('sqft'); // sqft | sqyd | sqm
     const [filterRoofRights, setFilterRoofRights] = useState(false);
     // Bulk reassign (#4, 2026-06-28)
     const [showReassignModal, setShowReassignModal] = useState(false);
@@ -117,7 +120,7 @@ export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryLis
         }).catch(() => {});
     }, []);
 
-    useEffect(() => { loadData(); }, [page, filterIntent, filterBrowseAll, filterStatus, filterAgent, filterTaxonomy, filterLocation, filterLocationSelection, filterListingSource, filterDataSource, filterDaysInSystem, filterDaysNoVisit, filterFloors, filterPriceMin, filterPriceMax, filterRoofRights]);
+    useEffect(() => { loadData(); }, [page, filterIntent, filterBrowseAll, filterStatus, filterAgent, filterTaxonomy, filterLocation, filterLocationSelection, filterListingSource, filterDataSource, filterDaysInSystem, filterDaysNoVisit, filterFloors, filterPriceMin, filterPriceMax, filterAreaMin, filterAreaMax, filterAreaUnit, filterRoofRights]);
 
     // Per-filter counts for the filter sheet (mirrors the desktop list). (2026-06-26)
     useEffect(() => {
@@ -178,6 +181,11 @@ export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryLis
             if (filterFloors.length > 0) params.floors = filterFloors.join(',');
             if (filterDaysNoVisit > 0) params.days_no_visit = String(filterDaysNoVisit);
             if (filterPriceMin.trim()) params.price_min = filterPriceMin.trim();
+            if (filterAreaMin.trim() || filterAreaMax.trim()) {
+                if (filterAreaMin.trim()) params.area_min = filterAreaMin.trim();
+                if (filterAreaMax.trim()) params.area_max = filterAreaMax.trim();
+                params.area_unit = filterAreaUnit;
+            }
             if (filterPriceMax.trim()) params.price_max = filterPriceMax.trim();
             if (filterRoofRights) params.roof_rights = 'true';
             const res = await getInventory(params);
@@ -1036,14 +1044,14 @@ export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryLis
                                 setFilterDaysInSystem(0); setFilterDaysNoVisit(0);
                                 setFilterFloors([]);
                                 setFilterAgent('');
-                                setFilterPriceMin(''); setFilterPriceMax(''); setFilterRoofRights(false);
+                                setFilterPriceMin(''); setFilterPriceMax(''); setFilterAreaMin(''); setFilterAreaMax(''); setFilterAreaUnit('sqft'); setFilterRoofRights(false);
                             }} style={{ background: 'none', border: 'none', color: 'var(--text-link)', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}>
                                 Clear All
                             </button>
                         </div>
 
                         {/* Text address search (locality/area/city) — finds listings without lat/lng too. (2026-06-26) */}
-                        <FilterSection title="Location (locality / area / city)" defaultOpen={false} badge={filterLocation.trim() ? 1 : 0}>
+                        <FilterSection title="Location" defaultOpen={false} badge={(filterLocation.trim() ? 1 : 0) + (filterLocationSelection.lat !== null ? 1 : 0)}>
                             <input
                                 value={filterLocation}
                                 onChange={e => setFilterLocation(e.target.value)}
@@ -1055,11 +1063,12 @@ export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryLis
                                 }}
                             />
                             <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>
-                                Searches the property address. For near-me radius, use the map location below.
+                                Text search matches the address. Or pin a point below for a near-me radius.
                             </div>
+                            <div style={{ borderTop: '1px solid var(--border-secondary)', margin: '12px 0 4px' }} />
+                            <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600, marginBottom: '6px', textTransform: 'uppercase' }}>Near me (map radius)</div>
+                            <FilterLocationSection value={filterLocationSelection} onChange={setFilterLocationSelection} bare />
                         </FilterSection>
-
-                        <FilterLocationSection value={filterLocationSelection} onChange={setFilterLocationSelection} />
 
                         <FilterSection title="Listing Source" defaultOpen={false} badge={filterListingSource ? 1 : 0}>
                             <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
@@ -1096,6 +1105,22 @@ export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryLis
                                     style={{ width: '100%', padding: '9px 12px', borderRadius: '10px', border: '1px solid var(--border-secondary)', backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)', fontSize: '13px', boxSizing: 'border-box' }} />
                                 <input type="number" inputMode="numeric" value={filterPriceMax} onChange={e => setFilterPriceMax(e.target.value)} placeholder="Max ₹"
                                     style={{ width: '100%', padding: '9px 12px', borderRadius: '10px', border: '1px solid var(--border-secondary)', backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)', fontSize: '13px', boxSizing: 'border-box' }} />
+                            </div>
+                        </FilterSection>
+
+                        {/* Size / area range (2026-07-24) — Min–Max in a chosen unit */}
+                        <FilterSection title="Size (area)" defaultOpen={false} badge={(filterAreaMin.trim() || filterAreaMax.trim()) ? 1 : 0}>
+                            <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
+                                <input type="number" inputMode="numeric" value={filterAreaMin} onChange={e => setFilterAreaMin(e.target.value)} placeholder="Min"
+                                    style={{ width: '100%', padding: '9px 12px', borderRadius: '10px', border: '1px solid var(--border-secondary)', backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)', fontSize: '13px', boxSizing: 'border-box' }} />
+                                <input type="number" inputMode="numeric" value={filterAreaMax} onChange={e => setFilterAreaMax(e.target.value)} placeholder="Max"
+                                    style={{ width: '100%', padding: '9px 12px', borderRadius: '10px', border: '1px solid var(--border-secondary)', backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)', fontSize: '13px', boxSizing: 'border-box' }} />
+                            </div>
+                            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                                {[{ label: 'Sq.ft', value: 'sqft' }, { label: 'Sq.yd (Gaj)', value: 'sqyd' }, { label: 'Sq.m', value: 'sqm' }].map(opt => (
+                                    <button key={opt.value} type="button" onClick={() => setFilterAreaUnit(opt.value)}
+                                        className={`chip ${filterAreaUnit === opt.value ? 'chip-active' : 'chip-inactive'}`}>{opt.label}</button>
+                                ))}
                             </div>
                         </FilterSection>
 
