@@ -518,6 +518,20 @@ export const TEMPLATE_REGISTRY: Record<string, TemplateDefinition> = {
         ],
     },
 
+    // Agent task-assignment alert (approved 2026-07-24). Delivers reliably even when the
+    // agent's 24h WhatsApp session has closed — smartSend uses this outside the window.
+    rp_agent_task_assigned: {
+        name: 'rp_agent_task_assigned',
+        category: 'UTILITY',
+        language: 'en',
+        body: '\u2705 New task assigned\n\n\ud83d\udccb Task: {{1}}\n\ud83d\udc64 Regarding: {{2}}\n\u23f0 Due: {{3}}\n\nComplete it in the CRM before the due time.',
+        params: [
+            { key: 'task', example: 'Qualify Lead' },
+            { key: 'regarding', example: 'Naresh Kumar' },
+            { key: 'due', example: 'Today, 10:30 AM' },
+        ],
+    },
+
     rp_executive_reassigned: {
         name: 'rp_executive_reassigned_v2',
         category: 'UTILITY',

@@ -335,6 +335,15 @@ export const NOTIFICATION_EVENTS: Record<string, NotificationEventConfig> = {
         title: (d) => 'New Task Assigned',
         body: (d) => `"${(d.title || 'Task').substring(0, 60)}" assigned to you${d.due_date ? ' — due ' + d.due_date : ''}`,
         defaultChannels: ['push', 'whatsapp'],
+        // Approved 2026-07-24 — delivers the task alert even when the agent's 24h window has closed.
+        waTemplate: {
+            key: 'rp_agent_task_assigned',
+            params: (d) => ({
+                task: (d.title || 'CRM task').toString().replace(/\s+/g, ' ').trim().slice(0, 200) || 'CRM task',
+                regarding: d.customer_name || d.contact_name || d.regarding || d.lead_name || 'N/A',
+                due: d.due_date ? String(d.due_date) : 'soon',
+            }),
+        },
         actionUrl: (d) => `#/tasks`,
         prefKey: 'task_due_reminder',
     },
