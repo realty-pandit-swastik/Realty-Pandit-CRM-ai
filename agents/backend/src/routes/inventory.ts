@@ -1051,6 +1051,26 @@ router.patch('/:id', authMiddleware, checkPermission('edit_inventory'), async (r
             updateData.uploader_phone = normalized;
         }
 
+        // 2026-07-24: recompute full_address when structured address parts change.
+        // full_address is denormalised and shown on cards/public views. Editing plot_no etc.
+        // used to leave it stale (157 rows had a full_address not matching their plot_no).
+        // Discriminator: a Google-Places pick updates full_address IN THE SAME request (so we keep
+        // that rich string), whereas a manual part edit leaves full_address untouched — only then
+        // do we rebuild from the merged parts. Never clobbers a freshly-picked address.
+        {
+            const PARTS = ['flat_no', 'plot_no', 'apartment_name', 'locality', 'sub_locality', 'city', 'district', 'state', 'pincode'];
+            const structuralChanged = PARTS.some(k => updateData[k] !== undefined && String(updateData[k] ?? '') !== String((existing as any)[k] ?? ''));
+            const fullAddrProvided = updateData.full_address !== undefined && String(updateData.full_address ?? '') !== String(existing.full_address ?? '');
+            if (structuralChanged && !fullAddrProvided) {
+                const g = (k: string) => (updateData[k] !== undefined ? updateData[k] : (existing as any)[k]);
+                const city = g('city') || g('district');
+                const pincode = g('pincode');
+                const rebuilt = [g('flat_no'), g('plot_no'), g('apartment_name'), g('locality'), g('sub_locality'), city, g('state'), pincode ? `- ${pincode}` : '']
+                    .filter(Boolean).join(', ').replace(', -', ' -');
+                if (rebuilt.trim()) updateData.full_address = rebuilt;
+            }
+        }
+
         if (Object.keys(updateData).length === 0) {
             return res.status(400).json({ error: 'No valid fields to update' });
         }
