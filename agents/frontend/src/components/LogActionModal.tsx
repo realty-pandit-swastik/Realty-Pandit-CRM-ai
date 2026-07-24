@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import client from '../api/client';
+import client, { getDealPropertyShares, bookDealAppointment } from '../api/client';
+import { bhkOf, societyOf, propertyTypeLabel } from '../lib/specChips';
 
 export type LogActionType =
     | 'CALLED'
@@ -49,6 +50,12 @@ export function LogActionModal({ dealId, stage: _stage, actionType, onClose, onS
     const [meetingType, setMeetingType] = useState(MEETING_TYPES[0].value);
     const [submitting, setSubmitting]   = useState(false);
     const [error, setError]             = useState('');
+    // EXEC 6 (2026-07-24): "I Scheduled a Visit" pre-fills +24h and can tie the visit to an already-shared property.
+    const isSchedVisit = actionType === 'SCHEDULED_VISIT';
+    const isVisitAction = ['SCHEDULED_VISIT', 'CONFIRMED_VISIT', 'VISIT_RESCHEDULED'].includes(actionType);
+    const [shares, setShares] = useState<any[]>([]);
+    const [sharesLoading, setSharesLoading] = useState(false);
+    const [selectedInventoryId, setSelectedInventoryId] = useState<string>('');
 
     useEffect(() => {
         const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
@@ -56,10 +63,38 @@ export function LogActionModal({ dealId, stage: _stage, actionType, onClose, onS
         return () => window.removeEventListener('keydown', onKey);
     }, [onClose]);
 
+    // Pre-fill visit date + time to now + 24h (editable), in the user's local (IST) timezone.
+    useEffect(() => {
+        if (!isVisitAction) return;
+        const d = new Date(Date.now() + 24 * 60 * 60 * 1000);
+        const pad = (n: number) => String(n).padStart(2, '0');
+        setVisitDate(`${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`);
+        setVisitTime(`${pad(d.getHours())}:${pad(d.getMinutes())}`);
+    }, [isVisitAction]);
+
+    // Load the deal's already-shared properties so the agent can tie this visit to one.
+    useEffect(() => {
+        if (!isSchedVisit) return;
+        setSharesLoading(true);
+        getDealPropertyShares(dealId)
+            .then((res: any) => setShares(res?.data || []))
+            .catch(() => setShares([]))
+            .finally(() => setSharesLoading(false));
+    }, [isSchedVisit, dealId]);
+
     const handleSubmit = async () => {
         setSubmitting(true);
         setError('');
         try {
+            // "I Scheduled a Visit" tied to a shared property → create a real appointment: pins the
+            // inventory, moves the deal to Visit Scheduled, and notifies customer / coordinator / key holder.
+            if (isSchedVisit && selectedInventoryId) {
+                if (!visitDate || !visitTime) { setError('Please select date and time'); setSubmitting(false); return; }
+                await bookDealAppointment(dealId, { inventory_id: selectedInventoryId, date: visitDate, time: visitTime });
+                onSuccess();
+                onClose();
+                return;
+            }
             let resolvedActionType: string = actionType;
             let resolvedNewStatus: string | undefined;
 
@@ -160,6 +195,50 @@ export function LogActionModal({ dealId, stage: _stage, actionType, onClose, onS
                                 <span style={{ marginLeft: 8, color: '#d1d5db', fontSize: 14 }}>{m.label}</span>
                             </label>
                         ))}
+                    </div>
+                )}
+
+                {/* Shared-property selector — tie "I Scheduled a Visit" to one already-shared property */}
+                {isSchedVisit && (
+                    <div style={{ marginBottom: 14 }}>
+                        <label style={labelStyle}>Which shared property is this visit for?</label>
+                        {sharesLoading ? (
+                            <div style={{ fontSize: 13, color: '#9ca3af', padding: '6px 0' }}>Loading shared properties…</div>
+                        ) : shares.length === 0 ? (
+                            <div style={{ fontSize: 13, color: '#9ca3af', padding: '6px 0' }}>
+                                No properties shared yet — the visit will be logged without a linked property.
+                            </div>
+                        ) : (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 180, overflowY: 'auto' }}>
+                                {shares.map((sh: any) => {
+                                    const inv = sh.inventory || {};
+                                    const bhkVal = bhkOf(inv.specs);
+                                    const lbl = `${bhkVal ? bhkVal + 'BHK ' : ''}${propertyTypeLabel(inv)}`;
+                                    const soc = societyOf(inv) || inv.location || '—';
+                                    const sel = selectedInventoryId === sh.inventory_id;
+                                    return (
+                                        <div key={sh.id}
+                                            onClick={() => setSelectedInventoryId(sel ? '' : sh.inventory_id)}
+                                            style={{
+                                                display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', cursor: 'pointer',
+                                                borderRadius: 8, border: sel ? '1.5px solid #3b82f6' : '1px solid #374151',
+                                                background: sel ? 'rgba(59,130,246,0.12)' : '#111827',
+                                            }}>
+                                            <input type="radio" name="sched_property" checked={sel} readOnly style={{ pointerEvents: 'none' }} />
+                                            <span style={{ minWidth: 0 }}>
+                                                <span style={{ display: 'block', fontSize: 13, color: '#f3f4f6', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{lbl} — {soc}</span>
+                                                <span style={{ display: 'block', fontSize: 11, color: '#9ca3af' }}>{inv.location || '—'}</span>
+                                            </span>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
+                        {selectedInventoryId && (
+                            <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 6 }}>
+                                ✅ A visit will be booked for this property. Customer, coordinator &amp; key holder are notified automatically.
+                            </div>
+                        )}
                     </div>
                 )}
 
