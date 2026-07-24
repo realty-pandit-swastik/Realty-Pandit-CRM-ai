@@ -19,7 +19,7 @@ import { normalizePhone } from '../utils/phone';
 import { isRealEmail } from '../utils/email';
 import { sanitizeName } from '../utils/name_sanitizer';
 import { sendBuyerConfirmationWhatsApp, sendBuyerConfirmationEmail } from './lead_notifications';
-import { assignViaRoundRobin, resolveAgentByEmail } from './lead_assignment';
+import { assignViaRoundRobin, assignViaManagerRoundRobin, resolveAgentByEmail } from './lead_assignment';
 import { assignContact, type AssignmentMethod } from './assign_contact';
 import { ensureDealForLead } from './ensure_deal';
 import { notify } from './notify';
@@ -610,17 +610,14 @@ export class NinetyNineAcresPoller {
                 if (finalAgentId) method = 'sub_user';
             }
             if (!finalAgentId) {
-                // No sub_user_name match — assign to manager (not round-robin)
-                // so the correct owner can be identified and reassigned manually
-                const manager = await prisma.agent.findFirst({
-                    where: { role: { in: ['manager', 'super_boss'] }, status: 'active' },
-                    orderBy: { created_at: 'asc' },
-                    select: { id: true },
-                });
-                finalAgentId = manager?.id ?? null;
+                // No sub_user_name match. 2026-07-24: was `orderBy created_at asc` = the SAME oldest
+                // super_boss every time (100% of unmatched leads dumped on one person). Now round-robins
+                // among managers+super_bosses so the review load is shared. Log the actual subUserName
+                // so an unmapped 99acres account can be identified and mapped to agents.nine9acres_email.
+                finalAgentId = await assignViaManagerRoundRobin();
                 if (finalAgentId) {
                     method = 'manager_review';
-                    logger.warn(`[99acres] No sub_user_name match for property ${lead.propertyCode} — assigned to manager for review`);
+                    logger.warn(`[99acres] No agent match for subUserName="${lead.subUserName ?? '(none)'}" (property ${lead.propertyCode}) — round-robined to a manager for review. Map this subUserName to an agent's nine9acres_email to auto-route.`);
                 }
             }
 
