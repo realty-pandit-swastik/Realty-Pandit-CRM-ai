@@ -1278,12 +1278,34 @@ router.post('/:id/log-action', checkPermission('act_on_deals'), async (req: any,
         if (action_type === 'PAUSED_AI') updateData.ai_paused = true;
         if (action_type === 'RESUMED_AI') updateData.ai_paused = false;
 
+        // 2026-07-24: a human "not interested" outcome must CLOSE the deal at ANY stage + pause AI.
+        // Previously this only happened via /log-call for NEW deals; a "Not interested" logged from
+        // DealWorkspace (log-action, free-text outcome) on a QUALIFIED+ deal did nothing, so the deal
+        // stayed on the board AI-active. Audit found 29 such stuck deals (28 still AI-active).
+        const TERMINAL = ['CLOSED_LOST', 'CLOSED_WON'];
+        const isNotInterestedOutcome = typeof outcome === 'string' && /\bnot\s*interested\b/i.test(outcome);
+        const willCloseNotInterested = isNotInterestedOutcome && !new_status && !TERMINAL.includes(deal.status);
+        if (willCloseNotInterested) updateData.ai_paused = true;
+
         await prisma.transaction.update({ where: { id: req.params.id }, data: updateData });
 
         // Optionally transition stage
         if (new_status) {
             const { transitionTransaction } = await import('../services/transaction_state_machine');
             await transitionTransaction(req.params.id, new_status, agent.id, 'web', { notes, action_type });
+        } else if (willCloseNotInterested) {
+            const { transitionTransaction } = await import('../services/transaction_state_machine');
+            await transitionTransaction(req.params.id, 'CLOSED_LOST' as any, agent.id, 'web', {
+                notes: (notes && String(notes).trim()) || `Marked not interested by ${agent.name}`,
+                action_type,
+            });
+            // Mirror onto the contact so Lost-Reasons analytics + opt-out semantics stay consistent.
+            if (deal.demand_contact_id) {
+                await prisma.contact.update({
+                    where: { phone_number: deal.demand_contact_id },
+                    data: { lost_reason: 'NOT_INTERESTED', lost_at: new Date() },
+                }).catch(() => {});
+            }
         }
 
         const updated = await getDealById(req.params.id);
