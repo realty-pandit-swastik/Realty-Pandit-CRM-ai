@@ -157,6 +157,9 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
     const [filterPriceMin, setFilterPriceMin] = useState(''); // budget/price range filter (#3, 2026-06-28)
     const [filterPriceMax, setFilterPriceMax] = useState('');
     const [filterRoofRights, setFilterRoofRights] = useState(false); // roof-rights filter (2026-06-28)
+    const [filterAreaMin, setFilterAreaMin] = useState('');
+    const [filterAreaMax, setFilterAreaMax] = useState('');
+    const [filterAreaUnit, setFilterAreaUnit] = useState('sqft'); // sqft | sqyd | sqm
     const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     // Request sequencing (2026-07-15): filter changes fire overlapping loadInventory() fetches
     // (e.g. drilling a taxonomy branch then ticking a leaf). Without this, a slower earlier
@@ -316,7 +319,7 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
 
     useEffect(() => {
         loadInventory();
-    }, [currentPage, filterIntent, filterBrowseAll, filterState, filterType, filterStatus, filterAgent, filterLocation, filterPriceMin, filterPriceMax, filterRoofRights, filterTaxonomy, filterLocationSelection, filterListingSource, filterDataSource, filterDaysInSystem, filterDaysNoVisit, filterFloors]);
+    }, [currentPage, filterIntent, filterBrowseAll, filterState, filterType, filterStatus, filterAgent, filterLocation, filterPriceMin, filterPriceMax, filterRoofRights, filterTaxonomy, filterLocationSelection, filterListingSource, filterDataSource, filterDaysInSystem, filterDaysNoVisit, filterFloors, filterAreaMin, filterAreaMax, filterAreaUnit]);
 
     // Close call dropdown on outside click
     useEffect(() => {
@@ -389,6 +392,11 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
             if (filterTaxonomy.bhk.length > 0) params.bhk = filterTaxonomy.bhk.join(',');
             if (filterLocation.trim()) params.location = filterLocation.trim();
             if (filterPriceMin.trim()) params.price_min = filterPriceMin.trim();
+            if (filterAreaMin.trim() || filterAreaMax.trim()) {
+                if (filterAreaMin.trim()) params.area_min = filterAreaMin.trim();
+                if (filterAreaMax.trim()) params.area_max = filterAreaMax.trim();
+                params.area_unit = filterAreaUnit;
+            }
             if (filterPriceMax.trim()) params.price_max = filterPriceMax.trim();
             if (filterRoofRights) params.roof_rights = 'true';
             if (filterTaxonomy.nodeIds.length > 0) params.taxonomy_node_ids = filterTaxonomy.nodeIds.join(',');
@@ -568,7 +576,7 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
         setSearchQuery('');
         setFilterTaxonomy({ nodeIds: [], bhk: [] });
         setFilterLocation('');
-        setFilterPriceMin(''); setFilterPriceMax('');
+        setFilterPriceMin(''); setFilterPriceMax(''); setFilterAreaMin(''); setFilterAreaMax(''); setFilterAreaUnit('sqft');
         setFilterRoofRights(false);
         setCurrentPage(1);
     };
@@ -3186,7 +3194,7 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
                         {/* Text location search — matches the stored property address (locality/area/city),
                             no geocoding needed so it finds listings without lat/lng too. Wired to
                             filterLocation → params.location → findInventoryIdsByAddress. (2026-06-26) */}
-                        <FilterSection title="Location (locality / area / city)" defaultOpen={false} badge={filterLocation.trim() ? 1 : 0}>
+                        <FilterSection title="Location" defaultOpen={false} badge={(filterLocation.trim() ? 1 : 0) + (filterLocationSelection.lat !== null ? 1 : 0)}>
                             <input
                                 value={filterLocation}
                                 onChange={e => setFilterLocation(e.target.value)}
@@ -3198,8 +3206,11 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
                                 }}
                             />
                             <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>
-                                Searches the property address. For radius / near-me, use the map location below.
+                                Text search matches the address. Or pin a point below for a near-me radius.
                             </div>
+                            <div style={{ borderTop: '1px solid var(--border-secondary)', margin: '12px 0 4px' }} />
+                            <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600, marginBottom: '6px', textTransform: 'uppercase' }}>Near me (map radius)</div>
+                            <FilterLocationSection value={filterLocationSelection} onChange={setFilterLocationSelection} bare />
                         </FilterSection>
 
                         {/* Budget / price range (#3, 2026-06-28) → params.price_min/price_max → inventory.price */}
@@ -3215,7 +3226,24 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
                             </div>
                         </FilterSection>
 
-                        <FilterLocationSection value={filterLocationSelection} onChange={setFilterLocationSelection} />
+                        {/* Size / area range (2026-07-24) — Min–Max in a chosen unit */}
+                        <FilterSection title="Size (area)" defaultOpen={false} badge={(filterAreaMin.trim() || filterAreaMax.trim()) ? 1 : 0}>
+                            <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
+                                <input type="number" inputMode="numeric" value={filterAreaMin} onChange={e => setFilterAreaMin(e.target.value)} placeholder="Min"
+                                    style={{ width: '100%', padding: '9px 12px', borderRadius: '10px', border: '1px solid var(--border-secondary)', backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)', fontSize: '13px', boxSizing: 'border-box' }} />
+                                <input type="number" inputMode="numeric" value={filterAreaMax} onChange={e => setFilterAreaMax(e.target.value)} placeholder="Max"
+                                    style={{ width: '100%', padding: '9px 12px', borderRadius: '10px', border: '1px solid var(--border-secondary)', backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)', fontSize: '13px', boxSizing: 'border-box' }} />
+                            </div>
+                            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                                {[{ label: 'Sq.ft', value: 'sqft' }, { label: 'Sq.yd (Gaj)', value: 'sqyd' }, { label: 'Sq.m', value: 'sqm' }].map(opt => (
+                                    <button key={opt.value} type="button" onClick={() => setFilterAreaUnit(opt.value)}
+                                        style={{ ...({ padding: '7px 12px', borderRadius: '8px', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }), border: filterAreaUnit === opt.value ? '1.5px solid var(--text-link)' : '1px solid var(--border-secondary)', backgroundColor: filterAreaUnit === opt.value ? 'var(--text-link)' : 'var(--bg-secondary)', color: filterAreaUnit === opt.value ? '#fff' : 'var(--text-secondary)' }}>{opt.label}</button>
+                                ))}
+                            </div>
+                            <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>
+                                Filters by built-up/plot area in the selected unit.
+                            </div>
+                        </FilterSection>
 
                         {/* Roof rights filter (2026-06-28) → params.roof_rights → inventory.roof_rights */}
                         <FilterSection title="Roof rights" defaultOpen={false} badge={filterRoofRights ? 1 : 0}>
