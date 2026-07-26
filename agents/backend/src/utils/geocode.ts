@@ -11,7 +11,8 @@ export interface GeoCoords {
  * Non-throwing — always returns null on error.
  */
 export async function geocodeAddress(address: string): Promise<GeoCoords | null> {
-    const key = process.env.GOOGLE_MAPS_API_KEY || '';
+    // Prefer a dedicated server-side geocoding key (GOOGLE_MAPS_API_KEY is referrer-restricted for the browser).
+    const key = process.env.GEOCODING_API_KEY || process.env.GOOGLE_MAPS_API_KEY || '';
     if (!key || !address?.trim()) return null;
     try {
         const res = await axios.get('https://maps.googleapis.com/maps/api/geocode/json', {
