@@ -1,7 +1,7 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 
-import { getPartnerAssignable, assignListingToTeammate, getInventory, getInventoryItem, updateInventory, deleteInventory, approveInventory, rejectInventory, getCategoryTree, getStates, getTeamMembers, getTeamMembersList, uploadInventoryImages, deleteInventoryMedia, transferInventory, uploadInventoryDocument, deleteInventoryDocument, renameInventoryDocument, shareInventoryDocument, getNodeFields } from '../api/client';
+import { getPartnerAssignable, assignListingToTeammate, getInventory, getInventoryItem, updateInventory, deleteInventory, approveInventory, rejectInventory, getCategoryTree, getStates, getTeamMembers, getTeamMembersList, uploadInventoryImages, deleteInventoryMedia, transferInventory, uploadInventoryDocument, deleteInventoryDocument, renameInventoryDocument, shareInventoryDocument, getNodeFields, markInventorySold, markInventoryOnHold } from '../api/client';
 import client from '../api/client';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
@@ -246,6 +246,13 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
     // existing WhatsApp share modal. Clicking 💬 inside it falls through to setShareItem.
     const [shareOptionsItem, setShareOptionsItem] = useState<any>(null);
     const [bookVisitItem, setBookVisitItem] = useState<any>(null);
+    // #10 (2026-07-25): mark sold / on hold
+    const [soldItem, setSoldItem] = useState<any>(null);
+    const [holdItem, setHoldItem] = useState<any>(null);
+    const [soldName, setSoldName] = useState(''); const [soldPhone, setSoldPhone] = useState(''); const [soldPrice, setSoldPrice] = useState('');
+    const [holdWhen, setHoldWhen] = useState(''); const [holdNote, setHoldNote] = useState('');
+    const [statusBusy, setStatusBusy] = useState(false);
+    const plus24hLocal = () => { const d = new Date(Date.now() + 24 * 3600 * 1000); const p = (n: number) => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`; };
 
     // Edit modal tab state
     const [editTab, setEditTab] = useState('media');
@@ -1813,6 +1820,12 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
                                                 {hasPermission('edit_inventory') && item.can_edit && (
                                                     <button style={{ ...s.actionBtn, color: 'var(--text-link)', borderColor: 'var(--text-link)' }} onClick={() => handleEdit(item)}>Edit</button>
                                                 )}
+                                                {hasPermission('edit_inventory') && item.can_edit && item.status !== 'sold' && (
+                                                    <>
+                                                        <button style={{ ...s.actionBtn, color: '#16a34a', borderColor: '#16a34a' }} onClick={() => { setSoldName(''); setSoldPhone(''); setSoldPrice(''); setSoldItem(item); }}>Sold</button>
+                                                        <button style={{ ...s.actionBtn, color: '#f59e0b', borderColor: '#f59e0b' }} onClick={() => { setHoldWhen(plus24hLocal()); setHoldNote(''); setHoldItem(item); }}>{item.status === 'on_hold' ? 'On Hold \u2713' : 'Hold'}</button>
+                                                    </>
+                                                )}
                                                 {hasPermission('edit_inventory') && item.can_edit && item.status !== 'pending_approval' && (
                                                     <button
                                                         style={{ ...s.actionBtn, color: item.status === 'active' ? '#f59e0b' : '#10b981' }}
@@ -2898,6 +2911,50 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
                     onClose={() => setShareItem(null)}
                     onShared={() => { setShareItem(null); }}
                 />
+            )}
+
+            {/* Mark Sold modal (#10) */}
+            {soldItem && (
+                <div style={s.overlay} onClick={e => e.target === e.currentTarget && setSoldItem(null)}>
+                    <div style={{ ...s.modal, width: '420px' }}>
+                        <h3 style={s.modalTitle}>Mark Sold</h3>
+                        <p style={{ color: 'var(--text-secondary)', fontSize: '13px', marginBottom: '14px' }}>Moves this listing to <strong>Sold</strong> (removed from the active list). Optionally record the new owner (buyer).</p>
+                        <label style={{ fontSize: '12px', color: 'var(--text-muted)' }}>New owner name (optional)</label>
+                        <input value={soldName} onChange={e => setSoldName(e.target.value)} placeholder="Buyer name" style={{    width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid var(--border-secondary)', backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)', fontSize: '13px', boxSizing: 'border-box', marginBottom: '10px' }} />
+                        <label style={{ fontSize: '12px', color: 'var(--text-muted)' }}>New owner phone (optional)</label>
+                        <input value={soldPhone} onChange={e => setSoldPhone(e.target.value)} placeholder="Buyer phone" style={{    width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid var(--border-secondary)', backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)', fontSize: '13px', boxSizing: 'border-box', marginBottom: '10px' }} />
+                        <label style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Final price (optional)</label>
+                        <input value={soldPrice} onChange={e => setSoldPrice(e.target.value)} placeholder="e.g. 5500000" style={{    width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid var(--border-secondary)', backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)', fontSize: '13px', boxSizing: 'border-box', marginBottom: '10px' }} />
+                        <div style={s.btnRow}>
+                            <button style={s.cancelBtn} onClick={() => setSoldItem(null)}>Cancel</button>
+                            <button style={{ ...s.btnPrimary, backgroundColor: '#16a34a', opacity: statusBusy ? 0.6 : 1 }} disabled={statusBusy}
+                                onClick={async () => { setStatusBusy(true); try { await markInventorySold(soldItem.id, { new_owner_phone: soldPhone.trim() || undefined, new_owner_name: soldName.trim() || undefined, final_price: soldPrice.trim() || undefined }); setSoldItem(null); await loadInventory(); showToast('Marked sold', 'success'); } catch (err: any) { showToast(err.response?.data?.error || 'Failed', 'error'); } finally { setStatusBusy(false); } }}>
+                                {statusBusy ? 'Saving…' : 'Confirm Sold'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Put On Hold modal (#10) */}
+            {holdItem && (
+                <div style={s.overlay} onClick={e => e.target === e.currentTarget && setHoldItem(null)}>
+                    <div style={{ ...s.modal, width: '420px' }}>
+                        <h3 style={s.modalTitle}>Put On Hold</h3>
+                        <p style={{ color: 'var(--text-secondary)', fontSize: '13px', marginBottom: '14px' }}>Sets the listing to <strong>On Hold</strong> and creates a follow-up task for the listing agent.</p>
+                        <label style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Follow-up on</label>
+                        <input type="datetime-local" value={holdWhen} onChange={e => setHoldWhen(e.target.value)} style={{    width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid var(--border-secondary)', backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)', fontSize: '13px', boxSizing: 'border-box', marginBottom: '10px' }} />
+                        <label style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Note (optional)</label>
+                        <input value={holdNote} onChange={e => setHoldNote(e.target.value)} placeholder="Why on hold / what to check" style={{    width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid var(--border-secondary)', backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)', fontSize: '13px', boxSizing: 'border-box', marginBottom: '10px' }} />
+                        <div style={s.btnRow}>
+                            <button style={s.cancelBtn} onClick={() => setHoldItem(null)}>Cancel</button>
+                            <button style={{ ...s.btnPrimary, backgroundColor: '#f59e0b', opacity: (statusBusy || !holdWhen) ? 0.6 : 1 }} disabled={statusBusy || !holdWhen}
+                                onClick={async () => { setStatusBusy(true); try { await markInventoryOnHold(holdItem.id, { follow_up_at: holdWhen, note: holdNote.trim() || undefined }); setHoldItem(null); await loadInventory(); showToast('On hold — follow-up task created', 'success'); } catch (err: any) { showToast(err.response?.data?.error || 'Failed', 'error'); } finally { setStatusBusy(false); } }}>
+                                {statusBusy ? 'Saving…' : 'Confirm Hold'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
             )}
 
             {/* Book Visit Modal */}

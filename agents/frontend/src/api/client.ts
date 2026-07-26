@@ -151,6 +151,14 @@ export const getInventory = async (params?: Record<string, any>) => {
     return res.data;
 };
 
+export const markInventorySold = async (id: string, body: { new_owner_phone?: string; new_owner_name?: string; final_price?: string }) => {
+    const res = await client.post(`/api/inventory/${id}/mark-sold`, body);
+    return res.data;
+};
+export const markInventoryOnHold = async (id: string, body: { follow_up_at: string; note?: string }) => {
+    const res = await client.post(`/api/inventory/${id}/mark-on-hold`, body);
+    return res.data;
+};
 export const updateInventory = async (id: string, data: Record<string, any>) => {
     const res = await client.patch(`/api/inventory/${id}`, data);
     return res.data;

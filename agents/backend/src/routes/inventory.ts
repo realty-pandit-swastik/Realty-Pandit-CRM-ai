@@ -2233,6 +2233,79 @@ router.post('/:id/transfer-ownership', authMiddleware, checkPermission('manage_i
     }
 });
 
+// POST /inventory/:id/mark-sold — mark a listing SOLD; optionally record the new owner (buyer). (#10, 2026-07-25)
+router.post('/:id/mark-sold', authMiddleware, checkPermission('edit_inventory'), async (req: any, res) => {
+    try {
+        const { id } = req.params;
+        const { new_owner_phone, new_owner_name, final_price, reason } = req.body || {};
+        const inv = await prisma.inventory.findUnique({ where: { id } });
+        if (!inv) return res.status(404).json({ error: 'Inventory not found' });
+        const data: any = { status: 'sold', updated_at: new Date() };
+        if (new_owner_phone) {
+            const newPhone = normalizePhone(new_owner_phone);
+            if (!newPhone) return res.status(400).json({ error: 'Invalid new owner phone number' });
+            const staff = await activeStaffOwnerName(newPhone);
+            if (staff) return res.status(400).json({ error: `${staff} is a team member and cannot be set as the new owner. Enter the buyer's number.` });
+            const tenant = await prisma.tenant.findFirst();
+            if (!tenant) return res.status(500).json({ error: 'Tenant configuration missing' });
+            await prisma.contact.upsert({
+                where: { phone_number: newPhone },
+                create: { phone_number: newPhone, tenant_id: tenant.id, name: new_owner_name || 'New Owner', source: 'system', contact_type: 'LANDLORD' },
+                update: { name: new_owner_name || undefined },
+            });
+            data.owner_phone = newPhone;
+            data.owner_id = await ensureOwner(newPhone, tenant.id);
+            data.owner_contact_id = newPhone;
+        }
+        const updated = await prisma.inventory.update({ where: { id }, data });
+        await prisma.interaction.create({ data: {
+            tenant_id: inv.tenant_id, phone_number: updated.owner_phone, channel: 'system', direction: 'outbound',
+            event_type: 'inventory_sold',
+            content: `Property marked SOLD${new_owner_name ? ` — new owner ${new_owner_name}` : ''}${reason ? ` (${reason})` : ''}`,
+            metadata: { property_id: id, final_price: final_price != null ? Number(final_price) : null, by_agent: req.agent!.id },
+        } }).catch(() => {});
+        logger.info(`[MarkSold] ${id} → sold by ${req.agent!.id}${data.owner_phone ? ` (new owner ${data.owner_phone})` : ''}`);
+        res.json({ success: true, status: 'sold', new_owner_phone: data.owner_phone || null });
+    } catch (e: any) {
+        captureRouteError(e, req, { route: 'inventory#mark-sold' });
+        logger.error('[MarkSold] Error:', e);
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// POST /inventory/:id/mark-on-hold — set status on_hold + create a follow-up task for the listing agent. (#10, 2026-07-25)
+router.post('/:id/mark-on-hold', authMiddleware, checkPermission('edit_inventory'), async (req: any, res) => {
+    try {
+        const { id } = req.params;
+        const { follow_up_at, note } = req.body || {};
+        const inv = await prisma.inventory.findUnique({ where: { id } });
+        if (!inv) return res.status(404).json({ error: 'Inventory not found' });
+        const due = follow_up_at ? new Date(follow_up_at) : new Date(Date.now() + 24 * 60 * 60 * 1000);
+        if (isNaN(due.getTime())) return res.status(400).json({ error: 'Invalid follow_up_at date' });
+        await prisma.inventory.update({ where: { id }, data: { status: 'on_hold', updated_at: new Date() } });
+        const assignee = inv.assigned_agent_id || req.agent!.id;
+        const label = inv.display_id || inv.apartment_name || inv.full_address || 'property';
+        const task = await prisma.task.create({ data: {
+            title: `Follow up on on-hold property ${label}`,
+            description: note || null,
+            assigned_to: assignee, due_date: due, priority: 'MEDIUM', status: 'TODO',
+            task_type: 'GENERAL', property_id: id, tags: ['inventory', 'on-hold', 'follow-up'],
+        } });
+        await prisma.interaction.create({ data: {
+            tenant_id: inv.tenant_id, phone_number: inv.owner_phone, channel: 'system', direction: 'outbound',
+            event_type: 'inventory_on_hold',
+            content: `Property marked ON HOLD — follow-up ${due.toLocaleString('en-IN')}${note ? ` (${note})` : ''}`,
+            metadata: { property_id: id, task_id: task.id, by_agent: req.agent!.id },
+        } }).catch(() => {});
+        logger.info(`[MarkOnHold] ${id} → on_hold by ${req.agent!.id}, follow-up task ${task.id} @ ${due.toISOString()}`);
+        res.json({ success: true, status: 'on_hold', task_id: task.id, due_date: due.toISOString() });
+    } catch (e: any) {
+        captureRouteError(e, req, { route: 'inventory#mark-on-hold' });
+        logger.error('[MarkOnHold] Error:', e);
+        res.status(500).json({ error: e.message });
+    }
+});
+
 // POST /inventory/:id/approve — Approve a pending_approval inventory, notify partner via WhatsApp
 router.post('/:id/approve', authMiddleware, checkPermission('edit_inventory'), async (req, res) => {
     try {

@@ -1,6 +1,6 @@
 
 import { useEffect, useState, useRef } from 'react';
-import { getInventory, getTeamMembers, updateInventory } from '../../api/client';
+import { getInventory, getTeamMembers, updateInventory, markInventorySold, markInventoryOnHold } from '../../api/client';
 import client from '../../api/client';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
@@ -89,6 +89,13 @@ export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryLis
     const loadReqIdRef = useRef(0);
     const [shareItem, setShareItem] = useState<any>(null);
     const [bookVisitItem, setBookVisitItem] = useState<any>(null);
+    // #10 (2026-07-25): mark sold / on hold
+    const [soldItem, setSoldItem] = useState<any>(null);
+    const [holdItem, setHoldItem] = useState<any>(null);
+    const [soldName, setSoldName] = useState(''); const [soldPhone, setSoldPhone] = useState(''); const [soldPrice, setSoldPrice] = useState('');
+    const [holdWhen, setHoldWhen] = useState(''); const [holdNote, setHoldNote] = useState('');
+    const [statusBusy, setStatusBusy] = useState(false);
+    const plus24hLocal = () => { const d = new Date(Date.now() + 24 * 3600 * 1000); const p = (n: number) => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`; };
     const [activeSheetItem, setActiveSheetItem] = useState<any>(null);
 
     // Multi-select / batch-share state (ported from desktop InventoryList)
@@ -646,6 +653,36 @@ export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryLis
             {bookVisitItem && (
                 <BookVisitModal item={bookVisitItem} onClose={() => setBookVisitItem(null)} onBooked={() => setBookVisitItem(null)} />
             )}
+            {soldItem && (
+                <div style={{position:'fixed', inset:0, background:'rgba(0,0,0,0.6)', zIndex:2000, display:'flex', alignItems:'flex-end', justifyContent:'center'}} onClick={e => e.target === e.currentTarget && setSoldItem(null)}>
+                    <div style={{background:'var(--bg-secondary)', borderRadius:'16px 16px 0 0', width:'100%', maxWidth:'520px', padding:'20px 18px 28px', boxSizing:'border-box'}}>
+                        <h3 style={{ margin:'0 0 6px', fontSize:'18px', color:'var(--text-primary)' }}>Mark Sold</h3>
+                        <p style={{ color:'var(--text-secondary)', fontSize:'13px', margin:'0 0 14px' }}>Moves this listing to Sold. Optionally record the buyer.</p>
+                        <input value={soldName} onChange={e => setSoldName(e.target.value)} placeholder="Buyer name (optional)" style={{width:'100%', padding:'10px 12px', borderRadius:'10px', border:'1px solid var(--border-secondary)', backgroundColor:'var(--bg-primary)', color:'var(--text-primary)', fontSize:'15px', boxSizing:'border-box', marginBottom:'10px'}} />
+                        <input value={soldPhone} onChange={e => setSoldPhone(e.target.value)} placeholder="Buyer phone (optional)" style={{width:'100%', padding:'10px 12px', borderRadius:'10px', border:'1px solid var(--border-secondary)', backgroundColor:'var(--bg-primary)', color:'var(--text-primary)', fontSize:'15px', boxSizing:'border-box', marginBottom:'10px'}} />
+                        <input value={soldPrice} onChange={e => setSoldPrice(e.target.value)} placeholder="Final price (optional)" style={{width:'100%', padding:'10px 12px', borderRadius:'10px', border:'1px solid var(--border-secondary)', backgroundColor:'var(--bg-primary)', color:'var(--text-primary)', fontSize:'15px', boxSizing:'border-box', marginBottom:'10px'}} />
+                        <div style={{ display:'flex', gap:'10px', marginTop:'6px' }}>
+                            <button onClick={() => setSoldItem(null)} style={{flex:1, padding:'12px', borderRadius:'10px', fontSize:'15px', fontWeight:700, cursor:'pointer', border:'none', background:'var(--border-secondary)', color:'var(--text-secondary)' }}>Cancel</button>
+                            <button disabled={statusBusy} onClick={async () => { setStatusBusy(true); try { await markInventorySold(soldItem.id, { new_owner_phone: soldPhone.trim() || undefined, new_owner_name: soldName.trim() || undefined, final_price: soldPrice.trim() || undefined }); setSoldItem(null); loadData(); showToast('Marked sold', 'success'); } catch (err: any) { showToast(err.response?.data?.error || 'Failed', 'error'); } finally { setStatusBusy(false); } }} style={{flex:1, padding:'12px', borderRadius:'10px', fontSize:'15px', fontWeight:700, cursor:'pointer', border:'none', background:'#16a34a', color:'#fff', opacity: statusBusy ? 0.6 : 1 }}>{statusBusy ? 'Saving…' : 'Confirm Sold'}</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+            {holdItem && (
+                <div style={{position:'fixed', inset:0, background:'rgba(0,0,0,0.6)', zIndex:2000, display:'flex', alignItems:'flex-end', justifyContent:'center'}} onClick={e => e.target === e.currentTarget && setHoldItem(null)}>
+                    <div style={{background:'var(--bg-secondary)', borderRadius:'16px 16px 0 0', width:'100%', maxWidth:'520px', padding:'20px 18px 28px', boxSizing:'border-box'}}>
+                        <h3 style={{ margin:'0 0 6px', fontSize:'18px', color:'var(--text-primary)' }}>Put On Hold</h3>
+                        <p style={{ color:'var(--text-secondary)', fontSize:'13px', margin:'0 0 14px' }}>Sets On Hold + creates a follow-up task for the listing agent.</p>
+                        <label style={{ fontSize:'12px', color:'var(--text-muted)' }}>Follow-up on</label>
+                        <input type="datetime-local" value={holdWhen} onChange={e => setHoldWhen(e.target.value)} style={{width:'100%', padding:'10px 12px', borderRadius:'10px', border:'1px solid var(--border-secondary)', backgroundColor:'var(--bg-primary)', color:'var(--text-primary)', fontSize:'15px', boxSizing:'border-box', marginBottom:'10px'}} />
+                        <input value={holdNote} onChange={e => setHoldNote(e.target.value)} placeholder="Note (optional)" style={{width:'100%', padding:'10px 12px', borderRadius:'10px', border:'1px solid var(--border-secondary)', backgroundColor:'var(--bg-primary)', color:'var(--text-primary)', fontSize:'15px', boxSizing:'border-box', marginBottom:'10px'}} />
+                        <div style={{ display:'flex', gap:'10px', marginTop:'6px' }}>
+                            <button onClick={() => setHoldItem(null)} style={{flex:1, padding:'12px', borderRadius:'10px', fontSize:'15px', fontWeight:700, cursor:'pointer', border:'none', background:'var(--border-secondary)', color:'var(--text-secondary)' }}>Cancel</button>
+                            <button disabled={statusBusy || !holdWhen} onClick={async () => { setStatusBusy(true); try { await markInventoryOnHold(holdItem.id, { follow_up_at: holdWhen, note: holdNote.trim() || undefined }); setHoldItem(null); loadData(); showToast('On hold — follow-up task created', 'success'); } catch (err: any) { showToast(err.response?.data?.error || 'Failed', 'error'); } finally { setStatusBusy(false); } }} style={{flex:1, padding:'12px', borderRadius:'10px', fontSize:'15px', fontWeight:700, cursor:'pointer', border:'none', background:'#f59e0b', color:'#fff', opacity: (statusBusy || !holdWhen) ? 0.6 : 1 }}>{statusBusy ? 'Saving…' : 'Confirm Hold'}</button>
+                        </div>
+                    </div>
+                </div>
+            )}
             {viewItem && (
                 <InventoryDetailView
                     inventoryId={viewItem.id}
@@ -982,6 +1019,16 @@ export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryLis
                             >
                                 ✏️ Edit Property
                             </button>
+                        )}
+
+                        {/* Mark Sold / Put On Hold (#10) */}
+                        {hasPermission('edit_inventory') && activeSheetItem.can_edit && activeSheetItem.status !== 'sold' && (
+                            <>
+                                <button type="button" onClick={() => { setSoldName(''); setSoldPhone(''); setSoldPrice(''); setSoldItem(activeSheetItem); setActiveSheetItem(null); }}
+                                    style={{ display:'block', width:'100%', padding:'16px 24px', background:'transparent', border:'none', borderBottom:'1px solid var(--border-primary)', color:'#16a34a', fontSize:'15px', textAlign:'left', cursor:'pointer', fontWeight:600 }}>\u2705 Mark Sold</button>
+                                <button type="button" onClick={() => { setHoldWhen(plus24hLocal()); setHoldNote(''); setHoldItem(activeSheetItem); setActiveSheetItem(null); }}
+                                    style={{ display:'block', width:'100%', padding:'16px 24px', background:'transparent', border:'none', borderBottom:'1px solid var(--border-primary)', color:'#f59e0b', fontSize:'15px', textAlign:'left', cursor:'pointer', fontWeight:600 }}>\u23f8\ufe0f {activeSheetItem.status === 'on_hold' ? 'On Hold (update)' : 'Put On Hold'}</button>
+                            </>
                         )}
 
                         {/* Deactivate — same lock as Edit (assigned manager + super_boss) */}
