@@ -29,6 +29,18 @@ import { resolveTypeFilter } from '../utils/demand_taxonomy';
 import { cacheDel } from '../utils/redis';
 
 const router = Router();
+
+// #9 owner railguard (2026-07-25): a team member's number must NEVER be stored as the property
+// OWNER (supply contact). Matches on last-10 digits against ALL active staff (broadened from the
+// old self-only edit check). Returns the staff member's name if the phone is active staff, else null.
+async function activeStaffOwnerName(phone: string | null | undefined): Promise<string | null> {
+    const d10 = (p: any) => (p ? String(p) : '').replace(/[^0-9]/g, '').slice(-10);
+    const key = d10(phone);
+    if (!key) return null;
+    const staff = await prisma.agent.findMany({ where: { status: 'active' }, select: { name: true, phone: true } });
+    const hit = staff.find(a => d10(a.phone) === key);
+    return hit ? (hit.name || 'a team member') : null;
+}
 const stateMachine = new InventoryStateMachine();
 const storageService = new StorageService();
 
@@ -91,6 +103,10 @@ router.post('/', authMiddleware, checkPermission('edit_inventory'), async (req, 
 
         // Normalize phone
         const phone = normalizePhone(owner_phone);
+        if (!phone) return res.status(400).json({ error: 'Invalid owner phone number' });
+        // #9 railguard: never store a team member as the property owner.
+        const staffOwnerC = await activeStaffOwnerName(phone);
+        if (staffOwnerC) return res.status(400).json({ error: `${staffOwnerC} is a team member and cannot be set as the property owner. Enter the actual owner's number.` });
 
         // Resolve legacy fields from classification IDs
         let legacyCategory = category;
@@ -1058,12 +1074,11 @@ router.patch('/:id', authMiddleware, checkPermission('edit_inventory'), async (r
         if (updateData.owner_phone) {
             const normalized = normalizePhone(updateData.owner_phone);
             if (!normalized) return res.status(400).json({ error: 'Invalid owner phone number' });
-            // (2026-06-20) A team member may NOT set their OWN number as the property owner — the owner
-            // number must be the actual owner's. Blocks "fixing" a flagged listing back to the agent.
-            const meEdit = await prisma.agent.findUnique({ where: { id: req.agent!.id }, select: { phone: true } });
-            const myDigits = (normalizePhone(meEdit?.phone || '') || '').replace(/\D/g, '').slice(-10);
-            if (myDigits && normalized.replace(/\D/g, '').slice(-10) === myDigits) {
-                return res.status(400).json({ error: 'You cannot use your own number as the property owner. Enter the actual owner number.' });
+            // #9 railguard (2026-07-25): the owner must be the ACTUAL owner — never ANY active team
+            // member (broadened from the self-only check of 2026-06-20; 313 rows had staff-as-owner).
+            const staffOwnerE = await activeStaffOwnerName(normalized);
+            if (staffOwnerE) {
+                return res.status(400).json({ error: `${staffOwnerE} is a team member and cannot be set as the property owner. Enter the actual owner number.` });
             }
             updateData.owner_phone = normalized;
             // Ensure Owner record exists and update FK
