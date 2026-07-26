@@ -163,11 +163,16 @@ export function formatType(type: string): string {
 }
 
 export function formatAddress(property: Property): string {
-    const parts = [
+    // Show sub-locality → locality → city (all three), not just one (owner request 2026-07-25).
+    // Exact-dedupe (case-insensitive) so identical parts don't repeat.
+    const raw = [
         property.apartment_name,
-        property.locality || property.sub_locality,
+        property.sub_locality,
+        property.locality,
         property.city || property.district,
     ].filter(Boolean).map(p => toTitleCase(p as string));
+    const seen = new Set<string>();
+    const parts = raw.filter(p => { const k = p.toLowerCase(); if (seen.has(k)) return false; seen.add(k); return true; });
     return parts.join(', ') || (property.location ? toTitleCase(property.location) : '');
 }
 

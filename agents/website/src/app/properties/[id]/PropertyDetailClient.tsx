@@ -340,9 +340,9 @@ export default function PropertyDetailClient({ id }: { id: string }) {
                                 {formatPrice(property.price, property.price_unit)}
                             </div>
 
-                            {property.location && (
+                            {(formatAddress(property) || property.location) && (
                                 <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400 mb-4">
-                                    <MapPin className="w-5 h-5" /> {property.location}
+                                    <MapPin className="w-5 h-5" /> {formatAddress(property) || property.location}
                                 </div>
                             )}
 
