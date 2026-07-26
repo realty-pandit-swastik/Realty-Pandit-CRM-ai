@@ -336,16 +336,23 @@ const DemandRequirementsForm = forwardRef<DemandRequirementsFormHandle, DemandRe
             {/* ── Preferred Location (Google Places autocomplete → lat/lng) ──── */}
             <div>
                 <label style={labelStyle}>Preferred Location</label>
-                <input
-                    ref={locationRef}
-                    style={preferredLat != null ? { ...inputStyle, backgroundColor: 'rgba(34,197,94,0.08)' } : inputStyle}
-                    type="text"
-                    value={preferredLocation}
-                    onChange={e => { setPreferredLocation(e.target.value); setPreferredLat(null); setPreferredLng(null); }}
-                    placeholder="Search area on Google Maps…"
-                    autoComplete="off"
-                    name="rp-demand-location-search"
-                />
+                <div style={{ position: 'relative' }}>
+                    <input
+                        ref={locationRef}
+                        style={{ ...(preferredLat != null ? { ...inputStyle, backgroundColor: 'rgba(34,197,94,0.08)' } : inputStyle), paddingRight: '34px' }}
+                        type="text"
+                        value={preferredLocation}
+                        onChange={e => { setPreferredLocation(e.target.value); setPreferredLat(null); setPreferredLng(null); }}
+                        placeholder="Search area on Google Maps…"
+                        autoComplete="off"
+                        name="rp-demand-location-search"
+                    />
+                    {preferredLocation && (
+                        <button type="button" aria-label="Clear location" title="Clear location"
+                            onClick={() => { setPreferredLocation(''); setPreferredLat(null); setPreferredLng(null); if (locationRef.current) locationRef.current.value = ''; locationRef.current?.focus(); }}
+                            style={{ position: 'absolute', right: '8px', top: '17px', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '15px', lineHeight: 1, padding: '4px' }}>✕</button>
+                    )}
+                </div>
                 {preferredLat != null && (
                     <div style={{ fontSize: '11px', color: '#22c55e', marginTop: '3px' }}>
                         📍 Geo-tagged: {preferredLat.toFixed(4)}, {preferredLng?.toFixed(4)}
@@ -354,6 +361,24 @@ const DemandRequirementsForm = forwardRef<DemandRequirementsFormHandle, DemandRe
             </div>
 
             {/* ── Property Type — taxonomy cascade ─────────────────────────── */}
+            {/* ── Property preferences (#8c, 2026-07-25): roof rights / renovated / pre-leased ── */}
+            <div>
+                <label style={labelStyle}>Preferences</label>
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                    {[{ k: 'roof_rights', l: '🏠 Roof rights' }, { k: 'renovated', l: '🔨 Renovated' }, { k: 'pre_leased', l: '🏷 Pre-leased' }].map(t => {
+                        const on = !!schemaValues[t.k];
+                        return (
+                            <button key={t.k} type="button" onClick={() => setKey(t.k, on ? undefined : true)}
+                                style={{ padding: '6px 12px', borderRadius: '999px', fontSize: '12px', cursor: 'pointer',
+                                    border: on ? '1px solid var(--text-link)' : '1px solid var(--border-secondary)',
+                                    background: on ? 'var(--text-link)' : 'var(--bg-tertiary)', color: on ? '#fff' : 'var(--text-primary)' }}>
+                                {t.l}
+                            </button>
+                        );
+                    })}
+                </div>
+            </div>
+
             <div style={{ borderTop: '1px solid var(--border-secondary)', paddingTop: '12px' }}>
                 <label style={{ ...labelStyle, marginBottom: '8px' }}>Property Type</label>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '8px' }}>
