@@ -21,6 +21,7 @@ import { sanitizeName } from '../utils/name_sanitizer';
 import { sendBuyerConfirmationWhatsApp, sendBuyerConfirmationEmail } from './lead_notifications';
 import { assignViaRoundRobin, assignViaManagerRoundRobin, resolveAgentByEmail } from './lead_assignment';
 import { assignContact, type AssignmentMethod } from './assign_contact';
+import { geocodeAddress } from '../utils/geocode';
 import { ensureDealForLead } from './ensure_deal';
 import { notify } from './notify';
 import { alertCritical } from '../utils/alerter';
@@ -432,6 +433,9 @@ export class NinetyNineAcresPoller {
             || this.extractLocation(lead.propertyLabel)
             || lead.cityName
             || null;
+        // #6 (2026-07-25): geocode so the lead gets preferred_lat/lng for radius matching (99acres
+        // never sends coords). Best-effort; null on failure leaves matching to fall back to text.
+        const geo = location ? await geocodeAddress(location) : null;
         const bhk = this.extractBhk(lead.propertyLabel);
         const propertyType = this.extractPropertyType(lead.propertyLabel, lead.resCom);
 
@@ -506,6 +510,7 @@ export class NinetyNineAcresPoller {
                 source: '99acres',
                 intent: intent || undefined,
                 preferred_location: location || undefined,
+                ...(geo ? { preferred_lat: geo.lat, preferred_lng: geo.lng } : {}),
                 // Only fill if extracted (don't overwrite manually-entered values with null)
                 property_type: propertyType || undefined,
                 demand_taxonomy_node_id: demandTax.demand_taxonomy_node_id ?? undefined,
@@ -531,6 +536,8 @@ export class NinetyNineAcresPoller {
                 contact_type: 'BUYER',
                 intent,
                 preferred_location: location,
+                preferred_lat: geo?.lat ?? null,
+                preferred_lng: geo?.lng ?? null,
                 budget_max: budgetMax,
                 property_type: propertyType,
                 demand_taxonomy_node_id: demandTax.demand_taxonomy_node_id ?? undefined,

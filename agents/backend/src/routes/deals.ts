@@ -34,6 +34,8 @@ import logger from '../utils/logger';
 import { captureRouteError } from '../utils/capture';
 import { foldLegacyDemand, mergeDemandSchemaValues } from '../utils/demand_canonical';
 
+import { geocodeAddress } from '../utils/geocode';
+
 const router = Router();
 router.use(authMiddleware);
 
@@ -759,6 +761,21 @@ router.get('/:id/matched-inventory', checkPermission('act_on_deals'), async (req
             ?? {}) as Record<string, any>;
         const bhkRaw = bedrooms || canonicalDemand.bhk || canonicalDemand['bhk'] || null;
         const bhkNum = typeof bhkRaw === 'string' ? bhkRaw.match(/\d+/)?.[0] : (bhkRaw != null ? String(bhkRaw) : undefined);
+        // #6/#8a (2026-07-25): a typed/changed location must re-centre the geo search. Geocode it so
+        // the radius search uses the NEW location's coords (the contact's stored lat/lng may be stale or
+        // absent — e.g. 99acres leads). Absent `location` param → keep the contact's coords.
+        let latOverride: number | null = dc.preferred_lat ?? null;
+        let lngOverride: number | null = dc.preferred_lng ?? null;
+        if (location !== undefined) {
+            if (location && String(location).trim()) {
+                const g = await geocodeAddress(String(location).trim());
+                latOverride = g ? g.lat : null;
+                lngOverride = g ? g.lng : null;
+            } else {
+                latOverride = null; lngOverride = null;
+            }
+        }
+
         const criteria = buildMatchCriteriaFromLead({
             intent: (intent || dc.intent || deal.demand_intent || 'buy') as 'buy' | 'rent',
             demand_type_slug: type_slug || null,
@@ -773,9 +790,9 @@ router.get('/:id/matched-inventory', checkPermission('act_on_deals'), async (req
             preferred_location: location !== undefined
                 ? (location || null)
                 : (dc.preferred_location || deal.demand_location || null),
-            // Geo from the contact (SSOT) → enables Haversine radius search instead of text-only. (2026-06-01)
-            preferred_lat: dc.preferred_lat ?? null,
-            preferred_lng: dc.preferred_lng ?? null,
+            // Geo: typed location (geocoded above) re-centres the search; else the contact's stored coords.
+            preferred_lat: latOverride,
+            preferred_lng: lngOverride,
             demand_bhk: bhkNum ? parseInt(bhkNum, 10) : null,
             // Canonical demand — CONTACT-first (SSOT), fall back to the deal snapshot.
             demand_taxonomy_node_id: dc.demand_taxonomy_node_id
