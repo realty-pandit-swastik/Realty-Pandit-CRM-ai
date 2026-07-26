@@ -16,6 +16,8 @@ interface TeamMember {
     department?: string;
     status: string;
     last_login_at?: string;
+    last_activity_at?: string | null;
+    last_activity_type?: string | null;
     created_at: string;
     _count?: { assigned_leads: number };
     reports_to?: { id: string; name: string; email: string } | null;
@@ -530,7 +532,7 @@ export function TeamManagement() {
                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                     <thead>
                         <tr style={{ borderBottom: '1px solid var(--border-secondary)', backgroundColor: 'var(--bg-primary)' }}>
-                            {['Member', 'Phone', 'Role', 'Department', 'Manager', 'Status', 'Last Login', 'Actions'].map(h => (
+                            {['Member', 'Phone', 'Role', 'Department', 'Manager', 'Status', 'Last Login', 'Last Activity', 'Actions'].map(h => (
                                 <th key={h} style={{ textAlign: 'left', padding: '12px 16px', color: 'var(--text-secondary)', fontSize: '11px', fontWeight: 600, textTransform: 'uppercase' as const, whiteSpace: 'nowrap' as const }}>{h}</th>
                             ))}
                         </tr>
@@ -566,6 +568,16 @@ export function TeamManagement() {
                                 </td>
                                 <td style={{ ...cellStyle, color: 'var(--text-muted)', fontSize: '12px' }}>
                                     {m.last_login_at ? new Date(m.last_login_at).toLocaleDateString('en-IN') : 'Never'}
+                                </td>
+                                <td style={{ ...cellStyle, fontSize: '12px' }}>
+                                    {m.last_activity_at ? (
+                                        <div>
+                                            <div style={{ color: 'var(--text-secondary)' }}>{m.last_activity_type || 'Activity'}</div>
+                                            <div style={{ color: 'var(--text-muted)', fontSize: '11px', marginTop: '2px', whiteSpace: 'nowrap' as const }}>
+                                                {new Date(m.last_activity_at).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                                            </div>
+                                        </div>
+                                    ) : <span style={{ color: 'var(--text-muted)' }}>—</span>}
                                 </td>
                                 <td style={{ ...cellStyle, whiteSpace: 'nowrap' as const }}>
                                     <div style={{ display: 'flex', gap: '6px' }}>

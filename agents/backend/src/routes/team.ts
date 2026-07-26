@@ -505,7 +505,37 @@ router.get('/members', checkPermission('manage_team'), async (req, res) => {
             },
             orderBy: [{ role: 'asc' }, { name: 'asc' }]
         });
-        res.json(members);
+
+        // #5 (2026-07-25): per-agent LAST ACTIVITY (timestamp + what) merged across pipeline
+        // actions (TeamAction), listing add/edit (inventory.uploaded_by) and task work (Task).
+        // DISTINCT ON gives the single latest row per agent from each source; we pick the newest.
+        const [taRows, invRows, taskRows] = await Promise.all([
+            prisma.$queryRawUnsafe<any[]>(`SELECT DISTINCT ON (agent_id) agent_id, created_at AS at, action_type AS typ FROM team_actions ORDER BY agent_id, created_at DESC`),
+            prisma.$queryRawUnsafe<any[]>(`SELECT DISTINCT ON (uploaded_by_agent_id) uploaded_by_agent_id AS agent_id, updated_at AS at FROM inventory WHERE uploaded_by_agent_id IS NOT NULL ORDER BY uploaded_by_agent_id, updated_at DESC`),
+            prisma.$queryRawUnsafe<any[]>(`SELECT DISTINCT ON (assigned_to) assigned_to AS agent_id, GREATEST(created_at, COALESCE(completed_at, created_at)) AS at FROM tasks ORDER BY assigned_to, GREATEST(created_at, COALESCE(completed_at, created_at)) DESC`),
+        ]);
+        const ACTION_LABEL: Record<string, string> = {
+            CALLED: 'Called', WHATSAPPED: 'WhatsApped', SCHEDULED_VISIT: 'Scheduled visit',
+            CONFIRMED_VISIT: 'Confirmed visit', VISIT_RESCHEDULED: 'Rescheduled visit',
+            REMINDER_GIVEN: 'Gave reminder', LOGGED_NOTE: 'Logged note', MEETING_BOOKED: 'Meeting update',
+            PAUSED_AI: 'Paused AI', RESUMED_AI: 'Resumed AI',
+        };
+        const label = (t: string) => ACTION_LABEL[t] || (t ? t.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase()) : 'Activity');
+        const acc: Record<string, { at: Date; type: string }> = {};
+        const consider = (agentId: string, at: any, type: string) => {
+            if (!agentId || !at) return;
+            const d = new Date(at);
+            if (!acc[agentId] || d > acc[agentId].at) acc[agentId] = { at: d, type };
+        };
+        for (const r of taRows) consider(r.agent_id, r.at, label(r.typ));
+        for (const r of invRows) consider(r.agent_id, r.at, 'Updated a listing');
+        for (const r of taskRows) consider(r.agent_id, r.at, 'Task activity');
+        const enriched = members.map(m => ({
+            ...m,
+            last_activity_at: acc[m.id]?.at ?? null,
+            last_activity_type: acc[m.id]?.type ?? null,
+        }));
+        res.json(enriched);
     } catch (error) {
         captureRouteError(error, req, { route: 'team#4' });
         logger.error('Team members fetch error:', error);
