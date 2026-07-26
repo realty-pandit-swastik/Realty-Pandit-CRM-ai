@@ -162,9 +162,10 @@ export default function DealPipeline({ initialDealId }: DealPipelineProps) {
     const transferSearchTimer = useRef<any>(null);
     const [filteredTotal, setFilteredTotal] = useState(0); // true server-side total for the CURRENT filters (#7)
     // 2026-07-22: ordering now runs SERVER-side across the WHOLE filtered set (see listDeals).
-    // 'next_action' = default work queue: overdue → soonest upcoming reminder → newest no-reminder.
-    // Deliberately NOT persisted — a refresh always returns to the default order (matches Ext. Leads).
-    const [sortMode, setSortMode] = useState<string>('next_action');
+    // Default = 'lead_date:desc' (Newest lead first) — owner request 2026-07-25. Other modes:
+    // 'next_action' work queue (overdue → soonest reminder → newest no-reminder), reminder sorts.
+    // Deliberately NOT persisted — a refresh always returns to this default (matches Ext. Leads).
+    const [sortMode, setSortMode] = useState<string>('lead_date:desc');
     // "Load more" grows the server-side page size; the 30s silent refresh then re-fetches
     // everything already on screen in one correctly-ordered call.
     const PAGE_SIZE = 500;

@@ -1,3 +1,5 @@
+import { getDisplayFloor } from './floor';
+
 /**
  * Type-aware inventory spec chips (2026-06-11).
  *
@@ -79,6 +81,11 @@ export function pickSpecChips(item: any): SpecChip[] {
             if (wash) chips.push({ value: `${wash} Bath` });
             pushArea();
         }
+    }
+    // Floor (2026-07-25) — show the property's own floor on the tile for all but land/plot.
+    if (bucketOf(item) !== 'land') {
+        const fl = getDisplayFloor(item);
+        if (fl) chips.push({ value: /^-?\d+$/.test(fl) ? `Floor ${fl}` : fl });
     }
     return chips;
 }
