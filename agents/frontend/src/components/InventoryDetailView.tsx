@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import client from '../api/client';
 import { toDialablePhone } from '../lib/phone';
 import { getDisplayFloor } from '../lib/floor';
@@ -78,6 +78,21 @@ export function InventoryDetailView({ inventoryId, onClose, onEdit }: Props) {
     ];
     const current = media[activeIdx];
 
+    // ── Gallery navigation: swipe (touch), arrow buttons, keyboard ← → (wraps) ──
+    const touchStartX = useRef<number | null>(null);
+    const go = (dir: number) => setActiveIdx(i => (media.length ? (i + dir + media.length) % media.length : 0));
+    useEffect(() => {
+        if (media.length < 2) return;
+        const onKey = (e: KeyboardEvent) => {
+            const t = e.target as HTMLElement | null;
+            if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+            if (e.key === 'ArrowLeft') { e.preventDefault(); go(-1); }
+            else if (e.key === 'ArrowRight') { e.preventDefault(); go(1); }
+        };
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+    }, [media.length]);
+
     // ── Type-aware specs grid (generic over specs keys; humanize) ──
     const HIDE_KEYS = new Set(['amenities', 'area_unit', 'plot-area-unit', 'bhk_source', 'parking']);
     const humanize = (k: string) => k.replace(/[-_]/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
@@ -125,10 +140,25 @@ export function InventoryDetailView({ inventoryId, onClose, onEdit }: Props) {
                         {/* ── Media viewer ── */}
                         {media.length > 0 ? (
                             <div style={{ background: '#0f1420' }}>
-                                <div style={{ width: '100%', aspectRatio: '4 / 3', background: '#000', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                <div
+                                    onTouchStart={(e) => { touchStartX.current = e.touches[0].clientX; }}
+                                    onTouchEnd={(e) => {
+                                        if (touchStartX.current == null) return;
+                                        const dx = e.changedTouches[0].clientX - touchStartX.current;
+                                        touchStartX.current = null;
+                                        if (media.length > 1 && Math.abs(dx) > 40) go(dx < 0 ? 1 : -1);
+                                    }}
+                                    style={{ position: 'relative', width: '100%', aspectRatio: '4 / 3', background: '#000', display: 'flex', alignItems: 'center', justifyContent: 'center', touchAction: 'pan-y', userSelect: 'none' }}>
                                     {current?.type === 'video'
                                         ? <video key={current.url} src={current.url} controls playsInline style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
-                                        : <img src={current?.url} alt="" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />}
+                                        : <img src={current?.url} alt="" draggable={false} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />}
+                                    {media.length > 1 && (
+                                        <>
+                                            <button aria-label="Previous photo" onClick={() => go(-1)} style={{ position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)', width: 38, height: 38, borderRadius: '50%', border: 'none', background: 'rgba(0,0,0,0.45)', color: '#fff', fontSize: 22, lineHeight: 1, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>‹</button>
+                                            <button aria-label="Next photo" onClick={() => go(1)} style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', width: 38, height: 38, borderRadius: '50%', border: 'none', background: 'rgba(0,0,0,0.45)', color: '#fff', fontSize: 22, lineHeight: 1, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>›</button>
+                                            <div style={{ position: 'absolute', bottom: 8, right: 10, background: 'rgba(0,0,0,0.55)', color: '#fff', fontSize: 11, padding: '2px 8px', borderRadius: 10 }}>{activeIdx + 1} / {media.length}</div>
+                                        </>
+                                    )}
                                 </div>
                                 {media.length > 1 && (
                                     <div style={{ display: 'flex', gap: 6, overflowX: 'auto', padding: '8px 12px' }}>
