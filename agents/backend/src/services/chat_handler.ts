@@ -1,5 +1,6 @@
 ﻿import prisma from '../db';
 import { LLMService } from './llm';
+import { isSupplyIntent } from '../utils/intent_signals';
 import { WhatsAppService } from './whatsapp';
 import { DateTimeParser } from './date_parser';
 import { CalendarService } from './calendar';
@@ -290,7 +291,9 @@ IMPORTANT:
             'apna makan', 'apna ghar', 'apni property', 'property bechni',
             'i want to sell', 'i want to list', 'want to upload',
         ];
-        if (uploadKeywords.some(kw => lowerMessage.includes(kw))) {
+        if (uploadKeywords.some(kw => lowerMessage.includes(kw)) || isSupplyIntent(message)) {
+            // 2026-07-28: reuse the shared supply classifier so the chatbox catches the same
+            // seller phrasings as WhatsApp ("put it on rent", "rent out", "kiraya pe dena", etc.).
             return 'redirect_upload';
         }
 
