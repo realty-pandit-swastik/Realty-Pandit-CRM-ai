@@ -1050,8 +1050,12 @@ export class WorkflowEngine {
             },
         });
 
-        // Auto-register external key holder as PARTNER_AGENT
-        if (dbKeyHolderType === 'EXTERNAL' && answers.key_holder_phone) {
+        // Auto-register external key holder as PARTNER_AGENT — but NOT when the key holder IS the
+        // owner (an owner who holds his own keys is a direct landlord, not a dealer). 2026-07-28: this
+        // wrongly flipped owner +919289633929 (Nilin) to PARTNER_AGENT and dropped him from Leads.
+        const _khNorm = normalizePhone(answers.key_holder_phone || '');
+        const _keyHolderIsOwner = !!_khNorm && _khNorm === normalizePhone(ownerPhone || '');
+        if (dbKeyHolderType === 'EXTERNAL' && answers.key_holder_phone && !_keyHolderIsOwner) {
             const dealerPhone = normalizePhone(answers.key_holder_phone);
             if (dealerPhone) {
                 try {

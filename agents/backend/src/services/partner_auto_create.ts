@@ -45,10 +45,15 @@ export async function ensurePartnerAgent(
         return { partnerId: existing.id, wasCreated: false, partnerPhone: normalizedPhone };
     }
 
+    // 2026-07-28: never DOWNGRADE a live demand lead (BUYER/TENANT) to PARTNER_AGENT — that silently
+    // hid real leads from the Leads list. Only set PARTNER_AGENT on create or for non-demand contacts.
+    const _existingC = await prisma.contact.findUnique({ where: { phone_number: normalizedPhone }, select: { contact_type: true } });
+    const _keepDemand = !!_existingC && ['BUYER', 'TENANT'].includes(_existingC.contact_type as string);
+    if (_keepDemand) logger.warn(`[PartnerAutoCreate] ${normalizedPhone} is a live ${_existingC!.contact_type} lead — NOT downgrading to PARTNER_AGENT`);
     // Create minimal Contact record (SSOT — phone is PK)
     await prisma.contact.upsert({
         where: { phone_number: normalizedPhone },
-        update: {
+        update: _keepDemand ? {} : {
             contact_type: 'PARTNER_AGENT',
         },
         create: {
