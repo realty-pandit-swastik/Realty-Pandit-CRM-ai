@@ -891,6 +891,15 @@ How can I help you find your perfect property today? 🏡`;
     try {
         const buyerSession = await BuyerWhatsAppAdapter.loadSession(from);
         if (buyerSession) {
+            // 2026-07-28: a clear SUPPLY message mid-buyer-session ("I want to put it on rent") must
+            // switch to the listing/inventory flow, not be captured as a buyer message. (Nilin root cause.)
+            if (isSupplyIntent(text)) {
+                logger.info(`[WebhookProcessor] Supply intent during buyer session for ${from} — switching to listing intake`);
+                await workflowAdapter.startSession(from);
+                await prisma.interaction.create({ data: { tenant_id: contact.tenant_id, phone_number: from, channel: 'whatsapp', direction: 'inbound', event_type: 'supply_reroute_from_buyer', content: text || '' } });
+                await prisma.contact.update({ where: { phone_number: from }, data: { last_channel: 'whatsapp', last_interaction: new Date() } });
+                return;
+            }
             logger.info(`[WebhookProcessor] Routing to buyer workflow for ${from}`);
             await buyerWorkflowAdapter.handleMessage(from, msg, buyerSession);
 
