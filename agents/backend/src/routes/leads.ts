@@ -160,12 +160,27 @@ router.get('/recent-external', async (req: any, res) => {
         const visibilityFilter = buildContactVisibilityFilter(req.agent.id, req.agent.role);
 
         const where: any = {
-            contact_type: { notIn: ['LANDLORD', 'MANAGEMENT', 'PARTNER_AGENT'] },
             // PARTNER: the team visibility filter is assigned-agent based and would always yield zero
             // for an external partner (they're not an Agent). Their scope is `referral_partner_id`,
             // applied below via partnerLeadWhere().
             ...(req.agent?.role === 'partner' ? {} : visibilityFilter),
         };
+
+        // Phase 4a (2026-07-28): NON-DESTRUCTIVE lead visibility. The old hard exclusion
+        // (contact_type notIn [LANDLORD,MANAGEMENT,PARTNER_AGENT]) permanently HID anyone later
+        // labeled an owner/dealer — even when they still had an ACTIVE demand deal (the "lead
+        // vanished" bug, e.g. Nilin). Now: show a contact if they are a normal demand lead OR they
+        // have an active demand deal, regardless of their supply-side label. MANAGEMENT/staff stay out.
+        // (Pushed into where.AND — never a top-level OR, which applyPartnerLeadScope would clobber.)
+        where.AND = [{
+            OR: [
+                { contact_type: { notIn: ['LANDLORD', 'MANAGEMENT', 'PARTNER_AGENT'] } },
+                {
+                    contact_type: { in: ['LANDLORD', 'PARTNER_AGENT'] },
+                    demand_transactions: { some: { status: { notIn: ['CLOSED_WON', 'CLOSED_LOST'] } } },
+                },
+            ],
+        }];
 
         // Source filter — when specified use it; when not, show all
         if (source) {
