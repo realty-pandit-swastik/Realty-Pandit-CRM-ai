@@ -732,7 +732,12 @@ router.get('/', authMiddleware, async (req, res) => {
             // (Part B, 2026-06-20) — flags the ~317 listings where an agent put themselves as the owner.
             const d10 = (p: any) => (p ? String(p) : '').replace(/\D/g, '').slice(-10);
             const ownerD = d10(i.owner_phone);
-            const needs_owner_fix = !!ownerD && (ownerD === d10(i.uploaded_by_agent?.phone) || ownerD === d10(i.assigned_agent?.phone));
+            // 2026-07-28: 466 staff-as-owner listings were detached to a placeholder owner
+            // ("Owner To Be Entered", +910000000000/1). Keep flagging them so the "⚠ Add owner details"
+            // badge stays lit until an agent enters the REAL owner. (owner-approved: flag + worklist.)
+            const OWNER_PENDING_PHONES = ['+910000000000', '+910000000001'];
+            const needs_owner_fix = OWNER_PENDING_PHONES.includes(i.owner_phone)
+                || (!!ownerD && (ownerD === d10(i.uploaded_by_agent?.phone) || ownerD === d10(i.assigned_agent?.phone)));
             return { ...redacted, source, mine, can_edit, needs_owner_fix };
         });
 
