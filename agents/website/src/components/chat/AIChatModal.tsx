@@ -90,6 +90,7 @@ export default function AIChatModal({ isOpen, onClose, initialQuery = '' }: AICh
     useEffect(() => {
         if (isOpen) {
             const savedSession = localStorage.getItem('rp-chat-session');
+            let restored = false;
             if (savedSession) {
                 try {
                     const parsed = JSON.parse(savedSession);
@@ -102,6 +103,7 @@ export default function AIChatModal({ isOpen, onClose, initialQuery = '' }: AICh
                             ...m,
                             timestamp: new Date(m.timestamp),
                         })));
+                        restored = true;
                         if (parsed.isAuthenticated && parsed.userPhone) {
                             setIsAuthenticated(true);
                             setUserPhone(parsed.userPhone);
@@ -119,13 +121,26 @@ export default function AIChatModal({ isOpen, onClose, initialQuery = '' }: AICh
                 }
             }
 
-            if (initialQuery && messages.length === 0) {
-                const welcomeMessage: Message = {
-                    id: `msg_${Date.now()}`,
-                    role: 'ai',
-                    content: `Namaste! I'm Panditji, your AI property assistant. ${initialQuery ? `I see you're looking for: "${initialQuery}". Let me search for you!` : 'How can I help you find your perfect property today?'}`,
-                    timestamp: new Date(),
-                };
+            if (!restored && messages.length === 0) {
+                // Phase 3 (2026-07-28): don't assume every visitor is a buyer. On a fresh open, ask ONE
+                // deterministic question — List vs Find — with one-tap chips (handled in handleQuickReply).
+                const welcomeMessage: Message = initialQuery
+                    ? {
+                        id: `msg_${Date.now()}`,
+                        role: 'ai',
+                        content: `Namaste! I'm Panditji, your AI property assistant. I see you're looking for: "${initialQuery}". Let me search for you!`,
+                        timestamp: new Date(),
+                    }
+                    : {
+                        id: `msg_${Date.now()}`,
+                        role: 'ai',
+                        content: `Namaste! I'm Panditji 🙏 your AI property assistant. What would you like to do?`,
+                        timestamp: new Date(),
+                        quick_replies: [
+                            { label: '🏠 List a property', value: '__list_property__' },
+                            { label: '🔍 Find a property', value: '__find_property__' },
+                        ],
+                    };
                 setMessages([welcomeMessage]);
             }
         }
@@ -277,6 +292,22 @@ export default function AIChatModal({ isOpen, onClose, initialQuery = '' }: AICh
 
     // ─── Handle quick reply click ────────────────────────────────────────────
     const handleQuickReply = useCallback((value: string) => {
+        // Phase 3 (2026-07-28): deterministic List-vs-Find choice from the welcome chips.
+        if (value === '__list_property__') {
+            setMessages((prev) => [...prev,
+                { id: `msg_${Date.now()}_user`, role: 'user', content: 'List a property', timestamp: new Date() },
+                { id: `msg_${Date.now()}_ai`, role: 'ai', content: 'Bilkul! Aapki property list karte hain. Main aapko Property Upload page par le ja raha hoon...', timestamp: new Date() },
+            ]);
+            setTimeout(() => { onClose(); router.push('/post-property'); }, 1200);
+            return;
+        }
+        if (value === '__find_property__') {
+            setMessages((prev) => [...prev,
+                { id: `msg_${Date.now()}_user`, role: 'user', content: 'Find a property', timestamp: new Date() },
+            ]);
+            startBuyerFlow();
+            return;
+        }
         if (!buyerSessionId && (value === '__change_requirements__' || value === '__edit__')) {
             setMessages((prev) => [...prev, {
                 id: `msg_${Date.now()}_user`,
@@ -304,7 +335,7 @@ export default function AIChatModal({ isOpen, onClose, initialQuery = '' }: AICh
         } else {
             handleBuyerMessage(undefined, value);
         }
-    }, [buyerSessionId, handleBuyerAction, handleBuyerMessage, startBuyerFlow]);
+    }, [buyerSessionId, handleBuyerAction, handleBuyerMessage, startBuyerFlow, onClose, router]);
 
     // ─── Main send handler ───────────────────────────────────────────────────
     const handleSendMessage = async (content: string) => {

@@ -107,6 +107,18 @@ async function processInboundMessageInner(data: InboundMessageData): Promise<voi
         logger.warn('[WebhookProcessor] template_button_router error:', err);
     }
 
+    // Phase 3 (2026-07-28): a tap on the List-vs-Find disambiguation buttons routes straight into the
+    // supply/demand workflow — before any keyword routing, so the choice can never be re-guessed.
+    try {
+        const { handleDisambiguationReply } = await import('./disambiguation_router');
+        if (await handleDisambiguationReply(msg, from)) {
+            logger.info(`[WebhookProcessor] Disambiguation reply handled for ${from}; skipping normal pipeline`);
+            return;
+        }
+    } catch (err) {
+        logger.warn('[WebhookProcessor] disambiguation_router error:', err);
+    }
+
     // ─── 1. SSOT: Check or Create Contact ─────────────────────────────────────
     let contact = await prisma.contact.findUnique({ where: { phone_number: from } });
 
@@ -1044,6 +1056,19 @@ How can I help you find your perfect property today? 🏡`;
     }
 
     // ─── 6. CENTRAL MESSAGE ROUTER ───────────────────────────────────────────
+    // Phase 3 (2026-07-28): the message failed BOTH the supply and buyer routers above. For a brand-new
+    // UNKNOWN contact, ASK "list or find?" (one deterministic tap) instead of letting the AI router
+    // guess the intent — the guessing is how landlords (Nilin) got misfiled as buyers.
+    try {
+        const { maybeSendDisambiguation } = await import('./disambiguation_router');
+        if (await maybeSendDisambiguation(from, contact, text)) {
+            await prisma.contact.update({ where: { phone_number: from }, data: { last_channel: 'whatsapp', last_interaction: new Date() } });
+            return;
+        }
+    } catch (err) {
+        logger.warn('[WebhookProcessor] maybeSendDisambiguation error:', err);
+    }
+
     const result = await messageRouter.route(contact, text, 'whatsapp', conversationContext);
 
     logger.info(`[Router] Result:`, result);

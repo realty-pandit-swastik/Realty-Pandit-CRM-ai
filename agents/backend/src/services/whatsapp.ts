@@ -341,6 +341,34 @@ export class WhatsAppService {
         });
     }
 
+    /**
+     * Send an interactive reply-buttons message (max 3 buttons). Phase 3 (2026-07-28)
+     * disambiguation prompt. Uses the strict sender so a send failure throws (caller then
+     * falls through to the normal router rather than going silent).
+     */
+    public async sendReplyButtons(
+        to: string,
+        bodyText: string,
+        buttons: Array<{ id: string; title: string }>,
+    ): Promise<void> {
+        await this.callWhatsAppAPIStrict({
+            messaging_product: 'whatsapp',
+            recipient_type: 'individual',
+            to,
+            type: 'interactive',
+            interactive: {
+                type: 'button',
+                body: { text: bodyText.substring(0, 1024) },
+                action: {
+                    buttons: buttons.slice(0, 3).map(b => ({
+                        type: 'reply',
+                        reply: { id: b.id, title: b.title.substring(0, 20) },
+                    })),
+                },
+            },
+        });
+    }
+
     public async sendFlow(
         to: string,
         flowId: string,
