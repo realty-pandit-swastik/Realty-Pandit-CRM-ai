@@ -14,6 +14,7 @@ import { ensurePartnerAgent } from '../services/partner_auto_create';
 import { authMiddleware, checkPermission } from '../middleware/auth';
 import logger from '../utils/logger';
 import { absurdPriceError } from '../utils/price_sanity';
+import { ensureH264Playable } from '../utils/video_transcode';
 import { normalizePhone, isPlaceholderPhone } from '../utils/phone';
 import { findInventoryIdsByAddress } from '../utils/inventory_search';
 import { generateDisplayId } from '../utils/inventory_id';
@@ -2646,6 +2647,9 @@ router.post('/:id/upload', upload.array('images', 20), async (req, res) => {
                 const filename = `${Date.now()}-video.${ext}`;
                 fs.writeFileSync(path.join(videoDir, filename), file.buffer);
                 newVideoUrls.push(`/uploads/properties/${id}/${filename}`);
+                // 2026-07-29: HEVC/iPhone videos don't play in Chrome/FF — transcode to H.264 in the
+                // background (non-blocking; website falls back to photos until it finishes).
+                void ensureH264Playable(path.join(videoDir, filename));
             } else {
                 const result = await storageService.uploadImage(file, id);
                 imageResults.push(result);

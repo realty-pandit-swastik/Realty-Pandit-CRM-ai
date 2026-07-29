@@ -18,6 +18,7 @@ import jwt from 'jsonwebtoken';
 import { ChatWorkflowAdapter } from '../workflows/chat_workflow_adapter';
 import { BuyerChatWorkflowAdapter } from '../workflows/buyer_chat_workflow_adapter';
 import logger from '../utils/logger';
+import { ensureH264Playable } from '../utils/video_transcode';
 import { captureRouteError } from '../utils/capture';
 
 const router = Router();
@@ -145,6 +146,8 @@ router.post('/upload-media', (req: Request, res: Response) => {
             }
 
             const urls = files.map(f => `/uploads/pending/${f.filename}`);
+            // 2026-07-29: transcode HEVC videos to H.264 in the background (non-blocking) so they play everywhere.
+            for (const f of files) if (f.mimetype.startsWith('video/')) void ensureH264Playable(path.join(PENDING_DIR, f.filename));
             const docMeta = files.map(f => ({
                 file_name: f.originalname,
                 mime_type: f.mimetype,
