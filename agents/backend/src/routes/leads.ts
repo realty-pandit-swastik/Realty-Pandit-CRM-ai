@@ -1,6 +1,7 @@
 
 import { Router } from 'express';
 import { LeadScoreService } from '../services/lead_score';
+import { deriveBudgetMin, DEFAULT_TIMELINE } from '../utils/demand_defaults';
 import { MatchingEngine, buildMatchCriteriaFromLead } from '../services/matching_engine';
 import prisma from '../db';
 import { normalizePhone, resolveStoredContactPhone, isPlaceholderPhone } from '../utils/phone';
@@ -1802,6 +1803,15 @@ router.patch('/:phone/requirements', async (req, res) => {
         if (area_max !== undefined) updateData.area_max = area_max ? Number(area_max) : null;
         if (area_unit !== undefined) updateData.area_unit = area_unit || null;
 
+        // 2026-07-29: when a MAX budget is set but MIN is left empty, auto-fill MIN = 10% below MAX;
+        // and default the timeline to 0–1 month when it was cleared. (owner-approved, going-forward)
+        if ((updateData.budget_min == null) && updateData.budget_max != null && Number(updateData.budget_max) > 0) {
+            updateData.budget_min = deriveBudgetMin(null, Number(updateData.budget_max));
+        }
+        if (timeline !== undefined && !updateData.timeline) {
+            updateData.timeline = DEFAULT_TIMELINE;
+        }
+
         // Phase 1 dual-write (2026-05-29) — fold legacy demand fields into canonical
         // schema_values; deep-merge with existing so unrelated keys aren't dropped.
         const _existingContact = await prisma.contact.findUnique({
@@ -1839,7 +1849,7 @@ router.patch('/:phone/requirements', async (req, res) => {
         // demand_category / demand_type_slug columns dropped from Transaction.
         // Sync only surviving universal columns + the canonical schema_values block.
         const dealSync: any = {};
-        if (budget_min !== undefined) dealSync.demand_budget_min = budget_min ? Number(budget_min) : null;
+        if ('budget_min' in updateData) dealSync.demand_budget_min = updateData.budget_min ?? null; // 2026-07-29: sync derived/entered min
         if (budget_max !== undefined) dealSync.demand_budget_max = budget_max ? Number(budget_max) : null;
         if (preferred_location !== undefined) dealSync.demand_location = preferred_location || null;
         if (intent !== undefined) dealSync.demand_intent = intent || null;

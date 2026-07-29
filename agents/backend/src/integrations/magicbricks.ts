@@ -1,6 +1,7 @@
 
 import { Router } from 'express';
 import prisma from '../db';
+import { deriveBudgetMin, DEFAULT_TIMELINE } from '../utils/demand_defaults';
 import { apiKeyAuth } from '../middleware/apikey';
 import logger from '../utils/logger';
 import { normalizePhone } from '../utils/phone';
@@ -209,7 +210,9 @@ async function handleMagicBricksPush(req: any, res: any) {
                 preferred_location: granularLocation,
                 property_type: mappedPropertyType,
                 budget_max: budgetMax,
-                budget_min: budgetMin,
+                // 2026-07-29: if only a max is given, set min = 10% below max; default timeline 0–1 month.
+                budget_min: deriveBudgetMin(budgetMin, budgetMax),
+                timeline: DEFAULT_TIMELINE,
                 demand_taxonomy_node_id: demandTax.demand_taxonomy_node_id ?? undefined,
                 needs_taxonomy_review: demandTax.needs_review || undefined,
                 // Persist legacy classification from the resolved node (2026-05-31).

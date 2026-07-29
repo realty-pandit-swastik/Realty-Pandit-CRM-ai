@@ -16,6 +16,7 @@ import { XMLParser } from 'fast-xml-parser';
 import prisma from '../db';
 import logger from '../utils/logger';
 import { normalizePhone } from '../utils/phone';
+import { deriveBudgetMin, DEFAULT_TIMELINE } from '../utils/demand_defaults';
 import { isRealEmail } from '../utils/email';
 import { sanitizeName } from '../utils/name_sanitizer';
 import { sendBuyerConfirmationWhatsApp, sendBuyerConfirmationEmail } from './lead_notifications';
@@ -539,6 +540,9 @@ export class NinetyNineAcresPoller {
                 preferred_lat: geo?.lat ?? null,
                 preferred_lng: geo?.lng ?? null,
                 budget_max: budgetMax,
+                // 2026-07-29: portal leads often give only a max — set min = 10% below max; default timeline 0–1 month.
+                budget_min: deriveBudgetMin(null, budgetMax),
+                timeline: DEFAULT_TIMELINE,
                 property_type: propertyType,
                 demand_taxonomy_node_id: demandTax.demand_taxonomy_node_id ?? undefined,
                 needs_taxonomy_review: demandTax.needs_review || undefined,
