@@ -330,6 +330,7 @@ router.get('/recent-external', async (req: any, res) => {
             score:       d => ({ lead_score: { total_score: d } }),
             intent:      d => ({ intent: { sort: d, nulls: 'last' } }),
             location:    d => ({ preferred_location: { sort: d, nulls: 'last' } }),
+            stage:       d => ({ lifecycle_stage: d }), // 2026-07-29 pipeline stage (non-nullable → plain sort)
             date:        d => ({ created_at: d }),
         };
         const sortKey = String(req.query.sort || 'date');

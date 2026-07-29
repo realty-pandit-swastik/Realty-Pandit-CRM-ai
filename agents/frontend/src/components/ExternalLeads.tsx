@@ -118,6 +118,23 @@ const sourceLabels: Record<string, string> = {
     'agent_registration': 'Agent Reg.',
 };
 const LEAD_STATUSES = ['cold', 'warm', 'hot', 'closed', 'lost'];
+// Pipeline stage (Contact.lifecycle_stage) — auto-driven by the deal pipeline. Shown read-only. (2026-07-29)
+const STAGE_META: Record<string, { label: string; color: string }> = {
+    NEW: { label: 'New', color: '#3b82f6' },
+    QUALIFIED: { label: 'Qualified', color: '#6366f1' },
+    MATCHED: { label: 'Matched', color: '#8b5cf6' },
+    MATCHING_APPOINTMENT: { label: 'Matching', color: '#8b5cf6' },
+    VISIT_SCHEDULED: { label: 'Visit set', color: '#f59e0b' },
+    VISITED: { label: 'Visited', color: '#14b8a6' },
+    NEGOTIATION: { label: 'Negotiation', color: '#f97316' },
+    CLOSED_WON: { label: 'Won', color: '#22c55e' },
+    CLOSED_LOST: { label: 'Lost', color: '#ef4444' },
+    ON_HOLD: { label: 'On hold', color: '#94a3b8' },
+};
+const stageInfo = (raw?: string | null): { label: string; color: string } => {
+    const key = String(raw || 'NEW').toUpperCase();
+    return STAGE_META[key === 'LEAD' ? 'NEW' : key] || { label: String(raw || 'New'), color: '#6b7280' };
+};
 const LIFECYCLE_STAGES = ['NEW', 'QUALIFIED', 'MATCHING_APPOINTMENT', 'VISIT_SCHEDULED', 'VISITED', 'NEGOTIATION', 'CLOSED_WON', 'CLOSED_LOST', 'ON_HOLD'];
 const SOURCES = ['99acres', 'magicbricks', 'housing', 'website', 'whatsapp', 'voice', 'manual', 'admin_created', 'inventory_workflow', 'website_popup', 'agent_registration'];
 const PRIVILEGED_ROLES = ['super_boss', 'manager'];
@@ -1353,7 +1370,7 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
                             <thead>
                                 <tr style={{ borderBottom: '1px solid var(--border-secondary)' }}>
                                     {leadSelectMode && <th style={{ padding: '6px 10px', width: '34px' }} />}
-                                    {([['Name', 'name'], ['Phone', 'phone'], ['Source', 'source'], ['Status', 'status'], ['Assigned to', 'assigned_to'], ['Budget', 'budget'], ['Score', 'score'], ['Intent', 'intent'], ['Location', 'location'], ['Date', 'date'], ['', '']] as Array<[string, string]>).map(([h, key]) => {
+                                    {([['Name', 'name'], ['Phone', 'phone'], ['Source', 'source'], ['Status', 'status'], ['Stage', 'stage'], ['Assigned to', 'assigned_to'], ['Budget', 'budget'], ['Score', 'score'], ['Intent', 'intent'], ['Location', 'location'], ['Date', 'date'], ['', '']] as Array<[string, string]>).map(([h, key]) => {
                                         const active = !!key && leadSortKey === key;
                                         return (
                                             <th
@@ -1414,6 +1431,11 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
                                                     style={{ padding: '2px 4px', borderRadius: '4px', fontSize: '11px', fontWeight: 500, border: '1px solid var(--border-secondary)', cursor: 'pointer', backgroundColor: lead.lead_status === 'hot' ? '#fef2f2' : lead.lead_status === 'warm' ? '#fffbeb' : 'var(--bg-primary)', color: lead.lead_status === 'hot' ? '#ef4444' : lead.lead_status === 'warm' ? '#f59e0b' : 'var(--text-primary)' }}>
                                                     {LEAD_STATUSES.map(s => <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
                                                 </select>
+                                            </td>
+                                            <td style={compactCell}>
+                                                {(() => { const si = stageInfo(lead.lifecycle_stage); return (
+                                                    <span title="Pipeline stage" style={{ backgroundColor: si.color + '18', color: si.color, padding: '1px 6px', borderRadius: '8px', fontSize: '10px', fontWeight: 600, whiteSpace: 'nowrap' }}>{si.label}</span>
+                                                ); })()}
                                             </td>
                                             <td style={{ ...compactCell, fontSize: '11px' }}>
                                                 {(lead as any).assigned_agent?.name
