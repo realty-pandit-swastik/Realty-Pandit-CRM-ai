@@ -2589,6 +2589,19 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
                             {/* ── Tab: More ── */}
                             {editTab === 'more' && (
                                 <div>
+                                    {/* Change owner (2026-07-29): repoint a wrongly-attached owner contact — parity with the PWA. */}
+                                    <EditContactSection
+                                        label="Owner / Source Contact"
+                                        color="#34d399"
+                                        currentPhone={editData.owner_phone}
+                                        currentName={editData.uploader_name}
+                                        onContactSelected={(contact) => setEditData({
+                                            ...editData,
+                                            owner_phone: contact.phone,
+                                            uploader_phone: contact.phone,
+                                            uploader_name: contact.name,
+                                        })}
+                                    />
                                     <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-link)', marginBottom: '12px', borderBottom: '1px solid var(--border-secondary)', paddingBottom: '4px' }}>Key Holder</div>
                                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px', marginBottom: '20px' }}>
                                         <div>
