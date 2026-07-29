@@ -1333,6 +1333,12 @@ export const shareDealProperties = async (dealId: string, inventoryIds: string[]
     return res.data;
 };
 
+// 2026-07-29: record a share sent from the agent's PERSONAL WhatsApp (wa.me) so it shows in Shared.
+export const recordPersonalShare = async (dealId: string, inventoryIds: string[], toPartner: boolean) => {
+    const res = await client.post(`/api/deals/${dealId}/record-personal-share`, { inventory_ids: inventoryIds, to_partner: toPartner });
+    return res.data;
+};
+
 export const bookDealAppointment = async (dealId: string, payload: {
     inventory_id: string;
     date: string;

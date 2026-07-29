@@ -920,6 +920,45 @@ router.post('/:id/share-properties', checkPermission('act_on_deals'), async (req
     }
 });
 
+// POST /api/deals/:id/record-personal-share — 2026-07-29: log a share the agent sent from their OWN
+// (personal) WhatsApp via a wa.me redirect. No Meta send here; this only records it so the properties
+// appear in the deal's Shared tab + timeline, exactly like a Company-WhatsApp share.
+router.post('/:id/record-personal-share', checkPermission('act_on_deals'), async (req: any, res) => {
+    const { id } = req.params;
+    const agent = req.agent;
+    if (!(await partnerOwnsDealOr403(req, res, id))) return;
+    const { inventory_ids, to_partner } = req.body || {};
+    if (!Array.isArray(inventory_ids) || inventory_ids.length === 0) {
+        return res.status(400).json({ error: 'inventory_ids array required' });
+    }
+    try {
+        const deal = await prisma.transaction.findFirst({
+            where: { id, tenant_id: agent.tenant_id },
+            select: { id: true, tenant_id: true, demand_contact: { select: { phone_number: true } } },
+        });
+        if (!deal) return res.status(404).json({ error: 'Deal not found' });
+        const phone = (deal as any).demand_contact?.phone_number || '';
+        for (const invId of inventory_ids) {
+            await prisma.interaction.create({
+                data: {
+                    tenant_id: deal.tenant_id,
+                    phone_number: phone,
+                    channel: 'whatsapp',
+                    direction: 'outbound',
+                    event_type: 'property_shared',
+                    content: `Shared via personal WhatsApp${to_partner ? ' (to partner agent)' : ''}`,
+                    metadata: { deal_id: id, inventory_id: invId, channel: 'personal_whatsapp', to_partner: !!to_partner, shared_by_agent_id: agent.id },
+                },
+            });
+        }
+        res.json({ success: true, recorded: inventory_ids.length });
+    } catch (err: any) {
+        captureRouteError(err, req, { route: 'deals#record-personal-share' });
+        logger.error('[DealAPI] record-personal-share error:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // ─── POST /api/deals/:id/book-appointment — Book visit, move to VISIT_SCHEDULED
 router.post('/:id/book-appointment', checkPermission('act_on_deals'), async (req: any, res) => {
     const { id } = req.params;

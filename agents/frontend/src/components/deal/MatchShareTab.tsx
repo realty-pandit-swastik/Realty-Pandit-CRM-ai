@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import type { Deal } from '../../api/client';
-import { getDealMatchedInventory, shareDealProperties, getInventoryItem, getTaxonomyTree } from '../../api/client';
+import { getDealMatchedInventory, shareDealProperties, recordPersonalShare, getInventoryItem, getTaxonomyTree } from '../../api/client';
 import { useToast } from '../../contexts/ToastContext';
 import { useConfirm } from '../../contexts/ConfirmContext';
 import { toDialablePhone } from '../../lib/phone';
@@ -489,6 +489,10 @@ export function MatchShareTab({ deal, onShared }: Props) {
         const selectedProps = results.filter(r => selected.has(r.id));
         const multi = selectedProps.length > 1;
         const isRent = (i?: string) => i === 'rent' || i === 'rent_lease' || i === 'lease';
+        // 2026-07-29: a partner-referral deal (no client phone) shares to the PARTNER AGENT — send a
+        // BRANDLESS message (no RP sign-off, no exact locality/unit, no RP link) so they present it as
+        // their own to their buyer. A normal client deal keeps the full branded message.
+        const brandless = shareToPartner;
 
         const blocks = selectedProps.map((p, i) => {
             const beds = p.specs?.bhk_count || p.specs?.bedrooms || bhkFromSlug(p.slug);
@@ -496,11 +500,13 @@ export function MatchShareTab({ deal, onShared }: Props) {
             const intentLabel = isRent(p.intent) ? 'For Rent' : 'For Sale';
 
             const seenLoc = new Set<string>();
-            const locParts = [p.sub_locality, p.locality, p.city, abbrevState(p.state)]
+            const locParts = (brandless
+                ? [(p as any).apartment_name, p.locality, p.city, abbrevState(p.state)]
+                : [p.sub_locality, p.locality, p.city, abbrevState(p.state)])
                 .map(x => (x || '').trim())
                 .filter(x => { const k = x.toLowerCase(); if (!x || seenLoc.has(k)) return false; seenLoc.add(k); return true; });
             let locLine = locParts.join(', ');
-            if (p.pincode) locLine += ` – ${p.pincode}`;
+            if (!brandless && p.pincode) locLine += ` – ${p.pincode}`;
 
             const specBits: string[] = [];
             if (p.specs?.area) specBits.push(`📐 ${p.specs.area} ${p.specs.area_unit || 'sq.ft'}`);
@@ -525,19 +531,30 @@ export function MatchShareTab({ deal, onShared }: Props) {
             if (p.furnishing) lines.push(`🛋 ${prettyValue(p.furnishing)}`);
             if (amenities) lines.push(`✨ ${amenities}`);
             if (desc) lines.push(`📝 ${desc}`);
-            lines.push('');
-            lines.push('🔗 Photos & full details:');
-            lines.push(link);
+            if (!brandless) {   // partner (brandless) → omit the Realty Pandit website link
+                lines.push('');
+                lines.push('🔗 Photos & full details:');
+                lines.push(link);
+            }
 
             const block = lines.join('\n');
             return multi ? `*${i + 1}.*\n${block}` : block;
         });
 
+        const body = blocks.join('\n\n');
         const msg = encodeURIComponent(
-            `Hi! Here are some properties for you:\n\n${blocks.join('\n\n')}\n\n— Realty Pandit Team`
+            brandless
+                ? body   // partner: brandless — no Realty Pandit sign-off
+                : `Hi! Here are some properties for you:\n\n${body}\n\n— Realty Pandit Team`
         );
         if (!shareTel) return;
         window.open(`https://wa.me/${shareTel.slice(1)}?text=${msg}`, '_blank');
+
+        // Record the personal-WhatsApp share so it appears in the Shared tab + timeline (owner-approved).
+        const sharedIds = selectedProps.map(p => p.id);
+        recordPersonalShare(deal.id, sharedIds, brandless).then(() => onShared()).catch(() => { /* non-fatal — wa.me already opened */ });
+        showToast(brandless ? 'Opened personal WhatsApp (brandless, for partner) — recorded' : 'Opened personal WhatsApp — recorded', 'success');
+        setSelected(new Set());
     };
 
     const inputStyle: React.CSSProperties = {
