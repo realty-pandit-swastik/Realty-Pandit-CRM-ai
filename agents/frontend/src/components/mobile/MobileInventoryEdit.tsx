@@ -96,6 +96,8 @@ export function MobileInventoryEdit({ item, onSaved, onCancel: _onCancel }: Mobi
         intent: item.intent || 'sell',
         status: item.status || 'active',
         roof_rights: item.roof_rights || false, // roof-rights flag (2026-06-28)
+        commercial_use: item.commercial_use || false, // 2026-07-29 residential-usable-as-commercial
+        commercial_use_type: item.commercial_use_type || '',
         // specs.* is SOLE SoT (Phase 3 dedup, 2026-05-28) — column fallbacks dropped.
         // Note: furnishing/property_age/facing live in editSchemaValues now (Phase 2);
         // kept in `data` here only for back-compat with any code that reads `data.*`.
@@ -466,6 +468,33 @@ export function MobileInventoryEdit({ item, onSaved, onCancel: _onCancel }: Mobi
                                 </span>
                             </button>
                         </div>
+                        {/* Commercial use (2026-07-29) — only for RESIDENTIAL properties usable commercially */}
+                        {String(item.category || '').toLowerCase() === 'residential' && (
+                            <div style={{ gridColumn: 'span 2' }}>
+                                <label style={labelStyle}>Commercial Use</label>
+                                <button type="button" onClick={() => set('commercial_use', !data.commercial_use)}
+                                    style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 12px', borderRadius: '8px', cursor: 'pointer', width: '100%', textAlign: 'left',
+                                        border: data.commercial_use ? '1.5px solid #a855f7' : '1px solid var(--border-secondary)',
+                                        backgroundColor: data.commercial_use ? 'rgba(168,85,247,0.08)' : 'var(--bg-secondary)' }}>
+                                    <div style={{ width: '20px', height: '20px', borderRadius: '4px', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                        border: data.commercial_use ? '2px solid #a855f7' : '2px solid var(--border-secondary)', backgroundColor: data.commercial_use ? '#a855f7' : 'transparent' }}>
+                                        {data.commercial_use && <span style={{ color: '#fff', fontSize: '12px', lineHeight: 1 }}>✓</span>}
+                                    </div>
+                                    <span style={{ fontSize: '13px', fontWeight: 600, color: data.commercial_use ? '#a855f7' : 'var(--text-secondary)' }}>
+                                        {data.commercial_use ? 'Also usable commercially ✓' : 'Mark as commercial-usable'}
+                                    </span>
+                                </button>
+                                {data.commercial_use && (
+                                    <select value={data.commercial_use_type || 'office'} onChange={e => set('commercial_use_type', e.target.value)}
+                                        style={{ width: '100%', marginTop: '8px', padding: '10px 12px', borderRadius: '10px', border: '1px solid var(--border-secondary)', backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)', fontSize: '15px', boxSizing: 'border-box' }}>
+                                        <option value="office">Office</option>
+                                        <option value="shop">Shop</option>
+                                        <option value="showroom">Showroom</option>
+                                        <option value="other">Others</option>
+                                    </select>
+                                )}
+                            </div>
+                        )}
                         {/* Furnishing / Age / Facing inputs removed Phase 2 dedup (2026-05-28) —
                             rendered by the taxonomy-driven by-type panel inside the Specs section below. */}
                     </div>

@@ -709,6 +709,7 @@ router.get('/:id/matched-inventory', checkPermission('act_on_deals'), async (req
         radius_km,      // pin geo search to one radius
         roof_rights,    // 2026-06-28: only listings that include roof rights
         area_unit, floor_min, floor_max, renovated, pre_leased, // 2026-07-24 Match&Share manual filters
+        commercial_use, commercial_use_type, // 2026-07-29: residential-usable-as-commercial (+ type)
     } = req.query as Record<string, string>;
 
     try {
@@ -840,12 +841,12 @@ router.get('/:id/matched-inventory', checkPermission('act_on_deals'), async (req
         {
             const needArea = !!area_unit && (!!area_min || !!area_max);
             const needFloor = !!floor_min || !!floor_max;
-            const needFlags = roof_rights === 'true' || renovated === 'true' || pre_leased === 'true';
+            const needFlags = roof_rights === 'true' || renovated === 'true' || pre_leased === 'true' || commercial_use === 'true';
             if (matches.length && (needArea || needFloor || needFlags)) {
                 const ids = matches.map((m: any) => m.id);
                 const rows = await prisma.inventory.findMany({
                     where: { id: { in: ids } },
-                    select: { id: true, roof_rights: true, renovated: true, pre_rented: true, floor_number: true, specs: true },
+                    select: { id: true, roof_rights: true, renovated: true, pre_rented: true, commercial_use: true, commercial_use_type: true, floor_number: true, specs: true },
                 });
                 const lo = area_min ? parseFloat(area_min) : -Infinity;
                 const hi = area_max ? parseFloat(area_max) : Infinity;
@@ -855,6 +856,10 @@ router.get('/:id/matched-inventory', checkPermission('act_on_deals'), async (req
                     if (roof_rights === 'true' && !r.roof_rights) return false;
                     if (renovated === 'true' && !r.renovated) return false;
                     if (pre_leased === 'true' && !r.pre_rented) return false;
+                    if (commercial_use === 'true') {
+                        if (!r.commercial_use) return false;
+                        if (commercial_use_type && String(r.commercial_use_type || '').toLowerCase() !== String(commercial_use_type).toLowerCase()) return false;
+                    }
                     if (needFloor) { const fn = r.floor_number; if (fn == null || fn < fLo || fn > fHi) return false; }
                     if (needArea) {
                         const sp = (r.specs && typeof r.specs === 'object' && !Array.isArray(r.specs)) ? r.specs as any : {};

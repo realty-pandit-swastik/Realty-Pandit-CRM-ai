@@ -84,6 +84,8 @@ router.post('/', authMiddleware, checkPermission('edit_inventory'), async (req, 
             renovated, roof_rights,
             // Pre-rented (pre-lease): for-sale property already tenanted + the current monthly rent.
             pre_rented, pre_rented_monthly_rent,
+            // Commercial use (2026-07-29): a residential property also usable commercially + its type.
+            commercial_use, commercial_use_type,
             // Source partner (middleman model, 2026-04-17). If the inventory came from
             // a partner agent, either pass their PartnerAgent.id or their phone (+ name).
             // If the phone is new, a PartnerAgent is auto-created and assigned to the
@@ -263,6 +265,12 @@ router.post('/', authMiddleware, checkPermission('edit_inventory'), async (req, 
                 pre_rented: pre_rented === true || pre_rented === 'true',
                 pre_rented_monthly_rent: pre_rented_monthly_rent != null && pre_rented_monthly_rent !== ''
                     ? Number(pre_rented_monthly_rent) : null,
+
+                // Commercial use (2026-07-29): residential property also usable commercially. Type only
+                // kept when the flag is on. (UI shows this option only for residential listings.)
+                commercial_use: commercial_use === true || commercial_use === 'true',
+                commercial_use_type: (commercial_use === true || commercial_use === 'true') && commercial_use_type
+                    ? String(commercial_use_type).toLowerCase() : null,
 
                 // Uploader — also auto-assign to uploader if no explicit assignment
                 uploaded_by_agent_id: req.agent!.id,
@@ -544,6 +552,11 @@ router.get('/', authMiddleware, async (req, res) => {
 
         // Roof rights filter (2026-06-28): ?roof_rights=true → only listings that include roof rights.
         if (req.query.roof_rights === 'true') where.roof_rights = true;
+
+        // Commercial-use filter (2026-07-29): residential properties also usable commercially,
+        // optionally narrowed to a type (office/shop/showroom/other).
+        if (req.query.commercial_use === 'true') where.commercial_use = true;
+        if (req.query.commercial_use_type) where.commercial_use_type = String(req.query.commercial_use_type).toLowerCase();
 
         // Classification ID filters (v2)
         if (category_id && typeof category_id === 'string') {
@@ -954,6 +967,16 @@ router.patch('/:id', authMiddleware, checkPermission('edit_inventory'), async (r
             const r = req.body.pre_rented_monthly_rent;
             updateData.pre_rented_monthly_rent = (r === null || r === '' || isNaN(Number(r))) ? null : Number(r);
         }
+        // Commercial use (2026-07-29) — flag + type (office/shop/showroom/other). Type is cleared
+        // whenever the flag is off, so the two never drift out of sync.
+        if (req.body.commercial_use !== undefined) {
+            updateData.commercial_use = req.body.commercial_use === true || req.body.commercial_use === 'true';
+        }
+        if (req.body.commercial_use_type !== undefined) {
+            const t = req.body.commercial_use_type;
+            updateData.commercial_use_type = (t === null || t === '') ? null : String(t).toLowerCase();
+        }
+        if (updateData.commercial_use === false) updateData.commercial_use_type = null;
         for (const field of allowedFields) {
             if (req.body[field] !== undefined) {
                 if (['price', 'customer_price', 'display_price'].includes(field)) {

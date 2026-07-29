@@ -624,6 +624,9 @@ model Inventory {
   // Pre-rented (pre-lease): a FOR-SALE property that already has a sitting tenant paying rent.
   pre_rented              Boolean  @default(false) // For-sale property already tenanted
   pre_rented_monthly_rent Decimal? // Current monthly rent the sitting tenant pays
+  // Commercial use (2026-07-29): a RESIDENTIAL property that can also be used commercially.
+  commercial_use          Boolean  @default(false) // Residential property also usable commercially
+  commercial_use_type     String?  // office | shop | showroom | other (set only when commercial_use)
 
   documents        InventoryDocument[] // Attached documents (title deed, NOC, etc.)
   appointments     Appointment[] // Calendar system appointments

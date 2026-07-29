@@ -157,6 +157,8 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
     const [filterPriceMin, setFilterPriceMin] = useState(''); // budget/price range filter (#3, 2026-06-28)
     const [filterPriceMax, setFilterPriceMax] = useState('');
     const [filterRoofRights, setFilterRoofRights] = useState(false); // roof-rights filter (2026-06-28)
+    const [filterCommercialUse, setFilterCommercialUse] = useState(false); // 2026-07-29 residential-usable-as-commercial
+    const [filterCommercialUseType, setFilterCommercialUseType] = useState(''); // '' = any
     const [filterAreaMin, setFilterAreaMin] = useState('');
     const [filterAreaMax, setFilterAreaMax] = useState('');
     const [filterAreaUnit, setFilterAreaUnit] = useState('sqft'); // sqft | sqyd | sqm
@@ -326,7 +328,7 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
 
     useEffect(() => {
         loadInventory();
-    }, [currentPage, filterIntent, filterBrowseAll, filterState, filterType, filterStatus, filterAgent, filterLocation, filterPriceMin, filterPriceMax, filterRoofRights, filterTaxonomy, filterLocationSelection, filterListingSource, filterDataSource, filterDaysInSystem, filterDaysNoVisit, filterFloors, filterAreaMin, filterAreaMax, filterAreaUnit]);
+    }, [currentPage, filterIntent, filterBrowseAll, filterState, filterType, filterStatus, filterAgent, filterLocation, filterPriceMin, filterPriceMax, filterRoofRights, filterCommercialUse, filterCommercialUseType, filterTaxonomy, filterLocationSelection, filterListingSource, filterDataSource, filterDaysInSystem, filterDaysNoVisit, filterFloors, filterAreaMin, filterAreaMax, filterAreaUnit]);
 
     // Close call dropdown on outside click
     useEffect(() => {
@@ -406,6 +408,7 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
             }
             if (filterPriceMax.trim()) params.price_max = filterPriceMax.trim();
             if (filterRoofRights) params.roof_rights = 'true';
+            if (filterCommercialUse) { params.commercial_use = 'true'; if (filterCommercialUseType) params.commercial_use_type = filterCommercialUseType; }
             if (filterTaxonomy.nodeIds.length > 0) params.taxonomy_node_ids = filterTaxonomy.nodeIds.join(',');
             if (filterListingSource) params.listing_source = filterListingSource;
             if (filterDataSource) params.data_source = filterDataSource;
@@ -585,10 +588,11 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
         setFilterLocation('');
         setFilterPriceMin(''); setFilterPriceMax(''); setFilterAreaMin(''); setFilterAreaMax(''); setFilterAreaUnit('sqft');
         setFilterRoofRights(false);
+        setFilterCommercialUse(false); setFilterCommercialUseType('');
         setCurrentPage(1);
     };
 
-    const hasActiveFilters = filterIntent || filterState || filterType || filterStatus || filterAgent || searchQuery.trim() || filterTaxonomy.nodeIds.length > 0 || filterTaxonomy.bhk.length > 0 || filterLocation.trim() || filterPriceMin.trim() || filterPriceMax.trim() || filterRoofRights;
+    const hasActiveFilters = filterIntent || filterState || filterType || filterStatus || filterAgent || searchQuery.trim() || filterTaxonomy.nodeIds.length > 0 || filterTaxonomy.bhk.length > 0 || filterLocation.trim() || filterPriceMin.trim() || filterPriceMax.trim() || filterRoofRights || filterCommercialUse;
 
     const activeInventoryFilterCount = [
         filterIntent,
@@ -718,6 +722,9 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
             // Pre-rented (pre-lease)
             pre_rented: item.pre_rented || false,
             pre_rented_monthly_rent: item.pre_rented_monthly_rent != null ? String(item.pre_rented_monthly_rent) : '',
+            // Commercial use (2026-07-29): residential property also usable commercially + its type.
+            commercial_use: item.commercial_use || false,
+            commercial_use_type: item.commercial_use_type || '',
         });
     };
 
@@ -2306,6 +2313,40 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
                                             )}
                                         </div>
                                     )}
+                                    {/* Commercial use (2026-07-29) — only for RESIDENTIAL properties that can also be used commercially. */}
+                                    {String(editData.category || '').toLowerCase() === 'residential' && (
+                                        <div style={{ gridColumn: '1 / -1' }}>
+                                            <label style={s.editLabel}>Commercial Use</label>
+                                            <button
+                                                type="button"
+                                                onClick={() => setEditData((p: any) => ({ ...p, commercial_use: !p.commercial_use, commercial_use_type: !p.commercial_use ? (p.commercial_use_type || 'office') : '' }))}
+                                                style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 14px', borderRadius: '8px', cursor: 'pointer', width: '100%', textAlign: 'left', border: editData.commercial_use ? '1.5px solid #a855f7' : '1px solid var(--border-secondary)', backgroundColor: editData.commercial_use ? 'rgba(168,85,247,0.08)' : 'var(--bg-secondary)' }}
+                                            >
+                                                <div style={{ width: '20px', height: '20px', borderRadius: '4px', flexShrink: 0, border: editData.commercial_use ? '2px solid #a855f7' : '2px solid var(--border-secondary)', backgroundColor: editData.commercial_use ? '#a855f7' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                    {editData.commercial_use && <span style={{ color: '#fff', fontSize: '12px', lineHeight: 1 }}>✓</span>}
+                                                </div>
+                                                <div>
+                                                    <div style={{ fontSize: '13px', fontWeight: 600, color: editData.commercial_use ? '#a855f7' : 'var(--text-secondary)' }}>
+                                                        {editData.commercial_use ? 'Also usable commercially ✓' : 'Mark as commercial-usable'}
+                                                    </div>
+                                                    <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                                                        Residential property that can also be used for commercial purposes
+                                                    </div>
+                                                </div>
+                                            </button>
+                                            {editData.commercial_use && (
+                                                <div style={{ marginTop: '10px' }}>
+                                                    <label style={s.editLabel}>Commercial use type</label>
+                                                    <select style={s.editInput} value={editData.commercial_use_type || 'office'} onChange={e => setEditData((p: any) => ({ ...p, commercial_use_type: e.target.value }))}>
+                                                        <option value="office">Office</option>
+                                                        <option value="shop">Shop</option>
+                                                        <option value="showroom">Showroom</option>
+                                                        <option value="other">Others</option>
+                                                    </select>
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
                                 </div>
                             )}
 
@@ -3242,6 +3283,7 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
                                 setFilterFloors([]);
                                 setFilterPriceMin(''); setFilterPriceMax('');
                                 setFilterRoofRights(false);
+                                setFilterCommercialUse(false); setFilterCommercialUseType('');
                                 setFilterAgent('');
                             }} style={{ background: 'none', border: 'none', color: 'var(--text-link)', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}>
                                 Clear All
@@ -3316,6 +3358,32 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
                                     {filterRoofRights ? 'Only listings with roof rights' : 'Show only roof-rights listings'}
                                 </div>
                             </button>
+                        </FilterSection>
+
+                        {/* Commercial-use filter (2026-07-29) → params.commercial_use(+type) → residential-usable-as-commercial */}
+                        <FilterSection title="Commercial use" defaultOpen={false} badge={filterCommercialUse ? 1 : 0}>
+                            <button type="button" onClick={() => { const n = !filterCommercialUse; setFilterCommercialUse(n); if (!n) setFilterCommercialUseType(''); }}
+                                style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 14px', borderRadius: '8px', cursor: 'pointer', width: '100%', textAlign: 'left',
+                                    border: filterCommercialUse ? '1.5px solid #a855f7' : '1px solid var(--border-secondary)',
+                                    backgroundColor: filterCommercialUse ? 'rgba(168,85,247,0.08)' : 'var(--bg-secondary)' }}>
+                                <div style={{ width: '20px', height: '20px', borderRadius: '4px', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                    border: filterCommercialUse ? '2px solid #a855f7' : '2px solid var(--border-secondary)', backgroundColor: filterCommercialUse ? '#a855f7' : 'transparent' }}>
+                                    {filterCommercialUse && <span style={{ color: '#fff', fontSize: '12px', lineHeight: 1 }}>✓</span>}
+                                </div>
+                                <div style={{ fontSize: '13px', fontWeight: 600, color: filterCommercialUse ? '#a855f7' : 'var(--text-secondary)' }}>
+                                    {filterCommercialUse ? 'Only commercial-usable' : 'Show only commercial-usable'}
+                                </div>
+                            </button>
+                            {filterCommercialUse && (
+                                <select value={filterCommercialUseType} onChange={e => setFilterCommercialUseType(e.target.value)}
+                                    style={{ width: '100%', marginTop: '8px', padding: '8px 10px', borderRadius: '8px', border: '1px solid var(--border-secondary)', backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)', fontSize: '13px', boxSizing: 'border-box' }}>
+                                    <option value="">Any type</option>
+                                    <option value="office">Office</option>
+                                    <option value="shop">Shop</option>
+                                    <option value="showroom">Showroom</option>
+                                    <option value="other">Others</option>
+                                </select>
+                            )}
                         </FilterSection>
 
                         <FilterSection title="Listing Source" defaultOpen={false} badge={filterListingSource ? 1 : 0}>

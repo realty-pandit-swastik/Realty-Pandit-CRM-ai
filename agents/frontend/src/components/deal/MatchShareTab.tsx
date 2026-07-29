@@ -277,6 +277,7 @@ export function MatchShareTab({ deal, onShared }: Props) {
     const [floorMax, setFloorMax] = useState<string>('');
     const [renovated, setRenovated] = useState<boolean>(false);
     const [preLeased, setPreLeased] = useState<boolean>(false);
+    const [commercialUse, setCommercialUse] = useState<boolean>(false); // 2026-07-29 residential-usable-as-commercial
 
     const [results, setResults] = useState<MatchedProperty[]>([]);
     const [loading, setLoading] = useState(false);
@@ -318,7 +319,7 @@ export function MatchShareTab({ deal, onShared }: Props) {
     const typeGroups = useMemo(() => (categoryNode ? collectTypeGroups(categoryNode) : []), [categoryNode]);
 
     // ── Search ─────────────────────────────────────────────────────────────────
-    type Snapshot = { bhkSet: Set<number>; typeNodeSet: Set<string>; budgetMin: string; budgetMax: string; radiusKm: number | null; location: string; roofRights: boolean; areaMin: string; areaMax: string; areaUnit: string; floorMin: string; floorMax: string; renovated: boolean; preLeased: boolean };
+    type Snapshot = { bhkSet: Set<number>; typeNodeSet: Set<string>; budgetMin: string; budgetMax: string; radiusKm: number | null; location: string; roofRights: boolean; areaMin: string; areaMax: string; areaUnit: string; floorMin: string; floorMax: string; renovated: boolean; preLeased: boolean; commercialUse: boolean };
     const buildParams = (s: Snapshot): Record<string, string> => {
         const p: Record<string, string> = {};
         if (intent) p.intent = intent;
@@ -337,6 +338,7 @@ export function MatchShareTab({ deal, onShared }: Props) {
         if (s.floorMax) p.floor_max = s.floorMax;
         if (s.renovated) p.renovated = 'true';
         if (s.preLeased) p.pre_leased = 'true';
+        if (s.commercialUse) p.commercial_use = 'true';
         // Always send `location` (even empty) so clearing it actually drops the filter — the
         // endpoint only falls back to the deal's stored location when the param is ABSENT.
         p.location = s.location || '';
@@ -344,7 +346,7 @@ export function MatchShareTab({ deal, onShared }: Props) {
     };
 
     const runSearch = useCallback(async (override?: Partial<Snapshot>) => {
-        const snap: Snapshot = { bhkSet, typeNodeSet, budgetMin, budgetMax, radiusKm, location, roofRights, areaMin, areaMax, areaUnit, floorMin, floorMax, renovated, preLeased, ...override };
+        const snap: Snapshot = { bhkSet, typeNodeSet, budgetMin, budgetMax, radiusKm, location, roofRights, areaMin, areaMax, areaUnit, floorMin, floorMax, renovated, preLeased, commercialUse, ...override };
         setLoading(true);
         setSendResults({});
         try {
@@ -355,7 +357,7 @@ export function MatchShareTab({ deal, onShared }: Props) {
         } finally {
             setLoading(false);
         }
-    }, [deal.id, bhkSet, typeNodeSet, budgetMin, budgetMax, radiusKm, location, roofRights, areaMin, areaMax, areaUnit, floorMin, floorMax, renovated, preLeased, intent, showToast]);
+    }, [deal.id, bhkSet, typeNodeSet, budgetMin, budgetMax, radiusKm, location, roofRights, areaMin, areaMax, areaUnit, floorMin, floorMax, renovated, preLeased, commercialUse, intent, showToast]);
 
     // First load: once the tree resolves, default-select the deal's own TYPE node and search
     // with it EXPLICITLY (override) — avoids the stale-closure race where the auto-search would
@@ -577,10 +579,12 @@ export function MatchShareTab({ deal, onShared }: Props) {
                 floorMax={floorMax}
                 renovated={renovated}
                 preLeased={preLeased}
+                commercialUse={commercialUse}
                 onSetArea={(min, max, unit) => { setAreaMin(min); setAreaMax(max); setAreaUnit(unit); runSearch({ areaMin: min, areaMax: max, areaUnit: unit }); }}
                 onSetFloor={(min, max) => { setFloorMin(min); setFloorMax(max); runSearch({ floorMin: min, floorMax: max }); }}
                 onToggleRenovated={() => { const next = !renovated; setRenovated(next); runSearch({ renovated: next }); }}
                 onTogglePreLeased={() => { const next = !preLeased; setPreLeased(next); runSearch({ preLeased: next }); }}
+                onToggleCommercialUse={() => { const next = !commercialUse; setCommercialUse(next); runSearch({ commercialUse: next }); }}
             />
 
             {/* Slim action row — broaden + sort kept off the bar so it stays clean. */}

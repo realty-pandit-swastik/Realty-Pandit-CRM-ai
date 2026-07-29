@@ -46,10 +46,12 @@ interface Props {
     floorMax: string;
     renovated: boolean;
     preLeased: boolean;
+    commercialUse: boolean;
     onSetArea: (min: string, max: string, unit: string) => void;
     onSetFloor: (min: string, max: string) => void;
     onToggleRenovated: () => void;
     onTogglePreLeased: () => void;
+    onToggleCommercialUse: () => void;
 }
 
 type CatKey = 'bhk' | 'type' | 'budget' | 'location' | 'radius' | 'size' | 'floor';
@@ -116,6 +118,7 @@ export function InventoryFilterCommandBar(p: Props) {
     }
     if (p.renovated) tokens.push({ key: 'renov', label: '🔨 Renovated', removable: true, remove: () => p.onToggleRenovated() });
     if (p.preLeased) tokens.push({ key: 'prelease', label: '🏷️ Pre-leased', removable: true, remove: () => p.onTogglePreLeased() });
+    if (p.commercialUse) tokens.push({ key: 'commuse', label: '🏢 Commercial-usable', removable: true, remove: () => p.onToggleCommercialUse() });
 
     // ── Dropdown items (list views only; budget/location render forms) ──────────
     const q = query.trim().toLowerCase();
@@ -137,6 +140,7 @@ export function InventoryFilterCommandBar(p: Props) {
             if ('roof rights'.includes(q)) out.push({ key: 'roof', label: '🏠 Roof rights only', checked: p.roofRights, run: () => p.onToggleRoof() });
             if ('renovated'.includes(q)) out.push({ key: 'renov', label: '🔨 Renovated only', checked: p.renovated, run: () => p.onToggleRenovated() });
             if ('pre-leased preleased pre leased'.includes(q)) out.push({ key: 'prelease', label: '🏷️ Pre-leased only', checked: p.preLeased, run: () => p.onTogglePreLeased() });
+            if ('commercial commercial-use commercial usable'.includes(q)) out.push({ key: 'commuse', label: '🏢 Commercial-usable only', checked: p.commercialUse, run: () => p.onToggleCommercialUse() });
             if ('size area'.includes(q)) out.push({ key: 'c-size', label: '📐 Size (area)', arrow: true, run: () => drill('size') });
             if ('floor'.includes(q)) out.push({ key: 'c-floor', label: '🏢 Floor', arrow: true, run: () => drill('floor') });
             if (p.hasGeo) p.radiusChoices.filter(km => `${km} km`.includes(q)).forEach(km => out.push({ key: 'r' + km, label: `${km} km radius`, checked: p.radiusKm === km, run: () => { p.onChangeRadius(km); } }));
@@ -153,10 +157,11 @@ export function InventoryFilterCommandBar(p: Props) {
             out.push({ key: 'c-floor', label: '🏢 Floor', arrow: true, run: () => drill('floor') });
             out.push({ key: 'renov', label: '🔨 Renovated only', checked: p.renovated, run: () => p.onToggleRenovated() });
             out.push({ key: 'prelease', label: '🏷️ Pre-leased only', checked: p.preLeased, run: () => p.onTogglePreLeased() });
+            out.push({ key: 'commuse', label: '🏢 Commercial-usable only', checked: p.commercialUse, run: () => p.onToggleCommercialUse() });
         }
         return out;
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [activeCat, q, p.bhkSet, p.typeNodeSet, p.radiusKm, p.roofRights, p.typeGroups, p.bhkChoices, p.specLabel, p.specMode, p.hasGeo, p.renovated, p.preLeased, p.areaMin, p.areaMax, p.floorMin, p.floorMax]);
+    }, [activeCat, q, p.bhkSet, p.typeNodeSet, p.radiusKm, p.roofRights, p.typeGroups, p.bhkChoices, p.specLabel, p.specMode, p.hasGeo, p.renovated, p.preLeased, p.commercialUse, p.areaMin, p.areaMax, p.floorMin, p.floorMax]);
 
     useEffect(() => { setHi(0); }, [activeCat, query]);
 

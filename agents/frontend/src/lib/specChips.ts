@@ -82,6 +82,12 @@ export function pickSpecChips(item: any): SpecChip[] {
             pushArea();
         }
     }
+    // Commercial use (2026-07-29): a RESIDENTIAL property flagged as also usable commercially.
+    if (item?.commercial_use) {
+        const ct = String(item.commercial_use_type || '').trim();
+        const label = ct ? ct.charAt(0).toUpperCase() + ct.slice(1) : 'Commercial';
+        chips.push({ value: `🏢 ${label} use` });
+    }
     // Floor (2026-07-25) — show the property's own floor on the tile for all but land/plot.
     if (bucketOf(item) !== 'land') {
         const fl = getDisplayFloor(item);

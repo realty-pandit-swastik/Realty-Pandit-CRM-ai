@@ -128,6 +128,45 @@ function inferDemandCategory(criteria: MatchCriteria): 'residential' | 'commerci
 }
 
 /**
+ * Commercial-use expansion (2026-07-29). A RESIDENTIAL property flagged `commercial_use` (of a given
+ * type) must also surface for a COMMERCIAL demand of the SAME type — office↔office, shop↔shop,
+ * showroom↔showroom (owner rule: type must match). Returns null for anything else, so normal matching
+ * is untouched. Additive-only: it never removes matches.
+ */
+async function resolveCommercialDemandType(criteria: MatchCriteria): Promise<'office' | 'shop' | 'showroom' | null> {
+    const kw = (v?: string | null): 'office' | 'shop' | 'showroom' | null => {
+        const t = String(v || '').toLowerCase();
+        if (/office/.test(t)) return 'office';
+        if (/showroom/.test(t)) return 'showroom';
+        if (/shop|retail|store/.test(t)) return 'shop';
+        return null;
+    };
+    let t = kw(criteria.property_type);
+    if (t) return t;
+    if (criteria.demand_taxonomy_node_id) {
+        try {
+            const node = await prisma.taxonomyNode.findUnique({ where: { id: criteria.demand_taxonomy_node_id }, select: { name: true } });
+            t = kw(node?.name);
+            if (t) return t;
+        } catch { /* non-fatal */ }
+    }
+    return null;
+}
+
+/**
+ * OR the residential-commercial-use branch into the inventory WHERE — but ONLY when a real
+ * classification barrier was set (else it would match everything). Nested under where.AND so it never
+ * collides with a top-level where.OR (e.g. the text location filter). Preserves every other filter.
+ */
+function expandWhereForCommercialUse(where: any, type: 'office' | 'shop' | 'showroom'): void {
+    const classKeys = ['sub_category_id', 'category_id', 'taxonomy_node_id', 'category'];
+    const primary: any = {};
+    for (const k of classKeys) if (k in where) { primary[k] = where[k]; delete where[k]; }
+    if (!Object.keys(primary).length) return; // no barrier to loosen
+    where.AND = [...(where.AND || []), { OR: [primary, { commercial_use: true, commercial_use_type: type }] }];
+}
+
+/**
  * Build a short, human-readable "why it matched" string for a result row, used by the
  * deal Match & Share UI. Pure display — derived from the same criteria/specs the scorer uses.
  */
@@ -328,6 +367,9 @@ export class MatchingEngine {
         // implies a category (bhk→residential, rooms→commercial) → constrain inventory.category so a
         // residential BHK client never sees shops/showrooms (and vice-versa).
         else { const c = inferDemandCategory(criteria); if (c) where.category = c; }
+        // Commercial-use expansion (2026-07-29): a commercial demand of a known type ALSO surfaces
+        // residential inventory flagged commercial_use of that SAME type. Residential demands unaffected.
+        { const cuType = await resolveCommercialDemandType(criteria); if (cuType) expandWhereForCommercialUse(where, cuType); }
         // BHK is a scoring factor by default. budget tolerance is ±30% UNLESS budget_hard.
         // Fix D (2026-06-12): never surface ₹0 / missing-price inventory as a customer card — it
         // renders as "₹0" and looks broken (audit found ₹0 sends). Require price>0 ALWAYS; the
@@ -515,6 +557,9 @@ export class MatchingEngine {
             const c = inferDemandCategory(criteria);
             if (c) where.category = c;
         }
+        // Commercial-use expansion (2026-07-29): mirror the radius path — commercial demand of a known
+        // type ALSO surfaces residential inventory flagged commercial_use of that same type.
+        { const cuType = await resolveCommercialDemandType(criteria); if (cuType) expandWhereForCommercialUse(where, cuType); }
 
         // BHK is a scoring factor only — not a hard WHERE filter (most inventory lacks specs.bedrooms)
 
