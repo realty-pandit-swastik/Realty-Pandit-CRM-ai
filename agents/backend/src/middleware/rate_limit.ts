@@ -18,6 +18,15 @@ export const loginLimiter = rateLimit({
 });
 
 // Auth routes - /auth/me is called frequently by the SPA, so a generous limit is fine here
+// Public partner self-registration (/agent/register) — strict, to blunt bot spam (2026-07-29).
+export const registerLimiter = rateLimit({
+    windowMs: 60 * 60 * 1000, // 1 hour
+    max: 5,
+    message: { error: 'Too many registration attempts. Please try again later.' },
+    standardHeaders: true,
+    legacyHeaders: false,
+});
+
 export const authLimiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
     max: 100,

@@ -12,6 +12,7 @@ import { agentLoginOtpSchema, agentVerifyOtpSchema, agentRegisterSchema, closeDe
 import logger from '../utils/logger';
 import { cacheGet, cacheSet, cacheDel } from '../utils/redis';
 import { normalizePhone } from '../utils/phone';
+import { registerLimiter } from '../middleware/rate_limit';
 import { foldLegacyDemand, mergeDemandSchemaValues } from '../utils/demand_canonical';
 import { sendOtp } from '../services/otp_sender';
 import { ensureOwner } from '../services/ensure_owner';
@@ -216,8 +217,11 @@ router.post('/verify-otp', validate(agentVerifyOtpSchema), async (req, res) => {
 });
 
 // 3. Register (Public)
-router.post('/register', validate(agentRegisterSchema), async (req, res) => {
-    const { name, phone, email, companyName } = req.body;
+router.post('/register', registerLimiter, validate(agentRegisterSchema), async (req, res) => {
+    // Honeypot (2026-07-29): real users never fill `website`; form-scraping bots do.
+    if (req.body.website) return res.status(400).json({ error: 'Registration failed. Please try again.' });
+    const { name, email, companyName } = req.body;
+    const phone = normalizePhone(String(req.body.phone || '')); // store canonical +91XXXXXXXXXX
 
     try {
         // Ensure Contact exists
