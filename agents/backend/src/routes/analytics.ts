@@ -59,37 +59,38 @@ router.get('/market-trends', authMiddleware, async (req, res) => {
     // Role-based visibility scope (super_boss => null => no restriction)
     const ids = await resolveVisibleAgentIds(req.agent?.id, req.agent?.role, tenantId);
 
-    // Get daily counts of contacts created (leads)
+    // Get daily counts of contacts created (leads). 2026-07-29: group by IST date (not UTC) so
+    // events in the 00:00–05:30 IST window count on the correct local day (matches Lead Intelligence).
     const leads = await prisma.$queryRaw<Array<{ date: Date; count: bigint }>>`
-      SELECT DATE(created_at) as date, COUNT(*)::int as count
+      SELECT DATE((created_at AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Kolkata') as date, COUNT(*)::int as count
       FROM contacts
       WHERE tenant_id = ${tenantId}
         AND created_at >= ${startDate}
         AND created_at <= ${endDate}${rawContactFilter(ids)}
-      GROUP BY DATE(created_at)
+      GROUP BY DATE((created_at AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Kolkata')
       ORDER BY date ASC
     `;
 
     // Get daily counts of appointments
     const visits = await prisma.$queryRaw<Array<{ date: Date; count: bigint }>>`
-      SELECT DATE(scheduled_at) as date, COUNT(*)::int as count
+      SELECT DATE((scheduled_at AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Kolkata') as date, COUNT(*)::int as count
       FROM appointments
       WHERE tenant_id = ${tenantId}
         AND scheduled_at >= ${startDate}
         AND scheduled_at <= ${endDate}${rawAgentFilter('assigned_to_agent_id', ids)}
-      GROUP BY DATE(scheduled_at)
+      GROUP BY DATE((scheduled_at AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Kolkata')
       ORDER BY date ASC
     `;
 
     // Get daily counts of closed deals
     const sales = await prisma.$queryRaw<Array<{ date: Date; count: bigint }>>`
-      SELECT DATE(closed_at) as date, COUNT(*)::int as count
+      SELECT DATE((closed_at AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Kolkata') as date, COUNT(*)::int as count
       FROM transactions
       WHERE tenant_id = ${tenantId}
         AND status = 'CLOSED_WON'
         AND closed_at >= ${startDate}
         AND closed_at <= ${endDate}${rawAgentFilter('executive_agent_id', ids)}
-      GROUP BY DATE(closed_at)
+      GROUP BY DATE((closed_at AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Kolkata')
       ORDER BY date ASC
     `;
 
