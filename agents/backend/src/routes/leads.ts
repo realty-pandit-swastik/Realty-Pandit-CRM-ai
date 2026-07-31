@@ -426,6 +426,40 @@ router.patch('/:phone/status', async (req, res) => {
     }
 });
 
+// POST /api/leads/:phone/share — share a LEAD with additional team member(s) for collaboration
+// (mirrors inventory sharing). Only the assigned handler, their manager, or super_boss may share;
+// a member the lead was shared with can view/work it but cannot re-share it onward (2026-07-31).
+router.post('/:phone/share', async (req: any, res) => {
+    try {
+        const actor = req.agent;
+        const phone = await resolvePhone(req.params.phone);
+        const { agent_ids } = req.body || {};
+        if (!Array.isArray(agent_ids)) return res.status(400).json({ error: 'agent_ids array required' });
+        const contact = await prisma.contact.findUnique({
+            where: { phone_number: phone },
+            select: { phone_number: true, tenant_id: true, assigned_agent_id: true, shared_with_ids: true, assigned_agent: { select: { reports_to_id: true } } },
+        });
+        if (!contact) return res.status(404).json({ error: 'Lead not found' });
+        let canShare = actor.role === 'super_boss' || contact.assigned_agent_id === actor.id;
+        if (!canShare && actor.role === 'manager') canShare = (contact as any).assigned_agent?.reports_to_id === actor.id;
+        if (!canShare) return res.status(403).json({ error: 'Only the lead owner, their manager, or super_boss can share this lead' });
+        // Keep only valid ACTIVE agents; never include the assigned owner; de-dup.
+        const valid = await prisma.agent.findMany({ where: { id: { in: agent_ids }, status: 'active' }, select: { id: true } });
+        const next = Array.from(new Set(valid.map(a => a.id).filter(id => id && id !== contact.assigned_agent_id)));
+        await prisma.contact.update({ where: { phone_number: phone }, data: { shared_with_ids: next } });
+        await prisma.interaction.create({ data: {
+            tenant_id: contact.tenant_id, phone_number: phone, channel: 'system', direction: 'outbound',
+            event_type: 'lead_shared', content: `Lead shared with ${next.length} teammate(s)`,
+            metadata: { shared_with_ids: next, by_agent_id: actor.id },
+        } }).catch(() => {});
+        res.json({ success: true, shared_with_ids: next });
+    } catch (err: any) {
+        captureRouteError(err, req, { route: 'leads#share' });
+        logger.error('[Leads] share error:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // PATCH /api/leads/:phone/reassign
 // 2026-05-15: Lead managers (employee role) can reassign leads they currently own.
 // Managers + super_boss can reassign any lead. Audit row written to interactions.

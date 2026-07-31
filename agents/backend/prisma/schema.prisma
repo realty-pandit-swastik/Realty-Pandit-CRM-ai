@@ -93,6 +93,7 @@ model Contact {
   lifecycle_stage   String  @default("NEW") // NEW, QUALIFIED, MATCHED, VISIT_SCHEDULED, VISITED, NEGOTIATION, CLOSED_WON, CLOSED_LOST
   assigned_agent_id String?
   assigned_agent    Agent?  @relation(fields: [assigned_agent_id], references: [id])
+  shared_with_ids   String[] @default([]) // Agent IDs this LEAD is shared with for collaboration (2026-07-31) — mirrors Inventory.shared_with_ids
   // Phase 5C (2026-07-17) — how this contact's agent was chosen (routing method). Nullable; legacy
   // rows + unassigned contacts stay null. See services/assign_contact.ts for the vocabulary.
   assignment_method String?
@@ -210,6 +211,7 @@ model Contact {
   // deals OR - it was never indexed. (2026-07-13)
   @@index([referral_partner_id])
   @@index([partner_assignee_id])
+  @@index([shared_with_ids])
   @@map("contacts")
 }
 

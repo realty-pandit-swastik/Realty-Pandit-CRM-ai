@@ -36,6 +36,7 @@ export function buildContactVisibilityFilter(
         { created_by: agentId },
         { assigned_agent: { reports_to_id: agentId } },
         { created_by_agent: { reports_to_id: agentId } },
+        { shared_with_ids: { has: agentId } }, // 2026-07-31: leads shared with this member
       ],
     };
   }
@@ -45,6 +46,7 @@ export function buildContactVisibilityFilter(
     OR: [
       { assigned_agent_id: agentId },
       { created_by: agentId },
+      { shared_with_ids: { has: agentId } }, // 2026-07-31: leads shared with this member
     ],
   };
 }

@@ -1,6 +1,6 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react';
-import client, { getPartnerAssignable, assignLeadToTeammate } from '../api/client';
+import client, { getPartnerAssignable, assignLeadToTeammate, shareLead } from '../api/client';
 import { isPlaceholderPhone, isDialablePhone, isValidPhoneInput, toDialablePhone } from '../lib/phone';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
@@ -287,6 +287,7 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
     const [savingName, setSavingName] = useState(false);
     const [editLifecycle, setEditLifecycle] = useState('');
     const [editAgent, setEditAgent] = useState('');
+    const [sharedWith, setSharedWith] = useState<string[]>([]); // 2026-07-31 lead collaboration
     const [editPartnerAssignee, setEditPartnerAssignee] = useState('');   // PartnerAgent id — NOT an Agent id
 
     // Phase 2 (2026-05-29): inline-form state vars (editBudgetMin/Max, editBhk,
@@ -613,6 +614,7 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
             setEditName(d.name || '');
             setEditLifecycle(d.lifecycle_stage || 'NEW');
             setEditAgent(d.assigned_agent_id || '');
+            setSharedWith((d as any).shared_with_ids || []);
             setEditPartnerAssignee((d as any).partner_assignee_id || '');
             // Phase 2 (2026-05-29): the inline edit form state vars are gone — all
             // requirements now flow through <DemandRequirementsForm> which reads its
@@ -771,6 +773,21 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
             await client.patch(`/api/leads/${encodeURIComponent(selectedPhone)}/requirements`, { lifecycle_stage: newStage });
             setRecentLeads(prev => prev.map(l => l.phone_number === selectedPhone ? { ...l, lifecycle_stage: newStage } : l));
         } catch (err) { console.error('[ExternalLeads] Operation failed:', err); }
+    };
+
+    const handleToggleShare = async (agentId: string) => {
+        if (!selectedPhone) return;
+        const next = sharedWith.includes(agentId) ? sharedWith.filter(id => id !== agentId) : [...sharedWith, agentId];
+        const prev = sharedWith;
+        setSharedWith(next);
+        try {
+            const res = await shareLead(selectedPhone, next);
+            setSharedWith(res.shared_with_ids || next);
+            setRecentLeads(pl => pl.map(l => l.phone_number === selectedPhone ? ({ ...l, shared_with_ids: res.shared_with_ids || next } as any) : l));
+        } catch (e: any) {
+            setSharedWith(prev);
+            showToast(e?.response?.data?.error || 'Failed to update sharing', 'error');
+        }
     };
 
     const handleAgentChange = async (agentId: string) => {
@@ -1559,6 +1576,28 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
                                                 {!isPrivileged && (
                                                     <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: '4px' }}>You can reassign this lead to another team member.</div>
                                                 )}
+                                            </div>
+                                        )}
+
+                                        {/* 2026-07-31: share the lead with additional teammates (collaboration). Owner unchanged. */}
+                                        {!isPartner && (isPrivileged || (agent?.id && editAgent === agent.id)) && (
+                                            <div>
+                                                <label style={soLabel}>Shared with (collaboration)</label>
+                                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '4px' }}>
+                                                    {teamMembers.filter(m => m.id !== editAgent).map(m => {
+                                                        const on = sharedWith.includes(m.id);
+                                                        return (
+                                                            <button key={m.id} type="button" onClick={() => handleToggleShare(m.id)}
+                                                                style={{ padding: '4px 10px', borderRadius: 14, fontSize: 11, fontWeight: 600, cursor: 'pointer',
+                                                                    border: on ? '1.5px solid #22c55e' : '1px solid var(--border-secondary)',
+                                                                    backgroundColor: on ? 'rgba(34,197,94,0.12)' : 'var(--bg-secondary)',
+                                                                    color: on ? '#16a34a' : 'var(--text-secondary)' }}>
+                                                                {on ? '✓ ' : '+ '}{m.name}
+                                                            </button>
+                                                        );
+                                                    })}
+                                                </div>
+                                                <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: '4px' }}>These members can also view &amp; work this lead; the assigned owner is unchanged.</div>
                                             </div>
                                         )}
 
