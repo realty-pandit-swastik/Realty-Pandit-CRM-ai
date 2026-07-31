@@ -258,7 +258,10 @@ export function MatchShareTab({ deal, onShared }: Props) {
     const partnerTel = toDialablePhone((deal.demand_contact as any)?.referral_partner_phone);
     const partnerName = (deal.demand_contact as any)?.referral_partner_name as string | undefined;
     const shareTel = customerTel || partnerTel;
-    const shareToPartner = !customerTel && !!partnerTel;
+    // 2026-07-31: auto-detect the recipient's TYPE. A deal whose contact IS a partner agent (dealer) —
+    // even with a real phone — must get the brandless partner content; a BUYER/TENANT gets branded content.
+    // (Mirrors the backend resolveShareMode, which keys company sends off the ACTIVE PartnerAgent table.)
+    const shareToPartner = (deal.demand_contact as any)?.contact_type === 'PARTNER_AGENT' || (!customerTel && !!partnerTel);
 
     // ── Filter state ───────────────────────────────────────────────────────────
     const [intent] = useState<string>(deal.demand_intent || 'buy');
