@@ -8,7 +8,8 @@ import LeadCard from './leads/LeadCard';
 import { WhatsAppChatTab } from './WhatsAppChatTab';
 import { ConvertToPartnerModal } from './ConvertToPartnerModal';
 import MatchedPropertiesSection from './leads/MatchedPropertiesSection';
-import DemandRequirementsForm, { type DemandPayload } from './leads/DemandRequirementsForm';
+import DemandRequirementsForm, { type DemandPayload, type DemandRequirementsFormHandle } from './leads/DemandRequirementsForm';
+import MultiSelectTeam from './leads/MultiSelectTeam';
 import { loadGoogleMaps } from '../lib/loadGoogleMaps';
 import {
     FilterSection,
@@ -288,6 +289,9 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
     const [editLifecycle, setEditLifecycle] = useState('');
     const [editAgent, setEditAgent] = useState('');
     const [sharedWith, setSharedWith] = useState<string[]>([]); // 2026-07-31 lead collaboration
+    const demandFormRef = useRef<DemandRequirementsFormHandle>(null); // 2026-08-01 single-save
+    const [savingAll, setSavingAll] = useState(false);
+    const [saveError, setSaveError] = useState<string | null>(null);
     const [editPartnerAssignee, setEditPartnerAssignee] = useState('');   // PartnerAgent id — NOT an Agent id
 
     // Phase 2 (2026-05-29): inline-form state vars (editBudgetMin/Max, editBhk,
@@ -766,46 +770,14 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
         }
     };
 
-    const handleLifecycleChange = async (newStage: string) => {
-        if (!selectedPhone) return;
-        setEditLifecycle(newStage);
-        try {
-            await client.patch(`/api/leads/${encodeURIComponent(selectedPhone)}/requirements`, { lifecycle_stage: newStage });
-            setRecentLeads(prev => prev.map(l => l.phone_number === selectedPhone ? { ...l, lifecycle_stage: newStage } : l));
-        } catch (err) { console.error('[ExternalLeads] Operation failed:', err); }
+    const handleLifecycleChange = (newStage: string) => {
+        setEditLifecycle(newStage); // staged — committed by Save changes
     };
 
-    const handleToggleShare = async (agentId: string) => {
-        if (!selectedPhone) return;
-        const next = sharedWith.includes(agentId) ? sharedWith.filter(id => id !== agentId) : [...sharedWith, agentId];
-        const prev = sharedWith;
-        setSharedWith(next);
-        try {
-            const res = await shareLead(selectedPhone, next);
-            setSharedWith(res.shared_with_ids || next);
-            setRecentLeads(pl => pl.map(l => l.phone_number === selectedPhone ? ({ ...l, shared_with_ids: res.shared_with_ids || next } as any) : l));
-        } catch (e: any) {
-            setSharedWith(prev);
-            showToast(e?.response?.data?.error || 'Failed to update sharing', 'error');
-        }
-    };
+    // handleToggleShare removed 2026-08-01 — sharing is now staged via <MultiSelectTeam> + committed by handleSaveAll.
 
-    const handleAgentChange = async (agentId: string) => {
-        if (!selectedPhone) return;
-        const prevAgent = editAgent;
-        setEditAgent(agentId);
-        try {
-            if (agentId) {
-                await client.patch(`/api/leads/${encodeURIComponent(selectedPhone)}/reassign`, { agent_id: agentId });
-            } else {
-                await client.patch(`/api/leads/${encodeURIComponent(selectedPhone)}/assign`, { agent_id: null });
-            }
-            setRecentLeads(prev => prev.map(l => l.phone_number === selectedPhone ? { ...l, assigned_agent_id: agentId || null } : l));
-        } catch (err: any) {
-            console.error('[ExternalLeads] Operation failed:', err);
-            setEditAgent(prevAgent);
-            alert(err?.response?.data?.error || 'Failed to reassign lead');
-        }
+    const handleAgentChange = (agentId: string) => {
+        setEditAgent(agentId); // staged — committed by Save changes
     };
 
     const handleSaveNotes = async () => {
@@ -902,8 +874,51 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
             } : prev);
         } catch (err) {
             console.error('[ExternalLeads] canonical save failed:', err);
+            throw err;
         } finally {
             setSavingReqs(false);
+        }
+    };
+
+    // Single unified save (2026-08-01) — commits every staged edit at once, reusing the
+    // existing per-field endpoints so all backend permissions/logic stay intact.
+    const handleSaveAll = async () => {
+        if (!selectedPhone || !leadDetail) return;
+        setSavingAll(true);
+        setSaveError(null);
+        const errs: string[] = [];
+        try {
+            if (editName.trim() !== (leadDetail.name || '')) { try { await handleSaveName(); } catch { errs.push('name'); } }
+            if (editNotes !== (leadDetail.notes || '')) { try { await handleSaveNotes(); } catch { errs.push('notes'); } }
+            if (editLifecycle !== (leadDetail.lifecycle_stage || 'NEW')) {
+                try {
+                    await client.patch(`/api/leads/${encodeURIComponent(selectedPhone)}/requirements`, { lifecycle_stage: editLifecycle });
+                    setRecentLeads(prev => prev.map(l => l.phone_number === selectedPhone ? { ...l, lifecycle_stage: editLifecycle } : l));
+                } catch { errs.push('stage'); }
+            }
+            if (editAgent !== (leadDetail.assigned_agent_id || '')) {
+                try {
+                    if (editAgent) await client.patch(`/api/leads/${encodeURIComponent(selectedPhone)}/reassign`, { agent_id: editAgent });
+                    else await client.patch(`/api/leads/${encodeURIComponent(selectedPhone)}/assign`, { agent_id: null });
+                    setRecentLeads(prev => prev.map(l => l.phone_number === selectedPhone ? { ...l, assigned_agent_id: editAgent || null } : l));
+                } catch { errs.push('assigned agent'); }
+            }
+            const origShared = ((leadDetail as any).shared_with_ids || []) as string[];
+            const changedShared = origShared.length !== sharedWith.length || origShared.some(id => !sharedWith.includes(id));
+            if (changedShared) {
+                try {
+                    const res = await shareLead(selectedPhone, sharedWith);
+                    setSharedWith(res.shared_with_ids || sharedWith);
+                    setRecentLeads(pl => pl.map(l => l.phone_number === selectedPhone ? ({ ...l, shared_with_ids: res.shared_with_ids || sharedWith } as any) : l));
+                } catch { errs.push('shared-with'); }
+            }
+            // Buyer requirements — always commit via the sub-form (idempotent PATCH).
+            try { await demandFormRef.current?.submit(); } catch { errs.push('requirements'); }
+
+            if (errs.length) { setSaveError('Could not save: ' + errs.join(', ')); showToast('Some changes failed to save', 'error'); }
+            else showToast('Lead saved', 'success');
+        } finally {
+            setSavingAll(false);
         }
     };
 
@@ -1551,14 +1566,11 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
                                         <div>
                                             <label style={soLabel}>Name</label>
                                             <input value={editName} onChange={e => setEditName(e.target.value)} placeholder="Contact name" style={soInput} />
-                                            <button onClick={handleSaveName} disabled={savingName} style={{ ...outlineBtn, fontSize: '12px', padding: '5px 12px', marginTop: '6px' }}>
-                                                {savingName ? 'Saving...' : 'Save Name'}
-                                            </button>
                                         </div>
                                     )}
 
-                                    {/* Lifecycle + Agent */}
-                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                                    {/* Lifecycle + Agent + collaboration — single column (2026-08-01) */}
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '12px' }}>
                                         <div>
                                             <label style={soLabel}>Lifecycle Stage</label>
                                             <select value={editLifecycle} onChange={e => handleLifecycleChange(e.target.value)} style={soInput}>
@@ -1579,24 +1591,17 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
                                             </div>
                                         )}
 
-                                        {/* 2026-07-31: share the lead with additional teammates (collaboration). Owner unchanged. */}
-                                        {!isPartner && (isPrivileged || (agent?.id && editAgent === agent.id)) && (
+                                        {/* 2026-08-01: share via a searchable multi-select (was a chip wall). Gate on the ORIGINAL owner so staging a reassign doesn't hide it. */}
+                                        {!isPartner && (isPrivileged || (agent?.id && (leadDetail.assigned_agent_id || '') === agent.id)) && (
                                             <div>
                                                 <label style={soLabel}>Shared with (collaboration)</label>
-                                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '4px' }}>
-                                                    {teamMembers.filter(m => m.id !== editAgent).map(m => {
-                                                        const on = sharedWith.includes(m.id);
-                                                        return (
-                                                            <button key={m.id} type="button" onClick={() => handleToggleShare(m.id)}
-                                                                style={{ padding: '4px 10px', borderRadius: 14, fontSize: 11, fontWeight: 600, cursor: 'pointer',
-                                                                    border: on ? '1.5px solid #22c55e' : '1px solid var(--border-secondary)',
-                                                                    backgroundColor: on ? 'rgba(34,197,94,0.12)' : 'var(--bg-secondary)',
-                                                                    color: on ? '#16a34a' : 'var(--text-secondary)' }}>
-                                                                {on ? '✓ ' : '+ '}{m.name}
-                                                            </button>
-                                                        );
-                                                    })}
-                                                </div>
+                                                <MultiSelectTeam
+                                                    options={teamMembers.filter(m => m.id !== editAgent)}
+                                                    value={sharedWith}
+                                                    onChange={setSharedWith}
+                                                    isMobile={effectiveIsMobile}
+                                                    placeholder="Add team members…"
+                                                />
                                                 <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: '4px' }}>These members can also view &amp; work this lead; the assigned owner is unchanged.</div>
                                             </div>
                                         )}
@@ -1663,7 +1668,8 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
                                             }}
                                             onSubmit={handleSaveDemandCanonical}
                                             submitting={savingReqs}
-                                            submitLabel="Save Requirements"
+                                            ref={demandFormRef}
+                                            hideSubmitButton
                                         />
                                     </div>
 
@@ -1705,9 +1711,6 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
                                         <label style={soLabel}>Notes</label>
                                         <textarea value={editNotes} onChange={e => setEditNotes(e.target.value)} rows={3}
                                             placeholder="Add notes about this lead..." style={{ ...soInput, resize: 'vertical' }} />
-                                        <button onClick={handleSaveNotes} disabled={savingNotes} style={{ ...outlineBtn, fontSize: '12px', padding: '5px 12px', marginTop: '6px' }}>
-                                            {savingNotes ? 'Saving...' : 'Save Notes'}
-                                        </button>
                                     </div>
 
                                     {/* Convert to Partner Agent — TEAM ONLY (backend already denies partners) */}
@@ -1915,6 +1918,13 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
                                             </div>
                                         )}
                                     </div>
+                                </div>
+                                {/* 2026-08-01: single sticky Save-changes footer (replaces the per-field save buttons) */}
+                                <div style={{ position: 'sticky', bottom: 0, marginTop: 'auto', padding: '12px 20px', borderTop: '1px solid var(--border-secondary)', backgroundColor: 'var(--bg-primary)', display: 'flex', flexDirection: 'column', gap: '6px', zIndex: 6, boxShadow: '0 -4px 12px rgba(0,0,0,0.06)' }}>
+                                    {saveError && <div style={{ fontSize: '12px', color: '#ef4444' }}>{saveError}</div>}
+                                    <button onClick={handleSaveAll} disabled={savingAll || savingName || savingNotes} style={{ ...primaryBtn, width: '100%', opacity: savingAll ? 0.7 : 1 }}>
+                                        {savingAll ? 'Saving…' : '💾 Save changes'}
+                                    </button>
                                 </div>
                             </>
                         ) : (

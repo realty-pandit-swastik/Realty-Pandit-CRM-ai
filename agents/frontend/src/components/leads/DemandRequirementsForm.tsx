@@ -76,7 +76,7 @@ export interface DemandRequirementsFormProps {
 // (e.g. RequirementsTab's top-bar "Save & Close"). Keeps the form's internal state
 // encapsulated while letting the parent own the primary action + post-save flow.
 export interface DemandRequirementsFormHandle {
-    submit: () => void;
+    submit: () => Promise<void> | void;
 }
 
 const TIMELINE_OPTIONS = [
@@ -273,7 +273,7 @@ const DemandRequirementsForm = forwardRef<DemandRequirementsFormHandle, DemandRe
             demand_taxonomy_node_id: nodeId,
             demand_schema_values: cleanSV,
         };
-        onSubmit(payload);
+        return onSubmit(payload);
     };
 
     // Expose submit() so a parent can drive the save from its own button.
