@@ -308,6 +308,14 @@ export class HousingPoller {
             }
         }
 
+        // Task 2+3 (2026-07-31): duplicate re-enquiry — timeline marker + share with the newly-attributed agent.
+        if (!isNew) {
+            const brokerEmail = (lead as any).broker_email || (lead as any).agent_email || null;
+            const reAttr = brokerEmail ? await resolveAgentByEmail(brokerEmail) : null;
+            const { recordLeadReingest } = await import('./lead_reingest');
+            await recordLeadReingest({ phone: phoneNumber, source: 'housing', attributedAgentId: reAttr, subUser: brokerEmail });
+        }
+
         // Auto-create NEW deal (B1) — only on new contacts.
         if (isNew) {
             ensureDealForLead({

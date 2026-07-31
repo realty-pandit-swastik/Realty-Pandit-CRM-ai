@@ -104,6 +104,12 @@ async function handleMagicBricksPush(req: any, res: any) {
                 },
             });
             logger.info(`[MagicBricks] Duplicate lead: ${phoneNumber}`);
+            // Task 2+3 (2026-07-31): duplicate re-enquiry — timeline marker + share with the newly-attributed agent.
+            try {
+                const reAttr = sub_user ? await resolveAgentByMagicBricksSubUser(String(sub_user)) : null;
+                const { recordLeadReingest } = await import('../services/lead_reingest');
+                await recordLeadReingest({ phone: phoneNumber, source: 'magicbricks', attributedAgentId: reAttr, subUser: sub_user ? String(sub_user) : null });
+            } catch (e) { logger.warn('[MagicBricks] reingest failed: ' + (e as Error).message); }
             return res.send('Failure: Lead already exist');
         }
 

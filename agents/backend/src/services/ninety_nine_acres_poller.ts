@@ -609,6 +609,14 @@ export class NinetyNineAcresPoller {
             });
         }
 
+        // Task 2+3 (2026-07-31): a DUPLICATE re-enquiry (existing contact) — log a timeline marker and,
+        // if this source attributes the lead to a different team member, share it with them (no reassign).
+        if (!isNew) {
+            const reAttr = lead.subUserName ? await resolveAgentByEmail(lead.subUserName) : null;
+            const { recordLeadReingest } = await import('./lead_reingest');
+            await recordLeadReingest({ phone: phoneNumber, source: '99acres', attributedAgentId: reAttr, subUser: lead.subUserName });
+        }
+
         // ── New contact: routing, notifications, escalation ───────────────────
         if (isNew) {
             // Step 1: Resolve listing agent via SubUserName (the 99acres account that uploaded the property)
