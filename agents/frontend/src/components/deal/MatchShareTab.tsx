@@ -36,6 +36,7 @@ interface MatchedProperty {
     match_reason?: string | null;
     distance_km?: number | null;
     already_shared: boolean;
+    shared_by_name?: string | null; // Task 4: who already shared it on this deal
     media_urls?: string[];
     specs?: { society_name?: string; bhk_count?: number; bedrooms?: number; bathrooms?: number; area?: number; area_unit?: string };
     intent?: string;
@@ -448,6 +449,8 @@ export function MatchShareTab({ deal, onShared }: Props) {
 
     const toggleSelect = (id: string, e: React.MouseEvent) => {
         e.stopPropagation();
+        // Task 4: a property already shared on this deal (by anyone) is locked — must pick another.
+        if (results.find(r => r.id === id)?.already_shared) return;
         setSelected(prev => {
             const next = new Set(prev);
             next.has(id) ? next.delete(id) : next.add(id);
@@ -706,7 +709,7 @@ export function MatchShareTab({ deal, onShared }: Props) {
                                     <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 1 }}>
                                         Match: {Math.round((prop.match_score || 0))}%
                                         {prop.distance_km != null && <span> · {prop.distance_km.toFixed(1)} km</span>}
-                                        {prop.already_shared && <span style={{ marginLeft: 6, color: '#f59e0b', fontWeight: 600 }}>✓ Already sent</span>}
+                                        {prop.already_shared && <span style={{ marginLeft: 6, color: '#f59e0b', fontWeight: 600 }}>✓ Already shared{prop.shared_by_name ? ` by ${prop.shared_by_name}` : ''}</span>}
                                         <button onClick={() => setPreviewId(prop.id)} style={{
                                             marginLeft: 8, background: 'none', border: 'none', color: 'var(--accent-primary)',
                                             fontSize: 10, cursor: 'pointer', padding: 0, fontWeight: 600,
@@ -718,6 +721,12 @@ export function MatchShareTab({ deal, onShared }: Props) {
                                 {status === 'sent'    && <span style={{ fontSize: 14 }}>✅</span>}
                                 {status === 'failed'  && <span style={{ fontSize: 14 }}>❌</span>}
 
+                                {prop.already_shared ? (
+                                    <div title={`Already shared${prop.shared_by_name ? ` by ${prop.shared_by_name}` : ''} — pick another property`} style={{
+                                        width: 18, height: 18, flexShrink: 0, display: 'flex', alignItems: 'center',
+                                        justifyContent: 'center', fontSize: 12, opacity: 0.7, cursor: 'not-allowed',
+                                    }}>🔒</div>
+                                ) : (
                                 <div onClick={e => toggleSelect(prop.id, e)} style={{
                                     width: 18, height: 18, borderRadius: 4, flexShrink: 0, cursor: 'pointer',
                                     border: `2px solid ${isSelected ? 'var(--accent-primary)' : 'var(--border-secondary)'}`,
@@ -727,6 +736,7 @@ export function MatchShareTab({ deal, onShared }: Props) {
                                 }}>
                                     {isSelected ? '✓' : ''}
                                 </div>
+                                )}
                             </div>
                         );
                     })}

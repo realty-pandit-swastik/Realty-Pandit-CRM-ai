@@ -745,6 +745,15 @@ router.get('/:id/matched-inventory', checkPermission('act_on_deals'), async (req
         const alreadySharedIds = new Set<string>(
             sharedInteractions.map((s: any) => s.metadata?.inventory_id).filter(Boolean)
         );
+        // Task 4 (2026-07-31): remember WHO shared each property so the UI shows "Already shared by [name]".
+        const sharedByAgentId = new Map<string, string | null>();
+        for (const s of sharedInteractions as any[]) {
+            const iid = s.metadata?.inventory_id;
+            if (iid && !sharedByAgentId.has(iid)) sharedByAgentId.set(iid, s.metadata?.shared_by_agent_id ?? null);
+        }
+        const sharerIds = Array.from(new Set(Array.from(sharedByAgentId.values()).filter(Boolean))) as string[];
+        const sharerRows = sharerIds.length ? await prisma.agent.findMany({ where: { id: { in: sharerIds } }, select: { id: true, name: true } }) : [];
+        const sharerName = new Map<string, string>(sharerRows.map((a: any) => [a.id, a.name]));
 
         const { MatchingEngine, buildMatchCriteriaFromLead } = await import('../services/matching_engine');
         const engine = new MatchingEngine();
@@ -874,10 +883,14 @@ router.get('/:id/matched-inventory', checkPermission('act_on_deals'), async (req
                 matchList = matches.filter((m: any) => keep.has(m.id));
             }
         }
-        const results = matchList.map((m: any) => ({
-            ...m,
-            already_shared: alreadySharedIds.has(m.id),
-        }));
+        const results = matchList.map((m: any) => {
+            const byId = sharedByAgentId.get(m.id);
+            return {
+                ...m,
+                already_shared: alreadySharedIds.has(m.id),
+                shared_by_name: byId ? (sharerName.get(byId) || null) : null,
+            };
+        });
         results.sort((a: any, b: any) => Number(a.already_shared) - Number(b.already_shared));
 
         res.json({ success: true, data: results });
@@ -905,10 +918,30 @@ router.post('/:id/share-properties', checkPermission('act_on_deals'), async (req
         });
         if (!deal) return res.status(404).json({ error: 'Deal not found' });
 
+        // Task 4 (2026-07-31): BLOCK re-sharing a property already shared on this deal (by anyone) — the
+        // other team member must pick another. We also record WHO already shared it.
+        const priorShares = await prisma.interaction.findMany({
+            where: { event_type: 'property_shared', metadata: { path: ['deal_id'], equals: id } },
+            select: { metadata: true },
+        });
+        const sharedBy = new Map<string, string | null>(); // inventory_id -> shared_by_agent_id
+        for (const s of priorShares as any[]) {
+            const iid = s.metadata?.inventory_id;
+            if (iid && !sharedBy.has(iid)) sharedBy.set(iid, s.metadata?.shared_by_agent_id ?? null);
+        }
+        const blkIds = Array.from(new Set(Array.from(sharedBy.values()).filter(Boolean))) as string[];
+        const blkRows = blkIds.length ? await prisma.agent.findMany({ where: { id: { in: blkIds } }, select: { id: true, name: true } }) : [];
+        const blkName = new Map<string, string>(blkRows.map((a: any) => [a.id, a.name]));
+
         const { shareSpecificProperty } = await import('../services/property_sharing');
-        const results: { inventory_id: string; sent: boolean }[] = [];
+        const results: { inventory_id: string; sent: boolean; reason?: string; shared_by_name?: string | null }[] = [];
         for (const invId of inventory_ids) {
-            const sent = await shareSpecificProperty(id, invId);
+            if (sharedBy.has(invId)) {
+                const byId = sharedBy.get(invId);
+                results.push({ inventory_id: invId, sent: false, reason: 'already_shared', shared_by_name: byId ? (blkName.get(byId) || null) : null });
+                continue;
+            }
+            const sent = await shareSpecificProperty(id, invId, agent.id);
             results.push({ inventory_id: invId, sent });
         }
 

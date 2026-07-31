@@ -311,7 +311,7 @@ export async function shareNextProperty(dealId: string, opts?: { bypassPause?: b
  * Share a specific inventory item for a deal — called from Deal Workspace.
  * Agent manually selects the property; no auto-dedup logic applied.
  */
-export async function shareSpecificProperty(dealId: string, inventoryId: string): Promise<boolean> {
+export async function shareSpecificProperty(dealId: string, inventoryId: string, sharedByAgentId?: string | null): Promise<boolean> {
     const deal = await prisma.transaction.findUnique({
         where: { id: dealId },
         include: { demand_contact: { select: { phone_number: true, name: true, referral_partner_id: true } } },
@@ -376,7 +376,7 @@ export async function shareSpecificProperty(dealId: string, inventoryId: string)
             direction: 'outbound',
             event_type: EVT_PROPERTY_SHARED,
             content: `Shared property card (manual${mode === 'dealer' ? ', partner brochure' : ''}): ${bhk} at ${society}`,
-            metadata: { deal_id: dealId, inventory_id: inventoryId, manual: true, recipient: mode },
+            metadata: { deal_id: dealId, inventory_id: inventoryId, manual: true, recipient: mode, shared_by_agent_id: sharedByAgentId ?? null },
         },
     });
 
