@@ -1,4 +1,6 @@
 import React, { useState, useCallback, useRef } from 'react';
+import PhoneInput from './PhoneInput';
+import { normalizePhoneInput } from '../lib/phone';
 import { identifyContactByPhone, ensureContact } from '../api/client';
 
 export interface SelectedContact {
@@ -91,8 +93,8 @@ export const ContactSearchField: React.FC<ContactSearchFieldProps> = ({
     }, []);
 
     const handleInputChange = useCallback((val: string) => {
-        // Strip all non-digits, cap at 10
-        const digitsOnly = val.replace(/\D/g, '').slice(0, 10);
+        // Normalise ANY pasted format (+91 / spaces / 91-prefix) to the accepted 10-digit number
+        const digitsOnly = normalizePhoneInput(val);
         setQuery(digitsOnly);
         setSearchResult(null);
         setNotFound(false);
@@ -164,14 +166,10 @@ export const ContactSearchField: React.FC<ContactSearchFieldProps> = ({
             {/* Search Input — accepts phone digits only */}
             <label style={styles.label}>{label}</label>
             <div style={{ position: 'relative' }}>
-                <input
-                    type="tel"
-                    inputMode="numeric"
-                    pattern="[0-9]*"
+                <PhoneInput
                     value={query}
-                    onChange={e => handleInputChange(e.target.value)}
-                    placeholder="Enter 10-digit phone number"
-                    maxLength={10}
+                    onChange={handleInputChange}
+                    placeholder="Enter phone number (any format)"
                     style={styles.input}
                     autoFocus
                 />

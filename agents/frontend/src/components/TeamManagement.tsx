@@ -1,5 +1,6 @@
 
 import { useEffect, useState } from 'react';
+import PhoneInput from './PhoneInput';
 import { useAuth } from '../contexts/AuthContext';
 import client, { setMemberPassword, resendSetupLink, getTeamMembers } from '../api/client';
 import { useToast } from '../contexts/ToastContext';
@@ -332,7 +333,7 @@ export function TeamManagement() {
                     )}
                     <form onSubmit={handleAddMember} style={{ display: 'grid', gridTemplateColumns: window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap: '12px' }}>
                         <input placeholder="Full Name *" value={formData.name} required onChange={e => setFormData({ ...formData, name: e.target.value })} style={inputStyle} />
-                        <input placeholder="Phone (10 digits) *" value={formData.phone} required maxLength={10} onChange={e => setFormData({ ...formData, phone: e.target.value.replace(/\D/g, '') })} style={inputStyle} />
+                        <PhoneInput placeholder="Phone (10 digits) *" value={formData.phone} required onChange={v => setFormData({ ...formData, phone: v })} style={inputStyle} />
                         <select value={formData.department} onChange={e => setFormData({ ...formData, department: e.target.value })} style={inputStyle}>
                             {DEPARTMENTS.map(d => <option key={d.value} value={d.value}>{d.label}</option>)}
                         </select>
@@ -405,7 +406,7 @@ export function TeamManagement() {
                         {editError && <div style={errorBoxStyle}>{editError}</div>}
                         <form onSubmit={handleUpdateMember} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                             <input placeholder="Full Name" value={editData.name} onChange={e => setEditData({ ...editData, name: e.target.value })} style={inputStyle} />
-                            <input placeholder="Phone (10 digits)" value={editData.phone} onChange={e => setEditData({ ...editData, phone: e.target.value.replace(/\D/g, '') })} style={inputStyle} maxLength={10} />
+                            <PhoneInput placeholder="Phone (10 digits)" value={editData.phone} onChange={v => setEditData({ ...editData, phone: v })} style={inputStyle} />
                             <select value={editData.department} onChange={e => setEditData({ ...editData, department: e.target.value })} style={inputStyle}>
                                 <option value="">No Department</option>
                                 {DEPARTMENTS.map(d => <option key={d.value} value={d.value}>{d.label}</option>)}

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import PhoneInput from './PhoneInput';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import { useConfirm } from '../contexts/ConfirmContext';
@@ -108,8 +109,8 @@ export function MyTeam() {
                         </div>
                         <div style={s.field}>
                             <label style={s.label}>WhatsApp number</label>
-                            <input style={s.input} value={form.phone} placeholder="9876543210" inputMode="tel"
-                                onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} />
+                            <PhoneInput style={s.input} value={form.phone} placeholder="9876543210"
+                                onChange={v => setForm(f => ({ ...f, phone: v }))} />
                         </div>
                         <div style={s.field}>
                             <label style={s.label}>Email (optional)</label>

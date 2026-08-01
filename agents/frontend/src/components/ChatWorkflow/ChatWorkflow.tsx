@@ -6,6 +6,7 @@
  */
 
 import React, { useEffect, useRef, useState } from 'react';
+import PhoneInput from '../PhoneInput';
 import { MessageSquare, Send, Loader2, ArrowLeft, X, Camera, Video, FileText, Check, Edit3, MapPin, Phone, User, Mail, CheckCircle2 } from 'lucide-react';
 import { useChatWorkflow, type ChatWorkflowState } from '../../hooks/useChatWorkflow';
 import { GooglePlacesInput, type PlaceResult } from '../GooglePlacesInput';
@@ -642,11 +643,10 @@ function ContactFormWidget({ mode, onSubmit, sending }: { mode: 'owner_block' | 
             <div className={styles.contactFormRow}>
                 <Phone size={14} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
                 <span className={styles.countryCode}>+91</span>
-                <input
+                <PhoneInput
                     value={phone}
-                    onChange={e => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                    onChange={setPhone}
                     placeholder="10-digit mobile"
-                    inputMode="tel"
                     aria-label="Phone number"
                     className={styles.textField}
                 />

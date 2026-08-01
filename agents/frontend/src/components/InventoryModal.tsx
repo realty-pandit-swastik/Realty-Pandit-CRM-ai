@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import PhoneInput from './PhoneInput';
 import { useWorkflow, type WorkflowStep, type StepOption, type DocType } from '../hooks/useWorkflow';
 import { EnrichmentPanel } from './EnrichmentPanel';
 import ParkingListField from './ParkingListField';
@@ -1423,7 +1424,7 @@ function OwnerBlockField({ value, onSubmit }: { value: any; onSubmit: (v: any) =
                 </button>
             </div>
             <div style={{ marginBottom: '12px' }}><label style={labelStyle}>Owner Name *</label><input type="text" value={ownerName} onChange={e => setOwnerName(e.target.value)} placeholder="Full name of the property owner" style={fieldStyle} autoFocus />{errors.owner_name && <div style={errStyle}>{errors.owner_name}</div>}</div>
-            <div style={{ marginBottom: '16px' }}><label style={labelStyle}>Owner Phone *</label><input type="tel" value={ownerPhone} onChange={e => setOwnerPhone(e.target.value.replace(/[^\d+\-\s()]/g, ''))} placeholder="e.g. 9876543210" style={fieldStyle} />{errors.owner_phone && <div style={errStyle}>{errors.owner_phone}</div>}<div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>Phone is mandatory for team uploads. Owner will be mapped in SSOT for future tracking.</div></div>
+            <div style={{ marginBottom: '16px' }}><label style={labelStyle}>Owner Phone *</label><PhoneInput value={ownerPhone} onChange={setOwnerPhone} placeholder="e.g. 9876543210" style={fieldStyle} />{errors.owner_phone && <div style={errStyle}>{errors.owner_phone}</div>}<div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>Phone is mandatory for team uploads. Owner will be mapped in SSOT for future tracking.</div></div>
             <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
                 <button type="button" style={styles.primaryBtn} onClick={handleSubmit}>Next &rarr;</button>
             </div>

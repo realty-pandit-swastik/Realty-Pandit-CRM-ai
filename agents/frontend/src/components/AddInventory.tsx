@@ -1,4 +1,5 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
+import PhoneInput from './PhoneInput';
 import { useWorkflow, type WorkflowStep, type StepOption, type DocType } from '../hooks/useWorkflow';
 import { EnrichmentPanel } from './EnrichmentPanel';
 import ParkingListField from './ParkingListField';
@@ -997,10 +998,9 @@ function OwnerBlockField({ value, onSubmit }: {
             {/* Owner Phone */}
             <div style={{ marginBottom: '16px' }}>
                 <label style={labelStyle}>Owner Phone {phoneRequired ? '*' : '(Optional)'}</label>
-                <input
-                    type="tel"
+                <PhoneInput
                     value={ownerPhone}
-                    onChange={e => setOwnerPhone(e.target.value.replace(/[^\d+\-\s()]/g, ''))}
+                    onChange={setOwnerPhone}
                     placeholder="e.g. 9876543210"
                     style={fieldStyle}
                 />

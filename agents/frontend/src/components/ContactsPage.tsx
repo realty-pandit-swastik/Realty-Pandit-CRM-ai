@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
+import PhoneInput from './PhoneInput';
 import { getContactsDirectory, getInventory, updateContactProfile, type DirectoryContact } from '../api/client';
 import { WhatsAppChatTab } from './WhatsAppChatTab';
 import { toDialablePhone } from '../lib/phone';
@@ -194,7 +195,7 @@ function ContactDetailDrawer({ contact, isMobile, onClose, onSaved }: { contact:
                     {editing ? (
                         <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
                             <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="Name" style={{ width: '100%', padding: '9px 11px', borderRadius: 8, border: '1px solid var(--border-secondary)', backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)', fontSize: 13, boxSizing: 'border-box' }} />
-                            <input value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="Phone number" style={{ width: '100%', padding: '9px 11px', borderRadius: 8, border: '1px solid var(--border-secondary)', backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)', fontSize: 13, boxSizing: 'border-box' }} />
+                            <PhoneInput value={form.phone} onChange={v => setForm(f => ({ ...f, phone: v }))} placeholder="Phone number" style={{ width: '100%', padding: '9px 11px', borderRadius: 8, border: '1px solid var(--border-secondary)', backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)', fontSize: 13, boxSizing: 'border-box' }} />
                             <input value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} placeholder="Email (optional)" style={{ width: '100%', padding: '9px 11px', borderRadius: 8, border: '1px solid var(--border-secondary)', backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)', fontSize: 13, boxSizing: 'border-box' }} />
                             {saveErr && <div style={{ color: '#ef4444', fontSize: 12 }}>{saveErr}</div>}
                             <div style={{ display: 'flex', gap: 8 }}>

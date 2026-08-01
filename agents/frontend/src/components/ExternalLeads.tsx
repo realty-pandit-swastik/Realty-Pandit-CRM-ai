@@ -1,7 +1,8 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react';
+import PhoneInput from './PhoneInput';
 import client, { getPartnerAssignable, assignLeadToTeammate, shareLead } from '../api/client';
-import { isPlaceholderPhone, isDialablePhone, isValidPhoneInput, toDialablePhone } from '../lib/phone';
+import { isPlaceholderPhone, isDialablePhone, isValidPhoneInput, toDialablePhone, normalizePhoneInput } from '../lib/phone';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import LeadCard from './leads/LeadCard';
@@ -720,8 +721,8 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
     };
 
     const handleClientSearchChange = (val: string) => {
-        // Strip all non-digits, cap at 10
-        const digitsOnly = val.replace(/\D/g, '').slice(0, 10);
+        // Normalise ANY pasted format (+91 / spaces / 91-prefix) to the accepted 10-digit number
+        const digitsOnly = normalizePhoneInput(val);
         setClientSearchQuery(digitsOnly);
         if (clientSearchTimer.current) clearTimeout(clientSearchTimer.current);
         if (digitsOnly.length < 10 || !/^[6-9]/.test(digitsOnly)) {
@@ -2000,15 +2001,11 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
                             <div>
                                 <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '12px' }}>Search if this client already exists</div>
                                 <div style={{ position: 'relative' }}>
-                                    <input
-                                        type="tel"
-                                        inputMode="numeric"
-                                        pattern="[0-9]*"
+                                    <PhoneInput
                                         autoFocus
                                         value={clientSearchQuery}
-                                        onChange={e => handleClientSearchChange(e.target.value)}
-                                        placeholder="Enter 10-digit phone number"
-                                        maxLength={10}
+                                        onChange={handleClientSearchChange}
+                                        placeholder="Enter phone number (any format)"
                                         style={{ ...inputStyle, fontSize: '14px', padding: '10px 14px' }}
                                     />
                                     <span style={{
@@ -2136,7 +2133,7 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
                                                     <div style={{ marginTop: '8px', padding: '12px', backgroundColor: '#fefce8', borderRadius: '8px', border: '1px solid #fde68a' }}>
                                                         <div style={{ fontSize: '13px', fontWeight: 600, color: '#92400e', marginBottom: '10px' }}>Register New Partner Agent</div>
                                                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-                                                            <div><label style={{ ...labelStyle, fontSize: '11px' }}>Phone *</label><input type="tel" value={newPartnerForm.phone} onChange={e => setNewPartnerForm(p => ({ ...p, phone: e.target.value }))} placeholder="+91 98765 43210" style={inputStyle} /></div>
+                                                            <div><label style={{ ...labelStyle, fontSize: '11px' }}>Phone *</label><PhoneInput value={newPartnerForm.phone} onChange={v => setNewPartnerForm(p => ({ ...p, phone: v }))} placeholder="+91 98765 43210" style={inputStyle} /></div>
                                                             <div><label style={{ ...labelStyle, fontSize: '11px' }}>Name *</label><input type="text" value={newPartnerForm.name} onChange={e => setNewPartnerForm(p => ({ ...p, name: e.target.value }))} placeholder="Partner name" style={inputStyle} /></div>
                                                             <div><label style={{ ...labelStyle, fontSize: '11px' }}>Email</label><input type="email" value={newPartnerForm.email} onChange={e => setNewPartnerForm(p => ({ ...p, email: e.target.value }))} placeholder="email@example.com" style={inputStyle} /></div>
                                                             <div><label style={{ ...labelStyle, fontSize: '11px' }}>City</label><input type="text" value={newPartnerForm.city} onChange={e => setNewPartnerForm(p => ({ ...p, city: e.target.value }))} placeholder="City" style={inputStyle} /></div>
@@ -2169,7 +2166,7 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
                                     </div>
                                     <div>
                                         <label style={labelStyle}>{createLeadType === 'PARTNER_REFERRAL' ? 'Client Phone (optional)' : 'Phone *'}</label>
-                                        <input type="tel" required={createLeadType === 'DIRECT_OWNER' && !preselectedContact} value={createForm.phone} onChange={e => setCreateForm(p => ({ ...p, phone: e.target.value }))} placeholder="+918178491914" style={{ ...inputStyle, opacity: preselectedContact ? 0.6 : 1 }} disabled={!!preselectedContact} />
+                                        <PhoneInput required={createLeadType === 'DIRECT_OWNER' && !preselectedContact} value={createForm.phone} onChange={v => setCreateForm(p => ({ ...p, phone: v }))} placeholder="+918178491914" style={{ ...inputStyle, opacity: preselectedContact ? 0.6 : 1 }} disabled={!!preselectedContact} />
                                     </div>
                                 </div>
 

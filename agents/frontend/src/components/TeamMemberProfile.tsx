@@ -1,5 +1,6 @@
 
 import { useEffect, useState } from 'react';
+import PhoneInput from './PhoneInput';
 import { useAuth } from '../contexts/AuthContext';
 import { EmailAccountCard } from './EmailAccountCard';
 import { GoogleAccountCard } from './GoogleAccountCard';
@@ -402,9 +403,9 @@ export function TeamMemberProfile({
                         </Field>
 
                         <Field label="Phone (10 digits)">
-                            <input
+                            <PhoneInput
                                 value={editForm.phone}
-                                onChange={e => setEditForm({ ...editForm, phone: e.target.value.replace(/\D/g, '').slice(0, 10) })}
+                                onChange={v => setEditForm({ ...editForm, phone: v })}
                                 placeholder="9876543210"
                                 style={inputStyle}
                             />

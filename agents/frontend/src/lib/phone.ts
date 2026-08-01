@@ -60,3 +60,20 @@ export function isValidPhoneInput(raw?: string | null): boolean {
     if (/^91[6-9]\d{9}$/.test(cleaned)) return true;     // +91 prefixed
     return /^\d{10,15}$/.test(cleaned);                  // plausible international
 }
+
+/**
+ * Normalize a pasted/typed phone into the accepted form. Handles every format the team pastes:
+ * "+91 995886 0411", "+919958860411", "919958860411", "0091-9958860411", "(0)99588 60411" ->
+ * "9958860411". Strips spaces/dashes/parens/leading +, leading zeros, and a leading 91 when the
+ * rest is a 10-digit Indian mobile. Genuine international numbers keep their full digits. Partial
+ * input while typing is returned as digits-only so it never fights the user.
+ */
+export function normalizePhoneInput(raw?: string | null): string {
+    if (!raw) return '';
+    const hadPlus = String(raw).trimStart().startsWith('+');
+    let d = String(raw).replace(/\D/g, '').replace(/^0+/, '');
+    if (/^91[6-9]\d{9}$/.test(d)) d = d.slice(2);   // 91 + Indian mobile -> drop the 91
+    if (/^[6-9]\d{9}$/.test(d)) return d;           // clean 10-digit Indian mobile
+    if (hadPlus || d.length > 10) return d;          // international -> keep full digits
+    return d;                                        // partial (while typing) -> digits as-is
+}

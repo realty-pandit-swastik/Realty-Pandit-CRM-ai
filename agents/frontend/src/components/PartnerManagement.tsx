@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
+import PhoneInput from './PhoneInput';
 import { getPartners, verifyPartner, updatePartnerStatus, updatePartnerPackage, updatePartnerCategory, createPartner } from '../api/client';
 import { loadGoogleMaps } from '../lib/loadGoogleMaps';
 import { useAuth } from '../contexts/AuthContext';
@@ -266,8 +267,8 @@ export function PartnerManagement() {
                             Only name + phone_number are required. Everything else is optional
                             and can be filled later (by the partner from their portal, or by
                             our admin team via the edit flow). No subscription tiers. */}
-                        <input placeholder="WhatsApp Number (10 digits) *" value={formData.phone_number} required maxLength={10}
-                            onChange={e => setFormData({ ...formData, phone_number: e.target.value.replace(/\D/g, '') })} style={formInputStyle} />
+                        <PhoneInput placeholder="WhatsApp Number (10 digits) *" value={formData.phone_number} required
+                            onChange={v => setFormData({ ...formData, phone_number: v })} style={formInputStyle} />
                         <input placeholder="Full Name *" value={formData.name} required
                             onChange={e => setFormData({ ...formData, name: e.target.value })} style={formInputStyle} />
                         <input placeholder="Email Address (optional)" type="email" value={formData.email}
