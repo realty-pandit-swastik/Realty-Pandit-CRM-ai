@@ -333,29 +333,32 @@ export default function AddressFields({
                     )}
 
                     {showUnitBlock && (
-                        <div style={{ display: 'grid', gridTemplateColumns: (isPlot || layout === 'house') ? '1fr 1fr' : '1fr 1fr 1fr', gap: '10px', ...row }}>
+                        <div style={{ ...row }}>
                             {isPlot ? (
-                                <div style={{ gridColumn: 'span 1' }}>
-                                    <label style={lStyle}>Plot No</label>
-                                    <input style={iStyle} value={value.plot_no || ''} onChange={e => set({ plot_no: e.target.value })} placeholder="e.g. Plot 42" />
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                                    <div><label style={lStyle}>Plot No</label><input style={iStyle} value={value.plot_no || ''} onChange={e => set({ plot_no: e.target.value })} placeholder="e.g. Plot 42" /></div>
                                 </div>
                             ) : layout === 'house' ? (
-                                <div style={{ gridColumn: 'span 1' }}>
-                                    <label style={lStyle}>House / Plot No</label>
-                                    <input style={iStyle} value={value.plot_no || ''} onChange={e => set({ plot_no: e.target.value })} placeholder="e.g. H-12" />
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                                    <div><label style={lStyle}>House / Plot No</label><input style={iStyle} value={value.plot_no || ''} onChange={e => set({ plot_no: e.target.value })} placeholder="e.g. H-12" /></div>
                                 </div>
                             ) : (
-                                <>
-                                    <div><label style={lStyle}>{unitLabel}</label><input style={iStyle} value={value.flat_no || ''} onChange={e => set({ flat_no: e.target.value })} placeholder="e.g. A-1201" /></div>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                                    {/* Row 1: unit + display floor (simple inputs) */}
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                                        <div><label style={lStyle}>{unitLabel}</label><input style={iStyle} value={value.flat_no || ''} onChange={e => set({ flat_no: e.target.value })} placeholder="e.g. A-1201" /></div>
+                                        <div><label style={lStyle}>Display floor <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>(optional — shown on website &amp; when sharing)</span></label><input style={iStyle} value={value.display_floor || ''} onChange={e => set({ display_floor: e.target.value })} placeholder="e.g. Ground, Lower Ground, 2nd" /></div>
+                                    </div>
+                                    {/* Row 2: floor chips + number — full width so chips + placeholder have room */}
                                     <div>
                                         <label style={lStyle}>Floor</label>
-                                        <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap', marginBottom: '5px' }}>
+                                        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '6px' }}>
                                             {FLOOR_PRESETS.map(p => {
                                                 const active = String(value.floor_label || '') === p.label;
                                                 return (
                                                     <button type="button" key={p.label}
                                                         onClick={() => set(active ? { floor_label: '', floor_number: '' } : { floor_label: p.label, floor_number: p.sort })}
-                                                        style={{ padding: '5px 9px', borderRadius: '8px', fontSize: '11px', fontWeight: 600, cursor: 'pointer', border: active ? '1px solid var(--accent-primary)' : '1px solid var(--border-secondary)', background: active ? 'var(--accent-primary)' : 'var(--bg-primary)', color: active ? '#fff' : 'var(--text-primary)' }}>
+                                                        style={{ padding: '6px 12px', borderRadius: '8px', fontSize: '12px', fontWeight: 600, cursor: 'pointer', border: active ? '1px solid var(--accent-primary)' : '1px solid var(--border-secondary)', background: active ? 'var(--accent-primary)' : 'var(--bg-primary)', color: active ? '#fff' : 'var(--text-primary)' }}>
                                                         {p.label}
                                                     </button>
                                                 );
@@ -363,10 +366,11 @@ export default function AddressFields({
                                         </div>
                                         <input style={iStyle} type="number" value={value.floor_label ? '' : (value.floor_number ?? '')} onChange={e => set({ floor_number: e.target.value, floor_label: '' })} placeholder="or a floor number — e.g. 3, or -1 for lower basement" />
                                     </div>
-                                    <div><label style={lStyle}>Display floor <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>(optional — shown on website &amp; when sharing)</span></label><input style={iStyle} value={value.display_floor || ''} onChange={e => set({ display_floor: e.target.value })} placeholder="e.g. Ground, Lower Ground, 2nd" /></div>
-                                    {/* Plot/Khasra optional — some apartment registries DO record one; honour it if user provides. */}
-                                    <div><label style={lStyle}>Plot / Khasra No (optional)</label><input style={iStyle} value={value.plot_no || ''} onChange={e => set({ plot_no: e.target.value })} placeholder="e.g. Plot 42 / Khasra 1234" /></div>
-                                </>
+                                    {/* Row 3: plot/khasra (optional) */}
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                                        <div><label style={lStyle}>Plot / Khasra No (optional)</label><input style={iStyle} value={value.plot_no || ''} onChange={e => set({ plot_no: e.target.value })} placeholder="e.g. Plot 42 / Khasra 1234" /></div>
+                                    </div>
+                                </div>
                             )}
                         </div>
                     )}
