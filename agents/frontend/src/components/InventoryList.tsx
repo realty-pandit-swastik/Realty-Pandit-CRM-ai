@@ -1,5 +1,6 @@
 
 import React, { useEffect, useRef, useState } from 'react';
+import { formatInventoryAddress } from '../lib/address';
 
 import { getPartnerAssignable, assignListingToTeammate, getInventory, getInventoryItem, updateInventory, deleteInventory, approveInventory, rejectInventory, getCategoryTree, getStates, getTeamMembers, getTeamMembersList, uploadInventoryImages, deleteInventoryMedia, transferInventory, uploadInventoryDocument, deleteInventoryDocument, renameInventoryDocument, shareInventoryDocument, getNodeFields, markInventorySold, markInventoryOnHold } from '../api/client';
 import client from '../api/client';
@@ -1645,7 +1646,7 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
                                                 {/* full_address already contains building + locality + city + state + pincode for new picks.
                                                     Only fall back to structured parts when full_address is empty. Avoids the
                                                     "apartment_name + full_address" double-print that was jumbling cards. */}
-                                                {item.full_address || [item.apartment_name, item.sub_locality, item.locality, item.district || item.city, item.state, item.pincode].filter(Boolean).join(', ') || 'Location N/A'}
+                                                {formatInventoryAddress(item)}
                                                 {/* Type-aware specs (residential→BHK/Bath/Area, hospitality→Rooms/Area,
                                                     commercial/land→Area; ⚠ on implausible area). See lib/specChips. */}
                                                 {pickSpecChips(item).map(c => ` | ${c.warn ? '⚠ ' : ''}${c.value}`).join('')}

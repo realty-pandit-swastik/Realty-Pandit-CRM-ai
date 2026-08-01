@@ -1,5 +1,6 @@
 
 import { useEffect, useState, useRef } from 'react';
+import { formatInventoryAddress } from '../../lib/address';
 import { getInventory, getTeamMembers, updateInventory, markInventorySold, markInventoryOnHold } from '../../api/client';
 import client from '../../api/client';
 import { useAuth } from '../../contexts/AuthContext';
@@ -421,7 +422,7 @@ export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryLis
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                         {items.map(item => {
                             const intentStyle = INTENT_COLORS[item.intent] || { bg: 'var(--bg-primary)', color: 'var(--text-muted)' };
-                            const location = item.full_address || [item.locality, item.city || item.district, item.state].filter(Boolean).join(', ') || 'Location N/A';
+                            const location = formatInventoryAddress(item);
                             return (
                                 <div
                                     key={item.id}
@@ -935,7 +936,7 @@ export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryLis
                                 {activeSheetItem.taxonomy_node?.name || activeSheetItem.flat_property_type?.name || activeSheetItem.property_type_link?.name || activeSheetItem.type?.replace(/_/g, ' ') || 'Property'}
                             </div>
                             <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>
-                                {activeSheetItem.full_address || [activeSheetItem.locality, activeSheetItem.city || activeSheetItem.district, activeSheetItem.state].filter(Boolean).join(', ') || 'Location N/A'}
+                                {formatInventoryAddress(activeSheetItem)}
                             </div>
                         </div>
 

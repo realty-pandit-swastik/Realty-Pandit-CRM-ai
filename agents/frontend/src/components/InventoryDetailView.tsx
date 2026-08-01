@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { formatInventoryAddress } from '../lib/address';
 import client from '../api/client';
 import { toDialablePhone } from '../lib/phone';
 import { getDisplayFloor } from '../lib/floor';
@@ -111,7 +112,7 @@ export function InventoryDetailView({ inventoryId, onClose, onEdit }: Props) {
 
     const title = inv?.taxonomy_node?.name || inv?.flat_property_type?.name || inv?.type?.replace(/_/g, ' ') || 'Property';
     // Location: general area always; exact flat/plot number only for full access.
-    const generalLoc = [inv?.apartment_name, inv?.sub_locality, inv?.locality, inv?.district || inv?.city, inv?.state, inv?.pincode].filter(Boolean).join(', ');
+    const generalLoc = formatInventoryAddress(inv);
     const unitLine = fullAccess
         ? [inv?.flat_no && `Flat ${inv.flat_no}`, inv?.plot_no && `Plot ${inv.plot_no}`].filter(Boolean).join(' · ')
         : '';
