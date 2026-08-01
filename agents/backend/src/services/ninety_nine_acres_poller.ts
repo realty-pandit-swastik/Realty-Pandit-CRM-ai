@@ -592,6 +592,13 @@ export class NinetyNineAcresPoller {
             },
         });
 
+        // LLM refinement (2026-08-01) — async, non-blocking: upgrade a coarse classification to a
+        // specific type + fill BHK from the description. Guarded; never blocks/breaks ingest.
+        if (isNew) {
+            const _clsTxt = `${lead.propertyLabel || ''} ${lead.queryInfo || ''}`.trim();
+            import('./demand_classifier').then(m => m.refineDemandWithLLM(phoneNumber, _clsTxt)).catch(() => {});
+        }
+
         // ── Initialize lead score for new contacts ──────────────────────────
         if (isNew) {
             await prisma.leadScore.upsert({

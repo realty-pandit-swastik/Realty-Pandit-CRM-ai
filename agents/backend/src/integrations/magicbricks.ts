@@ -273,6 +273,9 @@ async function handleMagicBricksPush(req: any, res: any) {
             },
         });
 
+        // LLM refinement (2026-08-01) — async, non-blocking. New-lead path only (dups return earlier).
+        import('../services/demand_classifier').then(m => m.refineDemandWithLLM(phoneNumber, String(msg || notes || ''))).catch(() => {});
+
         // Assignment (mirrors 99acres SubUserName routing):
         //   1) sub_user → the listing agent. MagicBricks sends "<agent phone>@timesgroup.com".
         //   2) else project → property uploader (legacy best-effort).

@@ -52,6 +52,9 @@ let cache: {
     byFlatSlug: Map<string, NodeRow[]>;  // flat-type slug -> nodes
     byNodeId: Map<string, NodeRow>;      // node id -> node row (for node -> classification lookup)
     subToCat: Map<string, string>;       // legacy_sub_category_id -> legacy category_id (PropertySubCategory.category_id)
+    catByMain: Map<string, string>;      // 'residential'|'commercial'|'agricultural' -> CATEGORY node id (coarse fallback)
+    subByKey: Map<string, string>;       // subcategory name/slug keyword -> SUBCATEGORY node id (coarse fallback)
+    allNodeIds: Set<string>;             // every taxonomy node id (recognise a precise CATEGORY/SUBCATEGORY node id)
 } | null = null;
 
 /** Reset the in-process lookup cache (taxonomy is near-static; refreshed on restart / call after edits). */
@@ -88,7 +91,31 @@ async function loadMaps() {
         if (f.slug) append(byFlatSlug, String(f.slug).toLowerCase(), ns);
         if (f.legacy_type_slug) append(byTypeSlug, String(f.legacy_type_slug).toLowerCase(), ns);
     }
-    cache = { bySub, byTypeSlug, byFlatSlug, byNodeId, subToCat };
+    // Coarse CATEGORY/SUBCATEGORY nodes for the fallback resolver (2026-08-01): portal leads
+    // whose label carries no specific TYPE keyword (e.g. "2 Bed for Sale in <project>") should
+    // still classify to Residential/Commercial (+ subcategory when hinted) instead of null.
+    const coarse = await prisma.taxonomyNode.findMany({
+        where: { node_kind: { in: ['CATEGORY', 'SUBCATEGORY'] } },
+        select: { id: true, name: true, slug: true, node_kind: true },
+    });
+    const catByMain = new Map<string, string>();
+    const subByKey = new Map<string, string>();
+    const allNodeIds = new Set<string>();
+    for (const c of coarse as any[]) {
+        allNodeIds.add(c.id);
+        const nm = String(c.name || '').toLowerCase();
+        if (c.node_kind === 'CATEGORY') {
+            if (nm.includes('resid')) catByMain.set('residential', c.id);
+            else if (nm.includes('commerc')) catByMain.set('commercial', c.id);
+            else if (nm.includes('agri')) catByMain.set('agricultural', c.id);
+        } else {
+            if (nm) subByKey.set(nm, c.id);
+            if (c.slug) subByKey.set(String(c.slug).toLowerCase(), c.id);
+        }
+    }
+    for (const id of byNodeId.keys()) allNodeIds.add(id);
+
+    cache = { bySub, byTypeSlug, byFlatSlug, byNodeId, subToCat, catByMain, subByKey, allNodeIds };
     return cache;
 }
 
@@ -160,17 +187,38 @@ export async function resolveDemandTaxonomy(input: DemandTaxonomyInput): Promise
     if (input.age_of_construction) sv['age-of-construction'] = input.age_of_construction;
     const demand_schema_values = Object.keys(sv).length ? sv : null;
 
-    const attempted = !!(input.sub_category_id || input.property_type);
-    // Derive legacy classification IDs from the resolved node (so callers persist
-    // node + columns together). Prefer the node's own legacy ids; fall back to the
-    // input ids when no node resolved.
+    // ── Coarse fallback (2026-08-01): resolve to a CATEGORY/SUBCATEGORY node when no
+    //    specific TYPE resolved, so portal/bot leads classify as Residential/Commercial
+    //    (+ subcategory when hinted) instead of null. Matching already expands a
+    //    category/subcategory node to its descendant types + hard-filters BHK.
+    let resolvedNodeId: string | null = node?.id ?? null;
+    // A. a precise CATEGORY/SUBCATEGORY node id was passed straight in (form re-save / manual).
+    if (!resolvedNodeId && input.demand_taxonomy_node_id && maps.allNodeIds.has(input.demand_taxonomy_node_id)) {
+        resolvedNodeId = input.demand_taxonomy_node_id;
+    }
+    // B. a subcategory hint inside a coarse property_type ("builder floor"->Builder Floor, "plot"->Land/Plot).
+    if (!resolvedNodeId && input.property_type) {
+        const raw = String(input.property_type).toLowerCase().trim();
+        for (const [k, id] of maps.subByKey) { if (k.length >= 4 && (raw.includes(k) || k.includes(raw))) { resolvedNodeId = id; break; } }
+    }
+    // C. bare main_category -> Residential/Commercial CATEGORY node.
+    if (!resolvedNodeId && input.main_category) {
+        const mc = String(input.main_category).toLowerCase().trim();
+        resolvedNodeId = maps.catByMain.get(mc)
+            ?? (mc.includes('resid') ? maps.catByMain.get('residential') ?? null : mc.includes('commerc') ? maps.catByMain.get('commercial') ?? null : null);
+    }
+
+    const attempted = !!(input.sub_category_id || input.property_type || input.main_category);
+    // Derive legacy classification IDs from the resolved TYPE node (coarse fallbacks leave
+    // them null on purpose -> the matching engine's category/subcategory node-expansion path
+    // kicks in instead of a legacy sub_category hard filter).
     const sub_category_id = node?.legacy_sub_category_id ?? input.sub_category_id ?? null;
     const category_id = (sub_category_id && maps.subToCat.get(sub_category_id)) ?? input.category_id ?? null;
     const type_id = node?.legacy_type_id ?? input.type_id ?? null;
     return {
-        demand_taxonomy_node_id: node?.id ?? null,
+        demand_taxonomy_node_id: resolvedNodeId,
         demand_schema_values,
-        needs_review: ambiguous || (attempted && !node),
+        needs_review: ambiguous || (attempted && !resolvedNodeId),
         sub_category_id,
         category_id,
         type_id,
