@@ -181,7 +181,7 @@ async function processInboundMessageInner(data: InboundMessageData): Promise<voi
             const ctwaClid = await cacheGet(`ctwa:${contact.phone_number}`);
             if (ctwaClid) {
                 const { trackWhatsAppLead } = await import('./meta_conversions');
-                trackWhatsAppLead({ ctwaClid, phone: contact.phone_number, eventName: 'Lead' }).catch(() => {});
+                trackWhatsAppLead({ ctwaClid, phone: contact.phone_number, eventName: 'LeadSubmitted' }).catch(() => {});
             }
         } catch { /* non-fatal */ }
     } else if (

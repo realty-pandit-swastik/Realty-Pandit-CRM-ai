@@ -84,6 +84,9 @@ export async function sendConversionEvent(data: ConversionEventData): Promise<vo
 // leads instead of "conversations started". Dataset: "WhatsApp Marketing Message
 // Event Sharing" (business 782804307620931). Override via FB_MESSAGING_DATASET_ID.
 const MESSAGING_DATASET_ID = process.env.FB_MESSAGING_DATASET_ID || '760915983366996';
+// business_messaging events MUST carry the originating page or WABA, or Meta 400s with
+// "missing a page_id or whatsapp_business_account_id parameter". This is the bot's WABA.
+const MESSAGING_WABA_ID = process.env.WHATSAPP_BUSINESS_ACCOUNT_ID || '2124684824933246';
 
 /**
  * Send a CTWA lead/qualification event for a WhatsApp ad-sourced contact.
@@ -92,11 +95,13 @@ const MESSAGING_DATASET_ID = process.env.FB_MESSAGING_DATASET_ID || '76091598336
 export async function trackWhatsAppLead(params: {
     ctwaClid: string;
     phone: string;
-    eventName?: 'Lead' | 'Contacted' | 'Schedule' | 'Purchase';
+    // Only these two are valid for action_source 'business_messaging' — Meta rejects
+    // 'Lead'/'Contact'/'Schedule'/'Contacted' outright (verified 2026-08-02).
+    eventName?: 'LeadSubmitted' | 'Purchase';
     value?: number;
     contentName?: string;
 }): Promise<void> {
-    const { ctwaClid, phone, eventName = 'Lead', value, contentName } = params;
+    const { ctwaClid, phone, eventName = 'LeadSubmitted', value, contentName } = params;
     if (!ctwaClid || !ACCESS_TOKEN || !MESSAGING_DATASET_ID) {
         logger.debug('[MetaConversions] WA lead skipped — missing ctwa_clid/token/dataset');
         return;
@@ -109,6 +114,7 @@ export async function trackWhatsAppLead(params: {
             messaging_channel: 'whatsapp',
             event_id: `wa_${eventName}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
             user_data: {
+                whatsapp_business_account_id: MESSAGING_WABA_ID,
                 ctwa_clid: ctwaClid,
                 ph: [hashSHA256(phone.replace(/\D/g, ''))],
                 external_id: [hashSHA256(phone.replace(/\D/g, ''))],
