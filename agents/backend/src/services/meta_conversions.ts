@@ -11,6 +11,22 @@
 import axios from 'axios';
 import crypto from 'crypto';
 import logger from '../utils/logger';
+import { captureBackgroundError } from '../utils/capture';
+
+/**
+ * Extract the ACTUALLY useful part of a Graph API error.
+ * Meta returns the diagnosis in `error_user_msg` + `error_subcode`; the top-level
+ * `message` is a generic "Invalid parameter" that identifies nothing. Logging only
+ * `message` is why the CTWA pipeline failed silently from 2026-05-18 to 2026-08-02.
+ */
+function describeGraphError(err: any): string {
+    const e = err?.response?.data?.error;
+    if (!e) return err?.message || String(err);
+    const parts = [e.error_user_msg || e.message];
+    if (e.error_subcode) parts.push(`subcode=${e.error_subcode}`);
+    if (e.code) parts.push(`code=${e.code}`);
+    return parts.join(' | ');
+}
 
 const GRAPH_API = 'https://graph.facebook.com/v25.0';
 const PIXEL_ID = process.env.FB_PIXEL_ID || '';
@@ -73,7 +89,9 @@ export async function sendConversionEvent(data: ConversionEventData): Promise<vo
 
         logger.info(`[MetaConversions] Sent ${data.eventName} event for ${data.phone || data.email || 'unknown'}`);
     } catch (err: any) {
-        logger.warn(`[MetaConversions] Failed to send ${data.eventName}: ${err.response?.data?.error?.message || err.message}`);
+        const detail = describeGraphError(err);
+        logger.error(`[MetaConversions] Failed to send ${data.eventName}: ${detail}`);
+        captureBackgroundError(err, { source: 'meta_conversions.sendConversionEvent', eventName: data.eventName, detail });
     }
 }
 
@@ -132,7 +150,9 @@ export async function trackWhatsAppLead(params: {
         );
         logger.info(`[MetaConversions] Sent WA ${eventName} (ctwa) for ${phone}`);
     } catch (err: any) {
-        logger.warn(`[MetaConversions] WA ${eventName} failed: ${err.response?.data?.error?.message || err.message}`);
+        const detail = describeGraphError(err);
+        logger.error(`[MetaConversions] WA ${eventName} failed: ${detail}`);
+        captureBackgroundError(err, { source: 'meta_conversions.trackWhatsAppLead', eventName, detail });
     }
 }
 
