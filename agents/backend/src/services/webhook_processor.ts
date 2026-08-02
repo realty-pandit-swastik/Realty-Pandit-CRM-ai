@@ -209,6 +209,25 @@ async function processInboundMessageInner(data: InboundMessageData): Promise<voi
     if (contact) {
         await leadScoreService.updateScore(contact.phone_number, 'engagement', 10);
     }
+    // CTWA: Meta puts a `referral` object on the first message after a Click-to-WhatsApp
+    // ad tap. Resolve it to ad/adset/campaign and stamp the contact's meta_* columns so
+    // ad-sourced leads are distinguishable in the admin dashboard (otherwise every ad lead
+    // looks identical to an organic WhatsApp lead). Runs for new AND returning contacts -
+    // the referral only exists when they genuinely clicked an ad. Fire-and-forget: must
+    // never block or fail inbound processing.
+    if (contact) {
+        try {
+            const { extractCtwaReferral, attributeCtwaLead } = await import('./ctwa_attribution');
+            const referral = extractCtwaReferral(msg);
+            if (referral) {
+                attributeCtwaLead({
+                    phone: contact.phone_number,
+                    tenantId: contact.tenant_id,
+                    referral,
+                }).catch(() => { /* already captured inside */ });
+            }
+        } catch { /* non-fatal */ }
+    }
 
     // ─── 2. AUTHENTICATION: Website chat WhatsApp link ────────────────────────
     const normalizedText = text.trim().toLowerCase();
