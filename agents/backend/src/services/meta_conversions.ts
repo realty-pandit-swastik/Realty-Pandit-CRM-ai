@@ -101,10 +101,14 @@ export async function sendConversionEvent(data: ConversionEventData): Promise<vo
 // what lets Meta attribute the lead to the ad and optimise delivery toward real
 // leads instead of "conversations started". Dataset: "WhatsApp Marketing Message
 // Event Sharing" (business 782804307620931). Override via FB_MESSAGING_DATASET_ID.
-const MESSAGING_DATASET_ID = process.env.FB_MESSAGING_DATASET_ID || '760915983366996';
-// business_messaging events MUST carry the originating page or WABA, or Meta 400s with
-// "missing a page_id or whatsapp_business_account_id parameter". This is the bot's WABA.
-const MESSAGING_WABA_ID = process.env.WHATSAPP_BUSINESS_ACCOUNT_ID || '2124684824933246';
+// CTWA events are only accepted by a dataset ASSOCIATED WITH THE PAGE THE AD RUNS ON.
+// The original dataset (760915983366996) is bound to page 950968444771731 (airealtypandit)
+// and can never accept clicks from ads on page 905415725999343 — every event 400d with
+// 2804065/2804072. This dataset is bound to the ad's page. Verified live 2026-08-02.
+const MESSAGING_DATASET_ID = process.env.FB_MESSAGING_DATASET_ID || '27479789261692563';
+// Must be page_id, NOT whatsapp_business_account_id: the dataset has a Page association,
+// so the WABA variant still fails with 2804132.
+const MESSAGING_PAGE_ID = process.env.FB_MESSAGING_PAGE_ID || '905415725999343';
 
 /**
  * Send a CTWA lead/qualification event for a WhatsApp ad-sourced contact.
@@ -132,7 +136,7 @@ export async function trackWhatsAppLead(params: {
             messaging_channel: 'whatsapp',
             event_id: `wa_${eventName}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
             user_data: {
-                whatsapp_business_account_id: MESSAGING_WABA_ID,
+                page_id: MESSAGING_PAGE_ID,
                 ctwa_clid: ctwaClid,
                 ph: [hashSHA256(phone.replace(/\D/g, ''))],
                 external_id: [hashSHA256(phone.replace(/\D/g, ''))],
