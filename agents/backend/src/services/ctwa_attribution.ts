@@ -1,20 +1,26 @@
 /**
- * CTWA (Click-to-WhatsApp) ad attribution.
+ * CTWA (Click-to-WhatsApp) ad attribution + advertised-property handoff.
  *
  * Meta attaches a `referral` object to the FIRST inbound WhatsApp message after
  * someone taps a Click-to-WhatsApp ad. It carries the ad id (`source_id`) plus the
- * creative's headline/body. We resolve ad → ad set → campaign through the Graph API
- * and persist it onto the Contact's existing meta_* columns — the same ones the
- * Facebook lead-form path fills (`integrations/facebook.ts`) — so ad-sourced
- * WhatsApp leads are identifiable in the admin dashboard instead of collapsing into
- * the generic "whatsapp" source bucket.
+ * creative's headline/body. Two jobs here:
  *
- * Deliberately additive: `contact.source` is left as 'whatsapp'. Routing, round-robin
- * and distribution logic switch on that string, so attribution rides in the meta_*
- * columns rather than changing the source.
+ *  1. ATTRIBUTION — resolve ad → ad set → campaign through the Graph API and persist
+ *     onto the Contact's existing meta_* columns (the same ones the Facebook lead-form
+ *     path fills), so ad-sourced leads are identifiable in the admin dashboard instead
+ *     of collapsing into the generic "whatsapp" source bucket.
  *
- * Fire-and-forget throughout — inbound message processing must never block on, or
- * fail because of, attribution.
+ *  2. ADVERTISED PROPERTY — an ad sells ONE specific listing, but Meta gives us nowhere
+ *     to attach an inventory id to an ad. So the listing's `display_id` is encoded in the
+ *     AD NAME (and, for CTW, in the pre-filled first message) and parsed back out here.
+ *     That is a deliberate no-migration link. When it resolves we copy the listing's
+ *     requirements onto the lead and send that exact property card — instead of the
+ *     generic "a team member will assist you" that ad leads used to get.
+ *
+ * Deliberately additive: `contact.source` stays 'whatsapp'. Routing, round-robin and
+ * distribution logic switch on that string, so attribution rides in the meta_* columns.
+ *
+ * Nothing here may throw into inbound message processing.
  */
 
 import axios from 'axios';
@@ -23,6 +29,9 @@ import logger from '../utils/logger';
 import { captureBackgroundError } from '../utils/capture';
 
 const GRAPH_API = 'https://graph.facebook.com/v25.0';
+
+/** e.g. RP-GZB-RES-20528 — the customer-facing listing code. */
+const DISPLAY_ID_RE = /\bRP-[A-Z]{2,4}-[A-Z]{2,4}-\d{3,}\b/i;
 
 export interface CtwaReferral {
     ctwaClid: string | null;
@@ -40,17 +49,12 @@ interface AdDetails {
     adName: string | null;
 }
 
-const NO_AD_DETAILS: AdDetails = {
-    campaignId: null,
-    adsetId: null,
-    campaignName: null,
-    adName: null,
-};
+const NO_AD_DETAILS: AdDetails = { campaignId: null, adsetId: null, campaignName: null, adName: null };
 
 /**
  * Pull the CTWA referral off a raw inbound WhatsApp message. Returns null when the
- * message did not originate from an ad click — which is the overwhelming majority,
- * so this stays cheap on the hot path.
+ * message did not originate from an ad click — the overwhelming majority, so this
+ * stays cheap on the hot path.
  */
 export function extractCtwaReferral(msg: any): CtwaReferral | null {
     const ref = msg?.referral;
@@ -73,6 +77,16 @@ export function extractCtwaReferral(msg: any): CtwaReferral | null {
     };
 }
 
+/** First listing display_id found across the given strings, uppercased. */
+export function extractDisplayId(...sources: Array<string | null | undefined>): string | null {
+    for (const s of sources) {
+        if (!s) continue;
+        const m = String(s).match(DISPLAY_ID_RE);
+        if (m) return m[0].toUpperCase();
+    }
+    return null;
+}
+
 /**
  * Resolve ad → ad set → campaign. Mirrors the proven lookup in
  * `integrations/facebook.ts`. Never throws — a failed lookup still leaves us with
@@ -84,16 +98,11 @@ async function fetchAdDetails(adId: string): Promise<AdDetails> {
         logger.warn('[CTWA] FB_ACCESS_TOKEN not set — storing ad id without campaign detail');
         return NO_AD_DETAILS;
     }
-
     try {
         const resp = await axios.get(`${GRAPH_API}/${adId}`, {
-            params: {
-                access_token: accessToken,
-                fields: 'name,campaign_id,adset_id,campaign{name}',
-            },
+            params: { access_token: accessToken, fields: 'name,campaign_id,adset_id,campaign{name}' },
             timeout: 8000,
         });
-
         return {
             campaignId: resp.data?.campaign_id || null,
             adsetId: resp.data?.adset_id || null,
@@ -106,13 +115,166 @@ async function fetchAdDetails(adId: string): Promise<AdDetails> {
     }
 }
 
+/** Write the meta_* columns (first-touch wins) + log the click to the timeline. */
+async function persistAttribution(
+    phone: string,
+    tenantId: string,
+    referral: CtwaReferral,
+    details: AdDetails,
+    firstMessage?: string,
+): Promise<void> {
+    const existing = await prisma.contact.findUnique({
+        where: { phone_number: phone },
+        select: { meta_ad_id: true },
+    });
+    if (!existing) return;
+
+    // First-touch wins: never let a later campaign overwrite the ad that originally
+    // produced the lead. Repeat clicks are still recorded as interactions below.
+    if (!existing.meta_ad_id && referral.adId) {
+        await prisma.contact.update({
+            where: { phone_number: phone },
+            data: {
+                meta_ad_id: referral.adId,
+                meta_campaign_id: details.campaignId,
+                meta_adset_id: details.adsetId,
+                meta_campaign_name: details.campaignName,
+                meta_ad_creative: details.adName || referral.headline,
+            },
+        });
+        logger.info(`[CTWA] Attributed ${phone} → campaign "${details.campaignName || 'unknown'}" (ad ${referral.adId})`);
+    }
+
+    await prisma.interaction.create({
+        data: {
+            tenant_id: tenantId,
+            phone_number: phone,
+            channel: 'whatsapp',
+            direction: 'inbound',
+            event_type: 'ctwa_ad_click',
+            content: `Clicked WhatsApp ad: ${referral.headline || details.adName || 'Untitled'}`
+                + (details.campaignName ? ` | Campaign: ${details.campaignName}` : ''),
+            metadata: {
+                source: 'ctwa',
+                ad_id: referral.adId,
+                adset_id: details.adsetId,
+                campaign_id: details.campaignId,
+                campaign_name: details.campaignName,
+                ad_creative: details.adName,
+                headline: referral.headline,
+                body: referral.body,
+                source_type: referral.sourceType,
+                source_url: referral.sourceUrl,
+                ctwa_clid: referral.ctwaClid,
+                first_message: firstMessage || null,
+            },
+        },
+    });
+}
+
 /**
- * Stamp ad attribution onto a contact and log the click to their timeline.
+ * Full handling for an inbound message that carries a CTWA referral.
  *
- * First-touch wins: the meta_* columns are only written when the contact has never
- * been attributed to an ad, so a later campaign can't overwrite the ad that
- * originally produced the lead. Repeat clicks are still recorded as interactions,
- * so nothing is lost.
+ * Returns TRUE when the advertised property card was sent — the caller must then
+ * return early, so the lead does NOT also get the generic greeting or the
+ * List-vs-Find disambiguation (asking "list or find?" is nonsense for someone who
+ * just tapped an ad for a specific flat).
+ *
+ * Returns FALSE when we could not identify the advertised listing; attribution has
+ * still been written and the normal pipeline should continue as before.
+ */
+export async function handleCtwaAdLead(params: {
+    phone: string;
+    tenantId: string;
+    referral: CtwaReferral;
+    firstMessage?: string;
+}): Promise<boolean> {
+    const { phone, tenantId, referral, firstMessage } = params;
+
+    try {
+        const details = referral.adId ? await fetchAdDetails(referral.adId) : NO_AD_DETAILS;
+        await persistAttribution(phone, tenantId, referral, details, firstMessage);
+
+        // Which listing is this ad selling? Ad name first (we control it), then the
+        // creative headline, then the customer's pre-filled first message.
+        const displayId = extractDisplayId(details.adName, referral.headline, referral.body, firstMessage);
+        if (!displayId) {
+            logger.info(`[CTWA] No listing code on ad "${details.adName || referral.adId}" — normal pipeline`);
+            return false;
+        }
+
+        const inv = await prisma.inventory.findFirst({
+            where: { display_id: displayId },
+            select: {
+                id: true, display_id: true, status: true, intent: true, taxonomy_node_id: true,
+                specs: true, locality: true, city: true, district: true, location: true,
+            },
+        });
+        if (!inv) {
+            logger.warn(`[CTWA] Ad references ${displayId} but no such listing — normal pipeline`);
+            return false;
+        }
+        if (inv.status !== 'active') {
+            // Don't market a sold/withdrawn flat. Fall through so a human picks it up.
+            logger.warn(`[CTWA] Advertised listing ${displayId} is '${inv.status}', not active — normal pipeline`);
+            return false;
+        }
+
+        // ── Stamp the lead's requirements from the advertised listing ──────────────
+        // Same helper the website enquiry path uses. Only fills what's still blank, so
+        // a returning customer's real requirements are never clobbered by an ad click.
+        const { buildDemandFromInventory } = await import('../utils/website_lead');
+        const demand = buildDemandFromInventory(inv as any);
+
+        const current = await prisma.contact.findUnique({
+            where: { phone_number: phone },
+            select: { demand_taxonomy_node_id: true, demand_schema_values: true, preferred_location: true, contact_type: true },
+        });
+        const patch: Record<string, any> = {};
+        if (current && !current.demand_taxonomy_node_id && demand.demand_taxonomy_node_id) {
+            patch.demand_taxonomy_node_id = demand.demand_taxonomy_node_id;
+        }
+        if (current && !current.demand_schema_values && demand.demand_schema_values) {
+            patch.demand_schema_values = demand.demand_schema_values;
+        }
+        if (current && !current.preferred_location && demand.preferred_location) {
+            patch.preferred_location = demand.preferred_location;
+        }
+        if (current && current.contact_type === 'UNKNOWN' && demand.contact_type) {
+            patch.contact_type = demand.contact_type;
+            patch.intent = demand.intent;
+            patch.demand_budget_type = demand.demand_budget_type;
+        }
+        if (Object.keys(patch).length) {
+            await prisma.contact.update({ where: { phone_number: phone }, data: patch });
+            logger.info(`[CTWA] Requirements copied from ${displayId} for ${phone}: ${Object.keys(patch).join(', ')}`);
+        }
+
+        // ── Make sure a deal exists, then send THAT property's card ────────────────
+        // shareSpecificProperty needs a deal: it records the share against the deal so
+        // the card's Schedule-Visit / Call-Back / Next buttons route correctly, and so
+        // the same flat is never sent twice.
+        const { ensureDealForLead } = await import('./ensure_deal');
+        const { dealId } = await ensureDealForLead({ contactPhone: phone, source: 'whatsapp' });
+
+        const { shareSpecificProperty } = await import('./property_sharing');
+        const sent = await shareSpecificProperty(dealId, inv.id, null);
+
+        if (sent) {
+            logger.info(`[CTWA] Sent advertised property ${displayId} to ${phone} (deal ${dealId})`);
+            return true;
+        }
+        logger.warn(`[CTWA] Card send failed for ${displayId} → ${phone}; falling back to normal pipeline`);
+        return false;
+    } catch (err) {
+        captureBackgroundError(err, { source: 'ctwa_attribution.handleCtwaAdLead', phone, adId: referral.adId });
+        return false;
+    }
+}
+
+/**
+ * Attribution-only entry point (no property handoff). Kept for callers that just want
+ * the meta_* columns stamped.
  */
 export async function attributeCtwaLead(params: {
     phone: string;
@@ -120,61 +282,10 @@ export async function attributeCtwaLead(params: {
     referral: CtwaReferral;
 }): Promise<void> {
     const { phone, tenantId, referral } = params;
-
     try {
-        const existing = await prisma.contact.findUnique({
-            where: { phone_number: phone },
-            select: { meta_ad_id: true },
-        });
-        if (!existing) return; // contact vanished mid-flight; nothing to attribute
-
         const details = referral.adId ? await fetchAdDetails(referral.adId) : NO_AD_DETAILS;
-
-        if (!existing.meta_ad_id && referral.adId) {
-            await prisma.contact.update({
-                where: { phone_number: phone },
-                data: {
-                    meta_ad_id: referral.adId,
-                    meta_campaign_id: details.campaignId,
-                    meta_adset_id: details.adsetId,
-                    meta_campaign_name: details.campaignName,
-                    meta_ad_creative: details.adName || referral.headline,
-                },
-            });
-            logger.info(
-                `[CTWA] Attributed ${phone} → campaign "${details.campaignName || 'unknown'}" (ad ${referral.adId})`
-            );
-        }
-
-        await prisma.interaction.create({
-            data: {
-                tenant_id: tenantId,
-                phone_number: phone,
-                channel: 'whatsapp',
-                direction: 'inbound',
-                event_type: 'ctwa_ad_click',
-                content: `Clicked WhatsApp ad: ${referral.headline || details.adName || 'Untitled'}`
-                    + (details.campaignName ? ` | Campaign: ${details.campaignName}` : ''),
-                metadata: {
-                    source: 'ctwa',
-                    ad_id: referral.adId,
-                    adset_id: details.adsetId,
-                    campaign_id: details.campaignId,
-                    campaign_name: details.campaignName,
-                    ad_creative: details.adName,
-                    headline: referral.headline,
-                    body: referral.body,
-                    source_type: referral.sourceType,
-                    source_url: referral.sourceUrl,
-                    ctwa_clid: referral.ctwaClid,
-                },
-            },
-        });
+        await persistAttribution(phone, tenantId, referral, details);
     } catch (err) {
-        captureBackgroundError(err, {
-            source: 'ctwa_attribution',
-            phone,
-            adId: referral.adId,
-        });
+        captureBackgroundError(err, { source: 'ctwa_attribution', phone, adId: referral.adId });
     }
 }

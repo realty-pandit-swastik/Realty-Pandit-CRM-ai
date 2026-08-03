@@ -217,16 +217,28 @@ async function processInboundMessageInner(data: InboundMessageData): Promise<voi
     // never block or fail inbound processing.
     if (contact) {
         try {
-            const { extractCtwaReferral, attributeCtwaLead } = await import('./ctwa_attribution');
+            const { extractCtwaReferral, handleCtwaAdLead } = await import('./ctwa_attribution');
             const referral = extractCtwaReferral(msg);
             if (referral) {
-                attributeCtwaLead({
+                // AWAITED, not fire-and-forget: a referral only appears on the first message
+                // after a real ad click (rare), and we must know whether the advertised
+                // property card went out before deciding to skip the generic ack below.
+                const handled = await handleCtwaAdLead({
                     phone: contact.phone_number,
                     tenantId: contact.tenant_id,
                     referral,
-                }).catch(() => { /* already captured inside */ });
+                    firstMessage: text,
+                });
+                if (handled) {
+                    await prisma.contact.update({
+                        where: { phone_number: contact.phone_number },
+                        data: { last_channel: 'whatsapp', last_interaction: new Date() },
+                    }).catch(() => { /* non-fatal */ });
+                    logger.info(`[WebhookProcessor] CTWA ad lead ${contact.phone_number} handled — advertised property card sent, skipping generic routing`);
+                    return;
+                }
             }
-        } catch { /* non-fatal */ }
+        } catch (err) { logger.warn('[WebhookProcessor] ctwa_attribution error:', err); }
     }
 
     // ─── 2. AUTHENTICATION: Website chat WhatsApp link ────────────────────────
@@ -1080,7 +1092,9 @@ How can I help you find your perfect property today? 🏡`;
     // guess the intent — the guessing is how landlords (Nilin) got misfiled as buyers.
     try {
         const { maybeSendDisambiguation } = await import('./disambiguation_router');
-        if (await maybeSendDisambiguation(from, contact, text)) {
+        // Never ask an ad-sourced lead "list or find?" — they tapped an ad for a specific
+        // property, so their intent is already known. CTWA leads carry meta_ad_id.
+        if (!contact.meta_ad_id && await maybeSendDisambiguation(from, contact, text)) {
             await prisma.contact.update({ where: { phone_number: from }, data: { last_channel: 'whatsapp', last_interaction: new Date() } });
             return;
         }
