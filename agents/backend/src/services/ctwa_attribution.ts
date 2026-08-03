@@ -77,6 +77,37 @@ export function extractCtwaReferral(msg: any): CtwaReferral | null {
     };
 }
 
+/**
+ * An ad-sourced lead arrived but we could not tell which listing the ad is selling.
+ *
+ * Fail LOUD. The ad→listing link lives in the AD NAME, so it breaks the moment someone
+ * renames the ad in Ads Manager — and the old behaviour was to silently fall back to
+ * generic handling, which is invisible until somebody notices the inventory manager
+ * stopped receiving leads. Surfacing it to GlitchTip turns that into a visible failure.
+ */
+export function alertUnresolvedAdListing(ctx: {
+    source: string;
+    phone: string;
+    adId: string | null;
+    adName: string | null;
+    displayId: string | null;
+    reason: string;
+}): void {
+    captureBackgroundError(
+        new Error(`Ad lead could not be matched to a listing (${ctx.reason}) — ad "${ctx.adName || ctx.adId}"`),
+        {
+            source: 'ad_listing_link_broken',
+            fix: 'Ensure the ad NAME contains the listing display_id, e.g. "… - RP-GZB-RES-20528"',
+            leadSource: ctx.source,
+            phone: ctx.phone,
+            adId: ctx.adId,
+            adName: ctx.adName,
+            displayId: ctx.displayId,
+            reason: ctx.reason,
+        },
+    );
+}
+
 /** First listing display_id found across the given strings, uppercased. */
 export function extractDisplayId(...sources: Array<string | null | undefined>): string | null {
     for (const s of sources) {
@@ -203,7 +234,15 @@ export async function handleCtwaAdLead(params: {
         // creative headline, then the customer's pre-filled first message.
         const displayId = extractDisplayId(details.adName, referral.headline, referral.body, firstMessage);
         if (!displayId) {
-            logger.info(`[CTWA] No listing code on ad "${details.adName || referral.adId}" — normal pipeline`);
+            logger.warn(`[CTWA] No listing code on ad "${details.adName || referral.adId}" — normal pipeline`);
+            // Only alert when this really was an ad click; a referral with no ad id is
+            // an organic post share, which legitimately has no listing behind it.
+            if (referral.adId) {
+                alertUnresolvedAdListing({
+                    source: 'ctwa', phone, adId: referral.adId, adName: details.adName,
+                    displayId: null, reason: 'no display_id in ad name, headline or first message',
+                });
+            }
             return false;
         }
 
@@ -218,11 +257,20 @@ export async function handleCtwaAdLead(params: {
         });
         if (!inv) {
             logger.warn(`[CTWA] Ad references ${displayId} but no such listing — normal pipeline`);
+            alertUnresolvedAdListing({
+                source: 'ctwa', phone, adId: referral.adId, adName: details.adName,
+                displayId, reason: 'display_id does not match any listing',
+            });
             return false;
         }
         if (inv.status !== 'active') {
-            // Don't market a sold/withdrawn flat. Fall through so a human picks it up.
+            // Don't market a sold/withdrawn flat. Fall through so a human picks it up —
+            // and alert, because an ad is still running and spending on a dead listing.
             logger.warn(`[CTWA] Advertised listing ${displayId} is '${inv.status}', not active — normal pipeline`);
+            alertUnresolvedAdListing({
+                source: 'ctwa', phone, adId: referral.adId, adName: details.adName,
+                displayId, reason: `listing status is '${inv.status}', not active — the ad is spending on a dead listing`,
+            });
             return false;
         }
 

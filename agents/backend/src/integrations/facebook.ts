@@ -186,11 +186,61 @@ async function handleLeadgenEvent(leadData: any): Promise<void> {
         // Without an owner, leadgen contacts have null assigned_agent_id/created_by and are
         // hidden by buildContactVisibilityFilter (invisible in the Leads section). Mirrors
         // WhatsApp/voice-source behaviour (db.ts $extends + new_lead_alerts).
-        let leadgenAssignedAgentId: string | undefined;
+        // Which listing is this ad selling? The display_id is encoded in the AD NAME —
+        // the same no-migration link the CTWA path uses — and adCreative already holds
+        // the ad name, so this costs no extra Graph call.
+        let advertised: any = null;
+        let advertisedDemand: Record<string, any> = {};
         try {
-            const { resolveSunnyAgentId } = await import('../services/new_lead_alerts');
-            leadgenAssignedAgentId = (await resolveSunnyAgentId(prisma)) || undefined;
-        } catch { /* non-fatal — lead still created, just unassigned */ }
+            const { extractDisplayId, alertUnresolvedAdListing } = await import('../services/ctwa_attribution');
+            const displayId = extractDisplayId(adCreative, campaignName);
+            if (displayId) {
+                advertised = await prisma.inventory.findFirst({
+                    where: { display_id: displayId },
+                    select: {
+                        id: true, display_id: true, status: true, intent: true, taxonomy_node_id: true,
+                        specs: true, locality: true, city: true, district: true, location: true,
+                        assigned_agent_id: true, owning_manager_id: true, uploaded_by_agent_id: true,
+                    },
+                });
+                if (!advertised || advertised.status !== 'active') {
+                    alertUnresolvedAdListing({
+                        source: 'leadgen', phone: phoneNumber, adId, adName: adCreative, displayId,
+                        reason: advertised ? `listing status is '${advertised.status}', not active` : 'display_id does not match any listing',
+                    });
+                    advertised = null;
+                } else {
+                    const { buildDemandFromInventory } = await import('../utils/website_lead');
+                    advertisedDemand = buildDemandFromInventory(advertised);
+                }
+            } else if (adId) {
+                alertUnresolvedAdListing({
+                    source: 'leadgen', phone: phoneNumber, adId, adName: adCreative, displayId: null,
+                    reason: 'no display_id in ad name',
+                });
+            }
+        } catch (err) { logger.warn('[Facebook] advertised-listing resolve failed:', (err as Error).message); }
+
+        // Route to the manager of the advertised listing when we know it; otherwise keep
+        // the previous super_boss default. Leadgen uses upsert, which bypasses the db.ts
+        // $extends auto-assign, so an owner MUST be set here or the contact is hidden by
+        // buildContactVisibilityFilter. Existing contacts are never reassigned (upsert
+        // only writes assigned_agent_id in the create branch).
+        let leadgenAssignedAgentId: string | undefined;
+        let leadgenAssignMethod: any = 'other';
+        if (advertised) {
+            leadgenAssignedAgentId = advertised.assigned_agent_id || advertised.owning_manager_id || advertised.uploaded_by_agent_id || undefined;
+            if (leadgenAssignedAgentId) {
+                leadgenAssignMethod = 'uploader';
+                logger.info(`[Facebook] Routing lead ${phoneNumber} to inventory manager ${leadgenAssignedAgentId} for ${advertised.display_id}`);
+            }
+        }
+        if (!leadgenAssignedAgentId) {
+            try {
+                const { resolveSunnyAgentId } = await import('../services/new_lead_alerts');
+                leadgenAssignedAgentId = (await resolveSunnyAgentId(prisma)) || undefined;
+            } catch { /* non-fatal — lead still created, just unassigned */ }
+        }
 
         // Upsert contact with ad tracking fields
         const contact = await prisma.contact.upsert({
@@ -221,10 +271,16 @@ async function handleLeadgenEvent(leadData: any): Promise<void> {
                 tenant_id: tenant.id,
                 assigned_agent_id: leadgenAssignedAgentId,
                 // super_boss default so leadgen contacts aren't hidden by the visibility filter. Phase 5C.
-                assignment_method: leadgenAssignedAgentId ? 'other' : undefined,
+                assignment_method: leadgenAssignedAgentId ? leadgenAssignMethod : undefined,
                 last_channel: 'facebook',
                 last_interaction: new Date(),
                 lead_status: 'warm',
+                // Requirements inherited from the advertised listing (same helper the website
+                // enquiry path uses) so the lead is instantly matchable. Spread AFTER the
+                // hardcoded BUYER/buy defaults so a rental listing correctly yields TENANT/rent.
+                ...advertisedDemand,
+                // ...but the customer's own city from the form still wins over the listing's.
+                ...(city ? { preferred_location: city } : {}),
                 meta_ad_id: adId,
                 meta_campaign_id: campaignId,
                 meta_adset_id: adsetId,
