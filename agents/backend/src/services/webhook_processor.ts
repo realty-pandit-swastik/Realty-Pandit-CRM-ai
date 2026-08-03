@@ -121,6 +121,9 @@ async function processInboundMessageInner(data: InboundMessageData): Promise<voi
 
     // ─── 1. SSOT: Check or Create Contact ─────────────────────────────────────
     let contact = await prisma.contact.findUnique({ where: { phone_number: from } });
+    // Captured BEFORE the create below: by the time the CTWA handler runs the contact
+    // always exists, so this is the only reliable signal that the lead is brand new.
+    const isNewContact = !contact;
 
     if (!contact) {
         const tenant = await prisma.tenant.findFirst();
@@ -228,6 +231,7 @@ async function processInboundMessageInner(data: InboundMessageData): Promise<voi
                     tenantId: contact.tenant_id,
                     referral,
                     firstMessage: text,
+                    isNewContact,
                 });
                 if (handled) {
                     await prisma.contact.update({

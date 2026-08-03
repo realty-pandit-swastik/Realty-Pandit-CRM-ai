@@ -188,8 +188,12 @@ export async function handleCtwaAdLead(params: {
     tenantId: string;
     referral: CtwaReferral;
     firstMessage?: string;
+    /** True when THIS message created the contact. Drives inventory-manager routing:
+     *  a brand-new lead goes to whoever manages the advertised listing, an existing
+     *  customer keeps their agent (never reassign — see feedback_lead_assignment_dedup). */
+    isNewContact?: boolean;
 }): Promise<boolean> {
-    const { phone, tenantId, referral, firstMessage } = params;
+    const { phone, tenantId, referral, firstMessage, isNewContact } = params;
 
     try {
         const details = referral.adId ? await fetchAdDetails(referral.adId) : NO_AD_DETAILS;
@@ -208,6 +212,8 @@ export async function handleCtwaAdLead(params: {
             select: {
                 id: true, display_id: true, status: true, intent: true, taxonomy_node_id: true,
                 specs: true, locality: true, city: true, district: true, location: true,
+                // routing: who manages this listing
+                assigned_agent_id: true, owning_manager_id: true, uploaded_by_agent_id: true,
             },
         });
         if (!inv) {
@@ -250,12 +256,39 @@ export async function handleCtwaAdLead(params: {
             logger.info(`[CTWA] Requirements copied from ${displayId} for ${phone}: ${Object.keys(patch).join(', ')}`);
         }
 
+        // ── Route to the inventory manager ─────────────────────────────────────────
+        // Same rule the website enquiry path uses (Puneet, 2026-06-11, see
+        // utils/website_lead.ts#resolveWebsiteLeadHandler): a NEW lead goes to whoever
+        // manages the advertised listing — assigned_agent → owning_manager → uploader.
+        // An EXISTING customer keeps their agent; re-assigning on re-ingest is the
+        // non-idempotent bug called out in feedback_lead_assignment_dedup.
+        // We can't call resolveWebsiteLeadHandler directly here: by this point the
+        // contact always exists (the inbound pipeline just created it and the db.ts
+        // $extends auto-assigned it), so its "existing → keep agent" branch would
+        // always win and the listing owner would never be reached.
+        let assignedAgentId: string | null = null;
+        if (isNewContact) {
+            const handlerId = inv.assigned_agent_id || inv.owning_manager_id || inv.uploaded_by_agent_id || null;
+            if (handlerId) {
+                const { assignContact } = await import('./assign_contact');
+                await assignContact(phone, handlerId, 'uploader');
+                assignedAgentId = handlerId;
+                logger.info(`[CTWA] Routed new ad lead ${phone} to inventory manager ${handlerId} for ${displayId}`);
+            }
+        }
+
         // ── Make sure a deal exists, then send THAT property's card ────────────────
         // shareSpecificProperty needs a deal: it records the share against the deal so
         // the card's Schedule-Visit / Call-Back / Next buttons route correctly, and so
-        // the same flat is never sent twice.
+        // the same flat is never sent twice. Passing assignedAgentId keeps lead owner ==
+        // deal coordinator (ensure_deal sets coordinator_agent_id + executive_agent_id
+        // from it) — the invariant in feedback_lead_deal_sync_traps.
         const { ensureDealForLead } = await import('./ensure_deal');
-        const { dealId } = await ensureDealForLead({ contactPhone: phone, source: 'whatsapp' });
+        const { dealId } = await ensureDealForLead({
+            contactPhone: phone,
+            source: 'whatsapp',
+            ...(assignedAgentId ? { assignedAgentId } : {}),
+        });
 
         const { shareSpecificProperty } = await import('./property_sharing');
         const sent = await shareSpecificProperty(dealId, inv.id, null);
