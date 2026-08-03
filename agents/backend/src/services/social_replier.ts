@@ -102,6 +102,13 @@ export async function handleInstagramComment(data: {
     const { comment_id, text, from, media_id, ad_id } = data;
     logger.info(`[SocialReplier] Instagram comment from @${from.username}: "${text}"`);
 
+    // Capture a CRM lead if they left a phone number. Independent of the reply below:
+    // a public reply can fail (token/permission) but the lead must still be recorded.
+    try {
+        const { captureSocialLead } = await import('./social_lead_capture');
+        await captureSocialLead({ platform: 'instagram', surface: 'comment', text, profileName: from.username, externalUserId: from.id, mediaId: data.media_id, adId: data.ad_id || null });
+    } catch (e) { logger.warn('[SocialReplier] lead capture failed:', (e as Error).message); }
+
     const commentType = classifyComment(text);
 
     // Skip spam and negative (flag negative for review)
@@ -159,6 +166,13 @@ export async function handleInstagramDM(data: {
     const { sender_id, text } = data;
     logger.info(`[SocialReplier] Instagram DM from ${sender_id}: "${text}"`);
 
+    // Capture a CRM lead if they left a phone number. Independent of the reply below:
+    // a public reply can fail (token/permission) but the lead must still be recorded.
+    try {
+        const { captureSocialLead } = await import('./social_lead_capture');
+        await captureSocialLead({ platform: 'instagram', surface: 'dm', text, externalUserId: sender_id });
+    } catch (e) { logger.warn('[SocialReplier] lead capture failed:', (e as Error).message); }
+
     // Reply with WhatsApp redirect (instant)
     const reply = `Namaste! 🙏 I'm Panditji, your AI property assistant.\n\nFor the best experience with property search, photos, and instant site visit booking, let's chat on WhatsApp:\n\n👉 ${WHATSAPP_LINK}\n\nPanditji is available 24/7 on WhatsApp! 🏠`;
 
@@ -189,6 +203,13 @@ export async function handleFacebookComment(data: {
 }): Promise<void> {
     const { comment_id, post_id, text, from } = data;
     logger.info(`[SocialReplier] Facebook comment from ${from.name}: "${text}"`);
+
+    // Capture a CRM lead if they left a phone number. Independent of the reply below:
+    // a public reply can fail (token/permission) but the lead must still be recorded.
+    try {
+        const { captureSocialLead } = await import('./social_lead_capture');
+        await captureSocialLead({ platform: 'facebook', surface: 'comment', text, profileName: from.name, externalUserId: from.id, mediaId: post_id });
+    } catch (e) { logger.warn('[SocialReplier] lead capture failed:', (e as Error).message); }
 
     const commentType = classifyComment(text);
 
@@ -258,6 +279,13 @@ export async function handleMessengerMessage(data: {
 }): Promise<void> {
     const { sender_id, text } = data;
     logger.info(`[SocialReplier] Messenger from ${sender_id}: "${text}"`);
+
+    // Capture a CRM lead if they left a phone number. Independent of the reply below:
+    // a public reply can fail (token/permission) but the lead must still be recorded.
+    try {
+        const { captureSocialLead } = await import('./social_lead_capture');
+        await captureSocialLead({ platform: 'facebook', surface: 'dm', text, externalUserId: sender_id });
+    } catch (e) { logger.warn('[SocialReplier] lead capture failed:', (e as Error).message); }
 
     // Reply with Generic Template + WhatsApp button (instant)
     try {
