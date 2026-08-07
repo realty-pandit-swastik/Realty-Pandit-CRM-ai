@@ -1,0 +1,61 @@
+# code-review-graph ignore rules — Realty Pandit
+#
+# WHY THIS FILE EXISTS:
+# The built-in DEFAULT_IGNORE_PATTERNS use anchored fnmatch patterns like "node_modules/**".
+# fnmatch matches the WHOLE relative path, so "node_modules/**" only matches a node_modules
+# directory at the repo ROOT. This repo keeps its dependencies nested --
+# agents/backend/node_modules, agents/website/node_modules, agents/frontend/node_modules,
+# agents/browser-qa/node_modules, agents/call-gateway/node_modules -- none of which matched.
+# Result: the graph indexed all of them and graph.db reached 2.59 GB, which is what made
+# code-review-graph stall sessions.
+#
+# The patterns below are unanchored (leading *) so they match at ANY depth.
+# Do not "tidy" them into node_modules/** -- that is the bug.
+
+# Dependencies (the 2.59 GB culprit)
+*node_modules*
+
+# Build output
+*/dist/*
+*/build/*
+*/.next/*
+*/out/*
+*.min.js
+*.min.css
+*.map
+
+# Test / coverage / caches
+*/coverage/*
+*/.turbo/*
+*/.cache/*
+*/__pycache__/*
+*/.pytest_cache/*
+*/playwright-report/*
+*/test-results/*
+
+# Vendored tooling and binaries
+*/platform-tools/*
+*/.venv/*
+*/venv/*
+*.exe
+*.dll
+*.zip
+*.tar.gz
+*.dump
+*.sql
+
+# Generated / data artifacts
+*/.code-review-graph/*
+*/prisma/migrations/*
+*.db
+*.sqlite
+*.log
+
+# Media
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.mp4
+*.webm
+*.pdf
