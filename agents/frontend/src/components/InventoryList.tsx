@@ -1,6 +1,6 @@
 
 import React, { useEffect, useRef, useState } from 'react';
-import { formatInventoryAddress } from '../lib/address';
+import { formatInventoryAddress, formatUnitLabel } from '../lib/address';
 
 import { getPartnerAssignable, assignListingToTeammate, getInventory, getInventoryItem, updateInventory, deleteInventory, approveInventory, rejectInventory, getCategoryTree, getStates, getTeamMembers, getTeamMembersList, uploadInventoryImages, deleteInventoryMedia, transferInventory, uploadInventoryDocument, deleteInventoryDocument, renameInventoryDocument, shareInventoryDocument, getNodeFields, markInventorySold, markInventoryOnHold } from '../api/client';
 import client from '../api/client';
@@ -1646,6 +1646,12 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
                                                 {/* full_address already contains building + locality + city + state + pincode for new picks.
                                                     Only fall back to structured parts when full_address is empty. Avoids the
                                                     "apartment_name + full_address" double-print that was jumbling cards. */}
+                                                {/* Exact unit first — the most specific identifier on the card. The API
+                                                    deletes flat_no/plot_no for viewers who may not see them, so an absent
+                                                    field yields '' and nothing renders. (2026-08-08) */}
+                                                {formatUnitLabel(item) && (
+                                                    <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{formatUnitLabel(item)} · </span>
+                                                )}
                                                 {formatInventoryAddress(item)}
                                                 {/* Type-aware specs (residential→BHK/Bath/Area, hospitality→Rooms/Area,
                                                     commercial/land→Area; ⚠ on implausible area). See lib/specChips. */}

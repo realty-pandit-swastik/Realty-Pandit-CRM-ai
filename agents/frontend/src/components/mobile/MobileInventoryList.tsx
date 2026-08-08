@@ -1,6 +1,6 @@
 
 import { useEffect, useState, useRef } from 'react';
-import { formatInventoryAddress } from '../../lib/address';
+import { formatInventoryAddress, formatUnitLabel } from '../../lib/address';
 import { getInventory, getTeamMembers, updateInventory, markInventorySold, markInventoryOnHold } from '../../api/client';
 import client from '../../api/client';
 import { useAuth } from '../../contexts/AuthContext';
@@ -423,6 +423,7 @@ export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryLis
                         {items.map(item => {
                             const intentStyle = INTENT_COLORS[item.intent] || { bg: 'var(--bg-primary)', color: 'var(--text-muted)' };
                             const location = formatInventoryAddress(item);
+                            const unitLabel = formatUnitLabel(item);
                             return (
                                 <div
                                     key={item.id}
@@ -504,6 +505,9 @@ export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryLis
                                                 {item.taxonomy_node?.name || item.flat_property_type?.name || item.property_type_link?.name || item.type?.replace(/_/g, ' ') || 'Property'}
                                             </div>
                                             <div style={{ fontSize: '11px', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                                {/* Exact unit first — it is the most specific identifier on the card.
+                                                    Absent (or redacted by the API) → '' → nothing renders. (2026-08-08) */}
+                                                {unitLabel && <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{unitLabel} · </span>}
                                                 {location}
                                             </div>
                                             {/* #1 (2026-07-01): click-to-copy inventory code (mobile). */}
