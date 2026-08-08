@@ -236,7 +236,21 @@ router.get('/recent-external', async (req: any, res) => {
             where.preferred_location = { contains: location, mode: 'insensitive' };
         }
         if (agentId) {
-            where.assigned_agent_id = agentId;
+            // Filtering by a teammate must include leads SHARED with them, not just leads they own.
+            // Until 2026-08-08 this was a bare `where.assigned_agent_id = agentId`, so picking a
+            // person in the Leads filter hid every lead shared with them — which is the natural way
+            // to ask "what is X working on?" and made lead sharing look broken. `shared_with_ids` was
+            // honoured by the visibility filter but ignored by this filter. (Same defect shape as the
+            // inventory redaction fixed in 6f689f6.)
+            //
+            // ⚠ Pushed into where.AND, never a top-level OR: `where` is spread from
+            // buildContactVisibilityFilter, which IS an { OR: [...] }. Assigning where.OR here would
+            // REPLACE the visibility rule and let any agent see any lead — see the warning at the top
+            // of this file and applyPartnerLeadScope.
+            where.AND = [
+                ...(where.AND || []),
+                { OR: [{ assigned_agent_id: agentId }, { shared_with_ids: { has: agentId } }] },
+            ];
         }
 
         // PARTNER: only their own leads (referred by OR assigned to them / their sub-agents).
