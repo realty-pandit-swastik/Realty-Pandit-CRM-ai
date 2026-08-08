@@ -3,15 +3,12 @@ import { Router, Request, Response } from 'express';
 import prisma from '../db';
 import logger from '../utils/logger';
 import { normalizePhone } from '../utils/phone';
+import { cacheGet, cacheSet } from '../utils/redis';
 import { sendBuyerConfirmationWhatsApp, sendBuyerConfirmationEmail } from '../services/lead_notifications';
 import { assignViaRoundRobin } from '../services/lead_assignment';
 import { assignContact } from '../services/assign_contact';
-import {
-    handleInstagramComment,
-    handleInstagramDM,
-    handleFacebookComment,
-    handleMessengerMessage,
-} from '../services/social_replier';
+import { socialInboundQueue } from '../queues';
+import type { SocialJobData } from '../queues/workers/social_inbound';
 
 const router = Router();
 
@@ -45,6 +42,64 @@ router.get('/webhook', (req: Request, res: Response) => {
  *   - Instagram DMs
  *   - Instagram mentions
  */
+/**
+ * Is this messaging event our OWN outbound message coming back to us?
+ *
+ * 2026-08-07: IGSID 17841447875862678 is `@airealtypandit` — our own account. Meta echoes
+ * messages the business sends, and nothing filtered them, so our team's replies in the IG
+ * inbox were processed as inbound customer DMs (phone→lead capture included).
+ *
+ * ⚠ This guard is a PRECONDITION for fixing the send path. With sends working and no echo
+ * filter, our own reply echoes back, the handler replies to it, that echoes back — a
+ * self-reply loop against our own account.
+ */
+function isSelfOrEcho(event: any, selfId: string | undefined): boolean {
+    if (event?.message?.is_echo) return true;                    // Meta's explicit echo flag
+    if (selfId && event?.sender?.id === selfId) return true;     // belt: sender is us
+    return false;
+}
+
+/**
+ * Dedup on Meta's own event id. Same Redis idiom as the WhatsApp path
+ * (routes/webhooks.ts:42-61) — survives restarts and works across the PM2 cluster.
+ * Without this a Meta retry re-sends the reply and re-writes the CRM rows.
+ */
+const SOCIAL_EVENT_TTL = 600; // 10 min — Meta retries well inside this
+async function isSocialEventProcessed(eventId?: string): Promise<boolean> {
+    if (!eventId) return false;                                  // no id → cannot dedup, let it through
+    try {
+        const seen = await cacheGet(`social_dedup:${eventId}`);
+        if (seen) logger.info(`[Facebook] Duplicate social event ${eventId}, skipping`);
+        return !!seen;
+    } catch { return false; }                                    // fail OPEN — never drop a real event
+}
+async function markSocialEventProcessed(eventId?: string): Promise<void> {
+    if (!eventId) return;
+    try { await cacheSet(`social_dedup:${eventId}`, '1', SOCIAL_EVENT_TTL); } catch { /* best-effort */ }
+}
+
+/**
+ * Hand the event to the durable queue instead of calling the reply handler inline.
+ *
+ * Previously these were fire-and-forget `handler(...).catch(log)` calls made AFTER the 200
+ * had already been sent — so a failed reply (and for months every reply failed) was gone with
+ * nothing to inspect or replay, and a restart mid-flight lost it outright.
+ *
+ * `jobId` is Meta's own id, giving BullMQ-level dedup behind the Redis `social_dedup:` key.
+ * Falls back to inline processing if the enqueue itself fails, so a Redis outage degrades to
+ * today's behaviour rather than dropping the event entirely.
+ */
+async function enqueueSocial(data: SocialJobData, eventId?: string): Promise<void> {
+    try {
+        await socialInboundQueue.add('social-event', data, eventId ? { jobId: eventId } : {});
+        logger.info(`[Facebook] Queued ${data.kind}${eventId ? ` (${eventId})` : ''}`);
+    } catch (err) {
+        logger.error(`[Facebook] Enqueue failed for ${data.kind}, processing inline: ${(err as Error).message}`);
+        const { runSocialJobInline } = await import('../queues/workers/social_inbound');
+        runSocialJobInline(data).catch(e => logger.error('[Facebook] Inline fallback failed:', e));
+    }
+}
+
 router.post('/webhook', async (req: Request, res: Response) => {
     // Always respond 200 immediately (Meta retries on non-200)
     res.status(200).json({ status: 'ok' });
@@ -96,13 +151,17 @@ async function handlePageEntry(entry: any): Promise<void> {
     // 2. Messaging events (Messenger)
     const messaging = entry.messaging || [];
     for (const event of messaging) {
-        if (event.message?.text) {
-            handleMessengerMessage({
-                sender_id: event.sender?.id,
-                text: event.message.text,
-                message_id: event.message?.mid,
-            }).catch(err => logger.error('[Facebook] Messenger handler error:', err));
-        }
+        if (!event.message?.text) continue;
+        if (isSelfOrEcho(event, process.env.FB_PAGE_ID)) continue;
+        if (await isSocialEventProcessed(event.message?.mid)) continue;
+        await markSocialEventProcessed(event.message?.mid);
+
+        await enqueueSocial({
+            kind: 'fb_dm',
+            sender_id: event.sender?.id,
+            text: event.message.text,
+            message_id: event.message?.mid,
+        }, event.message?.mid);
     }
 }
 
@@ -358,12 +417,16 @@ async function handleFeedEvent(value: any): Promise<void> {
     const pageId = process.env.FB_PAGE_ID;
     if (value.from?.id === pageId) return;
 
-    handleFacebookComment({
+    if (await isSocialEventProcessed(value.comment_id)) return;
+    await markSocialEventProcessed(value.comment_id);
+
+    await enqueueSocial({
+        kind: 'fb_comment',
         comment_id: value.comment_id,
         post_id: value.post_id,
         text: value.message || '',
         from: { id: value.from?.id, name: value.from?.name || 'User' },
-    }).catch(err => logger.error('[Facebook] Comment handler error:', err));
+    }, value.comment_id);
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -393,24 +456,37 @@ async function handleInstagramEntry(entry: any): Promise<void> {
     // 2. Messaging events (Instagram DMs)
     const messaging = entry.messaging || [];
     for (const event of messaging) {
-        if (event.message?.text) {
-            handleInstagramDM({
-                sender_id: event.sender?.id,
-                text: event.message.text,
-                message_id: event.message?.mid,
-            }).catch(err => logger.error('[Instagram] DM handler error:', err));
-        }
+        if (!event.message?.text) continue;
+        if (isSelfOrEcho(event, process.env.IG_BUSINESS_ACCOUNT_ID)) continue;
+        if (await isSocialEventProcessed(event.message?.mid)) continue;
+        await markSocialEventProcessed(event.message?.mid);
+
+        await enqueueSocial({
+            kind: 'ig_dm',
+            sender_id: event.sender?.id,
+            text: event.message.text,
+            message_id: event.message?.mid,
+        }, event.message?.mid);
     }
 }
 
 async function handleInstagramCommentEvent(value: any): Promise<void> {
     if (!value.id || !value.text) return;
 
+    // Only NEW comments. The FB side has always checked this (handleFeedEvent); the IG side
+    // did not, so a comment EDIT — which still carries id+text — triggered a fresh reply.
+    // Meta omits `verb` on some IG comment payloads, so only reject an explicit non-add.
+    if (value.verb && value.verb !== 'add') return;
+
     // Don't reply to our own comments
     const igAccountId = process.env.IG_BUSINESS_ACCOUNT_ID;
     if (value.from?.id === igAccountId) return;
 
-    handleInstagramComment({
+    if (await isSocialEventProcessed(value.id)) return;
+    await markSocialEventProcessed(value.id);
+
+    await enqueueSocial({
+        kind: 'ig_comment',
         comment_id: value.id,
         text: value.text,
         from: {
@@ -420,7 +496,7 @@ async function handleInstagramCommentEvent(value: any): Promise<void> {
         media_id: value.media?.id || '',
         ad_id: value.media?.ad_id || undefined,
         ad_title: value.media?.ad_title || undefined,
-    }).catch(err => logger.error('[Instagram] Comment handler error:', err));
+    }, value.id);
 }
 
 export default router;

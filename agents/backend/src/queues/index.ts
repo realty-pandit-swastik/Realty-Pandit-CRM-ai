@@ -21,6 +21,23 @@ export const whatsappInboundQueue = new Queue('whatsapp-inbound', {
     },
 });
 
+// ─── Social Inbound Queue ───────────────────────────────────────────────────
+// Instagram/Facebook comments and DMs. Added 2026-08-07: these were previously handled
+// inline and fire-and-forget in integrations/facebook.ts, so a failed reply was lost
+// permanently with nothing to inspect or replay — and every reply failed for months
+// (38 inbound events, 0 successful sends) with no queue to recover them from.
+// `jobId` is set to Meta's comment_id/message_id at enqueue time, giving a second natural
+// dedup layer behind the Redis `social_dedup:` key.
+export const socialInboundQueue = new Queue('social-inbound', {
+    connection: redisConnection,
+    defaultJobOptions: {
+        attempts: 3,
+        backoff: { type: 'exponential', delay: 5000 },  // 5s, 10s, 20s — Graph API blips
+        removeOnComplete: { count: 1000 },
+        removeOnFail: { count: 5000 },                  // keep for DLQ inspection
+    },
+});
+
 // ─── Scheduled Jobs Queue ───────────────────────────────────────────────────
 // Repeatable/cron jobs: daily reports, integrity checks, AI boss cycle, etc.
 export const scheduledJobsQueue = new Queue('scheduled-jobs', {
@@ -51,12 +68,23 @@ export async function getQueueStats() {
             scheduledJobsQueue.getFailedCount(),
         ]);
 
+        const [soWaiting, soActive, soFailed] = await Promise.all([
+            socialInboundQueue.getWaitingCount(),
+            socialInboundQueue.getActiveCount(),
+            socialInboundQueue.getFailedCount(),
+        ]);
+
         return {
             whatsapp_inbound: {
                 waiting: waWaiting,
                 active: waActive,
                 failed: waFailed,
                 delayed: waDelayed,
+            },
+            social_inbound: {
+                waiting: soWaiting,
+                active: soActive,
+                failed: soFailed,
             },
             scheduled_jobs: {
                 waiting: sjWaiting,

@@ -48,6 +48,7 @@ import integrationRoutes from './routes/integrations'; // Integration sync manag
 import paymentRoutes, { razorpayWebhookRouter } from './routes/payments'; // Razorpay Payment Gateway
 import internalToolsRouter from './routes/internal_tools'; // Panditji voice bot internal tool endpoints
 import { loginLimiter, authLimiter, publicLimiter, webhookLimiter, externalLimiter, agentLimiter, apiLimiter, workflowLimiter, chatLimiter } from './middleware/rate_limit';
+import { verifyMetaSignature } from './middleware/verify_meta_signature';
 import { csrfMiddleware } from './middleware/csrf';
 import { requestLogger } from './middleware/request_logger';
 import logger from './utils/logger';
@@ -288,8 +289,11 @@ app.use('/external', externalLimiter, externalLeadRoutes);
 app.use('/external/99acres', externalLimiter, nineNineAcresRoutes);
 app.use('/external/magicbricks', externalLimiter, magicBricksRoutes);
 app.use('/external/housing', externalLimiter, housingRoutes);
-// Facebook Lead Ads — mounted under /webhooks (not /external) because FB uses its own verify token, not our API key
-app.use('/webhooks/facebook', webhookLimiter, facebookRoutes);
+// Facebook Lead Ads — mounted under /webhooks (not /external) because FB uses its own verify token, not our API key.
+// verifyMetaSignature (2026-08-07) authenticates the POST payload against FB_APP_SECRET; it runs in
+// LOG-ONLY mode until META_SIGNATURE_ENFORCE=true. The GET handshake carries no signature and is
+// let through by the middleware's own header check.
+app.use('/webhooks/facebook', webhookLimiter, verifyMetaSignature, facebookRoutes);
 
 // Public team endpoints (must be before the /api auth middleware)
 app.get('/api/team/inventory/bulk-template', publicLimiter, (_req, res) => {

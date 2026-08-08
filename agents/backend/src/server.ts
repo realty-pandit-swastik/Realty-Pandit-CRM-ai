@@ -22,6 +22,7 @@ import { alertCritical } from './utils/alerter';
 
 // BullMQ Workers (replace node-cron + setTimeout/setInterval)
 import { startWhatsAppInboundWorker, stopWhatsAppInboundWorker } from './queues/workers/whatsapp_inbound';
+import { startSocialInboundWorker, stopSocialInboundWorker } from './queues/workers/social_inbound';
 import { startScheduledWorker, stopScheduledWorker } from './queues/workers/scheduled_worker';
 
 const port = process.env.PORT || 7071;
@@ -57,6 +58,9 @@ const server = app.listen(Number(port), '127.0.0.1', async () => {
         try {
             // 1. WhatsApp inbound message processor (async webhook processing)
             startWhatsAppInboundWorker();
+            // Instagram/Facebook comments + DMs. Previously handled inline and fire-and-forget,
+            // so a failed reply was lost with nothing to retry or inspect. (2026-08-07)
+            startSocialInboundWorker();
 
             // 2. Scheduled jobs worker (replaces node-cron, setTimeout, setInterval)
             //    - Pending actions check (every 60s)
@@ -85,6 +89,17 @@ const server = app.listen(Number(port), '127.0.0.1', async () => {
             startLeadRedistributionCron();
         } catch (e) {
             logger.error('[Server] lead redistribution cron start failed:', e);
+        }
+
+        // Prove the Instagram/Facebook reply path can authenticate. The 2026-08 outage
+        // (38 inbound social events, 0 successful replies, ever) went unnoticed for months
+        // because nothing ever asserted the send path worked. Fire-and-forget: it must
+        // shout in the logs, never block boot. (2026-08-07)
+        try {
+            const { assertPageToken } = require('./services/social_replier');
+            assertPageToken().catch(() => { /* logged inside */ });
+        } catch (e) {
+            logger.error('[Server] social page-token check failed to run:', e);
         }
     } else {
         logger.info(`[Server] Worker instance ${instanceId} — skipping workers (handled by instance 0)`);
@@ -171,6 +186,7 @@ async function gracefulShutdown(signal: string) {
     try {
         await Promise.all([
             stopWhatsAppInboundWorker(),
+            stopSocialInboundWorker(),
             stopScheduledWorker(),
         ]);
         logger.info('[Server] BullMQ workers stopped');

@@ -16,20 +16,108 @@
  */
 
 import axios from 'axios';
-import { llmService } from './llm';
 import prisma from '../db';
 import logger from '../utils/logger';
+import { cacheGet, cacheSet } from '../utils/redis';
 
 const GRAPH_API = 'https://graph.facebook.com/v25.0';
-const IG_GRAPH_API = 'https://graph.instagram.com/v25.0';
+
+/**
+ * ⭐ 2026-08-07 — THE FIX. This integration had never successfully sent a single reply:
+ * 38 inbound comments/DMs, 0 successful sends, 65 failures, all
+ * `Invalid OAuth access token - Cannot parse access token`.
+ *
+ * Cause: Instagram traffic was sent to `https://graph.instagram.com`, which only accepts
+ * INSTAGRAM-scoped tokens (Instagram Login), while `IG_ACCESS_TOKEN` holds a FACEBOOK
+ * system-user token. Wrong host AND wrong token type — so Meta could not even parse it.
+ *
+ * Instagram Messaging for a Page-linked professional account is served by the FACEBOOK
+ * Graph API with a PAGE token. Proven on prod before changing anything:
+ *   graph.instagram.com/me + system-user token  → Cannot parse access token  (the prod error)
+ *   graph.facebook.com/me  + PAGE token         → {"name":"Realty Pandit","id":"905415725999343"}
+ *   POST graph.facebook.com/me/messages + PAGE  → reaches endpoint ("recipient is required")
+ *
+ * `FB_PAGE_ACCESS_TOKEN` must hold a real PAGE token (derive with
+ * `GET /{FB_PAGE_ID}?fields=access_token` using the system-user token) — assertPageToken()
+ * below fails loudly at boot if it does not.
+ */
+const IG_GRAPH_API = GRAPH_API;
 const ACCESS_TOKEN = process.env.FB_ACCESS_TOKEN || '';
 const PAGE_ACCESS_TOKEN = process.env.FB_PAGE_ACCESS_TOKEN || ACCESS_TOKEN;
-const IG_ACCESS_TOKEN = process.env.IG_ACCESS_TOKEN || ACCESS_TOKEN;
+const IG_ACCESS_TOKEN = PAGE_ACCESS_TOKEN;
 const IG_ACCOUNT_ID = process.env.IG_BUSINESS_ACCOUNT_ID || '';
 const PAGE_ID = process.env.FB_PAGE_ID || '';
 const WHATSAPP_LINK = 'https://wa.me/918178491914?text=Hi%20Panditji';
 const WHATSAPP_NUMBER = '+91 81784 91914';
 const LOGO_URL = (process.env.WEBSITE_URL || 'https://realtypandit.in') + '/logo.png';
+
+/**
+ * Boot-time proof that the social send path can actually authenticate.
+ *
+ * This exists because of how the original bug survived for months: in May the feature was
+ * marked "end-to-end verified with a signed test webhook" — which proves a webhook ARRIVES,
+ * not that a reply SENDS. Every send failed from day one and nobody noticed, because a
+ * failed send only produced a log line nobody was watching.
+ *
+ * Calls GET /me and asserts it returns OUR Page id. A system-user or user token returns a
+ * different id (or errors), which is exactly the misconfiguration that caused this outage.
+ * Never throws — a bad token must not stop the server booting, it must SHOUT.
+ */
+export async function assertPageToken(): Promise<boolean> {
+    const pageId = process.env.FB_PAGE_ID || '';
+    if (!PAGE_ACCESS_TOKEN) {
+        logger.error('[SocialReplier] 🚨 FB_PAGE_ACCESS_TOKEN is empty — every Instagram/Facebook reply will fail.');
+        return false;
+    }
+    try {
+        const res = await axios.get(`${GRAPH_API}/me`, {
+            params: { access_token: PAGE_ACCESS_TOKEN },
+            timeout: 10000,
+        });
+        const id = String(res.data?.id || '');
+        if (pageId && id !== pageId) {
+            logger.error(
+                `[SocialReplier] 🚨 FB_PAGE_ACCESS_TOKEN is NOT a Page token for this Page — ` +
+                `/me returned id=${id} (${res.data?.name}), expected FB_PAGE_ID=${pageId}. ` +
+                `Derive one with: GET /${pageId}?fields=access_token`,
+            );
+            return false;
+        }
+        logger.info(`[SocialReplier] ✅ Page token OK — /me = ${res.data?.name} (${id}). Social replies can send.`);
+        return true;
+    } catch (err: any) {
+        const meta = err.response?.data?.error?.message || err.message;
+        logger.error(`[SocialReplier] 🚨 Page token check FAILED: ${meta} — Instagram/Facebook replies will not send.`);
+        return false;
+    }
+}
+
+/**
+ * Durable "we actually replied to this one" marker.
+ *
+ * The system has never had this — nothing anywhere recorded that a given comment or DM was
+ * answered, which is why 38 unanswered events could accumulate invisibly and why a backlog
+ * sweep had nothing to diff against.
+ *
+ * Stored in Redis rather than as an Interaction row on purpose: `Interaction.phone_number` is
+ * a required FK to `contacts`, and most commenters/DM senders have no Contact (they never
+ * shared a phone). An Interaction simply cannot be written for them — that is the same
+ * constraint that makes logSocialInteraction silently drop first-touch users today.
+ * 90 days is well beyond any Meta reply window, so it outlives every case that matters.
+ */
+const REPLY_MARKER_TTL = 90 * 24 * 3600;
+export async function markReplySent(
+    platform: string, surface: string, userId: string, eventId?: string,
+): Promise<void> {
+    try {
+        const key = `social_replied:${eventId || `${platform}:${surface}:${userId}`}`;
+        await cacheSet(key, JSON.stringify({ platform, surface, userId, at: new Date().toISOString() }), REPLY_MARKER_TTL);
+    } catch { /* best-effort — never fail a successful reply over bookkeeping */ }
+}
+
+export async function wasReplySent(eventId: string): Promise<boolean> {
+    try { return !!(await cacheGet(`social_replied:${eventId}`)); } catch { return false; }
+}
 
 // ─── Comment Classification ─────────────────────────────────────
 
@@ -89,6 +177,67 @@ function generateCasualReply(commentType: CommentType, text: string, platform: '
     }
 }
 
+// ─── LLM-Contextual Reply ───────────────────────────────────────
+
+/**
+ * Answer what the person actually asked, then carry the WhatsApp CTA.
+ *
+ * Static replies meant "Location" and "Kya demand hai is ki" both got the same canned
+ * paragraph. This answers the question and still routes them to WhatsApp — the link is the
+ * POINT of the reply, not an optional extra, so ensureWhatsAppCta() enforces it even if the
+ * model forgets.
+ *
+ * Runs inside the social-inbound WORKER, never on the webhook request path, so LLM latency
+ * can never delay Meta's 200.
+ *
+ * Behind SOCIAL_LLM_REPLIES_ENABLED (default OFF, `!== 'true'` idiom). Any failure falls back
+ * to the proven static template — a reply must ALWAYS go out.
+ */
+const SOCIAL_LLM_SYSTEM_PROMPT = `You are Panditji, a warm Indian real-estate assistant for Realty Pandit (Delhi NCR: Vaishali, Ghaziabad, Noida, Indirapuram, East Delhi).
+
+Reply to this Instagram/Facebook message in ONE or TWO short sentences.
+
+Rules:
+- Mirror the sender's language exactly: Hinglish gets Hinglish, English gets English, Hindi gets Hindi.
+- NEVER invent a price, address, availability, size or project name. You do not have listing data here. If they ask for specifics, say the team will share exact details on WhatsApp.
+- Be warm and human, not corporate. No emoji spam — at most one.
+- Do NOT include a URL or phone number; a WhatsApp link is appended automatically after your reply.
+- Never claim to be a human, and never promise a callback time.`;
+
+/** The model's own internal fallback text — treat it as a failure, never send it to a customer. */
+const LLM_FAILURE_MARKERS = ['experiencing high traffic', 'try again'];
+
+function ensureWhatsAppCta(reply: string): string {
+    if (reply.includes('wa.me') || reply.includes(WHATSAPP_LINK)) return reply;
+    return `${reply.trim()}\n\n👉 ${WHATSAPP_LINK}`;
+}
+
+async function buildReply(
+    text: string,
+    commentType: CommentType,
+    platform: 'instagram' | 'facebook',
+): Promise<string> {
+    const staticReply = generateCasualReply(commentType, text, platform);
+    if (process.env.SOCIAL_LLM_REPLIES_ENABLED !== 'true') return staticReply;
+    if (!staticReply) return staticReply;   // spam/negative — stay silent, don't spend an LLM call
+
+    try {
+        // `./llm` exports the CLASS. The old `import { llmService }` was undefined at runtime
+        // under ts-node --transpile-only, which is why it was never actually called.
+        const { LLMService } = await import('./llm');
+        const out = (await new LLMService().generateResponse(SOCIAL_LLM_SYSTEM_PROMPT, text) || '').trim();
+
+        if (!out || out.length < 3 || LLM_FAILURE_MARKERS.some(m => out.toLowerCase().includes(m))) {
+            logger.warn('[SocialReplier] LLM reply unusable, using static template');
+            return staticReply;
+        }
+        return ensureWhatsAppCta(out);
+    } catch (err) {
+        logger.warn(`[SocialReplier] LLM reply failed, using static template: ${(err as Error).message}`);
+        return staticReply;
+    }
+}
+
 // ─── Instagram Comment Handler ──────────────────────────────────
 
 export async function handleInstagramComment(data: {
@@ -122,8 +271,10 @@ export async function handleInstagramComment(data: {
         return;
     }
 
-    const reply = generateCasualReply(commentType, text, 'instagram');
+    const reply = await buildReply(text, commentType, 'instagram');
     if (!reply) return;
+
+    let publicOk = false, dmOk = false, lastErr = '';
 
     // 1. Public reply on the comment (instant — uses graph.instagram.com)
     try {
@@ -132,9 +283,11 @@ export async function handleInstagramComment(data: {
             { message: reply },
             { params: { access_token: IG_ACCESS_TOKEN } }
         );
+        publicOk = true;
         logger.info(`[SocialReplier] Public reply sent on Instagram comment ${comment_id}`);
     } catch (err: any) {
-        logger.error(`[SocialReplier] Instagram public reply failed: ${err.response?.data?.error?.message || err.message}`);
+        lastErr = err.response?.data?.error?.message || err.message;
+        logger.error(`[SocialReplier] Instagram public reply failed: ${lastErr}`);
     }
 
     // 2. Private DM with WhatsApp link (instant, 1 per comment, within 7 days)
@@ -147,13 +300,19 @@ export async function handleInstagramComment(data: {
             },
             { params: { access_token: IG_ACCESS_TOKEN } }
         );
+        dmOk = true;
         logger.info(`[SocialReplier] Private DM sent to @${from.username}`);
     } catch (err: any) {
         // Private reply may fail if already sent one for this comment
-        logger.warn(`[SocialReplier] Instagram private DM failed: ${err.response?.data?.error?.message || err.message}`);
+        lastErr = err.response?.data?.error?.message || err.message;
+        logger.warn(`[SocialReplier] Instagram private DM failed: ${lastErr}`);
     }
 
     await logSocialInteraction('instagram', 'comment', from.id, from.username, text, reply, ad_id);
+    if (publicOk || dmOk) await markReplySent('instagram', 'comment', from.id, comment_id);
+    // Retry only when NOTHING reached the user. A partial success must not retry — that would
+    // post the public reply a second time.
+    if (!publicOk && !dmOk) throw new Error(`IG comment reply failed for ${comment_id}: ${lastErr}`);
 }
 
 // ─── Instagram DM Handler ───────────────────────────────────────
@@ -163,7 +322,7 @@ export async function handleInstagramDM(data: {
     text: string;
     message_id?: string;
 }): Promise<void> {
-    const { sender_id, text } = data;
+    const { sender_id, text, message_id } = data;
     logger.info(`[SocialReplier] Instagram DM from ${sender_id}: "${text}"`);
 
     // Capture a CRM lead if they left a phone number. Independent of the reply below:
@@ -173,9 +332,26 @@ export async function handleInstagramDM(data: {
         await captureSocialLead({ platform: 'instagram', surface: 'dm', text, externalUserId: sender_id });
     } catch (e) { logger.warn('[SocialReplier] lead capture failed:', (e as Error).message); }
 
-    // Reply with WhatsApp redirect (instant)
-    const reply = `Namaste! 🙏 I'm Panditji, your AI property assistant.\n\nFor the best experience with property search, photos, and instant site visit booking, let's chat on WhatsApp:\n\n👉 ${WHATSAPP_LINK}\n\nPanditji is available 24/7 on WhatsApp! 🏠`;
+    // DMs previously bypassed classification entirely — every DM got the identical paragraph,
+    // including obvious spam and abuse. Same gate the comment path has always had. (2026-08-07)
+    const commentType = classifyComment(text);
+    if (commentType === 'spam') {
+        logger.info(`[SocialReplier] Skipping spam IG DM from ${sender_id}`);
+        return;
+    }
+    if (commentType === 'negative') {
+        logger.warn(`[SocialReplier] Negative IG DM from ${sender_id} — flagged for a human, no auto-reply: "${text}"`);
+        await logSocialInteraction('instagram', 'dm', sender_id, undefined, text, 'negative_flagged');
+        return;
+    }
 
+    // Contextual when SOCIAL_LLM_REPLIES_ENABLED=true, else the proven static template.
+    // Either way the WhatsApp CTA is guaranteed present.
+    const reply = await buildReply(text, commentType, 'instagram');
+    if (!reply) return;
+
+    let sent = false;
+    let lastErr = '';
     try {
         await axios.post(
             `${IG_GRAPH_API}/me/messages`,
@@ -185,12 +361,18 @@ export async function handleInstagramDM(data: {
             },
             { params: { access_token: IG_ACCESS_TOKEN } }
         );
+        sent = true;
         logger.info(`[SocialReplier] Instagram DM reply sent to ${sender_id}`);
     } catch (err: any) {
-        logger.error(`[SocialReplier] Instagram DM reply failed: ${err.response?.data?.error?.message || err.message}`);
+        lastErr = err.response?.data?.error?.message || err.message;
+        logger.error(`[SocialReplier] Instagram DM reply failed: ${lastErr}`);
     }
 
     await logSocialInteraction('instagram', 'dm', sender_id, undefined, text, reply);
+    if (sent) await markReplySent('instagram', 'dm', sender_id, message_id);
+    // Throw so the BullMQ worker retries. Before 2026-08-07 this was swallowed, which is how
+    // 65 consecutive failures produced nothing but log lines.
+    if (!sent) throw new Error(`Instagram DM reply failed for ${sender_id}: ${lastErr}`);
 }
 
 // ─── Facebook Page Comment Handler ──────────────────────────────
@@ -220,8 +402,10 @@ export async function handleFacebookComment(data: {
         return;
     }
 
-    const reply = generateCasualReply(commentType, text, 'facebook');
+    const reply = await buildReply(text, commentType, 'facebook');
     if (!reply) return;
+
+    let publicOk = false, dmOk = false, lastErr = '';
 
     // 1. Public reply on the comment (instant)
     try {
@@ -230,9 +414,11 @@ export async function handleFacebookComment(data: {
             { message: reply },
             { params: { access_token: PAGE_ACCESS_TOKEN } }
         );
+        publicOk = true;
         logger.info(`[SocialReplier] Public reply sent on FB comment ${comment_id}`);
     } catch (err: any) {
-        logger.error(`[SocialReplier] FB public reply failed: ${err.response?.data?.error?.message || err.message}`);
+        lastErr = err.response?.data?.error?.message || err.message;
+        logger.error(`[SocialReplier] FB public reply failed: ${lastErr}`);
     }
 
     // 2. Private Messenger reply with WhatsApp button (Generic Template)
@@ -262,12 +448,16 @@ export async function handleFacebookComment(data: {
             },
             { params: { access_token: PAGE_ACCESS_TOKEN } }
         );
+        dmOk = true;
         logger.info(`[SocialReplier] Messenger reply sent to ${from.name}`);
     } catch (err: any) {
-        logger.warn(`[SocialReplier] FB Messenger reply failed: ${err.response?.data?.error?.message || err.message}`);
+        lastErr = err.response?.data?.error?.message || err.message;
+        logger.warn(`[SocialReplier] FB Messenger reply failed: ${lastErr}`);
     }
 
     await logSocialInteraction('facebook', 'comment', from.id, from.name, text, reply);
+    if (publicOk || dmOk) await markReplySent('facebook', 'comment', from.id, comment_id);
+    if (!publicOk && !dmOk) throw new Error(`FB comment reply failed for ${comment_id}: ${lastErr}`);
 }
 
 // ─── Facebook Messenger Handler ─────────────────────────────────
@@ -277,8 +467,10 @@ export async function handleMessengerMessage(data: {
     text: string;
     message_id?: string;
 }): Promise<void> {
-    const { sender_id, text } = data;
+    const { sender_id, text, message_id } = data;
     logger.info(`[SocialReplier] Messenger from ${sender_id}: "${text}"`);
+
+    let sent = false, lastErr = '';
 
     // Capture a CRM lead if they left a phone number. Independent of the reply below:
     // a public reply can fail (token/permission) but the lead must still be recorded.
@@ -286,6 +478,21 @@ export async function handleMessengerMessage(data: {
         const { captureSocialLead } = await import('./social_lead_capture');
         await captureSocialLead({ platform: 'facebook', surface: 'dm', text, externalUserId: sender_id });
     } catch (e) { logger.warn('[SocialReplier] lead capture failed:', (e as Error).message); }
+
+    // Same spam/negative gate as every other surface (Messenger bypassed it entirely before).
+    // The reply below stays a Generic Template card — it already carries the WhatsApp CTA as a
+    // tappable button, which converts better than a link in text, so it is NOT routed through
+    // buildReply(). Contextual Messenger replies would need a text+card pair; not in scope here.
+    const messengerType = classifyComment(text);
+    if (messengerType === 'spam') {
+        logger.info(`[SocialReplier] Skipping spam Messenger DM from ${sender_id}`);
+        return;
+    }
+    if (messengerType === 'negative') {
+        logger.warn(`[SocialReplier] Negative Messenger DM from ${sender_id} — flagged for a human, no auto-reply: "${text}"`);
+        await logSocialInteraction('facebook', 'messenger', sender_id, undefined, text, 'negative_flagged');
+        return;
+    }
 
     // Reply with Generic Template + WhatsApp button (instant)
     try {
@@ -321,12 +528,16 @@ export async function handleMessengerMessage(data: {
             },
             { params: { access_token: PAGE_ACCESS_TOKEN } }
         );
+        sent = true;
         logger.info(`[SocialReplier] Messenger template reply sent to ${sender_id}`);
     } catch (err: any) {
-        logger.error(`[SocialReplier] Messenger reply failed: ${err.response?.data?.error?.message || err.message}`);
+        lastErr = err.response?.data?.error?.message || err.message;
+        logger.error(`[SocialReplier] Messenger reply failed: ${lastErr}`);
     }
 
     await logSocialInteraction('facebook', 'messenger', sender_id, undefined, text, 'template_reply');
+    if (sent) await markReplySent('facebook', 'messenger', sender_id, message_id);
+    if (!sent) throw new Error(`Messenger reply failed for ${sender_id}: ${lastErr}`);
 }
 
 // ─── Interaction Logger ─────────────────────────────────────────

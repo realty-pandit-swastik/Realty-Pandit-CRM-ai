@@ -27,6 +27,14 @@ const AUTO_ASSIGN_SOURCES = new Set([
     'whatsapp_inbound',
     'panditji_voice',
     'voice',
+    // 2026-08-07: social leads were excluded, so a Contact created from an Instagram/Facebook
+    // comment or DM got NO assigned_agent_id at create time. buildContactVisibilityFilter
+    // (middleware/contact_visibility.ts) then hid it from every manager and employee — only a
+    // super_boss login could see it. Assignment previously depended entirely on
+    // ensureDealForLead's round-robin fallback finding an eligible agent, and produced an
+    // "Assigned: Unassigned" new-lead alert. These are real inbound leads; treat them as such.
+    'instagram',
+    'facebook',
 ]);
 
 const DEMAND_TYPES = new Set(['BUYER', 'TENANT', 'UNKNOWN']);

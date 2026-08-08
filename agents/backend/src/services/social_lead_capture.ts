@@ -102,13 +102,26 @@ export async function captureSocialLead(input: SocialLeadInput): Promise<string 
 
         const existing = await prisma.contact.findUnique({
             where: { phone_number: phone },
-            select: { phone_number: true, name: true },
+            select: {
+                phone_number: true, name: true,
+                // Needed by the "fill only when blank" scoped-id guard below.
+                instagram_scoped_id: true, facebook_scoped_id: true,
+            },
         });
+
+        // Link the social identity to the Contact. Until 2026-08-07 nothing ever wrote these
+        // columns — ZERO contacts had one — so logSocialInteraction's lookup by scoped id
+        // always missed, every commenter logged as an "unlinked instagram user", and a
+        // follow-up DM that did not repeat the phone number could not be tied to anyone.
+        const scopedIdField = input.platform === 'instagram' ? 'instagram_scoped_id' : 'facebook_scoped_id';
+        const scopedId = input.externalUserId || null;
 
         if (!existing) {
             // contact.create goes through the db.ts $extends hook, which auto-assigns an
             // owner and fires the new-lead alerts — the same treatment every other inbound
             // channel gets. That is intentional: this IS a real inbound lead.
+            // ('instagram'/'facebook' were added to AUTO_ASSIGN_SOURCES on 2026-08-07; before
+            // that the auto-assign half of the hook silently skipped social leads.)
             await prisma.contact.create({
                 data: {
                     phone_number: phone,
@@ -119,6 +132,7 @@ export async function captureSocialLead(input: SocialLeadInput): Promise<string 
                     lead_status: 'warm',
                     last_channel: source,
                     last_interaction: new Date(),
+                    ...(scopedId ? { [scopedIdField]: scopedId } : {}),
                 },
             });
             logger.info(`[SocialLead] NEW lead ${phone} from ${input.platform} ${input.surface}${name ? ' (' + name + ')' : ''}`);
@@ -129,7 +143,13 @@ export async function captureSocialLead(input: SocialLeadInput): Promise<string 
             }
             await prisma.contact.update({
                 where: { phone_number: phone },
-                data: { last_channel: source, last_interaction: new Date() },
+                data: {
+                    last_channel: source,
+                    last_interaction: new Date(),
+                    // Fill only when blank — never repoint an existing link to a different
+                    // account, which would silently reattribute someone else's identity.
+                    ...(scopedId && !(existing as any)[scopedIdField] ? { [scopedIdField]: scopedId } : {}),
+                },
             });
             logger.info(`[SocialLead] Existing contact ${phone} re-engaged via ${input.platform} ${input.surface}`);
         }
