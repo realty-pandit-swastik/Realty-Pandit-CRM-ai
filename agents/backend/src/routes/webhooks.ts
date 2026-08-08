@@ -113,13 +113,18 @@ router.post('/whatsapp', async (req, res) => {
     // but never DELIVERED looked identical to a success: the send logged fine, the
     // Interaction row was written, and the customer got nothing. Log them so a delivery
     // failure is visible instead of silent.
+    // 2026-08-07: also PERSIST the callback. Logging alone made "which sender caused which
+    // 131049" a log-grep-and-correlate-by-timestamp exercise, while outbound was failing ~40%.
+    // res.sendStatus(200) has already been sent above, so this cannot delay Meta.
     if (changeValue?.statuses) {
+        const { applyStatusCallback } = await import('../services/wa_message_log');
         for (const s of changeValue.statuses) {
             if (s.status === 'failed') {
                 logger.error(`[WA-Delivery] FAILED → ${s.recipient_id}: ${JSON.stringify(s.errors || [])}`);
             } else {
                 logger.info(`[WA-Delivery] ${s.status} → ${s.recipient_id}`);
             }
+            applyStatusCallback(s).catch(() => { /* best-effort; never break the webhook */ });
         }
     }
 

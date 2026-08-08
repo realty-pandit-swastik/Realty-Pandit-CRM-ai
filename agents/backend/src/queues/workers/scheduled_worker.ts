@@ -723,23 +723,43 @@ async function dispatchJob(job: Job): Promise<void> {
         }
 
         case 'session-keepalive': {
+            // ⚠ KILL SWITCH (2026-08-07). This job blasts `rp_reopen_session` at every contact
+            // whose session is about to lapse — with no opt-out filter, no per-run cap and no
+            // dedup marker. It is nearly a no-op TODAY only because `last_wa_inbound` was
+            // never being stamped for new contacts (the SessionTracker.markInbound race). The
+            // moment that field gets backfilled this job wakes up and fires at the whole
+            // backfilled population in one run. Default OFF; enable only after watching the
+            // candidate count. See the Phase 2 → Phase 4 ordering constraint.
+            if (process.env.SESSION_KEEPALIVE_ENABLED !== 'true') {
+                logger.info('[SessionKeepAlive] DISABLED (SESSION_KEEPALIVE_ENABLED != true) — skipping.');
+                break;
+            }
+
             // Find contacts whose last WhatsApp inbound is 21-23 hours ago (approaching 24h expiry)
             const prisma = (await import('../../db')).default;
             const { WhatsAppService } = await import('../../services/whatsapp');
             const { isQuietHours, msUntilMorningSend } = await import('../../utils/quiet_hours');
             const wa = new WhatsAppService();
 
+            const KEEPALIVE_CAP = 50;
             const now = new Date();
             const windowStart = new Date(now.getTime() - 23 * 60 * 60 * 1000); // 23h ago
             const windowEnd = new Date(now.getTime() - 21 * 60 * 60 * 1000);   // 21h ago
+            const dedupSince = new Date(now.getTime() - 24 * 60 * 60 * 1000);
 
             const expiringContacts = await prisma.contact.findMany({
                 where: {
                     last_wa_inbound: { gte: windowStart, lte: windowEnd },
                     contact_type: { notIn: ['MANAGEMENT'] },
                     lead_status: { notIn: ['closed', 'lost'] },
+                    opted_out_at: null,   // consent guard — was entirely absent (2026-08-07)
+                    // Dedup: never keep-alive the same contact twice in 24h.
+                    interactions: {
+                        none: { event_type: 'session_keepalive', created_at: { gte: dedupSince } },
+                    },
                 },
-                select: { phone_number: true, name: true, last_wa_inbound: true },
+                select: { phone_number: true, name: true, last_wa_inbound: true, tenant_id: true },
+                take: KEEPALIVE_CAP,
             });
 
             if (expiringContacts.length === 0) break;
@@ -756,7 +776,19 @@ async function dispatchJob(job: Job): Promise<void> {
                     const displayName = contact.name || 'there';
                     await wa.sendTemplate(contact.phone_number, 'rp_reopen_session', {
                         name: displayName,
-                    });
+                    }, undefined, 'session_keepalive');
+                    // Dedup marker — the `none:` filter above reads this back, so a contact
+                    // cannot be keep-alived again within 24h.
+                    await prisma.interaction.create({
+                        data: {
+                            tenant_id: contact.tenant_id,
+                            phone_number: contact.phone_number,
+                            channel: 'whatsapp',
+                            direction: 'outbound',
+                            event_type: 'session_keepalive',
+                            content: 'Session keep-alive (rp_reopen_session)',
+                        },
+                    }).catch(() => { /* marker is best-effort; never fail the send on it */ });
                     logger.info(`[SessionKeepAlive] Keep-alive sent to ${contact.phone_number}`);
                 } catch (err) {
                     logger.warn(`[SessionKeepAlive] Failed for ${contact.phone_number}: ${(err as Error).message}`);

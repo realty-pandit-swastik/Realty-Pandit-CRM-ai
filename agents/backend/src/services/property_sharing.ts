@@ -106,10 +106,52 @@ export async function shareInventoryBrochure(
 }
 
 /**
- * Share the next un-shared matching property for a deal via WhatsApp.
- * Returns the inventory_id shared, or null if nothing left to share.
+ * Why this function returns a tagged union (2026-08-07).
+ *
+ * It has nine exits. FIVE of them send nothing and log no Interaction. Callers only
+ * ever saw `string | null`, so "sent a card", "customer is opted out of this because
+ * a human took over" and "the template send threw" were indistinguishable. In
+ * webhook_processor 3b.3 the return value was discarded entirely — so when one of the
+ * silent paths fired, the turn produced no outbound Interaction and the post-turn
+ * safety net emitted "🙏 Got it — thank you for your message. A team member will
+ * assist you shortly." to a buyer who had just stated a budget. That is how the
+ * account's only hot lead got dead-ended.
+ *
+ * `outcomeRepliedToCustomer()` is the question callers actually need answered.
+ */
+export type ShareOutcome =
+    | { status: 'shared'; inventoryId: string; matchScore: number | null }
+    | { status: 'no_deal' }                                  // nothing sent
+    | { status: 'ai_paused' }                                // nothing sent — human owns this deal
+    | { status: 'budget_reask_sent' }                        // text sent + Interaction logged
+    | { status: 'budget_reask_exhausted' }                   // agent task created, nothing sent
+    | { status: 'exhausted_notified' }                       // template sent + Interaction logged
+    | { status: 'exhausted_deduped' }                        // nothing sent (5-min race guard)
+    | { status: 'exhausted_send_failed' }                    // nothing sent
+    | { status: 'card_send_failed'; inventoryId: string };   // nothing sent
+
+/** True iff this outcome already put a message in front of the customer THIS turn. */
+export function outcomeRepliedToCustomer(o: ShareOutcome): boolean {
+    return o.status === 'shared'
+        || o.status === 'budget_reask_sent'
+        || o.status === 'exhausted_notified';
+}
+
+/**
+ * Back-compat wrapper — preserves the original `string | null` contract for all
+ * existing call sites. New callers that need to know WHY nothing was sent should
+ * call `shareNextPropertyDetailed` instead.
  */
 export async function shareNextProperty(dealId: string, opts?: { bypassPause?: boolean }): Promise<string | null> {
+    const r = await shareNextPropertyDetailed(dealId, opts);
+    return r.status === 'shared' ? r.inventoryId : null;
+}
+
+/**
+ * Share the next un-shared matching property for a deal via WhatsApp.
+ * Returns a tagged outcome describing exactly which exit was taken.
+ */
+export async function shareNextPropertyDetailed(dealId: string, opts?: { bypassPause?: boolean }): Promise<ShareOutcome> {
     const deal = await prisma.transaction.findUnique({
         where: { id: dealId },
         include: {
@@ -128,7 +170,7 @@ export async function shareNextProperty(dealId: string, opts?: { bypassPause?: b
     });
     if (!deal || !deal.demand_contact?.phone_number) {
         logger.warn(`[PropShare] Deal ${dealId} missing or has no contact phone`);
-        return null;
+        return { status: 'no_deal' };
     }
 
     // Honour the AI pause switch at the ONE chokepoint every auto-share flows through — a human
@@ -136,7 +178,7 @@ export async function shareNextProperty(dealId: string, opts?: { bypassPause?: b
     // closes the "Next Option" card-tap leak). A human's manual share passes bypassPause. (QUALIFIED-4)
     if (!opts?.bypassPause && (deal as any).ai_paused) {
         logger.info(`[PropShare] Deal ${dealId} is ai_paused — skipping auto-share (human is handling it)`);
-        return null;
+        return { status: 'ai_paused' };
     }
 
     // ── Fix D (2026-06-12): implausible-budget re-ask-once-then-flag ──────────────
@@ -166,7 +208,7 @@ export async function shareNextProperty(dealId: string, opts?: { bypassPause?: b
                     },
                 });
                 logger.info(`[PropShare] Implausible budget on deal ${dealId} (${sanity.issue}) — re-asked buyer once`);
-                return null;
+                return { status: 'budget_reask_sent' };
             }
         } else {
             try {
@@ -177,7 +219,7 @@ export async function shareNextProperty(dealId: string, opts?: { bypassPause?: b
                 });
                 logger.info(`[PropShare] Implausible budget on deal ${dealId} persists after re-ask — flagged assigned agent`);
             } catch (e) { logger.error('[PropShare] budget flag task failed', e); }
-            return null;
+            return { status: 'budget_reask_exhausted' };
         }
     }
 
@@ -254,12 +296,12 @@ export async function shareNextProperty(dealId: string, opts?: { bypassPause?: b
         });
         if (recentExhausted) {
             logger.info(`[PropShare] Skipping duplicate exhausted notification for deal ${dealId} (sent in last 5min)`);
-            return null;
+            return { status: 'exhausted_deduped' };
         }
 
         // Exhausted — let the customer know we'll keep looking.
         try {
-            await whatsapp.sendTemplate(deal.demand_contact.phone_number, 'rp_all_properties_shared', {});
+            await whatsapp.sendTemplate(deal.demand_contact.phone_number, 'rp_all_properties_shared', {}, undefined, 'property_sharing');
             await prisma.interaction.create({
                 data: {
                     tenant_id: deal.tenant_id,
@@ -273,8 +315,9 @@ export async function shareNextProperty(dealId: string, opts?: { bypassPause?: b
             });
         } catch (err) {
             logger.warn(`[PropShare] rp_all_properties_shared send failed:`, err);
+            return { status: 'exhausted_send_failed' };
         }
-        return null;
+        return { status: 'exhausted_notified' };
     }
 
     const inv: any = next; // MatchedProperty has flattened inventory fields
@@ -288,7 +331,7 @@ export async function shareNextProperty(dealId: string, opts?: { bypassPause?: b
     const sent = await shareInventoryCard(deal.demand_contact.phone_number, inv);
     if (!sent) {
         logger.error(`[PropShare] Failed to send property card for deal ${dealId} property ${inv.id}`);
-        return null;
+        return { status: 'card_send_failed', inventoryId: inv.id };
     }
 
     await prisma.interaction.create({
@@ -304,7 +347,7 @@ export async function shareNextProperty(dealId: string, opts?: { bypassPause?: b
     });
 
     logger.info(`[PropShare] Deal ${dealId} → property ${inv.id} (${bhk} @ ${society}) shared`);
-    return inv.id;
+    return { status: 'shared', inventoryId: inv.id, matchScore: (next as any).match_score ?? null };
 }
 
 /**

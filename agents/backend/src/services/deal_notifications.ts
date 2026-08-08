@@ -20,6 +20,8 @@ import { emailService } from './email_service';
 import { maskDealForViewer } from './deal_visibility';
 import prisma from '../db';
 import logger from '../utils/logger';
+import { isNotificationQuietHours } from '../utils/quiet_hours';
+import { isOptedOut } from './wa_compliance';
 import * as SentrySDK from '@sentry/node';
 
 const whatsapp = new WhatsAppService();
@@ -71,9 +73,10 @@ export async function notifyDealEvent(ctx: DealEventContext): Promise<void> {
             return;
         }
 
-        // Check notification preferences (quiet hours etc.)
+        // Check notification preferences (quiet hours etc.). The hour is no longer read
+        // from server-local time here — isNotificationQuietHours() computes it in IST,
+        // which is what the 21/8 window was always meant to mean. (2026-08-07)
         const now = new Date();
-        const currentHour = now.getHours();
 
         // Build common context. Phase 5 (demand canonical): legacy demand_property_type
         // / demand_type_slug columns dropped on Transaction. Derive a human label
@@ -100,11 +103,19 @@ export async function notifyDealEvent(ctx: DealEventContext): Promise<void> {
         // Send to each recipient
         for (const recipient of recipients) {
             try {
-                // Check quiet hours (skip WhatsApp between 9 PM and 8 AM, but still send email)
-                const isQuietHours = currentHour >= 21 || currentHour < 8;
+                // Quiet hours (skip WhatsApp 9 PM – 8 AM, but still send email). The 21/8 window
+                // now lives in utils/quiet_hours as isNotificationQuietHours() — deliberately NOT
+                // the shared isQuietHours() (22/6), which would WIDEN this send window. (2026-08-07)
+                const isQuietHours = isNotificationQuietHours();
+
+                // Consent guard — this dispatcher checked neither opted_out_at nor ai_paused.
+                const optedOut = recipient.phone ? await isOptedOut(recipient.phone) : false;
+                if (optedOut) {
+                    logger.info(`[DealNotifications] Skipping ${recipient.phone} — opted out`);
+                }
 
                 // Send WhatsApp
-                if (recipient.phone && !isQuietHours) {
+                if (recipient.phone && !isQuietHours && !optedOut) {
                     await sendWhatsAppNotification(ctx, recipient, {
                         propertyType, location, budget, coordinatorName, customerName, ownerName, mapsLink,
                     });

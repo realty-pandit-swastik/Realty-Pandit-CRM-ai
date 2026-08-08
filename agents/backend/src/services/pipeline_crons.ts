@@ -18,6 +18,7 @@ function captureCronError(name: string, err: unknown): void {
     });
 }
 import { WhatsAppService } from './whatsapp';
+import { isOptedOut } from './wa_compliance';
 import { notifyDealEvent } from './deal_notifications';
 import { transitionTransaction } from './transaction_state_machine';
 
@@ -414,6 +415,7 @@ export async function runVisitReminders(): Promise<void> {
             if (!appt.transaction || appt.transaction.status !== 'VISIT_SCHEDULED') continue;
             if (!appt.contact?.phone_number) continue;
             if (appt.transaction.ai_paused) continue;
+            if (await isOptedOut(appt.contact.phone_number)) continue;   // consent guard (2026-08-07)
             // Skip if team already called to remind in the last 2 hours
             if (kind === '2hr' && teamActedRecently(appt.transaction, 2 * 60 * 60 * 1000)) continue;
 
@@ -655,6 +657,7 @@ export async function runPostVisitFollowup(): Promise<void> {
         const tx = appt.transaction;
         if (!tx || tx.status !== 'VISIT_SCHEDULED' || tx.ai_paused || tx.visit_outcome) continue;
         if (!appt.contact?.phone_number) continue;
+        if (await isOptedOut(appt.contact.phone_number)) continue;   // consent guard (2026-08-07)
         const already = await prisma.interaction.findFirst({
             where: { event_type: EVT_POST_VISIT, metadata: { path: ['appointment_id'], equals: appt.id } },
             select: { id: true },
@@ -717,6 +720,7 @@ export async function runPostVisitFollowup(): Promise<void> {
         const tx = appt.transaction;
         if (!tx || tx.status !== 'VISIT_SCHEDULED' || tx.ai_paused) continue;
         if (!appt.contact?.phone_number) continue;
+        if (await isOptedOut(appt.contact.phone_number)) continue;   // consent guard (2026-08-07)
         const already = await prisma.interaction.findFirst({
             where: { event_type: EVT_REQUESTED_REASK, metadata: { path: ['appointment_id'], equals: appt.id } },
             select: { id: true },

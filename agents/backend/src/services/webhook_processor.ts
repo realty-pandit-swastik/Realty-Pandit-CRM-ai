@@ -77,8 +77,13 @@ async function processInboundMessageInner(data: InboundMessageData): Promise<voi
 
     logger.info(`[WebhookProcessor] Processing msg from ${from}: ${text}`);
 
-    // Track 24h session window for Meta template compliance
-    SessionTracker.markInbound(from).catch(() => {});
+    // Track 24h session window for Meta template compliance.
+    // Deliberately NOT awaited and deliberately NOT moved below contact creation: the three
+    // handlers at ~:89/:103/:115 return early for EXISTING contacts (card replies, template
+    // buttons, disambiguation taps), so moving this down would lose the stamp for exactly the
+    // most engaged users. Brand-new contacts are covered by the create() below instead.
+    SessionTracker.markInbound(from).catch(err =>
+        logger.warn(`[WebhookProcessor] markInbound failed for ${from}: ${(err as Error).message}`));
 
     // Deliver any queued messages (from LLM hybrid approach)
     PendingMessageQueue.deliverPending(whatsappService, from).catch(() => {});
@@ -140,6 +145,14 @@ async function processInboundMessageInner(data: InboundMessageData): Promise<voi
                 phone_number: from,
                 tenant_id: tenant.id,
                 lead_status: 'cold',
+                // This contact exists BECAUSE they just sent us a WhatsApp message, so the
+                // 24h session window is open right now. Stamping it here is the
+                // ordering-independent fix for the markInbound() race above — that call ran
+                // before this row existed and silently updated nothing, leaving every
+                // first-time contact permanently "session closed": forced onto templates by
+                // SessionTracker.isSessionActive, flagged "never replied" by
+                // followup_scheduler and auto-downgraded to cold after 7 days. (2026-08-07)
+                last_wa_inbound: new Date(),
                 source: identified ? `auto_${identified.source_table.toLowerCase()}` : 'whatsapp',
                 contact_type: identified?.contact_type || 'UNKNOWN',
                 name: identified?.name || null,
@@ -814,7 +827,12 @@ How can I help you find your perfect property today? 🏡`;
                     select: { demand_location: true, demand_budget_max: true },
                 });
                 const hasEnough = !!dealNow?.demand_location && !!dealNow?.demand_budget_max;
-                const { shareNextProperty } = await import('./property_sharing');
+                // 2026-08-07: use the DETAILED variant. The old code discarded the return value,
+                // so whenever shareNextProperty took one of its five silent exits the turn ended
+                // with no outbound Interaction and the post-turn safety net fired the generic
+                // "a team member will assist you shortly" at a customer who had just given us a
+                // budget. Now every non-replying outcome gets a real, specific answer.
+                const { shareNextPropertyDetailed, outcomeRepliedToCustomer } = await import('./property_sharing');
 
                 if (activeDeal.status === 'NEW') {
                     if (hasEnough) {
@@ -823,7 +841,10 @@ How can I help you find your perfect property today? 🏡`;
                         await transitionTransaction(activeDeal.id, TransactionStatus.QUALIFIED, from, 'whatsapp',
                             { notes: 'Customer provided enough requirement (location+budget) via WhatsApp' });
                         logger.info(`[WebhookProcessor] Deal ${activeDeal.id} qualified (location+budget) from ${from}`);
-                        await shareNextProperty(activeDeal.id);
+                        const outcome = await shareNextPropertyDetailed(activeDeal.id);
+                        if (!outcomeRepliedToCustomer(outcome)) {
+                            await sendRequirementAck(from, contact.tenant_id, activeDeal.id, dealNow, reqSlots, outcome);
+                        }
                     } else {
                         const miss: string[] = [];
                         if (!dealNow?.demand_location) miss.push('location (jaise: Vaishali, Sector 62 Noida)');
@@ -833,7 +854,10 @@ How can I help you find your perfect property today? 🏡`;
                 } else {
                     // QUALIFIED: share only on a NEW requirement or an explicit "more" — not on chit-chat.
                     if (capturedThisTurn || wantsMore) {
-                        await shareNextProperty(activeDeal.id);
+                        const outcome = await shareNextPropertyDetailed(activeDeal.id);
+                        if (!outcomeRepliedToCustomer(outcome)) {
+                            await sendRequirementAck(from, contact.tenant_id, activeDeal.id, dealNow, reqSlots, outcome);
+                        }
                     } else {
                         await whatsappService.sendText(from, `🙏 Ji bataiye — in properties mein se koi pasand aayi, ya koi aur requirement hai? (location / budget / BHK bata sakte hain)`);
                     }
@@ -1229,7 +1253,10 @@ const EXTERNAL_TYPES = ['BUYER', 'TENANT', 'LANDLORD', 'UNKNOWN'];
 // correctly exempt from bot auto-replies.
 export const SAFETYNET_COVERED_TYPES = [...EXTERNAL_TYPES, 'PARTNER_AGENT'];
 // Specialised handlers that legitimately own a turn without an outbound row.
-const CLAIMED_EVENT_TYPES = ['workflow_message', 'workflow_start', 'workflow_error', 'authentication_confirmed', 'closing_signal'];
+// `ai_paused_inbound` (2026-08-07): a human has taken this deal over personally, so the
+// bot must stay genuinely silent instead of talking over them with the generic ack. The
+// human is pinged with a HIGH task instead — see sendRequirementAck().
+const CLAIMED_EVENT_TYPES = ['workflow_message', 'workflow_start', 'workflow_error', 'authentication_confirmed', 'closing_signal', 'ai_paused_inbound'];
 
 export async function processInboundMessage(data: InboundMessageData): Promise<void> {
     const from = normalizePhone(data.from);
@@ -1283,6 +1310,134 @@ type SafetyNetContact = {
     assigned_agent_id: string | null;
     name: string | null;
 };
+
+/**
+ * Answer a captured requirement that produced no property card.
+ *
+ * Replaces the generic safety-net ack for this specific case. The bug it fixes:
+ * `shareNextProperty` has five exits that send nothing and log nothing, the caller
+ * discarded its return value, and so the turn fell through to sendSafetyNetAck().
+ * A buyer who had just said "1 cr" was told "a team member will assist you shortly".
+ *
+ * Writing the outbound Interaction here is not incidental — it is the mechanism that
+ * makes the post-turn check in processInboundMessage() find a reply and skip the
+ * generic ack. `event_type:'message'` keeps behavior_auditor R2 semantics intact, and
+ * the session is open by construction (the customer just messaged us).
+ */
+async function sendRequirementAck(
+    from: string,
+    tenantId: string,
+    dealId: string,
+    dealNow: { demand_location: string | null; demand_budget_max: any } | null,
+    slots: { intent?: string; bhk?: number; type?: string; location?: string; budget?: number },
+    outcome: import('./property_sharing').ShareOutcome,
+): Promise<void> {
+    // A human owns this deal — go silent, ping them, do NOT message the customer.
+    if (outcome.status === 'ai_paused') {
+        await prisma.interaction.create({
+            data: {
+                tenant_id: tenantId, phone_number: from, channel: 'whatsapp',
+                direction: 'inbound', event_type: 'ai_paused_inbound',
+                content: 'Inbound on an ai_paused deal — bot stayed silent, human notified',
+                metadata: { deal_id: dealId },
+            },
+        }).catch(() => {});
+        await createRequirementTask(from, dealId,
+            'Customer messaged a deal you paused',
+            'You paused the AI on this deal, so the bot did not reply. Please respond personally.',
+            30 * 60 * 1000);
+        logger.info(`[WebhookProcessor] ai_paused deal ${dealId} — bot silent, task raised for the human`);
+        return;
+    }
+
+    const { formatPropertyPrice } = await import('../utils/format_price');
+    const loc = slots.location || dealNow?.demand_location || null;
+    const budgetNum = slots.budget ?? (dealNow?.demand_budget_max != null ? Number(dealNow.demand_budget_max) : null);
+    const intent = slots.intent === 'rent' ? 'rent' : 'buy';
+    const budgetTxt = budgetNum ? formatPropertyPrice(budgetNum, { intent }) : null;
+
+    // Echo back what we actually captured, so the customer can see they were heard.
+    const bits: string[] = [];
+    if (loc) bits.push(loc);
+    if (budgetTxt) bits.push(`${budgetTxt} tak`);
+    if (slots.bhk) bits.push(`${slots.bhk} BHK`);
+    const captured = bits.length ? bits.join(', ') : 'aapki requirement';
+
+    let ack: string;
+    let taskTitle: string;
+    let taskDesc: string;
+
+    switch (outcome.status) {
+        case 'card_send_failed':
+            ack = `🙏 Note kar liya — ${captured}.\n\nEk matching property mil gayi hai, lekin bhejne mein technical issue aa raha hai. Humari team abhi aapko bhejegi.`;
+            taskTitle = 'Property card failed to send';
+            taskDesc = `Match found (inventory ${outcome.inventoryId}) but the card send failed on both v5 and v4 templates. Send it manually.`;
+            break;
+        case 'budget_reask_exhausted':
+            ack = `🙏 Note kar liya — ${captured}.\n\nBudget ke baare mein thoda confirm karna hai — humari team abhi aapko call karegi.`;
+            taskTitle = 'Budget still unclear after re-ask';
+            taskDesc = 'Budget looks implausible for the stated intent and the customer did not clarify. Call to confirm rent vs buy and correct the budget.';
+            break;
+        default:
+            // exhausted_deduped / exhausted_send_failed / no_deal — genuinely nothing to send.
+            ack = `🙏 Note kar liya — ${captured}.\n\nAbhi is exact requirement pe koi ready listing nahi hai. Aapki detail humari team ko bhej di hai — nayi matching property aate hi turant bhejenge.\n\nAgar budget ya aas-paas ke area mein thodi flexibility ho toh bata dijiye — main abhi options bhej sakta hoon.`;
+            taskTitle = 'No matching inventory for a stated requirement';
+            taskDesc = `Customer stated: ${captured}. No property scored above the match floor. Review inventory or call to widen the requirement.`;
+            break;
+    }
+
+    await whatsappService.sendText(from, ack).catch(() => {});
+    await prisma.interaction.create({
+        data: {
+            tenant_id: tenantId, phone_number: from, channel: 'whatsapp',
+            direction: 'outbound', event_type: 'message', content: ack,
+            metadata: { deal_id: dealId, requirement_ack: true, share_outcome: outcome.status, slots },
+        },
+    }).catch(() => {});
+
+    await createRequirementTask(from, dealId, taskTitle, taskDesc, 24 * 60 * 60 * 1000);
+}
+
+/** Deduped HIGH task for a requirement the bot could not serve (one per deal per 24h). */
+async function createRequirementTask(
+    from: string, dealId: string, title: string, description: string, dueInMs: number,
+): Promise<void> {
+    try {
+        const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
+        const existing = await prisma.task.findFirst({
+            where: { contact_phone: from, task_type: 'CALLBACK', status: 'TODO', created_at: { gte: since } },
+            select: { id: true },
+        });
+        if (existing) return;
+
+        const contact = await prisma.contact.findUnique({
+            where: { phone_number: from }, select: { assigned_agent_id: true, name: true },
+        });
+        let assignee = contact?.assigned_agent_id || null;
+        if (!assignee) {
+            const sb = await prisma.agent.findFirst({
+                where: { role: 'super_boss', status: 'active' }, select: { id: true },
+            });
+            assignee = sb?.id || null;
+        }
+        if (!assignee) return;
+
+        await prisma.task.create({
+            data: {
+                title: `${title}: ${contact?.name || from}`,
+                description: `${description} (deal ${dealId})`,
+                contact_phone: from,
+                assigned_to: assignee,
+                priority: 'HIGH',
+                status: 'TODO',
+                task_type: 'CALLBACK',
+                due_date: new Date(Date.now() + dueInMs),
+            },
+        });
+    } catch (e) {
+        logger.warn(`[WebhookProcessor] requirement task create failed: ${(e as Error).message}`);
+    }
+}
 
 /**
  * Shared ack + follow-up-task logic for a contact the bot has gone silent on.

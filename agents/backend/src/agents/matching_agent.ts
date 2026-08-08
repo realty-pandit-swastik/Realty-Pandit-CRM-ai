@@ -13,6 +13,7 @@
 import { BaseAgent, AgentContext, AgentResponse } from './types';
 import { MatchingEngine, MatchCriteria } from '../services/matching_engine';
 import { formatPropertyPrice } from '../utils/format_price';
+import { parseIndianSaleAmount } from '../utils/requirement_slots';
 import logger from '../utils/logger';
 
 export class MatchingAgent implements BaseAgent {
@@ -101,13 +102,11 @@ export class MatchingAgent implements BaseAgent {
             if (!Number.isNaN(_b)) criteria.bhk = _b;
         }
 
-        // Extract budget from message if mentioned (e.g., "50 lakh", "1 crore")
-        const budgetMatch = msg.match(/(\d+\.?\d*)\s*(lakh|lac|crore|cr)/i);
-        if (budgetMatch) {
-            const amount = parseFloat(budgetMatch[1]);
-            const unit = budgetMatch[2].toLowerCase();
-            const value = unit.startsWith('cr') ? amount * 10000000 : amount * 100000;
-
+        // Extract budget from message if mentioned (e.g., "50 lakh", "1 crore", "1.25 crores").
+        // Shared parser since 2026-08-07 — the inline regex here had NO word boundary, so it
+        // over-matched "cr" inside unrelated words; the shared one is boundaried and plural-aware.
+        const value = parseIndianSaleAmount(msg);
+        if (value != null) {
             if (!criteria.budget_max || value > criteria.budget_max) {
                 criteria.budget_max = value;
             }

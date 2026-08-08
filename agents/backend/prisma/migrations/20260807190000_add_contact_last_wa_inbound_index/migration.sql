@@ -1,0 +1,11 @@
+-- Index contacts.last_wa_inbound.
+--
+-- Range-scanned by the session-keepalive job (21-23h window) and read by the 24h
+-- session-window check. It was never indexed; the scan only stayed cheap because the
+-- column was ~92% NULL, which was the bug being fixed in this same batch. Indexed
+-- BEFORE the backfill populates it.
+--
+-- Plain CREATE INDEX (not CONCURRENTLY): the contacts table is ~2.7 MB / ~5.7k rows,
+-- so the write lock is momentary. CONCURRENTLY cannot run inside the transaction
+-- Prisma wraps migrations in, and is not warranted at this size.
+CREATE INDEX IF NOT EXISTS "contacts_last_wa_inbound_idx" ON "contacts"("last_wa_inbound");

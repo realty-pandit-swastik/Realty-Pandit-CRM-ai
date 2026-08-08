@@ -179,7 +179,10 @@ export class MarketingAgent {
      * Build audience list based on filter criteria.
      */
     async buildAudience(filter: AudienceFilter): Promise<Array<{ phone_number: string; email: string | null; name: string | null }>> {
-        const where: any = {};
+        // Consent guard seeded here rather than added per-filter (2026-08-07): a campaign
+        // audience previously started from `{}` and had no opted_out_at exclusion at all,
+        // so a bulk broadcast would reach everyone who had asked us to stop.
+        const where: any = { opted_out_at: null };
 
         if (filter.contact_type) {
             where.contact_type = filter.contact_type;

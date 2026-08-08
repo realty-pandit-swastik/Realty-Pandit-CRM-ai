@@ -14,6 +14,7 @@
 import { BaseAgent, AgentContext, AgentResponse } from './types';
 import { getDisplayFloor } from '../utils/floor';
 import { formatPropertyPrice } from '../utils/format_price';
+import { parseIndianSaleAmount } from '../utils/requirement_slots';
 import { LLMService } from '../services/llm';
 import { SystemPromptService } from '../services/system_prompt';
 import { InventoryStateMachine, InventoryState } from '../workflows/inventory_machine';
@@ -60,9 +61,13 @@ function parseBudget(text: string): { min: number; max: number } | null {
         return { min, max };
     }
 
+    // Sale amounts (crore/lakh, plurals included) via the shared parser — 2026-08-07.
+    // The two inline patterns this replaces both failed on "crores" / "lakhs". Checked
+    // before the rent patterns to preserve the original crore → lakh → k precedence.
+    const sale = parseIndianSaleAmount(lower);
+    if (sale != null) return { min: sale * 0.7, max: sale };
+
     const patterns = [
-        { regex: /(\d+\.?\d*)\s*(crore|cr)\b/i, multiplier: 10_000_000 },
-        { regex: /(\d+\.?\d*)\s*(lakh|lac|lacs)\b/i, multiplier: 100_000 },
         { regex: /(\d+\.?\d*)\s*(k|thousand|hazar)\b/i, multiplier: 1_000 },
         { regex: /(\d+)\s*(?:per\s*month|monthly|\/month|pm|mahine)\b/i, multiplier: 1 },
     ];

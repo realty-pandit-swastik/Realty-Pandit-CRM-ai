@@ -204,6 +204,10 @@ model Contact {
   @@index([next_action_at])
   @@index([contact_type, lead_status])
   @@index([last_interaction])
+  // Range-scanned every 30 min by the session-keepalive job (scheduled_worker.ts) and read
+  // by the 24h-window check. Never indexed, and it only stayed cheap because the column was
+  // almost entirely NULL — which was itself the bug. Indexed before backfilling. (2026-08-07)
+  @@index([last_wa_inbound])
   @@index([assigned_agent_id])
   @@index([created_by])
   @@index([owning_manager_id])
@@ -270,8 +274,23 @@ model WhatsAppMessage {
   media_url     String?
   status        String  @default("sent") // sent, delivered, read, failed
 
+  // Delivery-status persistence (2026-08-07). Status callbacks were logged and thrown
+  // away, so "which sender caused which 131049" was a log grep, not a query — and
+  // outbound was failing ~40% with no way to attribute it.
+  sent_by       String? // free-text source key: interaction_engine, property_sharing, agent:<id>, …
+  template_name String?
+  error_code    Int? // Meta error code on failure (131049, 131047, …)
+  error_title   String?
+  delivered_at  DateTime?
+  read_at       DateTime?
+  failed_at     DateTime?
+
   created_at DateTime @default(now())
 
+  @@index([status, created_at])
+  @@index([error_code, created_at])
+  @@index([sent_by, created_at])
+  @@index([phone_number, created_at])
   @@map("whatsapp_messages")
 }
 

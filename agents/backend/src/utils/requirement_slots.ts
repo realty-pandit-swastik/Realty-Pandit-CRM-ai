@@ -36,6 +36,30 @@ const AREAS = [
     'delhi', 'pune',
 ];
 
+/**
+ * Indian sale-amount parser — the SINGLE source of truth for "50 lakh" / "1.25 crore".
+ *
+ * 2026-08-07: this logic was duplicated in four places with three different bugs. The
+ * live one: `\b` after `crore` sits between two word characters in "1.25 crores", so
+ * every PLURAL form silently failed to parse. A real buyer (+91 87459 94545) stated
+ * "1.25 crores ka budget hai maximum", was not understood, and had to restate it as
+ * "1 cr" — the bot asked for a budget it had already been given.
+ *
+ * The `s?` before `\b` is the fix. Alternation order matters: `crore` must precede
+ * `cr` so the plural consumes the whole word rather than backtracking.
+ *
+ * Still word-boundaried, so "2 crocodiles" does NOT parse as 2 crore.
+ */
+export function parseIndianSaleAmount(raw: string): number | null {
+    const m = (raw || '').match(/(\d+(?:\.\d+)?)\s*(crore|karod|kror|cr|lakh|lac|lakhs|lacs)s?\b/i);
+    if (!m) return null;
+    const v = parseFloat(m[1]);
+    if (!Number.isFinite(v) || v <= 0) return null;
+    const u = m[2].toLowerCase();
+    const isCrore = u.startsWith('cr') || u.startsWith('ka') || u.startsWith('kr');
+    return Math.round(v * (isCrore ? 1e7 : 1e5));
+}
+
 export function extractReqSlots(rawMsg: string): ReqSlots {
     const msg = (rawMsg || '').toLowerCase();
     const out: ReqSlots = {};
@@ -75,10 +99,9 @@ export function extractReqSlots(rawMsg: string): ReqSlots {
     // Budget — sale (lakh/cr) or monthly rent (Nk, or a 4-7 digit figure guarded by a budget
     // CUE so a sector/pincode number isn't mistaken for a budget). Previously absent here, so the
     // active-deal path (webhook 3b.3) silently dropped a client's stated budget. (2026-06-21)
-    const sale = msg.match(/(\d+\.?\d*)\s*(lakh|lac|crore|cr)\b/i);
-    if (sale) {
-        const v = parseFloat(sale[1]);
-        out.budget = Math.round(sale[2].toLowerCase().startsWith('cr') ? v * 1e7 : v * 1e5);
+    const sale = parseIndianSaleAmount(msg);
+    if (sale != null) {
+        out.budget = sale;
     } else {
         const k = msg.match(/(\d+\.?\d*)\s*k\b/i);
         if (k) {

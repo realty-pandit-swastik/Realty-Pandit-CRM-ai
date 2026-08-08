@@ -51,10 +51,18 @@ export class SessionTracker {
      */
     static async markInbound(phone: string): Promise<void> {
         try {
-            await prisma.contact.updateMany({
+            const r = await prisma.contact.updateMany({
                 where: { phone_number: phone },
                 data: { last_wa_inbound: new Date() },
             });
+            // updateMany matching zero rows is NOT an error — and that silence is exactly how
+            // this went unnoticed. webhook_processor fires this un-awaited at the top of the
+            // pipeline, BEFORE the contact row exists, so every first-ever inbound matched
+            // nothing and the stamp was lost permanently. Contact creation now sets the field
+            // directly; this log exists so any remaining gap is visible. (2026-08-07)
+            if (r.count === 0) {
+                logger.warn(`[SessionTracker] markInbound matched 0 rows for ${phone} (contact not created yet?)`);
+            }
         } catch (err) {
             // Non-critical - don't block message processing
             logger.warn(`[SessionTracker] Failed to mark inbound for ${phone}:`, err);
