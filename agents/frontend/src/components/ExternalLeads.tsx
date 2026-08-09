@@ -895,14 +895,25 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
         setSavingAll(true);
         setSaveError(null);
         const errs: string[] = [];
+        // Stage now routes through the deal's state machine, which rejects illegal jumps with a
+        // message naming the allowed next stages. Keep it verbatim instead of collapsing it to "stage".
+        let stageError: string | null = null;
         try {
             if (editName.trim() !== (leadDetail.name || '')) { try { await handleSaveName(); } catch { errs.push('name'); } }
             if (editNotes !== (leadDetail.notes || '')) { try { await handleSaveNotes(); } catch { errs.push('notes'); } }
             if (editLifecycle !== (leadDetail.lifecycle_stage || 'NEW')) {
                 try {
-                    await client.patch(`/api/leads/${encodeURIComponent(selectedPhone)}/requirements`, { lifecycle_stage: editLifecycle });
-                    setRecentLeads(prev => prev.map(l => l.phone_number === selectedPhone ? { ...l, lifecycle_stage: editLifecycle } : l));
-                } catch { errs.push('stage'); }
+                    const resp = await client.patch(`/api/leads/${encodeURIComponent(selectedPhone)}/requirements`, { lifecycle_stage: editLifecycle });
+                    // Trust the server's value, not the requested one: when a lead has more than
+                    // one deal the resulting stage is derived from all of them and can legitimately
+                    // differ from the pick (e.g. another deal is further along).
+                    const applied = (resp as any)?.data?.lifecycle_stage || editLifecycle;
+                    if (applied !== editLifecycle) setEditLifecycle(applied);
+                    setRecentLeads(prev => prev.map(l => l.phone_number === selectedPhone ? { ...l, lifecycle_stage: applied } : l));
+                } catch (e: any) {
+                    stageError = e?.response?.data?.error || null;
+                    errs.push('stage');
+                }
             }
             if (editAgent !== (leadDetail.assigned_agent_id || '')) {
                 try {
@@ -923,7 +934,7 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
             // Buyer requirements — always commit via the sub-form (idempotent PATCH).
             try { await demandFormRef.current?.submit(); } catch { errs.push('requirements'); }
 
-            if (errs.length) { setSaveError('Could not save: ' + errs.join(', ')); showToast('Some changes failed to save', 'error'); }
+            if (errs.length) { setSaveError(stageError || ('Could not save: ' + errs.join(', '))); showToast(stageError || 'Some changes failed to save', 'error'); }
             else showToast('Lead saved', 'success');
         } finally {
             setSavingAll(false);

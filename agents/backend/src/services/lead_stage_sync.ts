@@ -47,15 +47,66 @@ const OPEN_RANK: Record<string, number> = {
  * PARTNER_AGENT (supply side). Callers must leave `lifecycle_stage` untouched for those rather
  * than defaulting it to anything.
  */
-export function deriveLeadStage(deals: DealStageRow[]): string | null {
+export function pickGoverningDeal<T extends DealStageRow>(deals: T[]): T | null {
     if (!deals || deals.length === 0) return null;
 
     const open = deals.filter((d) => !CLOSED.includes(String(d.status)));
     if (open.length > 0) {
         return open.reduce((best, d) =>
             (OPEN_RANK[String(d.status)] ?? 0) > (OPEN_RANK[String(best.status)] ?? 0) ? d : best
-        ).status as string;
+        );
     }
 
-    return deals.reduce((best, d) => (d.updated_at > best.updated_at ? d : best)).status as string;
+    return deals.reduce((best, d) => (d.updated_at > best.updated_at ? d : best));
+}
+
+export function deriveLeadStage(deals: DealStageRow[]): string | null {
+    const governing = pickGoverningDeal(deals);
+    return governing ? (governing.status as string) : null;
+}
+
+/**
+ * Apply a stage edit made on the LEAD page.
+ *
+ * Phase 3 (2026-08-09). The lead's Lifecycle Stage dropdown used to write `lifecycle_stage`
+ * directly, which meant a user could set a stage that instantly contradicted the deal — exactly
+ * the divergence phases 1 and 2 removed. Now the edit drives the deal, and the sync hook inside
+ * transitionTransaction writes the lead stage back.
+ *
+ * Returns `{ handled: false }` when the lead has no deal, and the caller should then write
+ * `lifecycle_stage` itself — that is the only remaining direct writer, and it covers the 399
+ * supply-side contacts (LANDLORD / PARTNER_AGENT) that legitimately have no pipeline.
+ *
+ * Throws ValidationError (400) for an illegal transition, carrying the state machine's own
+ * "Valid next: [...]" message, so the lead page reports the same thing the Deal Pipeline does.
+ */
+export async function applyLeadStageEdit(opts: {
+    phone: string;
+    requestedStage: string;
+    actorId: string;
+    channel?: string;
+}): Promise<{ handled: boolean }> {
+    // Imported lazily: transaction_state_machine imports THIS module for the sync hook, so a
+    // static import here would be a require cycle. Matches how the codebase already reaches the
+    // state machine from routes/services.
+    const prisma = (await import('../db')).default;
+
+    const deals = await prisma.transaction.findMany({
+        where: { demand_contact_id: opts.phone },
+        select: { id: true, status: true, updated_at: true },
+    });
+    const governing = pickGoverningDeal(deals);
+    if (!governing) return { handled: false };
+
+    if (String(governing.status) === opts.requestedStage) return { handled: true }; // no-op
+
+    const { transitionTransaction } = await import('./transaction_state_machine');
+    await transitionTransaction(
+        governing.id,
+        opts.requestedStage as any,
+        opts.actorId,
+        opts.channel || 'admin',
+        { reason: 'Stage changed from the lead page', source: 'lead_page' },
+    );
+    return { handled: true };
 }

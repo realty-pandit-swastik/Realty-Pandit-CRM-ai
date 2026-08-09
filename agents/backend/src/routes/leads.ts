@@ -27,6 +27,7 @@ import { buildContactVisibilityFilter, buildFullContactVisibilityFilter } from '
 import { captureRouteError } from '../utils/capture';
 import logger from '../utils/logger';
 import { syncContactShares } from '../services/contact_shares';
+import { applyLeadStageEdit } from '../services/lead_stage_sync';
 
 const PRIVILEGED_ROLES = ['super_boss', 'manager'];
 
@@ -466,7 +467,22 @@ router.patch('/:phone/status', async (req, res) => {
 
         const updateData: any = {};
         if (lead_status) updateData.lead_status = lead_status;
-        if (lifecycle_stage) updateData.lifecycle_stage = lifecycle_stage;
+        // Stage edits go through the DEAL (2026-08-09, phase 3). Writing lifecycle_stage here
+        // directly is what let the lead page instantly contradict the deal. applyLeadStageEdit
+        // transitions the governing deal and the sync hook writes the stage back; it only
+        // returns handled:false for a lead with no deal (the 399 supply-side contacts), which
+        // is the one case we still write ourselves.
+        if (lifecycle_stage) {
+            try {
+                const r = await applyLeadStageEdit({ phone, requestedStage: lifecycle_stage, actorId: (req as any).agent?.id || 'system' });
+                if (!r.handled) updateData.lifecycle_stage = lifecycle_stage;
+            } catch (e: any) {
+                // The state machine rejects illegal jumps and its message already names the
+                // allowed next stages — surface it as a 400, same as the Deal Pipeline does.
+                if (e?.statusCode === 400) return res.status(400).json({ error: e.message });
+                throw e;
+            }
+        }
         if (notes !== undefined) updateData.notes = notes;
 
         const contact = await prisma.contact.update({
@@ -1942,7 +1958,22 @@ router.patch('/:phone/requirements', async (req, res) => {
         if (category_id !== undefined) updateData.category_id = category_id || null;
         if (sub_category_id !== undefined) updateData.sub_category_id = sub_category_id || null;
         if (type_id !== undefined) updateData.type_id = type_id || null;
-        if (lifecycle_stage !== undefined) updateData.lifecycle_stage = lifecycle_stage;
+        // Stage edits go through the DEAL (2026-08-09, phase 3). Writing lifecycle_stage here
+        // directly is what let the lead page instantly contradict the deal. applyLeadStageEdit
+        // transitions the governing deal and the sync hook writes the stage back; it only
+        // returns handled:false for a lead with no deal (the 399 supply-side contacts), which
+        // is the one case we still write ourselves.
+        if (lifecycle_stage !== undefined && lifecycle_stage !== null && lifecycle_stage !== '') {
+            try {
+                const r = await applyLeadStageEdit({ phone, requestedStage: lifecycle_stage, actorId: (req as any).agent?.id || 'system' });
+                if (!r.handled) updateData.lifecycle_stage = lifecycle_stage;
+            } catch (e: any) {
+                // The state machine rejects illegal jumps and its message already names the
+                // allowed next stages — surface it as a 400, same as the Deal Pipeline does.
+                if (e?.statusCode === 400) return res.status(400).json({ error: e.message });
+                throw e;
+            }
+        }
         if (notes !== undefined) updateData.notes = notes;
         if (timeline !== undefined) updateData.timeline = timeline || null;
         if (intent !== undefined) updateData.intent = intent || null;
