@@ -10,6 +10,7 @@
  */
 import prisma from '../db';
 import logger from '../utils/logger';
+import { addContactShare } from './contact_shares';
 
 export async function recordLeadReingest(opts: {
     phone: string;
@@ -31,9 +32,19 @@ export async function recordLeadReingest(opts: {
         if (a && a !== contact.assigned_agent_id && !(contact.shared_with_ids || []).includes(a)) {
             const agent = await prisma.agent.findFirst({ where: { id: a, status: 'active' }, select: { id: true, name: true } });
             if (agent) {
-                await prisma.contact.update({
-                    where: { phone_number: contact.phone_number },
-                    data: { shared_with_ids: { push: agent.id } },
+                // Dual-write (2026-08-09, phase 4a) — see services/contact_shares.ts. shared_by is
+                // null: the sharer here is the portal attribution, not a person.
+                await prisma.$transaction(async (tx) => {
+                    await tx.contact.update({
+                        where: { phone_number: contact.phone_number },
+                        data: { shared_with_ids: { push: agent.id } },
+                    });
+                    await addContactShare(tx, {
+                        tenantId: contact.tenant_id,
+                        phone: contact.phone_number,
+                        agentId: agent.id,
+                        sharedBy: null,
+                    });
                 });
                 shared = true;
                 sharedAgentId = agent.id;

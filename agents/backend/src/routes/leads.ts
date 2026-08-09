@@ -26,6 +26,7 @@ const matchingEngine = new MatchingEngine();
 import { buildContactVisibilityFilter, buildFullContactVisibilityFilter } from '../middleware/contact_visibility';
 import { captureRouteError } from '../utils/capture';
 import logger from '../utils/logger';
+import { syncContactShares } from '../services/contact_shares';
 
 const PRIVILEGED_ROLES = ['super_boss', 'manager'];
 
@@ -475,7 +476,13 @@ router.post('/:phone/share', async (req: any, res) => {
         const valid = await prisma.agent.findMany({ where: { id: { in: agent_ids }, status: 'active' }, select: { id: true } });
         const next = Array.from(new Set(valid.map(a => a.id).filter(id => id && id !== contact.assigned_agent_id)));
         const previous: string[] = contact.shared_with_ids || [];
-        await prisma.contact.update({ where: { phone_number: phone }, data: { shared_with_ids: next } });
+        // Dual-write (2026-08-09, phase 4a): the array stays the source of truth for every READ,
+        // but contact_shares records WHO shared and WHEN, which the array cannot. Same transaction
+        // so the two can never disagree. Reads move to the relation in 4b.
+        await prisma.$transaction(async (tx) => {
+            await tx.contact.update({ where: { phone_number: phone }, data: { shared_with_ids: next } });
+            await syncContactShares(tx, { tenantId: contact.tenant_id, phone, next, sharedBy: actor.id });
+        });
         await prisma.interaction.create({ data: {
             tenant_id: contact.tenant_id, phone_number: phone, channel: 'system', direction: 'outbound',
             event_type: 'lead_shared', content: `Lead shared with ${next.length} teammate(s)`,
