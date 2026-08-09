@@ -253,6 +253,15 @@ router.get('/recent-external', async (req: any, res) => {
             ];
         }
 
+        // "Shared with me" — leads someone else owns but deliberately shared with the viewer.
+        // Without this they are visible in principle but unfindable: nothing in the list marks them
+        // and the default sort is the lead's own age, so on a 3,485-lead account a freshly shared
+        // lead can sit thousands of rows down. (2026-08-09)
+        // ⚠ where.AND, never where.OR — see the note above.
+        if (String(req.query.shared_with_me) === 'true') {
+            where.AND = [...(where.AND || []), { shared_with_ids: { has: req.agent.id } }];
+        }
+
         // PARTNER: only their own leads (referred by OR assigned to them / their sub-agents).
         // Mutates `where.AND` — must never Object.assign a top-level OR here (see the helper).
         await applyPartnerLeadScope(req, where);

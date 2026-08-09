@@ -17,9 +17,13 @@ interface Lead {
     referral_partner_name: string | null;
     referral_partner_phone: string | null;
     assigned_agent?: { id: string; name: string | null; role: string | null } | null;
+    // 2026-08-09: agent IDs this lead is shared with, for the "Shared" badge.
+    shared_with_ids?: string[] | null;
 }
 
 interface LeadCardProps {
+    /** Viewer's agent id — the badge shows only when the lead is shared with THIS person. */
+    currentAgentId?: string | null;
     lead: Lead;
     isSelected: boolean;
     onSelect: (phone: string) => void;
@@ -37,7 +41,7 @@ const statusColors: Record<string, string> = {
 };
 
 export default function LeadCard({
-    lead, isSelected, onSelect, onStatusChange, updatingPhone,
+    lead, currentAgentId, isSelected, onSelect, onStatusChange, updatingPhone,
     sourceColors, sourceLabels, scoreColor, formatBudget,
 }: LeadCardProps) {
     const clientTel = toDialablePhone(lead.phone_number);          // canonical +91… for tel:, or null (placeholder/junk)
@@ -67,6 +71,12 @@ export default function LeadCard({
                 {lead.lead_type === 'PARTNER_REFERRAL' && (
                     <span style={{ backgroundColor: '#ede9fe', color: '#7c3aed', padding: '1px 6px', borderRadius: '8px', fontSize: '9px', fontWeight: 700 }}>
                         {lead.referral_partner_name || 'Partner'}
+                    </span>
+                )}
+                {!!currentAgentId && lead.shared_with_ids?.includes(currentAgentId) && (
+                    <span title="Shared with you by a teammate — the owner is unchanged"
+                        style={{ backgroundColor: '#ede9fe', color: '#7c3aed', padding: '1px 6px', borderRadius: '8px', fontSize: '9px', fontWeight: 700 }}>
+                        🤝 Shared
                     </span>
                 )}
                 {lead.demand_bhk && (
