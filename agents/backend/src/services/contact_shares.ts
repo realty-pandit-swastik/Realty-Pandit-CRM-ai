@@ -5,10 +5,14 @@
  * lead and WHO sent it, neither of which `Contact.shared_with_ids` (a bare string[]) can
  * express. That is what blocks "shared with me, newest first" and any audit of sharing.
  *
- * 🔴 Phase 4a is EXPAND-ONLY. Every caller here writes BOTH the array and this table; every
- * READ in the app still goes through `shared_with_ids`. Behaviour is unchanged and rolling
- * the code back strands nothing. Reads move to the relation in 4b, and the array stays as a
- * synchronised mirror after that — do not drop it in the same change.
+ * 🔴 Every caller here writes BOTH the array and this table, and must keep doing so.
+ * As of phase 4b the visibility filter and the lead filters READ this table
+ * (middleware/contact_visibility.ts, routes/leads.ts), so a lead whose array is updated
+ * without a matching row here becomes INVISIBLE to the person it was shared with.
+ *
+ * Contact.shared_with_ids is still maintained as a synchronised mirror — the list endpoint
+ * returns it for the "Shared" badge, and it makes 4b a one-line revert with no data
+ * migration. Dropping it is a separate cleanup once 4b has soaked in production.
  *
  * Both helpers are called INSIDE the same `prisma.$transaction` as the array write, so the
  * two representations can never disagree.

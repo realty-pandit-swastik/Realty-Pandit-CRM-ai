@@ -250,7 +250,7 @@ router.get('/recent-external', async (req: any, res) => {
             // of this file and applyPartnerLeadScope.
             where.AND = [
                 ...(where.AND || []),
-                { OR: [{ assigned_agent_id: agentId }, { shared_with_ids: { has: agentId } }] },
+                { OR: [{ assigned_agent_id: agentId }, { shares: { some: { agent_id: agentId } } }] },
             ];
         }
 
@@ -260,7 +260,7 @@ router.get('/recent-external', async (req: any, res) => {
         // lead can sit thousands of rows down. (2026-08-09)
         // ⚠ where.AND, never where.OR — see the note above.
         if (String(req.query.shared_with_me) === 'true') {
-            where.AND = [...(where.AND || []), { shared_with_ids: { has: req.agent.id } }];
+            where.AND = [...(where.AND || []), { shares: { some: { agent_id: req.agent.id } } }];
         }
 
         // PARTNER: only their own leads (referred by OR assigned to them / their sub-agents).

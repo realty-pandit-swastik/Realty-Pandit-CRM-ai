@@ -8,6 +8,16 @@
 //   manager     -> sees contacts assigned to / created by self + direct subordinates
 //   employee    -> sees contacts assigned to them OR created by them
 //   null agent  -> no access (returns impossible filter)
+//
+// Sharing (2026-08-09, phase 4b): "shared with me" now reads the contact_shares RELATION,
+// not the Contact.shared_with_ids array. The array is still written and kept in sync (see
+// services/contact_shares.ts) so a rollback to `{ shared_with_ids: { has: agentId } }` is a
+// one-line revert with no data migration. The relation is what carries who shared and when.
+//
+// 🔴 This filter is spread into caller `where` objects as a top-level { OR: [...] }. A caller
+// that assigns where.OR REPLACES it and every agent sees every lead. Push into where.AND.
+// Only ever applied to prisma.contact queries — `shares` does not exist on Inventory, whose
+// own shared_with_ids array is a separate thing.
 
 import prisma from '../db';
 
@@ -36,7 +46,7 @@ export function buildContactVisibilityFilter(
         { created_by: agentId },
         { assigned_agent: { reports_to_id: agentId } },
         { created_by_agent: { reports_to_id: agentId } },
-        { shared_with_ids: { has: agentId } }, // 2026-07-31: leads shared with this member
+        { shares: { some: { agent_id: agentId } } }, // leads shared with this member (see note above)
       ],
     };
   }
@@ -46,7 +56,7 @@ export function buildContactVisibilityFilter(
     OR: [
       { assigned_agent_id: agentId },
       { created_by: agentId },
-      { shared_with_ids: { has: agentId } }, // 2026-07-31: leads shared with this member
+      { shares: { some: { agent_id: agentId } } }, // leads shared with this member (see note above)
     ],
   };
 }
