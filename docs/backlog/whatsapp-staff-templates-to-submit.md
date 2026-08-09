@@ -1,5 +1,16 @@
 # WhatsApp templates to submit — staff (internal) notifications
 
+> **STATUS (2026-07-24): all 4 APPROVED by Meta.** Wired: `rp_agent_lead_reassigned` (`392ff50`),
+> `rp_agent_deal_reassigned` (`ec1eb09`), **`rp_agent_task_assigned` (`e7ba8be`, 2026-07-24)**.
+> **`rp_agent_daily_digest` — approved but intentionally NOT wired** (owner chose "skip for now" on
+> 2026-07-24; needs a recipients decision + two metrics the current 9 AM digest doesn't compute).
+> The registry/wiring recipe below still applies when we pick the digest back up.
+>
+> 🟡 **NEW 2026-08-09 — `rp_agent_lead_shared` (§5) is DRAFTED, NOT YET SUBMITTED.** Needs a human
+> in WhatsApp Manager; nothing in code can submit it. Until it is approved the `lead_shared` event
+> ships **without** a `waTemplate`, so its WhatsApp leg only lands for recipients inside their own
+> 24-hour window — the bell and push notifications are unaffected and always fire.
+
 **Why:** internal alerts are sent as free-form text, which Meta only delivers inside the 24-hour
 customer-service window. That window closes 24h after **the recipient** last messaged the bot, so
 staff alerts stop for anyone who doesn't chat with the bot daily. Measured 2026-07-22:
@@ -116,6 +127,77 @@ Open the dashboard for the full picture.
 | {{5}} | visits today | 0 |
 | {{6}} | deals needing action | 3,425 |
 
+## 5. `rp_agent_lead_shared` — Lead shared with a teammate  🟡 NOT YET SUBMITTED
+
+Added 2026-08-09 with the lead-sharing work (`13a490c` … `f98bb5d`). Sharing a lead notified
+**nobody** until `13a490c`; the teammate only found out if someone phoned them.
+
+⚠ Do **not** reuse `rp_agent_lead_reassigned`. It is UTILITY and structurally identical, but it
+says *reassigned* — the opposite of what happens here. A share does **not** move ownership: the
+assigned agent is unchanged and the recipient gains a second pair of hands, not the lead. Sending
+"reassigned to you" would make people think they now own it.
+
+```
+🤝 Lead shared with you
+
+👤 Lead: {{1}}
+📞 Phone: {{2}}
+↪️ Shared by: {{3}}
+
+You can view and work this lead — the owner is unchanged.
+Open the CRM and use "Shared with me" to find it.
+```
+| Var | Meaning | Example |
+|---|---|---|
+| {{1}} | lead name | Amit Sharma |
+| {{2}} | lead phone | +919876543210 |
+| {{3}} | who shared it | Savikant Sharma |
+
+Only 3 variables — there is no "reason" field on a share, and Meta rejects blank variables, so do
+not pad it with a fourth.
+
+### Wiring once approved
+
+Both edits are copy-paste; nothing else changes. `notify()` routes via `SessionTracker.smartSend`
+automatically as soon as the `waTemplate` block exists.
+
+**1.** `backend/src/config/whatsapp_templates.ts` — beside `rp_agent_lead_reassigned`:
+```ts
+rp_agent_lead_shared: {
+    name: 'rp_agent_lead_shared',
+    category: 'UTILITY',
+    language: 'en',
+    body: '🤝 Lead shared with you\n\n👤 Lead: {{1}}\n📞 Phone: {{2}}\n↪️ Shared by: {{3}}\n\nYou can view and work this lead — the owner is unchanged.\nOpen the CRM and use "Shared with me" to find it.',
+    params: [
+        { key: 'lead',  example: 'Amit Sharma' },
+        { key: 'phone', example: '+919876543210' },
+        { key: 'by',    example: 'Savikant Sharma' },
+    ],
+},
+```
+
+**2.** `backend/src/config/notification_events.ts` — inside the existing `lead_shared` event:
+```ts
+waTemplate: {
+    key: 'rp_agent_lead_shared',
+    params: (d) => ({
+        lead:  d.lead_name   || 'A lead',
+        phone: d.phone       || 'N/A',
+        by:    d.sharer_name || 'A team member',
+    }),
+},
+```
+The event already passes `lead_name`, `phone` and `sharer_name`, each with a non-empty fallback at
+the call site (`routes/leads.ts` `POST /:phone/share`) — `sharer_name` comes from a DB lookup
+because `req.agent` is the raw JWT payload and carries no `name`.
+
+### Verifying after wiring
+
+Share a lead with a teammate who is **outside** their 24-hour window (that is the whole point —
+before this, those recipients got nothing). Confirm the WhatsApp message arrives and that no
+`131047` appears for that number in the logs. The bell row is written by `notify()` regardless, so
+a delivered bell alone does **not** prove the template worked.
+
 ---
 
 ## Submission order
@@ -123,6 +205,8 @@ Open the dashboard for the full picture.
 1. `rp_agent_lead_reassigned` + `rp_agent_deal_reassigned` (highest volume after lead_assigned)
 2. `rp_agent_task_assigned`
 3. `rp_agent_daily_digest` (riskiest — submit once the others are through)
+4. **`rp_agent_lead_shared` — outstanding.** Low volume (35 shares total on prod as of
+   2026-08-09), so it is not a throughput or `131049` concern; it just needs submitting.
 
 Submit via **WhatsApp Manager → Message templates → Create template**, category **Utility**,
 language **English**. See [`meta-template-approval.md`](../runbooks/meta-template-approval.md) for
