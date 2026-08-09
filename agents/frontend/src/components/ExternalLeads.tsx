@@ -1171,7 +1171,14 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
                         <button
                             type="button"
                             title="Leads someone else owns but shared with you"
-                            onClick={() => setSharedWithMe(v => !v)}
+                            onClick={() => setSharedWithMe(v => {
+                                const next = !v;
+                                // "When was this shared with me" only means anything inside this filter, so the
+                                // chip applies the order and hands the list back to date order when switched off.
+                                if (next) { setLeadSortKey('shared_at'); setLeadSortDir('desc'); }
+                                else if (leadSortKey === 'shared_at') { setLeadSortKey('date'); setLeadSortDir('desc'); }
+                                return next;
+                            })}
                             style={{
                                 padding: '6px 14px', fontSize: 12, fontWeight: 600, cursor: 'pointer', borderRadius: 10,
                                 border: '1px solid ' + (sharedWithMe ? '#7c3aed' : 'var(--border-secondary)'),
@@ -1179,6 +1186,19 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
                                 color: sharedWithMe ? '#fff' : 'var(--text-secondary)', whiteSpace: 'nowrap',
                             }}
                         >🤝 Shared with me</button>
+                        {sharedWithMe && (
+                            <button
+                                type="button"
+                                title="Order by when the lead was shared with you, not by the age of the lead"
+                                onClick={() => { setLeadSortDir(leadSortKey === 'shared_at' && leadSortDir === 'desc' ? 'asc' : 'desc'); setLeadSortKey('shared_at'); }}
+                                style={{
+                                    padding: '6px 12px', fontSize: 12, fontWeight: 600, cursor: 'pointer', borderRadius: 10,
+                                    border: '1px solid ' + (leadSortKey === 'shared_at' ? '#7c3aed' : 'var(--border-secondary)'),
+                                    backgroundColor: 'var(--bg-secondary)',
+                                    color: leadSortKey === 'shared_at' ? '#7c3aed' : 'var(--text-secondary)', whiteSpace: 'nowrap',
+                                }}
+                            >{leadSortKey === 'shared_at' && leadSortDir === 'asc' ? '▲ Oldest share' : '▼ Newest share'}</button>
+                        )}
                         {/* Row 1: Search + Filters button */}
                         <div style={{ display: 'flex', gap: '8px' }}>
                             <input
@@ -1284,7 +1304,7 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
                                 )}
                                 <button
                                     type="button"
-                                    onClick={() => { setStatusFilter(''); setSourceFilter(''); setAgentFilter(''); setDateFrom(''); setDateTo(''); setIntentFilter(''); setFilterTaxonomy({ nodeIds: [], bhk: [] }); setLocationSelection({ label: '', lat: null, lng: null, radiusKm: 2 }); setNotContactedDays(0); setNoShowcaseDays(0); setBudgetMinFilter(''); setBudgetMaxFilter(''); setSharedWithMe(false); }}
+                                    onClick={() => { setStatusFilter(''); setSourceFilter(''); setAgentFilter(''); setDateFrom(''); setDateTo(''); setIntentFilter(''); setFilterTaxonomy({ nodeIds: [], bhk: [] }); setLocationSelection({ label: '', lat: null, lng: null, radiusKm: 2 }); setNotContactedDays(0); setNoShowcaseDays(0); setBudgetMinFilter(''); setBudgetMaxFilter(''); setSharedWithMe(false); if (leadSortKey === 'shared_at') { setLeadSortKey('date'); setLeadSortDir('desc'); } }}
                                     style={{ padding: '4px 10px', borderRadius: '20px', fontSize: '12px', fontWeight: 600, backgroundColor: 'transparent', border: '1px solid var(--border-secondary)', color: 'var(--text-muted)', cursor: 'pointer' }}
                                 >
                                     Clear all
@@ -1318,7 +1338,14 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
                             <button
                                 type="button"
                                 title="Leads someone else owns but shared with you"
-                                onClick={() => setSharedWithMe(v => !v)}
+                                onClick={() => setSharedWithMe(v => {
+                                    const next = !v;
+                                    // "When was this shared with me" only means anything inside this filter, so the
+                                    // chip applies the order and hands the list back to date order when switched off.
+                                    if (next) { setLeadSortKey('shared_at'); setLeadSortDir('desc'); }
+                                    else if (leadSortKey === 'shared_at') { setLeadSortKey('date'); setLeadSortDir('desc'); }
+                                    return next;
+                                })}
                                 style={{
                                     padding: '6px 14px', fontSize: 12, fontWeight: 600, cursor: 'pointer', borderRadius: 8,
                                     border: '1px solid ' + (sharedWithMe ? '#7c3aed' : 'var(--border-secondary)'),
@@ -1326,6 +1353,19 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
                                     color: sharedWithMe ? '#fff' : 'var(--text-secondary)', whiteSpace: 'nowrap',
                                 }}
                             >🤝 Shared with me</button>
+                            {sharedWithMe && (
+                                <button
+                                    type="button"
+                                    title="Order by when the lead was shared with you, not by the age of the lead"
+                                    onClick={() => { setLeadSortDir(leadSortKey === 'shared_at' && leadSortDir === 'desc' ? 'asc' : 'desc'); setLeadSortKey('shared_at'); }}
+                                    style={{
+                                        padding: '6px 12px', fontSize: 12, fontWeight: 600, cursor: 'pointer', borderRadius: 8,
+                                        border: '1px solid ' + (leadSortKey === 'shared_at' ? '#7c3aed' : 'var(--border-secondary)'),
+                                        backgroundColor: 'var(--bg-secondary)',
+                                        color: leadSortKey === 'shared_at' ? '#7c3aed' : 'var(--text-secondary)', whiteSpace: 'nowrap',
+                                    }}
+                                >{leadSortKey === 'shared_at' && leadSortDir === 'asc' ? '▲ Oldest share' : '▼ Newest share'}</button>
+                            )}
                             <input type="text" placeholder="Search name, phone, email..." value={searchQuery}
                                 onChange={e => setSearchQuery(e.target.value)}
                                 style={{ flex: 1, minWidth: '200px', padding: '7px 12px', borderRadius: 8, border: '1px solid var(--border-secondary)', backgroundColor: 'var(--bg-secondary)', color: 'var(--text-primary)', fontSize: 13, boxSizing: 'border-box' }} />
@@ -1353,7 +1393,7 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
                                 }}
                             >{leadSelectMode ? `✓ ${selectedLeadPhones.size} Selected` : '☐ Select'}</button>}
                             {(searchQuery || activeFilterCount > 0) && (
-                                <button type="button" onClick={() => { setSearchQuery(''); setStatusFilter(''); setSourceFilter(''); setAgentFilter(''); setDateFrom(''); setDateTo(''); setIntentFilter(''); setFilterTaxonomy({ nodeIds: [], bhk: [] }); setLocationSelection({ label: '', lat: null, lng: null, radiusKm: 2 }); setNotContactedDays(0); setNoShowcaseDays(0); setBudgetMinFilter(''); setBudgetMaxFilter(''); setSharedWithMe(false); }}
+                                <button type="button" onClick={() => { setSearchQuery(''); setStatusFilter(''); setSourceFilter(''); setAgentFilter(''); setDateFrom(''); setDateTo(''); setIntentFilter(''); setFilterTaxonomy({ nodeIds: [], bhk: [] }); setLocationSelection({ label: '', lat: null, lng: null, radiusKm: 2 }); setNotContactedDays(0); setNoShowcaseDays(0); setBudgetMinFilter(''); setBudgetMaxFilter(''); setSharedWithMe(false); if (leadSortKey === 'shared_at') { setLeadSortKey('date'); setLeadSortDir('desc'); } }}
                                     style={{ padding: '6px 12px', borderRadius: 8, border: '1px solid var(--border-secondary)', backgroundColor: 'transparent', color: '#ef4444', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>
                                     Clear
                                 </button>

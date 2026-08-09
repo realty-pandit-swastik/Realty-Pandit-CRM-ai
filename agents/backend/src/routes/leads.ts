@@ -362,12 +362,42 @@ router.get('/recent-external', async (req: any, res) => {
         const sortDir: 'asc' | 'desc' = String(req.query.direction || 'desc') === 'asc' ? 'asc' : 'desc';
         const leadOrderBy = (LEAD_SORTS[sortKey] || LEAD_SORTS.date)(sortDir);
 
+        // "Recently shared with me" (2026-08-09, phase 4c) — the point of the whole
+        // contact_shares table. Deliberately NOT in LEAD_SORTS: Prisma cannot orderBy a field
+        // across a to-MANY relation, so this cannot be expressed as a Prisma orderBy at all.
+        //
+        // It also implies the shared-with-me restriction, because "when was this shared with
+        // me" is undefined for a lead that was never shared with the viewer — ranking their
+        // other 5,000 leads by a null share time would be noise, not an ordering.
+        //
+        // The candidate set is therefore bounded by the viewer's own share count (largest on
+        // prod today: 12), which is why the page is ordered and sliced in memory instead of by
+        // the DB. SHARE_SORT_CAP keeps that bounded if someone ever accumulates thousands.
+        const SHARE_SORT_CAP = 2000;
+        let shareRank: Map<string, number> | null = null;
+        if (sortKey === 'shared_at') {
+            const shareRows = await prisma.contactShare.findMany({
+                where: { agent_id: req.agent.id },
+                orderBy: { shared_at: sortDir },
+                select: { phone_number: true },
+                take: SHARE_SORT_CAP + 1,
+            });
+            if (shareRows.length > SHARE_SORT_CAP) {
+                logger.warn(`[Leads] shared_at sort capped at ${SHARE_SORT_CAP} for agent ${req.agent.id}; older shares omitted from this ordering`);
+                shareRows.length = SHARE_SORT_CAP;
+            }
+            const phones = shareRows.map(r => r.phone_number);
+            shareRank = new Map(phones.map((ph, i) => [ph, i]));
+            where.AND = [...(where.AND || []), { phone_number: { in: phones } }];
+        }
+
         const [leads, total] = await Promise.all([
             prisma.contact.findMany({
                 where,
                 orderBy: leadOrderBy,
-                take: limit,
-                skip: (page - 1) * limit,
+                // shared_at re-orders below, so it must not receive a pre-paginated slice.
+                take: shareRank ? undefined : limit,
+                skip: shareRank ? undefined : (page - 1) * limit,
                 select: {
                     phone_number: true,
                     name: true,
@@ -409,7 +439,17 @@ router.get('/recent-external', async (req: any, res) => {
             prisma.contact.count({ where }),
         ]);
 
-        res.json({ leads, total, page, limit });
+        // Apply the share ordering and paginate here rather than in SQL (see above).
+        let pageLeads = leads;
+        if (shareRank) {
+            const start = (page - 1) * limit;
+            pageLeads = [...leads]
+                .sort((a, b) => (shareRank!.get(a.phone_number) ?? Number.MAX_SAFE_INTEGER)
+                              - (shareRank!.get(b.phone_number) ?? Number.MAX_SAFE_INTEGER))
+                .slice(start, start + limit);
+        }
+
+        res.json({ leads: pageLeads, total, page, limit });
     } catch (error) {
         captureRouteError(error, req, { route: 'leads#2' });
         res.status(500).json({ error: (error as Error).message });
