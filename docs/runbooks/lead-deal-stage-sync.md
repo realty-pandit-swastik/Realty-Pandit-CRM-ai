@@ -33,11 +33,24 @@ WHERE lifecycle_stage NOT IN ('NEW','QUALIFIED','MATCHING_APPOINTMENT','VISIT_SC
                               'VISITED','NEGOTIATION','CLOSED_WON','CLOSED_LOST','ON_HOLD')
 GROUP BY 1;
 
--- 4. Deals whose current status has no audit row = something wrote status directly.
---    Historical baseline ~121 (pre-fix). It must NOT grow.
+-- 4. Something wrote transactions.status directly, bypassing the state machine.
+--    Historical baseline 102 (pre-fix). It must NOT grow.
+--    ⚠ `created_at <> updated_at` is load-bearing: a deal BORN at a non-NEW status has no
+--    audit row either, because creation is not a transition. 20 such deals exist and are
+--    perfectly fine. Without this clause the query reports ~122 and cries wolf.
 SELECT count(*) AS status_writes_without_audit
+FROM transactions t
+WHERE t.status <> 'NEW'
+  AND t.created_at <> t.updated_at
+  AND NOT EXISTS (
+    SELECT 1 FROM transaction_logs l WHERE l.transaction_id = t.id AND l.new_status = t.status);
+
+-- 4b. Sanity split, if 4 ever looks wrong:
+SELECT CASE WHEN t.created_at = t.updated_at THEN 'born at this status (fine)'
+            ELSE 'status changed with no audit row (bypass)' END AS kind, count(*)
 FROM transactions t WHERE t.status <> 'NEW' AND NOT EXISTS (
-  SELECT 1 FROM transaction_logs l WHERE l.transaction_id = t.id AND l.new_status = t.status);
+  SELECT 1 FROM transaction_logs l WHERE l.transaction_id = t.id AND l.new_status = t.status)
+GROUP BY 1;
 ```
 
 ### Expected mismatches
