@@ -793,11 +793,20 @@ router.post('/:phone/convert-to-partner', checkPermission('act_on_deals'), async
         if (!contact) return res.status(404).json({ error: 'Lead not found' });
 
         // Idempotent: already a partner → no-op.
-        if (contact.contact_type === 'PARTNER_AGENT') {
-            const existing = await prisma.partnerAgent.findUnique({
-                where: { phone_number: phone }, select: { id: true },
-            });
-            return res.json({ success: true, partner_id: existing?.id ?? null, reframed_deal_ids: [], already_partner: true });
+        //
+        // 🔴 Keyed on the PartnerAgent row, NOT contact_type (fixed 2026-08-10). The old check was
+        // `contact.contact_type === 'PARTNER_AGENT'`, which never fired for the leads that matter:
+        // the 2026-07-28 `_keepDemand` guard in partner_auto_create.ts deliberately refuses to move a
+        // live BUYER/TENANT contact to that type (it was hiding real leads from the Leads list). So a
+        // second click on a real buyer re-ran the whole conversion — re-tagging deals and re-sending
+        // the customer a partner welcome WhatsApp.
+        // Proven on prod: +919555562204 (a HOT buyer) had one partner row but TWO
+        // `converted_to_partner` interactions, 09:12 on 4 Aug, from two different agents.
+        const existingPartner = await prisma.partnerAgent.findUnique({
+            where: { phone_number: phone }, select: { id: true },
+        });
+        if (existingPartner) {
+            return res.json({ success: true, partner_id: existingPartner.id, reframed_deal_ids: [], already_partner: true });
         }
 
         const partnerName = (name || contact.name || '').trim();
@@ -823,9 +832,13 @@ router.post('/:phone/convert-to-partner', checkPermission('act_on_deals'), async
         // 2) Reframe the contact's OPEN deals as this partner's deals.
         const openDeals = await prisma.transaction.findMany({
             where: { demand_contact_id: phone, status: { notIn: ['CLOSED_WON', 'CLOSED_LOST'] } },
-            select: { id: true },
+            select: { id: true, owning_manager_id: true },
         });
         const dealIds = openDeals.map(d => d.id);
+        // Snapshot what we are about to overwrite so a later revert restores it exactly rather
+        // than guessing the owner (2026-08-10).
+        const dealPrevOwners: Record<string, string | null> = {};
+        for (const d of openDeals) dealPrevOwners[d.id] = d.owning_manager_id ?? null;
 
         await prisma.$transaction([
             prisma.contact.update({
@@ -850,7 +863,12 @@ router.post('/:phone/convert-to-partner', checkPermission('act_on_deals'), async
                     direction: 'outbound',
                     event_type: 'converted_to_partner',
                     content: `Converted ${contact.name || phone} to Partner Agent by ${actorName}. Reframed ${dealIds.length} deal(s).`,
-                    metadata: { partner_id: partnerId, deal_ids: dealIds, actor_id: actor.id, partner_category: category },
+                    metadata: {
+                        partner_id: partnerId, deal_ids: dealIds, actor_id: actor.id, partner_category: category,
+                        // Revert inputs (2026-08-10) — the reverse path reads these instead of guessing.
+                        previous_contact_type: contact.contact_type,
+                        deal_prev_owners: dealPrevOwners,
+                    },
                 },
             }),
         ]);
