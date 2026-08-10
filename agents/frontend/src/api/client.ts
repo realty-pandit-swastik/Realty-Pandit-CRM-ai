@@ -417,6 +417,13 @@ export const verifyPartner = async (id: string, verify: boolean) => {
     return res.data;
 };
 
+// Undo an accidental lead -> partner conversion. 409 when the partner has referred inventory,
+// commission entries or sub-agents — the caller shows that message verbatim.
+export const revertPartnerToCustomer = async (id: string) => {
+    const res = await client.post(`/api/partners/${id}/revert-to-customer`);
+    return res.data;
+};
+
 export const updatePartnerStatus = async (id: string, status: string) => {
     const res = await client.patch(`/api/partners/${id}/status`, { status });
     return res.data;

@@ -1028,6 +1028,13 @@ model PartnerAgent {
   onboarded_by_agent_id String?
   onboarded_at          DateTime?
 
+  /// Set when an accidental lead->partner conversion is undone (2026-08-10). The Partner Agents
+  /// list filters on `reverted_at: null`, so a reverted partner disappears from it. Status is set
+  /// to SUSPENDED at the same time, which the existing ACTIVE-only login gate already blocks —
+  /// this column exists so reverted partners stay distinguishable from genuinely suspended ones.
+  reverted_at DateTime?
+  reverted_by String?
+
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
 
