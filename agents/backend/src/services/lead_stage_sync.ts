@@ -110,3 +110,33 @@ export async function applyLeadStageEdit(opts: {
     );
     return { handled: true };
 }
+
+/**
+ * Recompute and persist a lead's stage from ALL of its deals.
+ *
+ * Needed because deal CREATION is not a transition, so the hook inside
+ * transitionTransaction never fires for it. Two creators can start a deal at a non-NEW
+ * status — deal_service.ts opens TEAM_MEMBER-sourced deals straight at QUALIFIED, and
+ * ensure_deal.ts takes the status as an argument — and those leads were left behind.
+ * Found live on 2026-08-10, one day after the backfill: a deal born QUALIFIED sat against
+ * a lead still showing NEW.
+ *
+ * Also correct for deals created at NEW: if the contact was CLOSED_LOST from an earlier
+ * deal, a fresh open deal legitimately pulls the lead back to NEW.
+ *
+ * Pass the transaction client so the write is atomic with the create.
+ */
+export async function syncLeadStageForContact(
+    phone: string,
+    client?: { transaction: { findMany: Function }; contact: { update: Function } } | any,
+): Promise<string | null> {
+    const db = client || (await import('../db')).default;
+    const deals = await db.transaction.findMany({
+        where: { demand_contact_id: phone },
+        select: { status: true, updated_at: true },
+    });
+    const stage = deriveLeadStage(deals);
+    if (!stage) return null;
+    await db.contact.update({ where: { phone_number: phone }, data: { lifecycle_stage: stage } });
+    return stage;
+}

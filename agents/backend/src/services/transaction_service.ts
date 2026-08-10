@@ -11,6 +11,7 @@ import prisma from '../db';
 import { assignExecutive } from './executive_assigner';
 import { TransactionData } from '../agents/types';
 import { foldLegacyDemand } from '../utils/demand_canonical';
+import { syncLeadStageForContact } from './lead_stage_sync';
 
 // Active statuses (not closed)
 const ACTIVE_STATUSES: TransactionStatus[] = [
@@ -188,6 +189,11 @@ export async function createTransaction(
             ...(foldLegacyDemand({ demand_bedrooms: input.demand_bedrooms ?? null }) as any),
         },
     });
+    // Deal CREATION is not a transition, so the sync hook in transitionTransaction never
+    // fires here. Without this a deal born at a non-NEW status leaves its lead behind —
+    // observed live 2026-08-10. Awaited, not best-effort: the contact row is guaranteed by
+    // the required FK, so the only way this fails is a real fault worth surfacing.
+    await syncLeadStageForContact(transaction.demand_contact_id);
 
     // 3. Log creation
     await prisma.transactionLog.create({
