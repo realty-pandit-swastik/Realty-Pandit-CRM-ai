@@ -1820,6 +1820,8 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
                                         <ConvertToPartnerModal
                                             phone={selectedPhone}
                                             defaultName={leadDetail?.name || ''}
+                                            contactType={leadDetail?.contact_type}
+                                            leadStatus={leadDetail?.lead_status}
                                             onClose={() => setShowConvert(false)}
                                             onConverted={() => {
                                                 setRecentLeads(prev => prev.map(l => l.phone_number === selectedPhone ? { ...l, contact_type: 'PARTNER_AGENT' } : l));
