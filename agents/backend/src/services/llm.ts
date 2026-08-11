@@ -499,9 +499,9 @@ export class LLMService {
             ? specs.amenities.join(', ')
             : '';
 
-        const priceStr = property.price
-            ? `₹${property.price} ${property.price_unit || ''}`
-            : 'Price on request';
+        const priceStr = (property as any).display_price
+            ? `₹${Number((property as any).display_price).toLocaleString('en-IN')}`
+            : (property.price ? `₹${property.price} ${property.price_unit || ''}` : 'Price on request');
 
         const intentLabel = property.intent === 'sell' ? 'Sale' : property.intent === 'rent' ? 'Rent' : property.intent || '';
 

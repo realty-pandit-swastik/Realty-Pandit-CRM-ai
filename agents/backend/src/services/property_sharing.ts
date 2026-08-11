@@ -464,7 +464,9 @@ function buildV5Card(inv: any): { template: string; params: Record<string, strin
 
     const typeName = inv.flat_property_type?.name || inv.property_type_link?.name || prettifyType(inv.type);
     const location = [inv.locality, inv.city].filter(Boolean).join(', ') || inv.city || inv.district || inv.full_address || 'Location on request';
-    const price = formatPrice(inv.price, inv.price_unit, inv.intent);
+    const price = inv.display_price
+        ? formatPrice(inv.display_price, undefined, inv.intent)
+        : formatPrice(inv.price, inv.price_unit, inv.intent);
     const link = `https://www.realtypandit.in/properties/${inv.display_id || inv.id}`;
 
     let p1: string, p4: string, p5: string, p6: string;
@@ -519,7 +521,9 @@ export async function shareInventoryCard(phone: string, inv: any): Promise<boole
             const bhk = beds ? `${beds}BHK ${typeName}` : typeName;
             const society = inv.specs?.society_name || inv.locality || inv.city || 'Property';
             const city = inv.city || inv.district || 'India';
-            const price = formatPrice(inv.price, inv.price_unit, inv.intent);
+            const price = inv.display_price
+        ? formatPrice(inv.display_price, undefined, inv.intent)
+        : formatPrice(inv.price, inv.price_unit, inv.intent);
             const h1 = inv.specs?.furnishing ? capitalize(inv.specs.furnishing) : (inv.intent === 'rent' ? 'Available Now' : 'Ready to Move');
             const h2 = inv.specs?.floors ? `Floor ${inv.specs.floors}` : (inv.specs?.facing ? `${inv.specs.facing} Facing` : 'Prime Location');
             const h3 = buildAmenityLine(inv.specs?.amenities);

@@ -52,7 +52,7 @@ export class CalendarService {
                 message += `📍 *Property Visit*\n`;
                 if (appointment.property) {
                     message += `Property: ${appointment.property.type} in ${appointment.property.location}\n`;
-                    message += `Price: ₹${appointment.property.price}\n`;
+                    message += `Price: ₹${Number((appointment.property as any).display_price ?? appointment.property.price).toLocaleString('en-IN')}\n`;
                 }
             } else {
                 message += `📞 *${this.formatAppointmentType(appointment.type)}*\n`;
@@ -440,6 +440,7 @@ export class CalendarService {
                             location: true,
                             type: true,
                             price: true,
+                            display_price: true,
                         },
                     },
                     assigned_to_agent: {
