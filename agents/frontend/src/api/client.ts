@@ -342,21 +342,24 @@ export const getStates = async () => {
  * Roster for FILTER CHIPS and ASSIGN DROPDOWNS: active members only, sorted by NAME.
  *
  * Why: /api/team/members and /members-list both order by [role asc, name asc].
- * 'employee' < 'manager' < 'super_boss', so every manager/super_boss lands BELOW all
- * ~35 employees. In a flat chip list that reads as "the name is missing" — e.g. Ashwani
+ * 'employee' < 'manager' < 'super_boss', so every manager/super_boss sorts BELOW all
+ * ~35 employees. In a flat chip list that reads as "the name is missing" — Ashwani
  * (manager) sat at position 36 of 41 instead of 3. Role order is right for the Team
- * Management table, wrong for a flat picker, so we re-sort here rather than change the API.
+ * Management table, wrong for a flat picker, so we re-sort here instead of changing the API.
  *
- * Also drops status!=='active' (6 inactive agents own 0 listings and 0 contacts, so
- * filtering by them can only ever return nothing). /members-list already filters
- * server-side and omits `status`, hence the `!m.status` guard.
+ * Also drops status!=='active': those 6 agents own 0 listings and 0 contacts, so filtering
+ * by them can only return nothing. /members-list already filters server-side and omits
+ * `status`, hence the `!m.status` guard.
+ *
+ * Objects are passed through UNCHANGED (filter + sort only) so each caller keeps its own
+ * element type — reshaping here broke the TeamMember type in ExternalLeads.
  */
-export const rosterForPickers = (raw: any): { id: string; name: string; role?: string }[] => {
-    const list = Array.isArray(raw) ? raw : raw?.data || raw?.members || [];
+export const rosterForPickers = (raw: any): any[] => {
+    const list: any[] = Array.isArray(raw) ? raw : raw?.data || raw?.members || [];
     return list
         .filter((m: any) => !m.status || m.status === 'active')
-        .map((m: any) => ({ id: m.id, name: m.name, role: m.role }))
-        .sort((a: any, b: any) => String(a.name || '').localeCompare(String(b.name || '')));
+        .slice()
+        .sort((a: any, b: any) => String(a?.name || '').localeCompare(String(b?.name || '')));
 };
 
 export const getTeamMembers = async () => {
