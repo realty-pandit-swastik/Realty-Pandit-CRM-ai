@@ -3155,7 +3155,6 @@ router.patch('/:id/enrich', authMiddleware, async (req, res) => {
 
 // ─── Document Management ─────────────────────────────────────────────────────
 
-// Multer config for document uploads (PDF, images, Word, Excel)
 /**
  * Document access guard (2026-08-11, owner-set rule).
  *
@@ -3197,31 +3196,56 @@ async function mayAccessDocuments(req: any, res: any, inventoryId: string | stri
     return false;
 }
 
+// Multer config for document uploads (PDF, images, Word, Excel)
+const DOC_MAX_MB = 20;
+const DOC_MIMES = [
+    'application/pdf',
+    'image/jpeg', 'image/png', 'image/webp',
+    'application/msword',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'application/vnd.ms-excel',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+];
+const DOC_EXTS = ['.pdf', '.jpg', '.jpeg', '.png', '.webp', '.doc', '.docx', '.xls', '.xlsx'];
+
 const docUpload = multer({
     storage: multer.memoryStorage(),
-    limits: { fileSize: 20 * 1024 * 1024 }, // 20MB
+    limits: { fileSize: DOC_MAX_MB * 1024 * 1024 },
     fileFilter: (_req, file, cb) => {
-        const allowed = [
-            'application/pdf',
-            'image/jpeg', 'image/png', 'image/webp',
-            'application/msword',
-            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-            'application/vnd.ms-excel',
-            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        ];
-        if (allowed.includes(file.mimetype)) {
-            cb(null, true);
-        } else {
-            cb(new Error('Only PDF, images, Word, and Excel files are allowed'));
-        }
+        const mt = (file.mimetype || '').toLowerCase();
+        const ext = extOf(file.originalname);
+        if (DOC_MIMES.includes(mt)) return cb(null, true);
+        // Android pickers hand over a perfectly good PDF as application/octet-stream (or with
+        // no mimetype at all) - trust a known document extension instead. Exactly the rule the
+        // media route needed in cde4667; documents had the same bug.
+        if ((!mt || mt === 'application/octet-stream') && DOC_EXTS.includes(ext)) return cb(null, true);
+        cb(new Error(`"${file.originalname}" is not a supported document. Please upload a PDF, a photo (JPG, PNG, WebP), or a Word or Excel file.`));
     },
 });
+
+/**
+ * multer wrapper that turns a document-upload rejection into a readable 400.
+ *
+ * Without it the fileFilter error escapes unhandled: the user is told "Internal server
+ * error" with no idea what was wrong, and every rejected file fires a false
+ * [Alert:CRITICAL] server_5xx. Same fix as uploadMedia above. (2026-08-11)
+ */
+const uploadDocument = (req: any, res: any, next: any) => {
+    docUpload.single('document')(req, res, (err: any) => {
+        if (!err) return next();
+        if (err.code === 'LIMIT_FILE_SIZE') {
+            return res.status(400).json({ error: `That document is too large. The maximum is ${DOC_MAX_MB} MB.` });
+        }
+        logger.warn(`[Documents] upload rejected: ${err.message}`);
+        return res.status(400).json({ error: err.message || 'Upload failed' });
+    });
+};
 
 /**
  * POST /inventory/:id/documents
  * Upload a document and attach it to an inventory item.
  */
-router.post('/:id/documents', authMiddleware, checkPermission('edit_inventory'), docUpload.single('document'), async (req, res) => {
+router.post('/:id/documents', authMiddleware, checkPermission('edit_inventory'), uploadDocument, async (req, res) => {
     try {
         const inventoryId = req.params.id as string;
         // Partner write-guard: a partner may only mutate their OWN listing.
