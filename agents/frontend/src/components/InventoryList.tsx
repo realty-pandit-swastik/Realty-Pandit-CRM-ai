@@ -32,6 +32,7 @@ import {
     StalenessSection,
 } from './filters/FilterSheetShared';
 import type { TaxonomySelection, LocationSelection } from './filters/FilterSheetShared';
+import { compressVideo, isCompressionSupported } from '../utils/video_compress';
 
 function formatPrice(price: number | null, intent: string): string {
     if (!price || price === 0) return 'Price on request';
@@ -287,6 +288,7 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
     const [editMediaUrls, setEditMediaUrls] = useState<string[]>([]);
     const [editVideoUrls, setEditVideoUrls] = useState<string[]>([]);
     const [mediaUploading, setMediaUploading] = useState(false);
+    const [compressMsg, setCompressMsg] = useState<string | null>(null);
     const imageUploadRef = useRef<HTMLInputElement>(null);
     const videoUploadRef = useRef<HTMLInputElement>(null);
 
@@ -845,13 +847,36 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
 
     const handleUploadVideos = async (invId: string, files: FileList) => {
         if (!files.length) return;
-        // Stop oversized files here: Cloudflare would reject them at the edge with an error
-        // we cannot explain, so the user would just see a generic failure.
-        const tooBig = oversizeError(Array.from(files));
+        // Phone video is 4K by default — ~350-400MB/minute — so almost any walkthrough exceeds the
+        // limit. Re-encode to 1080p in the browser first (WebCodecs, hardware-accelerated). Only
+        // files that are actually too big pay the cost; anything already small is passed straight
+        // through. If the browser lacks WebCodecs, compressVideo returns the original untouched and
+        // the size guard below gives the user a clear message instead.
+        let list = Array.from(files);
+        const oversized = list.filter(f => f.size > MAX_UPLOAD_MB * 1024 * 1024);
+        if (oversized.length && isCompressionSupported()) {
+            try {
+                const out: File[] = [];
+                for (let idx = 0; idx < list.length; idx++) {
+                    const f = list[idx];
+                    if (f.size <= MAX_UPLOAD_MB * 1024 * 1024) { out.push(f); continue; }
+                    setCompressMsg(`Compressing ${list.length > 1 ? `${idx + 1}/${list.length} ` : ''}— 0%`);
+                    const done = await compressVideo(f, p =>
+                        setCompressMsg(`Compressing ${list.length > 1 ? `${idx + 1}/${list.length} ` : ''}— ${p.percent}%`));
+                    out.push(done);
+                }
+                list = out;
+            } finally {
+                setCompressMsg(null);
+            }
+        }
+        // Anything still over the limit could not be compressed enough (or this browser cannot
+        // compress at all). Cloudflare would reject it at the edge with an error we cannot explain.
+        const tooBig = oversizeError(list);
         if (tooBig) { showToast(tooBig, 'error'); return; }
         setMediaUploading(true);
         try {
-            const result = await uploadInventoryImages(invId, Array.from(files));
+            const result = await uploadInventoryImages(invId, list);
             if (result.video_urls) setEditVideoUrls(result.video_urls);
         } catch (err: any) {
             showToast(err.response?.data?.error || 'Upload failed', 'error');
@@ -1228,7 +1253,7 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
                                     {/* ── Section: Media Management ── */}
                                     <div style={{ marginBottom: '16px' }}>
                                         <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-link)', marginBottom: '8px', borderBottom: '1px solid var(--border-secondary)', paddingBottom: '4px' }}>
-                                            Photos & Videos {mediaUploading && <span style={{ color: '#fbbf24', fontWeight: 400 }}> (uploading...)</span>}
+                                            Photos & Videos {compressMsg ? <span style={{ color: '#38bdf8', fontWeight: 400 }}> ({compressMsg})</span> : mediaUploading && <span style={{ color: '#fbbf24', fontWeight: 400 }}> (uploading...)</span>}
                                         </div>
                                         {/* Images */}
                                         <div style={{ marginBottom: '8px' }}>
@@ -2152,7 +2177,7 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
                             {editTab === 'media' && (
                                 <div>
                                     <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-link)', marginBottom: '12px' }}>
-                                        Photos & Videos {mediaUploading && <span style={{ color: '#fbbf24', fontWeight: 400 }}>(uploading...)</span>}
+                                        Photos & Videos {compressMsg ? <span style={{ color: '#38bdf8', fontWeight: 400 }}>({compressMsg})</span> : mediaUploading && <span style={{ color: '#fbbf24', fontWeight: 400 }}>(uploading...)</span>}
                                     </div>
                                     <div style={{ marginBottom: '16px' }}>
                                         <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '8px' }}>Photos ({editMediaUrls.length})</div>
