@@ -88,6 +88,29 @@ different document `403`.
 This changed nothing in the field — `document_shared` interactions were **0**; the feature had
 never been used.
 
+## Uploading a document (`d7758bf`)
+
+`POST /:id/documents`, max **20 MB**, single file. Accepted: PDF · JPG/PNG/WebP · Word · Excel.
+
+🔴 **`application/octet-stream` and an empty mimetype are accepted when the EXTENSION is a known
+document type** (`.pdf .doc .docx .xls .xlsx .jpg .jpeg .png .webp`). Android pickers routinely
+hand over a perfectly good PDF with no usable mimetype — matching on mimetype alone refused it.
+Do not "tidy" that rule away; it is the same rule the media route needed in `cde4667`.
+
+Rejections come back as a **400 naming the file**, via the `uploadDocument` wrapper. Before
+`d7758bf` the `fileFilter` throw was unhandled, so every rejected file produced a **500** plus a
+false `[Alert:CRITICAL] server_5xx`. A 500 on this route now means a genuine bug.
+
+`docUpload` still uses `memoryStorage` — fine here, because it is a single file at 20 MB. The media
+route had to move to `diskStorage` only because it accepts 20 files at 100 MB.
+
+⚠ The multer middleware runs **before** `mayAccessDocuments`, so an unauthorized upload is buffered
+(≤20 MB) before being refused with a 403. Wasteful, not dangerous.
+
+⚠ **iPhone photos of a deed are `.heic` and are still refused.** Accepting them needs a
+sharp-based conversion to JPEG on upload, or the stored file will not render in any browser — a
+deliberate decision, not an oversight.
+
 ## Diagnosis
 
 ```bash
@@ -114,10 +137,7 @@ A **403** naming the rule is working as designed. Documents live at
 - **The Media tab requests `*_thumb_thumb.webp`** and 404s on every property photo — it appends
   `_thumb` to a URL that already ends in `_thumb`. Pre-existing, unrelated to documents,
   confirmed **404 not 403** (so not the static guard). Cosmetic but noisy in the console.
-- **Document upload rejects `application/octet-stream`** (`docUpload` uses a strict mimetype
-  whitelist), so a PDF picked on some Android devices is refused — and the `fileFilter` throw is
-  unhandled, so the user sees a **500** and a false `[Alert:CRITICAL] server_5xx`. This is the
-  same defect class fixed for video in `cde4667`. ~20 lines.
+- ~~Document upload rejects `application/octet-stream`~~ — **fixed in `d7758bf`**, see below.
 - `services/storage.ts` builds a second, unrelated `/uploads/documents/<key>/` path. It is **dead
   code** — no callers, empty directory — and is *not* covered by the static guard.
 - `GET /:id/enrichment` still does `include: { documents: true }` although it never returns them.
