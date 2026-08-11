@@ -45,23 +45,91 @@ async function activeStaffOwnerName(phone: string | null | undefined): Promise<s
 const stateMachine = new InventoryStateMachine();
 const storageService = new StorageService();
 
-// Multer config: memory storage (buffer), max 50MB per file (videos need more)
+// ─── Inventory media upload (photos + videos) ────────────────────────────────────────────
+//
+// 🔴 diskStorage, NOT memoryStorage (2026-08-11). multer buffers whole files in RAM, and this
+// route accepts 20 files — at 100MB each that is 2GB against a ~2,096MB Node heap, i.e. a
+// guaranteed OOM of the cluster worker. On disk it costs nothing; videos are moved into place
+// and sharp reads images straight from the path.
+const TMP_UPLOAD_DIR = path.join(process.cwd(), 'uploads', 'tmp');
+fs.mkdirSync(TMP_UPLOAD_DIR, { recursive: true });
+
+// Cap is 100MB, but Cloudflare Free rejects request bodies over 100MB at the EDGE, before this
+// server ever sees them — so the practical ceiling users are told about is 95MB, leaving room
+// for multipart overhead. Keep the two numbers in step with the frontend guard.
+const MAX_UPLOAD_MB = 100;
+export const ADVERTISED_MAX_UPLOAD_MB = 95;
+
+const IMAGE_MIMES = [
+    'image/jpeg', 'image/png', 'image/webp', 'image/avif',
+    'image/heic', 'image/heif', 'image/gif', 'image/bmp',
+];
+// Formats phones actually produce: iPhone .mov, Android .mp4, budget Android .3gp, plus the
+// .avi/.mkv the picker has always allowed users to choose. Non-h264 is transcoded after upload
+// by ensureH264Playable, so accepting them here is safe.
+const VIDEO_MIMES = [
+    'video/mp4', 'video/webm', 'video/quicktime', 'video/3gpp', 'video/3gpp2',
+    'video/x-matroska', 'video/x-msvideo', 'video/x-m4v', 'video/mpeg',
+];
+const VIDEO_EXTS = ['.mp4', '.mov', '.webm', '.3gp', '.3g2', '.mkv', '.avi', '.m4v', '.mpeg', '.mpg'];
+const IMAGE_EXTS = ['.jpg', '.jpeg', '.png', '.webp', '.avif', '.heic', '.heif', '.gif', '.bmp'];
+
+const extOf = (name: string) => path.extname(name || '').toLowerCase();
+
+/**
+ * Is this a video? Decided by mimetype OR extension.
+ *
+ * 🔴 The extension half is load-bearing. Some Android pickers hand over a perfectly good .mp4 as
+ * `application/octet-stream`; the old code keyed purely on `mimetype.startsWith('video/')`, so
+ * such a file was routed to sharp as an image and the whole request 500'd. Verified on prod.
+ */
+export function isVideoUpload(file: { mimetype?: string; originalname?: string }): boolean {
+    const mt = (file.mimetype || '').toLowerCase();
+    if (mt.startsWith('video/')) return true;
+    return VIDEO_EXTS.includes(extOf(file.originalname || ''));
+}
+
 const upload = multer({
-    storage: multer.memoryStorage(),
-    limits: { fileSize: 50 * 1024 * 1024 },
+    storage: multer.diskStorage({
+        destination: (_req, _file, cb) => cb(null, TMP_UPLOAD_DIR),
+        filename: (_req, file, cb) =>
+            cb(null, `${Date.now()}-${Math.random().toString(36).slice(2, 8)}${extOf(file.originalname)}`),
+    }),
+    limits: { fileSize: MAX_UPLOAD_MB * 1024 * 1024 },
     fileFilter: (_req, file, cb) => {
-        const allowed = [
-            'image/jpeg', 'image/png', 'image/webp', 'image/avif',
-            'image/heic', 'image/heif', 'image/gif', 'image/bmp',
-            'video/mp4', 'video/webm', 'video/quicktime',
-        ];
-        if (allowed.includes(file.mimetype)) {
-            cb(null, true);
-        } else {
-            cb(new Error('Only images and videos (mp4, webm, mov) are allowed'));
+        const mt = (file.mimetype || '').toLowerCase();
+        const ext = extOf(file.originalname);
+        if (IMAGE_MIMES.includes(mt) || VIDEO_MIMES.includes(mt)) return cb(null, true);
+        // Unknown/omitted mimetype from a phone picker — trust a known media extension instead.
+        if ((!mt || mt === 'application/octet-stream') && (VIDEO_EXTS.includes(ext) || IMAGE_EXTS.includes(ext))) {
+            return cb(null, true);
         }
-    }
+        cb(new Error(`"${file.originalname}" is not a supported file. Please upload a photo (JPG, PNG, HEIC) or a video (MP4, MOV, WebM, 3GP, MKV, AVI).`));
+    },
 });
+
+/**
+ * multer wrapper that turns upload rejections into a readable 400.
+ *
+ * Without this the fileFilter error escapes as an unhandled error: the user sees
+ * "Internal server error" with no idea what was wrong, and every rejected file fires an
+ * [Alert:CRITICAL] server_5xx. (2026-08-11)
+ */
+const uploadMedia = (req: any, res: any, next: any) => {
+    upload.array('images', 20)(req, res, (err: any) => {
+        if (!err) return next();
+        if (err.code === 'LIMIT_FILE_SIZE') {
+            return res.status(400).json({
+                error: `That file is too large. The maximum is ${ADVERTISED_MAX_UPLOAD_MB} MB per file — for a long video, record at 1080p instead of 4K, or trim it.`,
+            });
+        }
+        if (err.code === 'LIMIT_FILE_COUNT') {
+            return res.status(400).json({ error: 'Too many files at once. Please upload up to 20 at a time.' });
+        }
+        logger.warn(`[Upload] rejected: ${err.message}`);
+        return res.status(400).json({ error: err.message || 'Upload failed' });
+    });
+};
 
 
 // POST /inventory - Create single inventory record (authenticated)
@@ -2621,7 +2689,7 @@ router.post('/commit', async (req, res) => {
 });
 
 // POST /inventory/:id/upload - Upload property images and videos (max 20 files)
-router.post('/:id/upload', upload.array('images', 20), async (req, res) => {
+router.post('/:id/upload', uploadMedia, async (req, res) => {
     try {
         const id = req.params.id as string;
         const files = req.files as Express.Multer.File[];
@@ -2639,13 +2707,13 @@ router.post('/:id/upload', upload.array('images', 20), async (req, res) => {
         const newVideoUrls: string[] = [];
 
         for (const file of files) {
-            if (file.mimetype.startsWith('video/')) {
-                // Write video to disk directly (no sharp processing)
+            if (isVideoUpload(file)) {
+                // Move the already-on-disk temp file into place — no buffering, any size.
                 const videoDir = path.join(process.cwd(), 'uploads', 'properties', id);
                 fs.mkdirSync(videoDir, { recursive: true });
                 const ext = (file.originalname.split('.').pop() || 'mp4').toLowerCase();
                 const filename = `${Date.now()}-video.${ext}`;
-                fs.writeFileSync(path.join(videoDir, filename), file.buffer);
+                fs.renameSync(file.path, path.join(videoDir, filename));
                 newVideoUrls.push(`/uploads/properties/${id}/${filename}`);
                 // 2026-07-29: HEVC/iPhone videos don't play in Chrome/FF — transcode to H.264 in the
                 // background (non-blocking; website falls back to photos until it finishes).
@@ -2678,6 +2746,17 @@ router.post('/:id/upload', upload.array('images', 20), async (req, res) => {
         captureRouteError(error, req, { route: 'inventory#15' });
         logger.error('[Upload] Error:', error);
         res.status(500).json({ error: (error as Error).message });
+    } finally {
+        // diskStorage writes every upload to uploads/tmp first. Videos are renamed out of there,
+        // but images are only READ by sharp — without this they accumulate forever. Also covers
+        // the error path, where nothing was moved at all. (2026-08-11)
+        for (const f of ((req.files as Express.Multer.File[]) || [])) {
+            try {
+                if (f.path && fs.existsSync(f.path)) fs.unlinkSync(f.path);
+            } catch (e) {
+                logger.warn(`[Upload] temp files left behind: ${f.path} — ${(e as Error).message}`);
+            }
+        }
     }
 });
 

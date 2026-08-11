@@ -118,6 +118,25 @@ function EditContactSection({ label, color, currentPhone, currentName, onContact
     );
 }
 
+// Upload limits (2026-08-11). The backend accepts 100MB, but Cloudflare Free rejects request
+// bodies over 100MB at the EDGE — before our server sees them — and that error cannot be
+// customised. So we stop the user at 95MB with a message that actually helps. Keep in step with
+// ADVERTISED_MAX_UPLOAD_MB in backend/src/routes/inventory.ts.
+const MAX_UPLOAD_MB = 95;
+
+// Formats phones actually produce. Must stay a subset of the backend whitelist — the previous
+// wildcard let users pick .flv/.ogv that the server then rejected with an opaque error.
+const VIDEO_ACCEPT = 'video/mp4,video/quicktime,video/webm,video/3gpp,video/3gpp2,video/x-matroska,video/x-msvideo,video/x-m4v,.mp4,.mov,.webm,.3gp,.mkv,.avi,.m4v';
+const IMAGE_ACCEPT = 'image/jpeg,image/png,image/webp,image/avif,image/heic,image/heif,.jpg,.jpeg,.png,.webp,.heic';
+
+/** First file that exceeds the cap, as a user-facing message — or null when all are fine. */
+function oversizeError(files: File[]): string | null {
+    const bad = files.find(f => f.size > MAX_UPLOAD_MB * 1024 * 1024);
+    if (!bad) return null;
+    const mb = Math.round(bad.size / 1024 / 1024);
+    return `"${bad.name}" is ${mb} MB — the maximum is ${MAX_UPLOAD_MB} MB. Phone videos shot in 4K are often far larger; record at 1080p or trim the clip, then try again.`;
+}
+
 interface InventoryListProps {
     /** Pre-applied filter when opened via a dashboard drill-through (2026-07-16), e.g. { status: 'active' }. */
     initialFilter?: Record<string, string> | null;
@@ -808,6 +827,10 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
 
     const handleUploadImages = async (invId: string, files: FileList) => {
         if (!files.length) return;
+        // Stop oversized files here: Cloudflare would reject them at the edge with an error
+        // we cannot explain, so the user would just see a generic failure.
+        const tooBig = oversizeError(Array.from(files));
+        if (tooBig) { showToast(tooBig, 'error'); return; }
         setMediaUploading(true);
         try {
             const result = await uploadInventoryImages(invId, Array.from(files));
@@ -822,6 +845,10 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
 
     const handleUploadVideos = async (invId: string, files: FileList) => {
         if (!files.length) return;
+        // Stop oversized files here: Cloudflare would reject them at the edge with an error
+        // we cannot explain, so the user would just see a generic failure.
+        const tooBig = oversizeError(Array.from(files));
+        if (tooBig) { showToast(tooBig, 'error'); return; }
         setMediaUploading(true);
         try {
             const result = await uploadInventoryImages(invId, Array.from(files));
@@ -1225,7 +1252,7 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
                                                 </div>
                                             )}
                                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                                <input ref={imageUploadRef} type="file" multiple accept="image/*" title="Upload photos" style={{ display: 'none' }} onChange={e => e.target.files && handleUploadImages(editingId!, e.target.files)} />
+                                                <input ref={imageUploadRef} type="file" multiple accept={IMAGE_ACCEPT} title="Upload photos" style={{ display: 'none' }} onChange={e => e.target.files && handleUploadImages(editingId!, e.target.files)} />
                                                 <button style={{ ...s.smallBtn }} onClick={() => imageUploadRef.current?.click()} disabled={mediaUploading}>+ Add Photos</button>
                                             </div>
                                         </div>
@@ -1243,7 +1270,7 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
                                                 </div>
                                             )}
                                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                                <input ref={videoUploadRef} type="file" multiple accept="video/*" title="Upload videos" style={{ display: 'none' }} onChange={e => e.target.files && handleUploadVideos(editingId!, e.target.files)} />
+                                                <input ref={videoUploadRef} type="file" multiple accept={VIDEO_ACCEPT} title="Upload videos" style={{ display: 'none' }} onChange={e => e.target.files && handleUploadVideos(editingId!, e.target.files)} />
                                                 <button style={{ ...s.smallBtn }} onClick={() => videoUploadRef.current?.click()} disabled={mediaUploading}>+ Add Videos</button>
                                             </div>
                                         </div>
@@ -2147,7 +2174,7 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
                                                 ))}
                                             </div>
                                         )}
-                                        <input ref={imageUploadRef} type="file" multiple accept="image/*" title="Upload photos" style={{ display: 'none' }} onChange={e => e.target.files && handleUploadImages(editingId!, e.target.files)} />
+                                        <input ref={imageUploadRef} type="file" multiple accept={IMAGE_ACCEPT} title="Upload photos" style={{ display: 'none' }} onChange={e => e.target.files && handleUploadImages(editingId!, e.target.files)} />
                                         <button style={s.smallBtn} onClick={() => imageUploadRef.current?.click()} disabled={mediaUploading}>+ Add Photos</button>
                                     </div>
                                     <div>
@@ -2162,7 +2189,7 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
                                                 ))}
                                             </div>
                                         )}
-                                        <input ref={videoUploadRef} type="file" multiple accept="video/*" title="Upload videos" style={{ display: 'none' }} onChange={e => e.target.files && handleUploadVideos(editingId!, e.target.files)} />
+                                        <input ref={videoUploadRef} type="file" multiple accept={VIDEO_ACCEPT} title="Upload videos" style={{ display: 'none' }} onChange={e => e.target.files && handleUploadVideos(editingId!, e.target.files)} />
                                         <button style={s.smallBtn} onClick={() => videoUploadRef.current?.click()} disabled={mediaUploading}>+ Add Videos</button>
                                     </div>
                                 </div>
