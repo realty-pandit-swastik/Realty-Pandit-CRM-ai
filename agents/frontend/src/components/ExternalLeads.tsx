@@ -1,7 +1,7 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react';
 import PhoneInput from './PhoneInput';
-import client, { getPartnerAssignable, assignLeadToTeammate, shareLead } from '../api/client';
+import client, { getPartnerAssignable, assignLeadToTeammate, shareLead, rosterForPickers } from '../api/client';
 import { isPlaceholderPhone, isDialablePhone, isValidPhoneInput, toDialablePhone, normalizePhoneInput } from '../lib/phone';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
@@ -485,7 +485,7 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
     // no roster at all because they cannot assign.
     useEffect(() => {
         if (!isPartner) {
-            client.get('/api/team/members-list').then(r => setTeamMembers(r.data)).catch(() => {});
+            client.get('/api/team/members-list').then(r => setTeamMembers(rosterForPickers(r.data))).catch(() => {});
         } else if (isPartnerOwner) {
             getPartnerAssignable().then(r => setPartnerRoster(r.members || [])).catch(() => {});
         }
