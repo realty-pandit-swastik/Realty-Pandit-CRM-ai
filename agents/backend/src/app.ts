@@ -208,6 +208,24 @@ h1{font-size:1.75rem;font-weight:700;margin-bottom:.5rem;background:linear-gradi
 </html>`);
 });
 
+// Property DOCUMENTS are the owner's paperwork - title deeds, registries, NOCs - and are
+// NOT public like photos and video. Access is restricted to the listing's own agent +
+// super_boss (owner rule, 2026-08-11) and must go through
+//     GET /api/inventory/:id/documents/:docId/download
+// which authenticates and applies that rule. Block the raw static path outright so a
+// leaked, forwarded or guessed URL is worthless. This also covers the "*_thumb.*" siblings
+// that media_promote.ts writes beside image documents - a thumbnail of a title deed is
+// still the title deed.
+//
+// Photos and videos under /uploads stay PUBLIC: the website, WhatsApp shares and ad
+// creatives all depend on them.
+app.use('/uploads', (req, res, next) => {
+    if (/^\/properties\/[^/]+\/documents\//i.test(req.path)) {
+        return res.status(403).json({ error: 'Property documents must be opened from the admin panel.' });
+    }
+    next();
+});
+
 // Static file serving for uploaded property media
 app.use('/uploads', express.static(path.join(process.cwd(), 'uploads'), {
     maxAge: process.env.NODE_ENV === 'production' ? '7d' : 0,

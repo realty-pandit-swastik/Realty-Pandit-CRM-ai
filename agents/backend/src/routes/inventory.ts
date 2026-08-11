@@ -896,6 +896,10 @@ router.get('/:id', authMiddleware, async (req, res, next) => {
                 return res.status(403).json({ error: 'Not available' });
             }
             const maskedDetail: any = applyRoleMask(inventory as any, viewerFromPartner(meDetail.id));
+            // Documents (2026-08-11): owner paperwork - title deeds, registries, NOCs. An external
+            // partner never receives them, not even on their own listing. applyRoleMask strips them
+            // too; this is the belt to that braces.
+            delete maskedDetail.documents;
             return res.json({ ...maskedDetail, source: null, mine: isOwn, can_edit: isOwn });
         }
 
@@ -909,6 +913,12 @@ router.get('/:id', authMiddleware, async (req, res, next) => {
         redactedDetail.can_edit = meDetail.role === 'super_boss'
             || detailTeamIds.includes(inventory.assigned_agent_id)
             || detailTeamIds.includes(inventory.uploaded_by_agent_id);
+        // Documents (2026-08-11, owner-set rule): visible ONLY to the listing's own agent +
+        // super_boss - the same rule mayAccessDocuments() enforces on the download/write routes.
+        // Note this is deliberately NARROWER than redactInventoryForStaff, which also lets a
+        // shared-with teammate through: sharing a listing does NOT share its paperwork.
+        // The KEY is omitted, not set to [], so the UI can tell "none uploaded" from "not yours".
+        if (!redactedDetail.can_edit) delete redactedDetail.documents;
         res.json(redactedDetail);
     } catch (error) {
         captureRouteError(error, req, { route: 'inventory#3' });
@@ -3146,6 +3156,47 @@ router.patch('/:id/enrich', authMiddleware, async (req, res) => {
 // ─── Document Management ─────────────────────────────────────────────────────
 
 // Multer config for document uploads (PDF, images, Word, Excel)
+/**
+ * Document access guard (2026-08-11, owner-set rule).
+ *
+ * A property document - title deed, registry, NOC - may be viewed, downloaded,
+ * uploaded, renamed, deleted or shared ONLY by:
+ *   - super_boss, or
+ *   - the listing's own agent (its assigned OR uploading agent).
+ * A manager inherits their direct reports' listings because getTeamIds() returns
+ * [self, ...reports]. This mirrors the PATCH /:id edit guard above - keep the two
+ * in step if either changes.
+ *
+ * External partner agents get NOTHING here, even on their own listing: documents are
+ * the owner's paperwork, not marketing material. partnerMayMutateInventory() runs
+ * first on the write paths and is deliberately NOT sufficient on its own.
+ *
+ * Responds 403/404 and returns false when denied - same shape as
+ * partnerMayMutateInventory, so each call site stays one line.
+ */
+async function mayAccessDocuments(req: any, res: any, inventoryId: string | string[]): Promise<boolean> {
+    const me = req.agent!;
+    const invId = Array.isArray(inventoryId) ? inventoryId[0] : inventoryId;
+    const inv = await prisma.inventory.findUnique({
+        where: { id: invId },
+        select: { id: true, assigned_agent_id: true, uploaded_by_agent_id: true },
+    });
+    if (!inv) {
+        res.status(404).json({ error: "Inventory not found" });
+        return false;
+    }
+    if (me.role === "super_boss") return true;
+    if (me.role === "partner") {
+        res.status(403).json({ error: "Property documents are not available to partner agents." });
+        return false;
+    }
+    const teamIds = await getTeamIds(me);
+    const owners = [inv.assigned_agent_id, inv.uploaded_by_agent_id].filter((id): id is string => !!id);
+    if (owners.some((id) => teamIds.includes(id))) return true;
+    res.status(403).json({ error: "Only the property's assigned manager or a super boss can access its documents." });
+    return false;
+}
+
 const docUpload = multer({
     storage: multer.memoryStorage(),
     limits: { fileSize: 20 * 1024 * 1024 }, // 20MB
@@ -3175,6 +3226,7 @@ router.post('/:id/documents', authMiddleware, checkPermission('edit_inventory'),
         const inventoryId = req.params.id as string;
         // Partner write-guard: a partner may only mutate their OWN listing.
         if (!(await partnerMayMutateInventory(req, res, inventoryId))) return;
+        if (!(await mayAccessDocuments(req, res, inventoryId))) return;
         const file = req.file;
         const { doc_type, title } = req.body;
 
@@ -3243,6 +3295,7 @@ router.delete('/:id/documents/:docId', authMiddleware, checkPermission('edit_inv
         const { id: inventoryId, docId } = req.params;
         // Partner write-guard: a partner may only mutate their OWN listing.
         if (!(await partnerMayMutateInventory(req, res, inventoryId))) return;
+        if (!(await mayAccessDocuments(req, res, inventoryId))) return;
 
         const doc = await prisma.inventoryDocument.findUnique({ where: { id: docId } });
         if (!doc || doc.inventory_id !== inventoryId) {
@@ -3288,6 +3341,7 @@ router.patch('/:id/documents/:docId', authMiddleware, checkPermission('edit_inve
         const { id: inventoryId, docId } = req.params;
         // Partner write-guard: a partner may only mutate their OWN listing.
         if (!(await partnerMayMutateInventory(req, res, inventoryId))) return;
+        if (!(await mayAccessDocuments(req, res, inventoryId))) return;
         const title = (req.body?.title ?? '').toString().trim();
         if (!title) {
             return res.status(400).json({ error: 'title is required' });
@@ -3309,6 +3363,98 @@ router.patch('/:id/documents/:docId', authMiddleware, checkPermission('edit_inve
     }
 });
 
+/**
+ * GET /inventory/:id/documents/:docId/download
+ *   ?thumb=1   serve the *_thumb.* preview instead of the original (for <img> in the tab)
+ *   ?inline=1  render in the browser instead of forcing a save dialog
+ *
+ * The ONLY way to read a property document: the raw /uploads path is blocked in app.ts
+ * because documents are owner paperwork. Same rule as every other document route -
+ * super_boss or the listing's own agent.
+ */
+router.get('/:id/documents/:docId/download', authMiddleware, async (req, res) => {
+    try {
+        const { id: inventoryId, docId } = req.params;
+        if (!(await mayAccessDocuments(req, res, inventoryId))) return;
+
+        const doc = await prisma.inventoryDocument.findUnique({ where: { id: String(docId) } });
+        if (!doc || doc.inventory_id !== inventoryId) {
+            return res.status(404).json({ error: 'Document not found' });
+        }
+
+        // file_url is app-relative ('/uploads/properties/<id>/documents/<file>'). Resolve it
+        // and refuse anything that escapes uploads/ - the value is DB-held, but a traversal
+        // here would read arbitrary server files.
+        const uploadsRoot = path.resolve(process.cwd(), 'uploads');
+        let abs = path.resolve(process.cwd(), String(doc.file_url).replace(/^\/+/, ''));
+        const wantThumb = req.query.thumb === '1';
+        if (wantThumb) {
+            const t = abs.replace(/(\.[^.]+)$/, '_thumb$1');
+            if (fs.existsSync(t)) abs = t;
+        }
+        if (abs !== uploadsRoot && !abs.startsWith(uploadsRoot + path.sep)) {
+            return res.status(400).json({ error: 'Invalid document path' });
+        }
+        if (!fs.existsSync(abs)) {
+            logger.warn(`[Documents] Record ${docId} points at a missing file: ${abs}`);
+            return res.status(404).json({ error: 'File is missing on the server' });
+        }
+
+        if (wantThumb) {
+            res.type(path.extname(abs) || '.jpg');
+            res.setHeader('Content-Disposition', 'inline');
+        } else {
+            if (doc.mime_type) res.type(doc.mime_type);
+            const name = String(doc.file_name || 'document');
+            const disp = req.query.inline === '1' ? 'inline' : 'attachment';
+            res.setHeader(
+                'Content-Disposition',
+                `${disp}; filename="${name.replace(/["\r\n]/g, '')}"; filename*=UTF-8''${encodeURIComponent(name)}`,
+            );
+        }
+        // Never let a shared cache hold owner paperwork.
+        res.setHeader('Cache-Control', 'private, no-store');
+        fs.createReadStream(abs).pipe(res);
+    } catch (error) {
+        captureRouteError(error, req, { route: 'inventory#doc-download' });
+        logger.error(error);
+        if (!res.headersSent) res.status(500).json({ error: 'Failed to fetch document' });
+    }
+});
+
+// GET /inventory/:id/documents/:docId/public?token=...
+// PUBLIC, token-gated - the customer or dealer who was sent this document opens it with
+// no admin login. The raw /uploads path is blocked, so this is the only public door, and
+// the HMAC token binds the DOCUMENT id + an expiry: a forwarded link dies on its own and
+// cannot be re-pointed at another document. Same scheme as the brochure PDFs above.
+router.get('/:id/documents/:docId/public', async (req: any, res) => {
+    try {
+        const { id: inventoryId, docId } = req.params;
+        const { verifyPdfToken } = await import('../utils/pdf_token');
+        if (!verifyPdfToken(String(docId), 'document', String(req.query.token || ''))) {
+            return res.status(403).send('This document link has expired. Please ask for a new one.');
+        }
+        const doc = await prisma.inventoryDocument.findUnique({ where: { id: String(docId) } });
+        if (!doc || doc.inventory_id !== inventoryId) return res.status(404).send('Document not found');
+
+        const uploadsRoot = path.resolve(process.cwd(), 'uploads');
+        const abs = path.resolve(process.cwd(), String(doc.file_url).replace(/^\/+/, ''));
+        if (abs !== uploadsRoot && !abs.startsWith(uploadsRoot + path.sep)) {
+            return res.status(400).send('Invalid document path');
+        }
+        if (!fs.existsSync(abs)) return res.status(404).send('File is missing on the server');
+
+        if (doc.mime_type) res.type(doc.mime_type);
+        res.setHeader('Content-Disposition', 'inline');
+        res.setHeader('Cache-Control', 'private, no-store');
+        fs.createReadStream(abs).pipe(res);
+    } catch (error) {
+        captureRouteError(error, req, { route: 'inventory#doc-public' });
+        logger.error(error);
+        if (!res.headersSent) res.status(500).send('Failed to fetch document');
+    }
+});
+
 // POST /inventory/:id/documents/:docId/share — share ONE inventory document to a contact as a link,
 // via WhatsApp (rp_document_share template, falls back to in-window text) and/or email. Gated to
 // edit_inventory (inventory manager / manager / super_boss) — the roles that can edit inventory. (#8, 2026-07-09)
@@ -3317,6 +3463,7 @@ router.post('/:id/documents/:docId/share', authMiddleware, checkPermission('edit
         const { id: inventoryId, docId } = req.params;
         // Partner write-guard: a partner may only mutate their OWN listing.
         if (!(await partnerMayMutateInventory(req, res, inventoryId))) return;
+        if (!(await mayAccessDocuments(req, res, inventoryId))) return;
         const agent = req.agent!;
         const phoneRaw = (req.body?.contact_phone ?? '').toString().trim();
         const email = (req.body?.email ?? '').toString().trim();
@@ -3341,9 +3488,15 @@ router.post('/:id/documents/:docId/share', authMiddleware, checkPermission('edit
 
         // Public link — the file is served statically by the backend at /uploads/… (same URL the
         // in-app "View" button opens). file_url is stored as a leading-slash path.
-        const fileUrl = doc.file_url.startsWith('http')
-            ? doc.file_url
-            : `https://api.realtypandit.in${doc.file_url.startsWith('/') ? '' : '/'}${doc.file_url}`;
+        // Documents are no longer publicly readable (the raw /uploads path is blocked), so
+        // share a SIGNED, EXPIRING link. 7 days is long enough for a customer to act on it and
+        // short enough that an onward-forwarded link stops working. Same HMAC scheme as the
+        // brochure PDFs; the token is bound to this document id, so it cannot be re-pointed.
+        const { signPdfToken } = await import('../utils/pdf_token');
+        const shareExp = Math.floor(Date.now() / 1000) + 7 * 24 * 3600;
+        const shareToken = signPdfToken(String(docId), 'document', shareExp);
+        const apiBase = process.env.API_BASE_URL || 'https://api.realtypandit.in';
+        const fileUrl = `${apiBase}/inventory/${inventoryId}/documents/${docId}/public?token=${shareToken}`;
         const docTitle = doc.title || doc.file_name || 'Document';
         const propertyLabel = `${inventory.type ? inventory.type.toUpperCase() + ' · ' : ''}${inventory.locality || inventory.city || inventory.location || inventory.full_address || inventory.display_id || 'Property'}`;
 

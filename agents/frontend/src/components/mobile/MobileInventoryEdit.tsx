@@ -1,7 +1,7 @@
 
 import type React from 'react';
 import { useEffect, useState, useRef } from 'react';
-import { updateInventory, getCategoryTree, uploadInventoryImages, deleteInventoryMedia, getTeamMembersList, transferInventory, uploadInventoryDocument, deleteInventoryDocument, getInventoryItem, getNodeFields } from '../../api/client';
+import { updateInventory, getCategoryTree, uploadInventoryImages, deleteInventoryMedia, getTeamMembersList, transferInventory, uploadInventoryDocument, deleteInventoryDocument, inventoryDocumentUrl, getInventoryItem, getNodeFields } from '../../api/client';
 import { useToast } from '../../contexts/ToastContext';
 import { useConfirm } from '../../contexts/ConfirmContext';
 
@@ -739,7 +739,7 @@ export function MobileInventoryEdit({ item, onSaved, onCancel: _onCancel }: Mobi
                                                     )}
                                                 </div>
                                             </div>
-                                            <a href={doc.file_url} target="_blank" rel="noreferrer"
+                                            <a href={inventoryDocumentUrl(item.id, doc.id)} target="_blank" rel="noreferrer"
                                                 style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid var(--border-secondary)', fontSize: '12px', color: 'var(--text-link)', textDecoration: 'none', minHeight: '32px', display: 'flex', alignItems: 'center' }}>
                                                 View
                                             </a>

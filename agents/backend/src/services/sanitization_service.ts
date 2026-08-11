@@ -86,6 +86,11 @@ const STAFF_HIDDEN_INVENTORY_FIELDS = [
     'uploader_phone', 'uploader_email', 'referral_partner', 'referral_partner_phone',
     // First address line (exact unit) — locality/society/city/pincode stay visible
     'flat_no', 'plot_no',
+    // Owner paperwork (2026-08-11). Documents are restricted to the listing's own agent +
+    // super_boss, so any OTHER staff viewer gets the relation stripped here as well as at the
+    // route. Defence in depth: a future route that includes { documents: true } and forgets to
+    // gate it still cannot leak them.
+    'documents',
 ];
 
 export class SanitizationService {
@@ -95,6 +100,14 @@ export class SanitizationService {
      */
     sanitizeInventory<T extends Record<string, any>>(row: T, viewer: Viewer): T {
         if (!row) return row;
+        // Documents (2026-08-11): owner paperwork — never exposed to an external partner, not
+        // even on their OWN listing. Stripped ahead of the canSeeOwner early-return, which would
+        // otherwise hand the whole row back untouched.
+        if (viewer.role === 'partner' && (row as any).documents !== undefined) {
+            const noDocs: any = { ...row };
+            delete noDocs.documents;
+            row = noDocs as T;
+        }
         if (this.canSeeOwner(row, viewer)) return row;
 
         const cleaned: Record<string, any> = { ...row };

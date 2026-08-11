@@ -2,7 +2,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { formatInventoryAddress, formatUnitLabel } from '../lib/address';
 
-import { getPartnerAssignable, assignListingToTeammate, getInventory, getInventoryItem, updateInventory, deleteInventory, approveInventory, rejectInventory, getCategoryTree, getStates, getTeamMembers, getTeamMembersList, uploadInventoryImages, deleteInventoryMedia, transferInventory, uploadInventoryDocument, deleteInventoryDocument, renameInventoryDocument, shareInventoryDocument, getNodeFields, markInventorySold, markInventoryOnHold } from '../api/client';
+import { getPartnerAssignable, assignListingToTeammate, getInventory, getInventoryItem, updateInventory, deleteInventory, approveInventory, rejectInventory, getCategoryTree, getStates, getTeamMembers, getTeamMembersList, uploadInventoryImages, deleteInventoryMedia, transferInventory, uploadInventoryDocument, deleteInventoryDocument, renameInventoryDocument, shareInventoryDocument, inventoryDocumentUrl, getNodeFields, markInventorySold, markInventoryOnHold, rosterForPickers } from '../api/client';
 import client from '../api/client';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
@@ -372,13 +372,11 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
         }
         if (!isPartner) {
             getTeamMembers().then(data => {
-                const members = Array.isArray(data) ? data : data?.data || data?.members || [];
-                setAgentsList(members.map((m: any) => ({ id: m.id, name: m.name, role: m.role })));
+                setAgentsList(rosterForPickers(data));
             }).catch(() => {
                 // Fallback for employees who lack manage_team permission
                 getTeamMembersList().then(data => {
-                    const members = Array.isArray(data) ? data : [];
-                    setAgentsList(members.map((m: any) => ({ id: m.id, name: m.name, role: m.role })));
+                    setAgentsList(rosterForPickers(data));
                 }).catch(() => {});
             });
         }
@@ -2810,7 +2808,7 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
                                                             onClick={() => { setSharingDocId(sharingDocId === doc.id ? null : doc.id); setSharePhone(''); setShareEmail(''); setShareName(''); }}
                                                         >Share</button>
                                                         <a
-                                                            href={doc.file_url}
+                                                            href={inventoryDocumentUrl(editingId!, doc.id)}
                                                             target="_blank"
                                                             rel="noreferrer"
                                                             style={{ ...s.smallBtn, textDecoration: 'none', color: 'var(--text-link)' }}

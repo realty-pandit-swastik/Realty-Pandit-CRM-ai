@@ -338,6 +338,27 @@ export const getStates = async () => {
     return res.data;
 };
 
+/**
+ * Roster for FILTER CHIPS and ASSIGN DROPDOWNS: active members only, sorted by NAME.
+ *
+ * Why: /api/team/members and /members-list both order by [role asc, name asc].
+ * 'employee' < 'manager' < 'super_boss', so every manager/super_boss lands BELOW all
+ * ~35 employees. In a flat chip list that reads as "the name is missing" — e.g. Ashwani
+ * (manager) sat at position 36 of 41 instead of 3. Role order is right for the Team
+ * Management table, wrong for a flat picker, so we re-sort here rather than change the API.
+ *
+ * Also drops status!=='active' (6 inactive agents own 0 listings and 0 contacts, so
+ * filtering by them can only ever return nothing). /members-list already filters
+ * server-side and omits `status`, hence the `!m.status` guard.
+ */
+export const rosterForPickers = (raw: any): { id: string; name: string; role?: string }[] => {
+    const list = Array.isArray(raw) ? raw : raw?.data || raw?.members || [];
+    return list
+        .filter((m: any) => !m.status || m.status === 'active')
+        .map((m: any) => ({ id: m.id, name: m.name, role: m.role }))
+        .sort((a: any, b: any) => String(a.name || '').localeCompare(String(b.name || '')));
+};
+
 export const getTeamMembers = async () => {
     const res = await client.get('/api/team/members');
     return res.data;
@@ -729,6 +750,18 @@ export const deleteInventoryDocument = async (inventoryId: string, documentId: s
     const res = await client.delete(`/api/inventory/${inventoryId}/documents/${documentId}`);
     return res.data;
 };
+
+/**
+ * Absolute URL for reading an inventory document.
+ *
+ * Documents are the owner's paperwork (title deeds, registries, NOCs) and are NOT public:
+ * the raw /uploads path is blocked server-side, so this authenticated route is the only
+ * way to read one. A same-site <a> / <img> sends the session cookie automatically, and the
+ * server re-checks that the viewer is the listing's own agent or a super boss.
+ *   thumb -> the *_thumb.* preview, for showing an image document inline
+ */
+export const inventoryDocumentUrl = (inventoryId: string, documentId: string, thumb = false) =>
+    `${baseURL}/api/inventory/${inventoryId}/documents/${documentId}/download?${thumb ? 'thumb=1' : 'inline=1'}`;
 
 // ─── PARTNER TEAMS (2026-07-13) — a partner company manages its OWN sub-agents. ────────────────
 // Owner-only on the server (requirePartnerOwner). The roster returned here holds PartnerAgent ids —
