@@ -18,6 +18,30 @@ export interface InventoryAddressParts {
     pincode?: string | null;
     full_address?: string | null;
     location?: string | null;
+    // Exact unit. Deliberately NOT part of formatInventoryAddress() — see formatUnitLabel below.
+    flat_no?: string | null;
+    plot_no?: string | null;
+}
+
+/**
+ * The exact unit: "Flat 507" / "Plot 362" / "Flat S2 · Plot 362". Returns '' when neither is set.
+ *
+ * 2026-08-08: tiles never showed the unit — both card components render only
+ * formatInventoryAddress(), which composes building→locality→city and has no unit. The data was
+ * always there (453 of 847 listings carry a flat_no or plot_no) and the API returns it; the card
+ * simply dropped it. Detail view had this logic inline; this is now the one definition.
+ *
+ * ⚠ NO permission check here, on purpose. The API DELETES flat_no/plot_no for viewers who may not
+ * see them (STAFF_HIDDEN_INVENTORY_FIELDS → redactInventoryForStaff), so an absent field yields ''
+ * and nothing renders. Re-implementing the rule client-side would duplicate it and drift.
+ *
+ * ⚠ Trim and treat '' as absent — 508 rows carry an empty-string flat_no, which would otherwise
+ * render as a bare "Flat".
+ */
+export function formatUnitLabel(inv?: { flat_no?: string | null; plot_no?: string | null } | null): string {
+    const flat = (inv?.flat_no ?? '').trim();
+    const plot = (inv?.plot_no ?? '').trim();
+    return [flat && `Flat ${flat}`, plot && `Plot ${plot}`].filter(Boolean).join(' · ');
 }
 
 export function formatInventoryAddress(inv?: InventoryAddressParts | null): string {

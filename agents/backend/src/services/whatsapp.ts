@@ -3,6 +3,15 @@ import axios from 'axios';
 import logger from '../utils/logger';
 import { buildTemplatePayload } from '../config/whatsapp_templates';
 import { whatsappCircuit } from '../utils/circuit_breaker';
+import { classifyMetaError, throughputBackoffMs, WhatsAppSendError, MetaErrorInfo } from './whatsapp_errors';
+import { gateTemplateSend, suppressRecipient } from './wa_compliance';
+import { recordOutbound } from './wa_message_log';
+
+/** Outcome of a send — `waMessageId` feeds delivery-status persistence. */
+export interface SendResult {
+    waMessageId: string | null;
+    error?: MetaErrorInfo | null;
+}
 
 export class WhatsAppService {
     private readonly apiUrl = 'https://graph.facebook.com/v25.0';
@@ -31,14 +40,30 @@ export class WhatsAppService {
     /**
      * Internal: execute WhatsApp API call with circuit breaker + retry
      */
-    private async callWhatsAppAPI(payload: any): Promise<void> {
+    private async callWhatsAppAPI(payload: any): Promise<SendResult | undefined> {
         // Mock sending for development
         if (process.env.NODE_ENV === 'development') {
             return;
         }
 
-        await whatsappCircuit.call(
-            () => this.sendWithRetry(payload, 3),
+        return await whatsappCircuit.call(
+            async () => {
+                try {
+                    return await this.sendWithRetry(payload, 3);
+                } catch (err) {
+                    // ⚠ Business rejections must NOT open the circuit. whatsappCircuit trips
+                    // after 3 failures; on 2026-08-04 there were 369 × 131049 in one day, which
+                    // would have opened it in seconds and silently killed every WhatsApp send —
+                    // including customer-initiated replies, which are legal and never the
+                    // problem. Resolving normally here keeps the breaker a measure of TRANSPORT
+                    // health only. The error is still logged, classified and returned.
+                    const info = (err as WhatsAppSendError)?.info;
+                    if (info && !info.countsAsCircuitFailure) {
+                        return { waMessageId: null, error: info } as SendResult;
+                    }
+                    throw err;
+                }
+            },
             undefined // fallback: silent failure (logged inside)
         );
     }
@@ -46,12 +71,13 @@ export class WhatsAppService {
     /**
      * Retry with exponential backoff: 1s, 2s, 4s
      */
-    private async sendWithRetry(payload: any, maxRetries: number): Promise<void> {
+    private async sendWithRetry(payload: any, maxRetries: number): Promise<SendResult> {
         let lastError: Error | null = null;
+        let lastInfo: MetaErrorInfo | null = null;
 
         for (let attempt = 0; attempt < maxRetries; attempt++) {
             try {
-                await axios.post(
+                const res = await axios.post(
                     `${this.apiUrl}/${this.phoneNumberId}/messages`,
                     payload,
                     {
@@ -62,49 +88,70 @@ export class WhatsAppService {
                         timeout: 10000, // 10 second timeout
                     }
                 );
-                return; // Success
+                // Meta returns the message id here; it is the join key for delivery-status
+                // callbacks (`value.statuses[].id`).
+                return { waMessageId: res?.data?.messages?.[0]?.id ?? null };
             } catch (error) {
                 lastError = error as Error;
-                const status = (error as any)?.response?.status;
+                const info = classifyMetaError(error);
+                lastInfo = info;
 
-                // Don't retry on 4xx client errors (bad request, unauthorized, etc.)
-                if (status && status >= 400 && status < 500 && status !== 429) {
-                    // Surface Meta's error body (code/title, e.g. #131047 re-engagement / invalid URL)
-                    // — the generic axios message alone hides WHY Meta rejected the send.
-                    const metaErr = (error as any)?.response?.data?.error ?? (error as any)?.response?.data;
-                    logger.error(`[WhatsAppService] Client error ${status}, not retrying: ${lastError.message}${metaErr ? ' | meta: ' + JSON.stringify(metaErr) : ''}`);
-                    throw lastError;
+                // Meta told us to back off from this recipient (131049/131048/131026).
+                // Honour it — repeatedly hammering a throttled recipient is precisely what
+                // escalates into an account-level "Sending spam" restriction.
+                if (info.suppressRecipientSec > 0 && payload?.to) {
+                    suppressRecipient(String(payload.to), info.suppressRecipientSec, info.code).catch(() => {});
                 }
 
-                // Retry on 429 (rate limit) or 5xx (server error) or network error
+                if (info.alertCritical) {
+                    logger.error(`[WhatsAppService] 🚨 ACCOUNT-LEVEL WhatsApp failure (code ${info.code}): ${info.message} — every send will fail until this is resolved.`);
+                }
+
+                if (!info.retryable) {
+                    logger.error(`[WhatsAppService] Not retrying (code ${info.code ?? 'n/a'}, http ${info.httpStatus ?? 'n/a'}): ${info.message}`);
+                    throw new WhatsAppSendError(info, error);
+                }
+
                 if (attempt < maxRetries - 1) {
-                    const delay = Math.pow(2, attempt) * 1000; // 1s, 2s, 4s
-                    logger.warn(`[WhatsAppService] Attempt ${attempt + 1}/${maxRetries} failed, retrying in ${delay}ms`);
+                    // 130429/429 are throughput caps and need a longer wait than a network blip.
+                    const delay = info.code === 130429 || info.httpStatus === 429
+                        ? throughputBackoffMs(attempt)
+                        : Math.pow(2, attempt) * 1000; // 1s, 2s, 4s
+                    logger.warn(`[WhatsAppService] Attempt ${attempt + 1}/${maxRetries} failed (code ${info.code ?? 'n/a'}), retrying in ${delay}ms`);
                     await new Promise(resolve => setTimeout(resolve, delay));
                 }
             }
         }
 
         // All retries exhausted
-        const lastMetaErr = (lastError as any)?.response?.data?.error ?? (lastError as any)?.response?.data;
-        logger.error(`[WhatsAppService] All ${maxRetries} retries failed: ${lastError?.message}${lastMetaErr ? ' | meta: ' + JSON.stringify(lastMetaErr) : ''}`);
-        throw lastError || new Error('WhatsApp send failed after all retries');
+        const info = lastInfo ?? classifyMetaError(lastError);
+        logger.error(`[WhatsAppService] All ${maxRetries} retries failed (code ${info.code ?? 'n/a'}): ${info.message}`);
+        throw new WhatsAppSendError(info, lastError);
     }
 
     /**
      * Send a text message via WhatsApp Cloud API
      */
-    public async sendText(to: string, body: string): Promise<void> {
+    public async sendText(to: string, body: string, sentBy?: string): Promise<void> {
         logger.info(`[WhatsAppService] Sending to ${to}: ${body.substring(0, 80)}...`);
 
         try {
-            await this.callWhatsAppAPI({
+            const res = await this.callWhatsAppAPI({
                 messaging_product: 'whatsapp',
                 to: to,
                 text: { body: body }
             });
+            // Fire-and-forget: delivery bookkeeping must never fail or delay a send.
+            recordOutbound({
+                to, messageType: 'text', body, sentBy,
+                waMessageId: res?.waMessageId ?? null, error: res?.error ?? null,
+            }).catch(() => {});
         } catch (error) {
             logger.error('[WhatsAppService] Send failed:', (error as Error).message);
+            recordOutbound({
+                to, messageType: 'text', body, sentBy,
+                error: (error as WhatsAppSendError)?.info ?? classifyMetaError(error),
+            }).catch(() => {});
         }
     }
 
@@ -195,6 +242,7 @@ export class WhatsAppService {
         templateName: string,
         paramValues: Record<string, string> = {},
         imageUrl?: string,
+        sentBy?: string,
     ): Promise<void> {
         const payload = buildTemplatePayload(templateName, paramValues, imageUrl);
         logger.info(`[WhatsAppService] Sending template "${templateName}" (meta: ${payload.name}) to ${to}`);
@@ -204,16 +252,39 @@ export class WhatsAppService {
             return;
         }
 
-        await this.callWhatsAppAPIStrict({
-            messaging_product: 'whatsapp',
-            to,
-            type: 'template',
-            template: {
-                name: payload.name,
-                language: { code: payload.language },
-                components: payload.components,
-            },
-        });
+        // Central compliance gate — the one choke point every template send passes through.
+        // Returns (does NOT throw) when blocked: throwing would make sendTemplateOrText fall
+        // back to plaintext and defeat the gate entirely.
+        const blocked = await gateTemplateSend(to, templateName);
+        if (blocked) {
+            logger.warn(`[WhatsAppService] BLOCKED template "${templateName}" to ${to} — reason: ${blocked}`);
+            return;
+        }
+
+        try {
+            const res = await this.callWhatsAppAPIStrict({
+                messaging_product: 'whatsapp',
+                to,
+                type: 'template',
+                template: {
+                    name: payload.name,
+                    language: { code: payload.language },
+                    components: payload.components,
+                },
+            });
+            recordOutbound({
+                to, messageType: 'template', templateName, sentBy,
+                waMessageId: res?.waMessageId ?? null, error: res?.error ?? null,
+            }).catch(() => {});
+        } catch (error) {
+            // sendTemplate is strict by contract (sendTemplateOrText relies on the throw to
+            // fall back to plaintext), so record the failure and re-throw unchanged.
+            recordOutbound({
+                to, messageType: 'template', templateName, sentBy,
+                error: (error as WhatsAppSendError)?.info ?? classifyMetaError(error),
+            }).catch(() => {});
+            throw error;
+        }
     }
 
     /**
@@ -282,12 +353,12 @@ export class WhatsAppService {
      * Like callWhatsAppAPI but throws on failure instead of using circuit breaker fallback.
      * Used by sendTemplate so callers can fall back to plain text on template errors.
      */
-    private async callWhatsAppAPIStrict(payload: any): Promise<void> {
+    private async callWhatsAppAPIStrict(payload: any): Promise<SendResult | undefined> {
         if (process.env.NODE_ENV === 'development') {
             return;
         }
 
-        await this.sendWithRetry(payload, 3);
+        return await this.sendWithRetry(payload, 3);
     }
 
     public async sendMultiProductMessage(

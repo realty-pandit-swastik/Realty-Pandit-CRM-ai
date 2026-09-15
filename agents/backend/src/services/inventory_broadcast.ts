@@ -19,12 +19,21 @@ import prisma from '../db';
 import logger from '../utils/logger';
 import { MatchingEngine, buildMatchCriteriaFromLead } from './matching_engine';
 import { shareInventoryCard } from './property_sharing';
+import { flagEnabled } from './wa_compliance';
 
 const EVT_PROPERTY_SHARED = 'property_shared';
 const INTER_SEND_DELAY_MS = 200;
 const MIN_MATCH_SCORE = 50; // mirror property_sharing — only broadcast genuinely-relevant matches
 
 export async function broadcastInventoryToQualifiedDeals(inventoryId: string): Promise<void> {
+    // Kill switch, default ON — this one is agent-triggered and genuinely useful, so unlike
+    // the re-engagement engines it stays enabled; the flag exists so it can be shut off fast
+    // if it turns out to be a 131049 contributor. (2026-08-07)
+    if (!flagEnabled('INVENTORY_BROADCAST_ENABLED', true)) {
+        logger.info('[InvBroadcast] DISABLED (INVENTORY_BROADCAST_ENABLED=false) — skipping broadcast');
+        return;
+    }
+
     const inv = await prisma.inventory.findUnique({
         where: { id: inventoryId },
         include: { flat_property_type: true, property_type_link: true },
@@ -34,8 +43,13 @@ export async function broadcastInventoryToQualifiedDeals(inventoryId: string): P
         return;
     }
 
+    // Consent guard added 2026-08-07 — this fan-out honoured ai_paused but not opted_out_at,
+    // so a contact who asked us to stop still got a broadcast for every new matching listing.
     const qualifiedDeals = await prisma.transaction.findMany({
-        where: { tenant_id: inv.tenant_id, status: 'QUALIFIED', ai_paused: false },
+        where: {
+            tenant_id: inv.tenant_id, status: 'QUALIFIED', ai_paused: false,
+            demand_contact: { opted_out_at: null },
+        },
         include: {
             demand_contact: {
                 select: {
@@ -50,9 +64,18 @@ export async function broadcastInventoryToQualifiedDeals(inventoryId: string): P
 
     logger.info(`[InvBroadcast] Inventory ${inventoryId} — evaluating ${qualifiedDeals.length} QUALIFIED deals`);
     const engine = new MatchingEngine();
+    // Per-run cap (2026-08-07). This fan-out was unbounded: one activated listing could
+    // message every QUALIFIED deal in the tenant in a single burst — the shape of send
+    // spike that accumulates into a 131049 throttle. Cold nudges have had a cap of 25
+    // since July; this now matches.
+    const BROADCAST_CAP = 25;
     let sent = 0, skipped = 0;
 
     for (const deal of qualifiedDeals) {
+        if (sent >= BROADCAST_CAP) {
+            logger.warn(`[InvBroadcast] Hit BROADCAST_CAP=${BROADCAST_CAP} for ${inventoryId} — ${qualifiedDeals.length - sent - skipped} matching deals NOT messaged this run`);
+            break;
+        }
         try {
             const phone = deal.demand_contact?.phone_number;
             if (!phone) { skipped++; continue; }

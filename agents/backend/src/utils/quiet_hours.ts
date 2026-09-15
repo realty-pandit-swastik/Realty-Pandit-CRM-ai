@@ -26,6 +26,21 @@ export function isQuietHours(): boolean {
 }
 
 /**
+ * Notification-grade quiet hours: 9 PM – 8 AM IST — a NARROWER send window than
+ * `isQuietHours()` above (which allows 6 AM – 10 PM).
+ *
+ * This 21/8 window was previously hand-rolled inside deal_notifications.ts. It is
+ * lifted here so there is one home for it, but deliberately NOT merged into
+ * `isQuietHours()`: doing that would *widen* deal notifications from 08:00–21:00 to
+ * 06:00–22:00 — more proactive sends, the exact opposite of what the 131049
+ * throttling work is trying to achieve. (2026-08-07)
+ */
+export function isNotificationQuietHours(): boolean {
+    const hour = getISTHour();
+    return hour >= 21 || hour < 8; // 21:00 – 07:59 IST
+}
+
+/**
  * Get milliseconds until quiet hours end (6:00 AM IST).
  * Useful for rescheduling deferred actions.
  */

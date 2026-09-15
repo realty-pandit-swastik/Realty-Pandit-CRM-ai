@@ -17,7 +17,7 @@ import { transitionTransaction } from '../services/transaction_state_machine';
 import { TransactionStatus, TransactionType } from '@prisma/client';
 import prisma from '../db';
 import logger from '../utils/logger';
-import { extractReqSlots } from '../utils/requirement_slots';
+import { extractReqSlots, parseIndianSaleAmount } from '../utils/requirement_slots';
 import { applyDemandCategoryFromType } from '../utils/demand_capture';
 
 const STATES = {
@@ -352,13 +352,11 @@ export class SalesAgent implements BaseAgent {
                 }
             }
 
-            // Sale: "50 lakh", "1 crore", "1.5 cr" — only if rent didn't already match
+            // Sale: "50 lakh", "1 crore", "1.5 cr", "1.25 crores" — only if rent didn't already match.
+            // Shared parser since 2026-08-07; the inline regex here missed every plural form.
             if (!data.budget_max) {
-                const saleMatch = msg.match(/(\d+\.?\d*)\s*(lakh|lac|crore|cr)\b/i);
-                if (saleMatch) {
-                    const val = parseFloat(saleMatch[1]);
-                    const unit = saleMatch[2].toLowerCase();
-                    const amount = unit.startsWith('cr') ? val * 10000000 : val * 100000;
+                const amount = parseIndianSaleAmount(msg);
+                if (amount != null) {
                     data.budget_max = amount;
                     // budget_min left UNSET (see rent branch) — no fabricated 0.7x floor. (A1, 2026-06-21)
                 }

@@ -115,8 +115,9 @@ export class SanitizationService {
 
     /**
      * Inventory redaction for the staff-wide visibility model (2026-06-18). The listing's
-     * assigned OR uploading manager + super_boss see everything; every other internal agent
-     * gets the listing minus owner/key-holder contact and flat_no/plot_no (pricing stays visible).
+     * assigned OR uploading manager, anyone the listing is SHARED with, and super_boss see
+     * everything; every other internal agent gets the listing minus owner/key-holder contact and
+     * flat_no/plot_no (pricing stays visible).
      * The assigned manager's name+phone (the `assigned_agent` relation) is intentionally kept.
      */
     redactInventoryForStaff<T extends Record<string, any>>(
@@ -128,7 +129,23 @@ export class SanitizationService {
         // Full detail for the agent's OWN listings AND (for a manager) their TEAM's listings.
         // teamIds defaults to [agentId], so an employee's behaviour is unchanged.
         const teamIds = viewer.teamIds && viewer.teamIds.length ? viewer.teamIds : (viewer.agentId ? [viewer.agentId] : []);
-        if (teamIds.includes(row.assigned_agent_id) || teamIds.includes(row.uploaded_by_agent_id)) {
+        // shared_with_ids added 2026-08-08. The inventory list query already grants VISIBILITY via
+        // `shared_with_ids: { hasSome: teamIds }` (routes/inventory.ts), but this redaction only
+        // ever checked assigned/uploaded — so the teammate you deliberately shared a property with
+        // received the row with flat_no/plot_no STRIPPED. Verified on prod: RP-GZB-RES-20519
+        // (flat_no "3A-71") came back to its sharee with the field absent. That defeats the point
+        // of sharing. Same class of bug as the lead-side one where the agent_id filter ignores
+        // Contact.shared_with_ids.
+        //
+        // NOT included: reference_agent_id. The list query grants visibility to a referring agent
+        // too, but the owner's stated rule is manager + shared-with + super_boss only, so a
+        // referrer still gets the redacted view. Widen here if that changes.
+        const sharedWith: string[] = Array.isArray(row.shared_with_ids) ? row.shared_with_ids : [];
+        if (
+            teamIds.includes(row.assigned_agent_id)
+            || teamIds.includes(row.uploaded_by_agent_id)
+            || sharedWith.some((id) => teamIds.includes(id))
+        ) {
             return row;
         }
         const cleaned: Record<string, any> = { ...row };

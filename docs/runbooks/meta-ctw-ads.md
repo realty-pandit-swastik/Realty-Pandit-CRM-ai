@@ -34,6 +34,28 @@ The Page **is** linked to the bot WABA (Page → Settings → Linked Accounts �
 
 Geo keys (India): Delhi `1023040`, Ghaziabad city `1025436`, Noida `2678292`, Vasundhara `2802866`, Indirapuram `2802893`. City radius targeting: `cities:[{key,radius,distance_unit:"kilometer"}]`.
 
+**Localities have NO geo key — use `custom_locations` lat/lng pins (2026-08-02).** Vaishali
+and Kaushambi aren't Meta "cities", and city keys are far too coarse for a small budget
+(Ghaziabad@25km + Delhi@25km ≈ 20M people, which dilutes ₹300/day to nothing). Pin instead:
+
+```jsonc
+geo_locations: {
+  custom_locations: [
+    { latitude: 28.6435, longitude: 77.3310, radius: 4, distance_unit: "kilometer" }, // Vaishali+Kaushambi (1.6km apart → ONE pin)
+    { latitude: 28.6300, longitude: 77.2950, radius: 6, distance_unit: "kilometer" }, // East Delhi
+    { latitude: 28.5355, longitude: 77.3910, radius: 8, distance_unit: "kilometer" }, // Noida
+    { latitude: 28.6692, longitude: 77.4538, radius: 8, distance_unit: "kilometer" }  // Ghaziabad city
+  ],
+  location_types: ["home", "recent"]
+}
+```
+Meta echoes back a `primary_city_id` per pin — read it back to confirm each pin landed where
+you intended (GZB `1025436` / Delhi `1023040` / Noida `2678292`).
+
+⚠️ **`targeting_automation.advantage_audience = 0` is MANDATORY for `age_min > 25`** —
+otherwise Advantage+ silently caps the age floor at 25 (or errors with subcode `1870188`).
+Always read `targeting.age_min` back after creating the ad set to prove it held.
+
 ## Gotchas
 
 - **Validation order:** Meta checks `bid_strategy` *before* the page-WhatsApp link. A probe missing `bid_strategy` fails with a misleading `(#2446886) Page not linked to WhatsApp account` even though the link is fine. Always probe with full valid params.
@@ -56,7 +78,24 @@ Plain CTWA can only optimize for "conversations started" (vanity count) on this 
   1. `routes/webhooks.ts`: inbound `msg.referral.ctwa_clid` → `cacheSet('ctwa:'+phone, clid, 7d)`.
   2. `webhook_processor.ts`: new WA contact → `cacheGet` → `trackWhatsAppLead()` (best-effort).
   3. `meta_conversions.ts`: `trackWhatsAppLead()` → POST dataset `760915983366996`. (Existing `sendConversionEvent` untouched.)
-- **HARD owner step (not automatable):** Events Manager → dataset `760915983366996` → **Custom Conversions → Create on `Lead`**. Until done, events flow (tracking only) but ad-set optimization stays gated to `CONVERSATIONS`. After: re-probe `optimization_goal` (QUALITY_LEAD/custom conv) → build lead-optimized vs conversations A/B.
+- 🔴 **The event payload was WRONG from day one — fixed 2026-08-02 (`64e11f4`).** Two bugs, both
+  silent (every failure went to a `logger.warn` inside the catch, so the dataset sat at 0 events
+  with no error trail):
+  1. **`event_name: 'Lead'` is REJECTED** for `action_source: 'business_messaging'`. Only
+     **`LeadSubmitted`** and **`Purchase`** are accepted (`Lead`/`Contact`/`Schedule`/`Contacted`
+     all 400 — each probed individually).
+  2. **`page_id` OR `whatsapp_business_account_id` is REQUIRED in `user_data`** for
+     business_messaging + whatsapp channel. Neither was sent. Now sends WABA `2124684824933246`.
+- **`ctwa_clid` is validated against REAL ad clicks** — a synthetic/probe id is rejected
+  ("The ctwa_clid parameter is invalid"), so this pipeline **cannot be proven without a live ad
+  click**. Reaching that specific error means the payload shape is correct.
+- **HARD owner step (not automatable — confirmed):** Events Manager → dataset `760915983366996` →
+  **Custom Conversions → Create on `LeadSubmitted`** (NOT `Lead`). The API path does **not** work
+  for a messaging dataset: `POST /act_…/customconversions` returns *"A conversion rule is required
+  at creation time"* for every rule shape (`and/event/eq`, bare `event/eq`, `i_contains`) via both
+  query-params and form body — don't burn time re-attempting it. Until done, events flow (tracking
+  only) but ad-set optimization stays gated to `CONVERSATIONS`. Note a custom conversion with no
+  event history behind it won't unlock lead-optimization anyway — Meta needs volume first.
 - Memory: [[reference_ctwa_capi_lead_events]].
 
 ## Current live state (2026-05-18)

@@ -45,6 +45,8 @@ interface Lead {
     created_at: string;
     notes: string | null;
     assigned_agent_id: string | null;
+    // 2026-08-09: agent IDs this lead is shared with — powers the "Shared" badge.
+    shared_with_ids?: string[] | null;
     budget_min: string | null;
     budget_max: string | null;
     demand_bhk: number | null;
@@ -242,6 +244,10 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
     // only sees workable leads. Recovered via toggle at top of page.
     const [activeFilter, setActiveFilter] = useState<'active' | 'archived' | 'all'>((initialFilter?.active as 'active' | 'archived' | 'all') || 'active');
 
+    // "Shared with me" (2026-08-09): leads someone else owns but shared with me. Without this they
+    // are visible but unfindable — nothing marks them and the default sort is the lead's own age.
+    const [sharedWithMe, setSharedWithMe] = useState(false);
+
     // Drill-through one-shot (2026-07-16): opened pre-filtered from a dashboard tile → the filter is
     // seeded into the useState above on mount; tell the parent to clear its one-shot state so a later
     // manual visit to Ext. Leads starts clean.
@@ -384,6 +390,7 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
                         no_showcase_days: noShowcaseDays > 0 ? String(noShowcaseDays) : undefined,
                         budget_min: budgetMinFilter.trim() || undefined,
                         budget_max: budgetMaxFilter.trim() || undefined,
+                        ...(sharedWithMe ? { shared_with_me: 'true' } : {}),
                         limit: String(pageLimit),
                         sort: leadSortKey,
                         direction: leadSortDir,
@@ -400,7 +407,7 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
         } finally {
             setLoading(false);
         }
-    }, [sourceFilter, statusFilter, agentFilter, intentFilter, filterTaxonomy, locationSelection, notContactedDays, noShowcaseDays, budgetMinFilter, budgetMaxFilter, debouncedSearch, activeFilter, pageLimit, leadSortKey, leadSortDir]);
+    }, [sourceFilter, statusFilter, agentFilter, intentFilter, filterTaxonomy, locationSelection, notContactedDays, noShowcaseDays, budgetMinFilter, budgetMaxFilter, debouncedSearch, activeFilter, sharedWithMe, pageLimit, leadSortKey, leadSortDir]);
 
     useEffect(() => { loadData(); }, [loadData]);
     useEffect(() => {
@@ -1051,6 +1058,7 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
         notContactedDays > 0 ? '1' : '',
         noShowcaseDays > 0 ? '1' : '',
         (budgetMinFilter.trim() || budgetMaxFilter.trim()) ? '1' : '',
+        sharedWithMe ? '1' : '',
     ].filter(Boolean).length + (filterTaxonomy.nodeIds.length > 0 ? 1 : 0) + (filterTaxonomy.bhk.length > 0 ? 1 : 0);
 
     // 2026-05-13: Server now handles search + status + source + agent + activeFilter.
@@ -1158,6 +1166,19 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
                                 >{opt === 'active' ? 'Active' : opt === 'archived' ? 'Closed/Lost' : 'All'}</button>
                             ))}
                         </div>
+                        {/* Shared with me (2026-08-09): a lead shared with you is otherwise indistinguishable
+                            from your own and sorts by the lead's age, so it can sit thousands of rows down. */}
+                        <button
+                            type="button"
+                            title="Leads someone else owns but shared with you"
+                            onClick={() => setSharedWithMe(v => !v)}
+                            style={{
+                                padding: '6px 14px', fontSize: 12, fontWeight: 600, cursor: 'pointer', borderRadius: 10,
+                                border: '1px solid ' + (sharedWithMe ? '#7c3aed' : 'var(--border-secondary)'),
+                                backgroundColor: sharedWithMe ? '#7c3aed' : 'var(--bg-secondary)',
+                                color: sharedWithMe ? '#fff' : 'var(--text-secondary)', whiteSpace: 'nowrap',
+                            }}
+                        >🤝 Shared with me</button>
                         {/* Row 1: Search + Filters button */}
                         <div style={{ display: 'flex', gap: '8px' }}>
                             <input
@@ -1263,7 +1284,7 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
                                 )}
                                 <button
                                     type="button"
-                                    onClick={() => { setStatusFilter(''); setSourceFilter(''); setAgentFilter(''); setDateFrom(''); setDateTo(''); setIntentFilter(''); setFilterTaxonomy({ nodeIds: [], bhk: [] }); setLocationSelection({ label: '', lat: null, lng: null, radiusKm: 2 }); setNotContactedDays(0); setNoShowcaseDays(0); setBudgetMinFilter(''); setBudgetMaxFilter(''); }}
+                                    onClick={() => { setStatusFilter(''); setSourceFilter(''); setAgentFilter(''); setDateFrom(''); setDateTo(''); setIntentFilter(''); setFilterTaxonomy({ nodeIds: [], bhk: [] }); setLocationSelection({ label: '', lat: null, lng: null, radiusKm: 2 }); setNotContactedDays(0); setNoShowcaseDays(0); setBudgetMinFilter(''); setBudgetMaxFilter(''); setSharedWithMe(false); }}
                                     style={{ padding: '4px 10px', borderRadius: '20px', fontSize: '12px', fontWeight: 600, backgroundColor: 'transparent', border: '1px solid var(--border-secondary)', color: 'var(--text-muted)', cursor: 'pointer' }}
                                 >
                                     Clear all
@@ -1292,6 +1313,19 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
                                     >{opt === 'active' ? 'Active' : opt === 'archived' ? 'Closed/Lost' : 'All'}</button>
                                 ))}
                             </div>
+                            {/* Shared with me (2026-08-09): a lead shared with you is otherwise indistinguishable
+                                from your own and sorts by the lead's age, so it can sit thousands of rows down. */}
+                            <button
+                                type="button"
+                                title="Leads someone else owns but shared with you"
+                                onClick={() => setSharedWithMe(v => !v)}
+                                style={{
+                                    padding: '6px 14px', fontSize: 12, fontWeight: 600, cursor: 'pointer', borderRadius: 8,
+                                    border: '1px solid ' + (sharedWithMe ? '#7c3aed' : 'var(--border-secondary)'),
+                                    backgroundColor: sharedWithMe ? '#7c3aed' : 'var(--bg-secondary)',
+                                    color: sharedWithMe ? '#fff' : 'var(--text-secondary)', whiteSpace: 'nowrap',
+                                }}
+                            >🤝 Shared with me</button>
                             <input type="text" placeholder="Search name, phone, email..." value={searchQuery}
                                 onChange={e => setSearchQuery(e.target.value)}
                                 style={{ flex: 1, minWidth: '200px', padding: '7px 12px', borderRadius: 8, border: '1px solid var(--border-secondary)', backgroundColor: 'var(--bg-secondary)', color: 'var(--text-primary)', fontSize: 13, boxSizing: 'border-box' }} />
@@ -1319,7 +1353,7 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
                                 }}
                             >{leadSelectMode ? `✓ ${selectedLeadPhones.size} Selected` : '☐ Select'}</button>}
                             {(searchQuery || activeFilterCount > 0) && (
-                                <button type="button" onClick={() => { setSearchQuery(''); setStatusFilter(''); setSourceFilter(''); setAgentFilter(''); setDateFrom(''); setDateTo(''); setIntentFilter(''); setFilterTaxonomy({ nodeIds: [], bhk: [] }); setLocationSelection({ label: '', lat: null, lng: null, radiusKm: 2 }); setNotContactedDays(0); setNoShowcaseDays(0); setBudgetMinFilter(''); setBudgetMaxFilter(''); }}
+                                <button type="button" onClick={() => { setSearchQuery(''); setStatusFilter(''); setSourceFilter(''); setAgentFilter(''); setDateFrom(''); setDateTo(''); setIntentFilter(''); setFilterTaxonomy({ nodeIds: [], bhk: [] }); setLocationSelection({ label: '', lat: null, lng: null, radiusKm: 2 }); setNotContactedDays(0); setNoShowcaseDays(0); setBudgetMinFilter(''); setBudgetMaxFilter(''); setSharedWithMe(false); }}
                                     style={{ padding: '6px 12px', borderRadius: 8, border: '1px solid var(--border-secondary)', backgroundColor: 'transparent', color: '#ef4444', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>
                                     Clear
                                 </button>
@@ -1379,6 +1413,7 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
                                 <LeadCard
                                     key={lead.phone_number}
                                     lead={lead}
+                                    currentAgentId={agent?.id}
                                     isSelected={leadSelectMode ? selectedLeadPhones.has(lead.phone_number) : selectedPhone === lead.phone_number}
                                     onSelect={(phone: string) => { if (leadSelectMode) toggleLeadSelect(phone); else openDetail(phone); }}
                                     onStatusChange={handleStatusChange}
@@ -1447,6 +1482,12 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
                                                     {lead.lead_type === 'PARTNER_REFERRAL' && (
                                                         <span style={{ backgroundColor: '#ede9fe', color: '#7c3aed', padding: '1px 5px', borderRadius: '8px', fontSize: '9px', fontWeight: 700, marginLeft: '4px', whiteSpace: 'nowrap' }}>
                                                             {lead.referral_partner_name || 'Partner'}
+                                                        </span>
+                                                    )}
+                                                    {!!agent?.id && lead.shared_with_ids?.includes(agent.id) && (
+                                                        <span title="Shared with you by a teammate — the owner is unchanged"
+                                                            style={{ backgroundColor: '#ede9fe', color: '#7c3aed', padding: '1px 5px', borderRadius: '8px', fontSize: '9px', fontWeight: 700, marginLeft: '4px', whiteSpace: 'nowrap' }}>
+                                                            🤝 Shared
                                                         </span>
                                                     )}
                                                     {lead.demand_bhk ? <span style={{ color: 'var(--text-muted)', fontSize: '10px', marginLeft: '4px' }}>{lead.demand_bhk}BHK</span> : null}

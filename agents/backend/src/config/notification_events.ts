@@ -156,6 +156,28 @@ export const NOTIFICATION_EVENTS: Record<string, NotificationEventConfig> = {
         actionUrl: (d) => `#/leads`,
         prefKey: 'new_lead_notification',
     },
+    // 2026-08-09: sharing a lead told the recipient NOTHING — the share endpoint wrote
+    // shared_with_ids and returned, with zero notification calls. The teammate only found out if
+    // someone phoned them. Modelled on inventory_shared (the structural twin, above).
+    //
+    // NOTE the wording: "shared" is collaborative access with the owner UNCHANGED, unlike
+    // lead_reassigned_to_me above which is a transfer of ownership. Do not conflate them.
+    //
+    // No waTemplate yet — there is no approved Meta template for a lead share, and
+    // rp_agent_lead_reassigned would misstate what happened. Without one, notify() falls back to
+    // free-form text, which only delivers inside the recipient's 24h window; the in-app bell row is
+    // written unconditionally either way. Submit rp_agent_lead_shared as UTILITY (see
+    // docs/backlog/whatsapp-staff-templates-to-submit.md) and add the waTemplate block here once
+    // approved — smartSend then covers the out-of-window case automatically.
+    lead_shared: {
+        event: 'lead_shared',
+        category: 'lead',
+        title: (d) => 'Lead Shared with You',
+        body: (d) => `${d.sharer_name || 'A team member'} shared ${d.lead_name || 'a lead'}${d.phone ? ` (${d.phone})` : ''} with you — you can view and work it; the owner is unchanged`,
+        defaultChannels: ['whatsapp', 'push'],
+        actionUrl: (d) => `#/leads`,
+        prefKey: 'new_lead_notification',
+    },
     lead_reassigned_away: {
         event: 'lead_reassigned_away',
         category: 'lead',

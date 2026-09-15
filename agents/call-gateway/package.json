@@ -1,0 +1,14 @@
+{
+  "name": "rp-call-gateway",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "VPS bridge between the Realty Pandit Android call agent and the CRM backend",
+  "scripts": {
+    "start": "node src/server.ts",
+    "test": "node test/protocol.test.ts"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}

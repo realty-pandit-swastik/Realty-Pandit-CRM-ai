@@ -223,6 +223,22 @@ export class InteractionEngine {
      * Main trigger check: find all active transactions that need proactive follow-up.
      */
     async runTriggerCheck(): Promise<number> {
+        // ⚠ KILL SWITCH (2026-08-07). This engine fires silence-based re-engagement hourly,
+        // 24/7, up to MAX_FOLLOWUPS_PER_RUN, using MARKETING-category templates for the
+        // CLOSED_WON/CLOSED_LOST tail — architecturally the same "silence → re-engage"
+        // pattern that got the WABA locked for "Sending spam" in July 2026, just on a path
+        // that COLD_NUDGE_ENABLED never covered. Default OFF; turn on deliberately once
+        // send volume and the 131049 rate are being watched.
+        //
+        // The guard lives HERE rather than at a call site on purpose: the live invocation is
+        // queues/workers/scheduled_worker.ts ('interaction-triggers'), while server.ts only
+        // starts this engine in the legacy fallback path. Guarding a call site would patch
+        // the dead path and leave the live one running.
+        if (process.env.INTERACTION_ENGINE_ENABLED !== 'true') {
+            logger.info('[InteractionEngine] DISABLED (INTERACTION_ENGINE_ENABLED != true) — skipping trigger check.');
+            return 0;
+        }
+
         // Indian quiet hours: no automated follow-ups 9 PM – 8 AM IST
         if (isQuietHours()) {
             logger.info('[InteractionEngine] Quiet hours (9PM-8AM IST) — skipping trigger check.');
@@ -239,6 +255,9 @@ export class InteractionEngine {
             const transactions = await prisma.transaction.findMany({
                 where: {
                     status: { in: activeStatuses },
+                    // Consent guard — this engine had NO opted_out_at check at all, so anyone
+                    // who asked us to stop still received re-engagement templates. (2026-08-07)
+                    demand_contact: { opted_out_at: null },
                 },
                 include: {
                     demand_contact: true,

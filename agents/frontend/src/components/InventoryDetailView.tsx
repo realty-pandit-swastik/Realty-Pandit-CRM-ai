@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { formatInventoryAddress } from '../lib/address';
+import { formatInventoryAddress, formatUnitLabel } from '../lib/address';
 import client from '../api/client';
 import { toDialablePhone } from '../lib/phone';
 import { getDisplayFloor } from '../lib/floor';
@@ -113,9 +113,9 @@ export function InventoryDetailView({ inventoryId, onClose, onEdit }: Props) {
     const title = inv?.taxonomy_node?.name || inv?.flat_property_type?.name || inv?.type?.replace(/_/g, ' ') || 'Property';
     // Location: general area always; exact flat/plot number only for full access.
     const generalLoc = formatInventoryAddress(inv);
-    const unitLine = fullAccess
-        ? [inv?.flat_no && `Flat ${inv.flat_no}`, inv?.plot_no && `Plot ${inv.plot_no}`].filter(Boolean).join(' · ')
-        : '';
+    // Shared with the inventory tiles since 2026-08-08 — one definition of the unit string.
+    // The fullAccess gate stays: this view is fed by a different endpoint.
+    const unitLine = fullAccess ? formatUnitLabel(inv) : '';
 
     const C = { panel: '#1e2536', line: '#374151', line2: '#2d3748', text: '#f3f4f6', sub: '#9ca3af', dim: '#6b7280', body: '#d1d5db' };
 

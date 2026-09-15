@@ -236,7 +236,30 @@ router.get('/recent-external', async (req: any, res) => {
             where.preferred_location = { contains: location, mode: 'insensitive' };
         }
         if (agentId) {
-            where.assigned_agent_id = agentId;
+            // Filtering by a teammate must include leads SHARED with them, not just leads they own.
+            // Until 2026-08-08 this was a bare `where.assigned_agent_id = agentId`, so picking a
+            // person in the Leads filter hid every lead shared with them — which is the natural way
+            // to ask "what is X working on?" and made lead sharing look broken. `shared_with_ids` was
+            // honoured by the visibility filter but ignored by this filter. (Same defect shape as the
+            // inventory redaction fixed in 6f689f6.)
+            //
+            // ⚠ Pushed into where.AND, never a top-level OR: `where` is spread from
+            // buildContactVisibilityFilter, which IS an { OR: [...] }. Assigning where.OR here would
+            // REPLACE the visibility rule and let any agent see any lead — see the warning at the top
+            // of this file and applyPartnerLeadScope.
+            where.AND = [
+                ...(where.AND || []),
+                { OR: [{ assigned_agent_id: agentId }, { shared_with_ids: { has: agentId } }] },
+            ];
+        }
+
+        // "Shared with me" — leads someone else owns but deliberately shared with the viewer.
+        // Without this they are visible in principle but unfindable: nothing in the list marks them
+        // and the default sort is the lead's own age, so on a 3,485-lead account a freshly shared
+        // lead can sit thousands of rows down. (2026-08-09)
+        // ⚠ where.AND, never where.OR — see the note above.
+        if (String(req.query.shared_with_me) === 'true') {
+            where.AND = [...(where.AND || []), { shared_with_ids: { has: req.agent.id } }];
         }
 
         // PARTNER: only their own leads (referred by OR assigned to them / their sub-agents).
@@ -360,6 +383,11 @@ router.get('/recent-external', async (req: any, res) => {
                     created_at: true,
                     notes: true,
                     assigned_agent_id: true,
+                    // Needed by the list UI to badge rows shared with the viewer and to power the
+                    // "Shared with me" filter. Agent IDs only, no PII, and the row is already
+                    // visible to this viewer or the visibility filter would have excluded it.
+                    // Do NOT add this to any public or partner-facing route. (2026-08-09)
+                    shared_with_ids: true,
                     budget_min: true,
                     budget_max: true,
                     // demand_bhk dropped Phase 5 — derive from demand_schema_values.bhk
@@ -446,12 +474,50 @@ router.post('/:phone/share', async (req: any, res) => {
         // Keep only valid ACTIVE agents; never include the assigned owner; de-dup.
         const valid = await prisma.agent.findMany({ where: { id: { in: agent_ids }, status: 'active' }, select: { id: true } });
         const next = Array.from(new Set(valid.map(a => a.id).filter(id => id && id !== contact.assigned_agent_id)));
+        const previous: string[] = contact.shared_with_ids || [];
         await prisma.contact.update({ where: { phone_number: phone }, data: { shared_with_ids: next } });
         await prisma.interaction.create({ data: {
             tenant_id: contact.tenant_id, phone_number: phone, channel: 'system', direction: 'outbound',
             event_type: 'lead_shared', content: `Lead shared with ${next.length} teammate(s)`,
             metadata: { shared_with_ids: next, by_agent_id: actor.id },
         } }).catch(() => {});
+
+        // Tell the people it was shared WITH. Until 2026-08-09 nothing here notified anyone, so a
+        // teammate only learned about a shared lead if someone phoned them.
+        //
+        // ⚠ Notify only the NEWLY added, never the whole list: this endpoint REPLACES
+        // shared_with_ids, and the UI posts the full array on every lead save — so blanket-notifying
+        // would re-ping every existing sharee each time an unrelated field is edited.
+        // ⚠ Never notify the actor about their own action. routes/inventory.ts's equivalent
+        // (inventory_shared) omits both guards; do not copy that.
+        try {
+            const newlyAdded = next.filter(id => !previous.includes(id) && id !== actor.id);
+            if (newlyAdded.length) {
+                // ⚠ req.agent is the raw JWT payload — { id, email, role, tenant_id }. It has NO
+                // `name` (see feedback_jwt_agent_shape). Using actor.name directly would make every
+                // alert read "A team member shared…" instead of naming the person, so look it up.
+                const [lead, sharer, recipients] = await Promise.all([
+                    prisma.contact.findUnique({ where: { phone_number: phone }, select: { name: true } }),
+                    prisma.agent.findUnique({ where: { id: actor.id }, select: { name: true } }),
+                    prisma.agent.findMany({
+                        where: { id: { in: newlyAdded } },
+                        select: { id: true, phone: true, email: true, name: true },
+                    }),
+                ]);
+                notify('lead_shared', recipients.map(a => ({
+                    id: a.id, type: 'agent' as const, phone: a.phone || undefined,
+                    email: a.email || undefined, name: a.name,
+                })), {
+                    lead_name: lead?.name || 'A lead',
+                    phone,
+                    sharer_name: sharer?.name || 'A team member',
+                });
+            }
+        } catch (e) {
+            // Never fail the share because the notification failed.
+            logger.warn('[Leads] lead_shared notify failed:', (e as Error).message);
+        }
+
         res.json({ success: true, shared_with_ids: next });
     } catch (err: any) {
         captureRouteError(err, req, { route: 'leads#share' });
