@@ -1,0 +1,156 @@
+name: Deploy to Hostinger
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'agents/backend/**'
+      - 'agents/frontend/**'
+      - 'agents/website/**'
+      - 'deploy/github-hostinger-release.sh'
+      - '.github/workflows/deploy-hostinger.yml'
+  workflow_dispatch:
+    inputs:
+      run_migrations:
+        description: 'Run prisma migrate deploy (requires a verified backup and migration review)'
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hostinger-production
+  cancel-in-progress: false
+
+jobs:
+  backend-check:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: agents/backend
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: test_db
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping" --health-interval 10s --health-timeout 5s --health-retries 5
+    env:
+      DATABASE_URL: postgresql://test:test@localhost:5432/test_db?schema=public
+      REDIS_HOST: localhost
+      REDIS_PORT: '6379'
+      JWT_SECRET: ci-test-jwt-secret
+      AGENT_JWT_SECRET: ci-test-agent-jwt-secret
+      NODE_ENV: test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: agents/backend/package-lock.json
+      - run: npm ci
+      - run: npx prisma generate
+      - run: npm test
+      - run: npm audit --omit=dev --audit-level=high
+
+  frontend-check:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: agents/frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: agents/frontend/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run build
+      - run: npm audit --omit=dev --audit-level=high
+
+  website-check:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: agents/website
+    env:
+      NEXT_PUBLIC_API_URL: http://localhost:7071
+      NEXT_PUBLIC_SITE_URL: http://localhost:3000
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: agents/website/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run build
+      - run: npm audit --omit=dev --audit-level=high
+
+  deploy:
+    # Keep automatic delivery off until the server preflight in the handover is complete.
+    if: github.ref == 'refs/heads/main' && vars.HOSTINGER_GITHUB_DEPLOY_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    needs: [backend-check, frontend-check, website-check]
+    environment: production
+    env:
+      HOSTINGER_HOST: ${{ secrets.HOSTINGER_HOST }}
+      HOSTINGER_PORT: ${{ secrets.HOSTINGER_PORT }}
+      HOSTINGER_USER: ${{ secrets.HOSTINGER_USER }}
+      HOSTINGER_SSH_PRIVATE_KEY: ${{ secrets.HOSTINGER_SSH_PRIVATE_KEY }}
+      HOSTINGER_KNOWN_HOSTS: ${{ secrets.HOSTINGER_KNOWN_HOSTS }}
+      HOSTINGER_DEPLOY_PATH: ${{ secrets.HOSTINGER_DEPLOY_PATH }}
+      RUN_MIGRATIONS: ${{ inputs.run_migrations && '1' || '0' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate deployment configuration
+        run: |
+          test -n "$HOSTINGER_HOST"
+          test -n "$HOSTINGER_PORT"
+          test -n "$HOSTINGER_USER"
+          test -n "$HOSTINGER_SSH_PRIVATE_KEY"
+          test -n "$HOSTINGER_KNOWN_HOSTS"
+          test -n "$HOSTINGER_DEPLOY_PATH"
+
+      - name: Configure SSH
+        run: |
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$HOSTINGER_SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
+          printf '%s\n' "$HOSTINGER_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
+
+      - name: Package approved revision
+        run: |
+          tar -czf /tmp/realty-pandit-${GITHUB_SHA}.tgz \
+            --exclude='agents/backend/node_modules' --exclude='agents/backend/.env' --exclude='agents/backend/uploads' --exclude='agents/backend/logs' \
+            --exclude='agents/frontend/node_modules' --exclude='agents/frontend/dist' --exclude='agents/frontend/.env' \
+            --exclude='agents/website/node_modules' --exclude='agents/website/.next' --exclude='agents/website/.env' --exclude='agents/website/.env.local' \
+            agents/backend agents/frontend agents/website
+
+      - name: Upload and deploy
+        run: |
+          target="${HOSTINGER_USER}@${HOSTINGER_HOST}"
+          archive="/tmp/realty-pandit-${GITHUB_SHA}.tgz"
+          scp -P "$HOSTINGER_PORT" "$archive" "$target:$archive"
+          scp -P "$HOSTINGER_PORT" deploy/github-hostinger-release.sh "$target:/tmp/github-hostinger-release.sh"
+          ssh -p "$HOSTINGER_PORT" "$target" \
+            "HOSTINGER_DEPLOY_PATH='$HOSTINGER_DEPLOY_PATH' bash /tmp/github-hostinger-release.sh deploy '$archive' '$GITHUB_SHA' '$RUN_MIGRATIONS'"
+
+      - name: Remove runner key
+        if: always()
+        run: rm -f ~/.ssh/id_ed25519

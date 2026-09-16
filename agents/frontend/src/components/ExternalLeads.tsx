@@ -1079,6 +1079,22 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
         return true;
     });
 
+    // ── Select-all (header checkbox only) ──
+    // Operates on currently loaded + filtered rows (not the server-side recentTotal).
+    const allVisibleSelected = filteredLeads.length > 0 && filteredLeads.every(l => selectedLeadPhones.has(l.phone_number));
+    const someVisibleSelected = filteredLeads.some(l => selectedLeadPhones.has(l.phone_number));
+    const toggleSelectAllVisible = () => {
+        setSelectedLeadPhones(prev => {
+            const next = new Set(prev);
+            if (allVisibleSelected) {
+                filteredLeads.forEach(l => next.delete(l.phone_number));
+            } else {
+                filteredLeads.forEach(l => next.add(l.phone_number));
+            }
+            return next;
+        });
+    };
+
 
     // editSubCategories cascade removed Phase 2 demand-side unification (2026-05-29) —
     // the taxonomy cascade now lives inside <DemandRequirementsForm>.
@@ -1395,7 +1411,21 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
                 {/* Table */}
                 <div style={{ backgroundColor: 'var(--bg-secondary)', borderRadius: '8px', overflow: 'hidden', border: '1px solid var(--border-secondary)' }}>
                     <div style={{ padding: '8px 12px', borderBottom: isMobile ? 'none' : '1px solid var(--border-secondary)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span style={{ color: 'var(--text-primary)', fontSize: '13px', fontWeight: 600 }}>
+                        <span style={{ color: 'var(--text-primary)', fontSize: '13px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            {leadSelectMode && isMobile && (
+                                <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', cursor: filteredLeads.length === 0 ? 'not-allowed' : 'pointer' }}>
+                                    <input
+                                        type="checkbox"
+                                        checked={allVisibleSelected}
+                                        ref={el => { if (el) el.indeterminate = !allVisibleSelected && someVisibleSelected; }}
+                                        onChange={toggleSelectAllVisible}
+                                        disabled={filteredLeads.length === 0}
+                                        aria-label={allVisibleSelected ? 'Deselect all leads' : 'Select all leads'}
+                                        style={{ width: 16, height: 16, cursor: filteredLeads.length === 0 ? 'not-allowed' : 'pointer', accentColor: '#8b5cf6' }}
+                                    />
+                                    All
+                                </label>
+                            )}
                             Showing {filteredLeads.length.toLocaleString('en-IN')}{recentTotal > recentLeads.length ? ` of ${recentTotal.toLocaleString('en-IN')}` : ''} leads
                         </span>
                         {recentLeads.length < recentTotal ? (
@@ -1437,7 +1467,23 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
                         <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '700px' }}>
                             <thead>
                                 <tr style={{ borderBottom: '1px solid var(--border-secondary)' }}>
-                                    {leadSelectMode && <th style={{ padding: '6px 10px', width: '34px' }} />}
+                                    {leadSelectMode && (
+                                        <th style={{ padding: '6px 10px', width: '34px' }}>
+                                            <label title={allVisibleSelected ? 'Deselect all (visible)' : 'Select all (visible)'} style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: filteredLeads.length === 0 ? 'not-allowed' : 'pointer', fontSize: '10px', fontWeight: 600, textTransform: 'uppercase', color: 'var(--text-secondary)' }}>
+                                                <input
+                                                    type="checkbox"
+                                                    checked={allVisibleSelected}
+                                                    ref={el => { if (el) el.indeterminate = !allVisibleSelected && someVisibleSelected; }}
+                                                    onChange={toggleSelectAllVisible}
+                                                    onClick={e => e.stopPropagation()}
+                                                    disabled={filteredLeads.length === 0}
+                                                    aria-label={allVisibleSelected ? 'Deselect all leads' : 'Select all leads'}
+                                                    style={{ width: 16, height: 16, cursor: filteredLeads.length === 0 ? 'not-allowed' : 'pointer', accentColor: '#8b5cf6', margin: 0 }}
+                                                />
+                                                All
+                                            </label>
+                                        </th>
+                                    )}
                                     {([['Name', 'name'], ['Phone', 'phone'], ['Source', 'source'], ['Status', 'status'], ['Stage', 'stage'], ['Assigned to', 'assigned_to'], ['Budget', 'budget'], ['Score', 'score'], ['Intent', 'intent'], ['Location', 'location'], ['Date', 'date'], ['', '']] as Array<[string, string]>).map(([h, key]) => {
                                         const active = !!key && leadSortKey === key;
                                         return (
