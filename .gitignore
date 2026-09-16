@@ -46,3 +46,25 @@ agents/backend/temp/
 *.pem
 *.key
 !*.key.example
+AGENTS.md
+.graphifyignore
+
+
+
+
+# Graphify and temporary files
+graphify-out/
+temp.json
+temp2.json
+*.tmp
+.graphify_*
+
+
+# Tooling
+.claude/
+.codex/
+
+# Temp scripts
+extract.py
+generate_*.py
+
