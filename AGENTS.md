@@ -1,5 +1,7 @@
 ## graphify
 
+Before doing any work in this repository, read `.codex/AGENTS.md` completely. It contains the project-local architecture, source-of-truth, security, testing, and deployment decision rules distilled from the engineering handover and historical project reports.
+
 This project has a knowledge graph at graphify-out/ with god nodes, community structure, and cross-file relationships.
 
 When the user types `/graphify`, use the installed graphify skill or instructions before doing anything else.

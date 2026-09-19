@@ -62,9 +62,9 @@ temp2.json
 
 # Tooling
 .claude/
-.codex/
+.codex/*
+!.codex/AGENTS.md
 
 # Temp scripts
 extract.py
 generate_*.py
-
