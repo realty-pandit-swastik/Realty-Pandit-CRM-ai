@@ -18,6 +18,7 @@ import { MatchingEngine, buildMatchCriteriaFromLead } from './matching_engine';
 import { checkBudgetSanity, budgetReaskPrompt } from '../utils/budget_sanity';
 import { phoneVariants, isPlaceholderPhone } from '../utils/phone';
 import { BROCHURE_TEMPLATE_NAME } from '../config/whatsapp_templates';
+import { SessionTracker } from './session_tracker';
 
 const whatsapp = new WhatsAppService();
 const EVT_PROPERTY_SHARED = 'property_shared';
@@ -322,7 +323,7 @@ export async function shareNextPropertyDetailed(dealId: string, opts?: { bypassP
 
     const inv: any = next; // MatchedProperty has flattened inventory fields
     // bhk/society are used in the interaction log below; the actual card is built + sent by
-    // shareInventoryCard (category-correct v5 template + link). buildV5Card handles the
+    // shareInventoryCard (direct media + professional no-link summary) handles the
     // MatchedProperty shape (typeName ← prettifyType(type) when no flat_property_type relation).
     const beds = inv.specs?.bhk || inv.specs?.rooms || inv.specs?.bhk_count || inv.specs?.bedrooms || bhkFromSlug(inv.slug);
     const bhk = beds ? `${beds}BHK ${inv.type || 'Property'}` : (inv.type || 'Property');
@@ -400,7 +401,7 @@ export async function shareSpecificProperty(dealId: string, inventoryId: string,
     }
 
     // Auto-detect direct customer vs partner agent (same recognition the inventory share uses):
-    // partner ⇒ brandless brochure (PDF), direct ⇒ v5 template card.
+    // partner ⇒ brandless brochure (PDF), direct ⇒ media + no-link property card.
     const { resolveShareMode } = await import('./share_recognition');
     const { mode, partner } = await resolveShareMode(recipientPhone);
     const sent = mode === 'dealer'
@@ -444,92 +445,108 @@ export async function shareSpecificProperty(dealId: string, inventoryId: string,
  * Returns true only if Meta accepted the card — sendPropertyCard/sendTemplate throw strictly on
  * failure (callWhatsAppAPIStrict), so the boolean is ACCURATE (unlike the old swallowed sendText).
  */
-// Classify an inventory row + build the category-correct **v5** card (clickable link in body).
-// Picks 1 of the 8 approved v5 templates by:
-//   - residential vs commercial ← inv.category ('residential' | 'commercial' | 'agricultural');
-//     agricultural land sits in the Commercial tree → treated as commercial.
-//   - plot vs building ← legacy type slug / type name matching /plot|land|orchard/.
-//   - sale vs rent ← inv.intent.
-// Builds {{1}} (config: BHK for residential, type [+rooms] for commercial, plot label for land),
-// {{4}} (area/plot-area), {{5}}/{{6}} (furnishing+feature, or facing+ownership for plots), {{7}} (link).
-function buildV5Card(inv: any): { template: string; params: Record<string, string> } {
+export function buildPropertyShareContent(inv: any): { text: string; params: Record<string, string> } {
     const s = (inv.specs || {}) as Record<string, any>;
     const isRent = ['rent', 'rent_lease', 'lease'].includes(inv.intent);
     const isCommercial = String(inv.category || '').toLowerCase() !== 'residential';
     const typeStr = `${inv.type || ''} ${inv.flat_property_type?.name || ''} ${inv.property_type_link?.name || ''}`.toLowerCase();
     const isPlot = /plot|land|orchard/.test(typeStr) || String(inv.category || '').toLowerCase() === 'agricultural';
-
-    const cat = isCommercial ? (isPlot ? 'com_plot' : 'com') : (isPlot ? 'res_plot' : 'res');
-    const template = `rp_property_card_${cat}_${isRent ? 'rent' : 'sale'}_v5`;
-
     const typeName = inv.flat_property_type?.name || inv.property_type_link?.name || prettifyType(inv.type);
     const location = [inv.locality, inv.city].filter(Boolean).join(', ') || inv.city || inv.district || inv.full_address || 'Location on request';
-    const price = formatPrice(inv.price, inv.price_unit, inv.intent);
-    const link = `https://www.realtypandit.in/properties/${inv.display_id || inv.id}`;
+    const society = inv.apartment_name || s.society_name || inv.sub_locality || inv.locality || 'Property';
+    const price = formatPrice(inv.display_price ?? inv.price, inv.price_unit, inv.intent);
 
-    let p1: string, p4: string, p5: string, p6: string;
+    let title: string, area: string, detail1: string, detail2: string;
     if (isPlot) {
-        // Plots/land: no BHK/rooms/furnishing/floor — plot area + facing/road + ownership.
         const plotArea = s['plot-area'] || s.area;
         const plotUnit = s['plot-area-unit'] || s.area_unit || 'sqyd';
-        p1 = typeName || (isCommercial ? 'Commercial Land' : 'Residential Plot');
-        p4 = plotArea ? `${plotArea} ${plotUnit}` : 'Area on request';
-        p5 = `${s.facing || 'Open'}${s['road-facing'] === 'Yes' ? ' · Road-facing' : ''}`;
-        p6 = `${s['ownership-tenure'] || 'Freehold'}${s['boundary-wall'] === 'Yes' ? ' · Boundary wall' : ''}`;
+        title = typeName || (isCommercial ? 'Commercial Land' : 'Residential Plot');
+        area = plotArea ? `${plotArea} ${plotUnit}` : 'Area on request';
+        detail1 = `${s.facing || 'Open'}${s['road-facing'] === 'Yes' ? ' · Road-facing' : ''}`;
+        detail2 = `${s['ownership-tenure'] || 'Freehold'}${s['boundary-wall'] === 'Yes' ? ' · Boundary wall' : ''}`;
     } else if (isCommercial) {
-        // Commercial building: Rooms only if present (most are area-based), area + area-type, washrooms.
         const rooms = s.rooms;
-        p1 = rooms ? `${typeName} (${rooms} Rooms)` : typeName;
-        p4 = s.area ? `${s.area} ${s.area_unit || 'sqft'}${s['area-type'] ? ` · ${s['area-type']}` : ''}` : 'Area on request';
-        p5 = s.furnishing ? capitalize(s.furnishing) : (isRent ? 'Available Now' : 'Ready to Move');
+        title = rooms ? `${typeName} (${rooms} Rooms)` : typeName;
+        area = s.area ? `${s.area} ${s.area_unit || 'sqft'}${s['area-type'] ? ` · ${s['area-type']}` : ''}` : 'Area on request';
+        detail1 = s.furnishing ? capitalize(s.furnishing) : (isRent ? 'Available Now' : 'Ready to Move');
         const baths = s.bathrooms;
-        p6 = baths ? `${baths} Washroom${Number(baths) > 1 ? 's' : ''}`
+        detail2 = baths ? `${baths} Washroom${Number(baths) > 1 ? 's' : ''}`
             : (s.floors ? `Floor ${s.floors}` : buildAmenityLine(s.amenities));
     } else {
-        // Residential building: BHK (never "rooms"), area, furnishing, floor/facing.
         const beds = s.bhk || s.bhk_count || s.bedrooms || bhkFromSlug(inv.slug);
-        p1 = beds ? `${beds} BHK ${typeName}` : typeName;
-        p4 = s.area ? `${s.area} ${s.area_unit || 'sqft'}` : 'Area on request';
-        p5 = s.furnishing ? capitalize(s.furnishing) : (isRent ? 'Available Now' : 'Ready to Move');
-        p6 = s.floors ? `Floor ${s.floors}` : (s.facing ? `${s.facing} Facing` : 'Prime Location');
+        title = beds ? `${beds} BHK ${typeName}` : typeName;
+        area = s.area ? `${s.area} ${s.area_unit || 'sqft'}` : 'Area on request';
+        detail1 = s.furnishing ? capitalize(s.furnishing) : (isRent ? 'Available Now' : 'Ready to Move');
+        const floor = inv.display_floor || inv.floor_label || (inv.floor_number != null ? String(inv.floor_number) : s.floors);
+        detail2 = floor ? `Floor ${floor}` : (s.facing ? `${s.facing} Facing` : 'Prime Location');
     }
-    return { template, params: { p1, p2: location, p3: price, p4, p5, p6, p7: link } };
+
+    const amenities = buildAmenityLine(s.amenities);
+    const text = [
+        'Namaste 🙏',
+        `🏡 *${title}*`,
+        society !== location ? `🏘️ ${society}` : '',
+        `📍 ${location}`,
+        `💰 ${isRent ? 'Rent' : 'Price'}: ₹${price}${isRent ? '/month' : ''}`,
+        `📐 ${area}`,
+        `✅ ${detail1}`,
+        `🧭 ${detail2}`,
+        `✨ ${amenities}`,
+        '',
+        'Reply here to request more information or schedule a visit.',
+    ].join('\n');
+
+    return {
+        text,
+        params: {
+            p1: title,
+            p2: society,
+            p3: location,
+            p4: price,
+            p5: detail1,
+            p6: detail2,
+            p7: `${area} · ${amenities}`,
+        },
+    };
 }
 
 /**
- * Send ONE inventory item to any phone (client/partner) as the category-correct **v5** property
- * card (Image header + body with clickable link + 3 buttons). Reused by the Inventory page +
- * External-Lead "Send WhatsApp" (POST /inventory/:id/share-to-client). Falls back to the legacy
- * v4 card if a v5 send fails. Returns true only if Meta accepted the card (sendTemplate throws
- * strictly on failure), so the boolean is ACCURATE.
+ * Send one property without a website link. Inside an open customer-service window this sends
+ * direct photo/video attachments, with the professional summary as the first caption. Outside
+ * that window Meta only permits approved templates, so the approved image-card template is used.
  */
 export async function shareInventoryCard(phone: string, inv: any): Promise<boolean> {
-    const imageUrl = await pickSendableImage(inv.media_urls);
-    const { template, params } = buildV5Card(inv);
-    try {
-        await whatsapp.sendTemplate(phone, template, params, imageUrl);
-        logger.info(`[PropShare] Inventory ${inv.id} → ${phone} via ${template} (${params.p1})`);
-        return true;
-    } catch (e5) {
-        logger.warn(`[PropShare] ${template} failed for ${inv.id} (${(e5 as Error).message}); falling back to v4 card`);
-        // Resilience fallback: legacy v4/v2 card (generic labels, no link).
+    const { text, params } = buildPropertyShareContent(inv);
+    const media = collectPropertyShareMedia(inv);
+
+    if (await SessionTracker.isSessionActive(phone)) {
         try {
-            const typeName = inv.flat_property_type?.name || inv.property_type_link?.name || prettifyType(inv.type);
-            const beds = inv.specs?.bhk || inv.specs?.rooms || inv.specs?.bhk_count || inv.specs?.bedrooms || bhkFromSlug(inv.slug);
-            const bhk = beds ? `${beds}BHK ${typeName}` : typeName;
-            const society = inv.specs?.society_name || inv.locality || inv.city || 'Property';
-            const city = inv.city || inv.district || 'India';
-            const price = formatPrice(inv.price, inv.price_unit, inv.intent);
-            const h1 = inv.specs?.furnishing ? capitalize(inv.specs.furnishing) : (inv.intent === 'rent' ? 'Available Now' : 'Ready to Move');
-            const h2 = inv.specs?.floors ? `Floor ${inv.specs.floors}` : (inv.specs?.facing ? `${inv.specs.facing} Facing` : 'Prime Location');
-            const h3 = buildAmenityLine(inv.specs?.amenities);
-            await sendPropertyCard(phone, inv.intent, { p1: bhk, p2: society, p3: city, p4: price, p5: h1, p6: h2, p7: h3 }, imageUrl);
-            logger.info(`[PropShare] Inventory ${inv.id} → ${phone} via v4 fallback`);
+            const items = [
+                ...media.images.map(url => ({ type: 'image' as const, url })),
+                ...media.videos.map(url => ({ type: 'video' as const, url })),
+            ];
+            if (!items.length) {
+                await whatsapp.sendTextStrict(phone, text);
+            } else {
+                for (const [index, item] of items.entries()) {
+                    await whatsapp.sendMediaStrict(phone, item.type, item.url, index === 0 ? text : undefined);
+                }
+            }
+            logger.info(`[PropShare] Inventory ${inv.id} → ${phone} as ${items.length} direct media attachment(s)`);
             return true;
-        } catch (e4) {
-            logger.error(`[PropShare] inventory card failed for ${inv.id} (v5 + v4 fallback):`, e4);
-            return false;
+        } catch (mediaError) {
+            logger.warn(`[PropShare] Direct media failed for ${inv.id}; using approved property card: ${(mediaError as Error).message}`);
         }
+    }
+
+    try {
+        const imageUrl = await pickSendableImage(inv.media_urls);
+        await sendPropertyCard(phone, inv.intent, params, imageUrl);
+        logger.info(`[PropShare] Inventory ${inv.id} → ${phone} via no-link property card`);
+        return true;
+    } catch (cardError) {
+        logger.error(`[PropShare] inventory card failed for ${inv.id}:`, cardError);
+        return false;
     }
 }
 
@@ -537,9 +554,9 @@ function formatPrice(price: any, unit?: string, intent?: string | null): string 
     if (!price) return 'Price on request';
     const n = Number(price);
     if (!Number.isFinite(n) || n <= 0) return 'Price on request';
-    // Rent → monthly raw rupees ("25,000/month") — never "0.2 Lakh"/"25K". (F5, 2026-06-21)
-    const i = String(intent || '').toLowerCase();
-    if (i === 'rent' || i === 'rent_lease' || i === 'lease') return `${n.toLocaleString('en-IN')}/month`;
+    if (['rent', 'rent_lease', 'lease'].includes(String(intent || '').toLowerCase())) {
+        return n.toLocaleString('en-IN');
+    }
     // unit='lakh'|'crore'|'thousand'|null (raw rupees)
     const u = (unit || '').toLowerCase();
     if (u === 'lakh') return `${n % 1 === 0 ? n : n.toFixed(1)} Lakh`;
@@ -577,6 +594,21 @@ const API_BASE = process.env.API_BASE_URL || 'https://api.realtypandit.in';
 // Brandless fallback header image used when a property has no reachable photo.
 const DEFAULT_CARD_IMAGE = 'https://realtypandit.in/logo.png';
 
+export function collectPropertyShareMedia(inv: any): { images: string[]; videos: string[] } {
+    const normalize = (url: string) => url.startsWith('http') ? url : `${API_BASE}${url.startsWith('/') ? '' : '/'}${url}`;
+    const isVideo = (url: string) => /\.(mp4|webm|ogg|mov)(?:\?|$)/i.test(url);
+    const isImage = (url: string) => /\.(jpe?g|png|webp)(?:\?|$)/i.test(url);
+    const all = [...(inv.media_urls || []), ...(inv.video_urls || [])]
+        .filter((url: unknown): url is string => typeof url === 'string' && url.length > 0)
+        .map(normalize);
+    const unique = [...new Set(all)];
+    // ponytail: cap one share at 10 attachments; use a queued album sender if larger galleries become common.
+    return {
+        images: unique.filter(isImage).slice(0, 8),
+        videos: unique.filter(isVideo).slice(0, 2),
+    };
+}
+
 // HEAD-check (with GET fallback) that an image URL is actually fetchable as an image.
 // Meta downloads the template header image at send time; if it 404s, Meta rejects the
 // whole card. We must only hand Meta a URL we've confirmed resolves.
@@ -603,7 +635,7 @@ async function isReachableImage(url: string): Promise<boolean> {
 // Pick the first media URL that actually resolves to an image; otherwise the brandless
 // default. Prevents Meta rejecting the card because a stale/pending photo path is gone.
 async function pickSendableImage(mediaUrls?: string[] | null): Promise<string> {
-    const candidates = (mediaUrls || []).filter((u) => /\.(jpe?g|png|webp)$/i.test(u));
+    const candidates = (mediaUrls || []).filter((u) => /\.(jpe?g|png|webp)(?:\?|$)/i.test(u));
     for (const raw of candidates) {
         const url = raw.startsWith('http') ? raw : `${API_BASE}${raw}`;
         if (await isReachableImage(url)) return url;

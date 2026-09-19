@@ -15,6 +15,7 @@ export default function ShareWhatsAppModal({ property, onClose }: ShareWhatsAppM
     const [phone, setPhone] = useState('');
     const [submitted, setSubmitted] = useState(false);
     const [loading, setLoading] = useState(false);
+    const [error, setError] = useState('');
 
     const locationText = [property.locality, property.city].filter(Boolean).join(', ') || property.location || '';
     const propertyTitle = property.apartment_name || property.type?.replace(/_/g, ' ') || 'Property';
@@ -23,15 +24,17 @@ export default function ShareWhatsAppModal({ property, onClose }: ShareWhatsAppM
         e.preventDefault();
         if (!name.trim() || !phone.trim()) return;
         setLoading(true);
+        setError('');
         try {
-            await sharePropertyWhatsApp({
+            const result = await sharePropertyWhatsApp({
                 name: name.trim(),
                 phone: phone.trim(),
                 property_id: property.id,
             });
+            if (!result.whatsapp_sent) throw new Error(result.message);
             setSubmitted(true);
-        } catch {
-            setSubmitted(true);
+        } catch (err) {
+            setError((err as Error).message || 'WhatsApp delivery could not be started. Please try again.');
         } finally {
             setLoading(false);
         }
@@ -117,6 +120,7 @@ export default function ShareWhatsAppModal({ property, onClose }: ShareWhatsAppM
                             <MessageCircle className="w-4 h-4" />
                             {loading ? 'Sending...' : 'Send to My WhatsApp'}
                         </button>
+                        {error && <p role="alert" className="text-sm text-red-600 dark:text-red-400 text-center">{error}</p>}
                     </form>
                 )}
             </motion.div>

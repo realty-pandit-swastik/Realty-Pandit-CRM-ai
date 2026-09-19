@@ -1005,32 +1005,20 @@ router.post('/share-property-whatsapp', async (req, res) => {
             }
         });
 
-        // Fetch property details for the WhatsApp message
+        // Fetch the complete buyer-facing share payload, including persisted media.
         const property = await prisma.inventory.findUnique({
             where: { id: property_id },
-            select: {
-                id: true, slug: true, apartment_name: true, type: true, price: true,
-                price_unit: true, display_price: true, locality: true, city: true,
-                district: true, specs: true, intent: true
+            include: {
+                flat_property_type: { select: { name: true } },
+                property_type_link: { select: { name: true } },
             }
         });
         if (!property) return res.status(404).json({ error: 'Property not found' });
 
-        const title = [property.apartment_name, property.type?.replace(/_/g, ' ')].filter(Boolean).join(' - ') || 'Property';
-        const location = [property.locality, property.city || property.district].filter(Boolean).join(', ');
-        const price = property.display_price || property.price;
-        const priceText = price ? `₹${price} ${property.price_unit || ''}`.trim() : 'Price on request';
-        const link = `https://www.realtypandit.in/properties/${property.slug || property.id}`;
-        const specs: any = property.specs || {};
-        const specsText = [specs.bedrooms ? `${specs.bedrooms} BHK` : '', specs.area ? `${specs.area} sqft` : ''].filter(Boolean).join(' | ');
-
-        const message = `🏠 *${title}*\n📍 ${location}\n💰 ${priceText}${specsText ? `\n📐 ${specsText}` : ''}\n🔗 ${link}\n\nShared via Realty Pandit`;
-
-        // Send WhatsApp message via service
+        let whatsappSent = false;
         try {
-            const { default: WhatsAppService } = await import('../services/whatsapp');
-            const wa = new WhatsAppService();
-            await wa.sendText(phone, message);
+            const { shareInventoryCard } = await import('../services/property_sharing');
+            whatsappSent = await shareInventoryCard(phone, property);
         } catch (waErr) {
             logger.warn('WhatsApp send failed for share-property', { phone, error: (waErr as Error).message });
         }
@@ -1048,11 +1036,17 @@ router.post('/share-property-whatsapp', async (req, res) => {
                 tenant_id: tenant.id, phone_number: storedPhone, channel: 'website',
                 direction: 'inbound', event_type: 'property_shared',
                 content: `Shared property ${property_id} via WhatsApp`,
-                metadata: { property_id, channel: 'whatsapp' }
+                metadata: { property_id, channel: 'whatsapp', whatsapp_sent: whatsappSent }
             }
         });
 
-        res.json({ success: true, message: 'Property details sent to your WhatsApp!' });
+        res.json({
+            success: whatsappSent,
+            whatsapp_sent: whatsappSent,
+            message: whatsappSent
+                ? 'Property media and details sent to your WhatsApp!'
+                : 'Property saved, but WhatsApp delivery could not be started. Please try again.',
+        });
     } catch (error) {
         captureRouteError(error, req, { route: 'public#14' });
         res.status(500).json({ error: (error as Error).message });

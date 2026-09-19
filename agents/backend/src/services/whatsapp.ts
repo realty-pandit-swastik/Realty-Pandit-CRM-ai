@@ -199,6 +199,49 @@ export class WhatsAppService {
         }
     }
 
+    /** Send a direct image/video attachment and throw when Meta rejects it. */
+    public async sendMediaStrict(
+        to: string,
+        type: 'image' | 'video',
+        mediaUrl: string,
+        caption?: string,
+    ): Promise<void> {
+        logger.info(`[WhatsAppService] Sending ${type} (strict) to ${to}: ${mediaUrl}`);
+
+        if (process.env.NODE_ENV === 'development') {
+            logger.info(`[WhatsAppService] Mock ${type} sent: ${mediaUrl}`);
+            return;
+        }
+
+        try {
+            const res = await this.callWhatsAppAPIStrict({
+                messaging_product: 'whatsapp',
+                to,
+                type,
+                [type]: { link: mediaUrl, ...(caption ? { caption } : {}) },
+            });
+            recordOutbound({
+                to,
+                messageType: type,
+                body: caption,
+                mediaUrl,
+                sentBy: 'property_sharing',
+                waMessageId: res?.waMessageId ?? null,
+                error: res?.error ?? null,
+            }).catch(() => {});
+        } catch (error) {
+            recordOutbound({
+                to,
+                messageType: type,
+                body: caption,
+                mediaUrl,
+                sentBy: 'property_sharing',
+                error: (error as WhatsAppSendError)?.info ?? classifyMetaError(error),
+            }).catch(() => {});
+            throw error;
+        }
+    }
+
     /**
      * Download media from WhatsApp Cloud API by media ID.
      */
