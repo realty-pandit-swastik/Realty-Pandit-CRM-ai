@@ -1,5 +1,28 @@
-import { describe, expect, it } from 'vitest';
-import { buildPropertyShareContent, collectPropertyShareMedia } from '../services/property_sharing';
+import { describe, expect, it, vi } from 'vitest';
+
+const sent = vi.hoisted(() => [] as string[]);
+let sessionActive = vi.hoisted(() => ({ value: true }));
+
+vi.mock('../services/whatsapp', () => ({
+    WhatsAppService: class {
+        async sendMediaStrict(_to: string, type: string, url: string, caption?: string) {
+            sent.push(`${type} ${url}${caption ? ` caption=${caption}` : ''}`);
+        }
+        async sendTextStrict(_to: string, body: string) {
+            sent.push(`text ${body.split('\n')[1] ?? body}`);
+        }
+    },
+}));
+
+vi.mock('../services/session_tracker', () => ({
+    SessionTracker: { isSessionActive: async () => sessionActive.value },
+}));
+
+import {
+    buildPropertyShareContent,
+    collectPropertyShareMedia,
+    sendPropertyMediaAndDetails,
+} from '../services/property_sharing';
 
 describe('property WhatsApp share content', () => {
     const property = {
@@ -41,5 +64,35 @@ describe('property WhatsApp share content', () => {
             'https://api.realtypandit.in/uploads/walkthrough.mp4',
             'https://cdn.example.com/tour.mov',
         ]);
+    });
+
+    it('sends every photo then every video uncaptioned, and the details as a separate last message', async () => {
+        sent.length = 0;
+        sessionActive.value = true;
+
+        await expect(sendPropertyMediaAndDetails('+919999999999', property)).resolves.toBe(true);
+
+        expect(sent).toEqual([
+            'image https://api.realtypandit.in/uploads/home.jpg',
+            'video https://api.realtypandit.in/uploads/walkthrough.mp4',
+            'video https://cdn.example.com/tour.mov',
+            'text 🏡 *3 BHK Builder Floor*',
+        ]);
+    });
+
+    it('sends nothing outside the 24h window so the caller falls back to a template', async () => {
+        sent.length = 0;
+        sessionActive.value = false;
+
+        await expect(sendPropertyMediaAndDetails('+919999999999', property)).resolves.toBe(false);
+        expect(sent).toEqual([]);
+    });
+
+    // Runs after the brochure/card is already delivered — it must never throw, or a share that
+    // DID reach the customer would be recorded and shown to the agent as failed.
+    it('reports false instead of throwing on a malformed property', async () => {
+        sessionActive.value = true;
+
+        await expect(sendPropertyMediaAndDetails('+919999999999', null)).resolves.toBe(false);
     });
 });

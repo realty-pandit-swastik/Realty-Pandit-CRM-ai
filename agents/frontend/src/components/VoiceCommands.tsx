@@ -20,7 +20,7 @@ const VoiceCommands = ({ onNavigate, currentView }: VoiceCommandsProps) => {
   const [listening, setListening] = useState(false);
   const [transcript, setTranscript] = useState('');
   const [feedback, setFeedback] = useState('');
-  const [supported, setSupported] = useState(true);
+  const [supported] = useState(() => Boolean((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition));
   const [enabled, setEnabled] = useState(false);
   const [continuous, setContinuous] = useState(false);
   const [volume, setVolume] = useState(0.8);
@@ -28,6 +28,8 @@ const VoiceCommands = ({ onNavigate, currentView }: VoiceCommandsProps) => {
 
   const recognitionRef = useRef<any>(null);
   const synthRef = useRef<SpeechSynthesis | null>(null);
+  const processCommandRef = useRef<(text: string) => void>(() => {});
+  const speakRef = useRef<(text: string) => void>(() => {});
 
   // Voice command patterns mapped to navigation views
   const commands: VoiceCommand[] = [
@@ -58,7 +60,6 @@ const VoiceCommands = ({ onNavigate, currentView }: VoiceCommandsProps) => {
     const SpeechGrammarList = (window as any).SpeechGrammarList || (window as any).webkitSpeechGrammarList;
 
     if (!SpeechRecognition) {
-      setSupported(false);
       return;
     }
 
@@ -89,7 +90,7 @@ const VoiceCommands = ({ onNavigate, currentView }: VoiceCommandsProps) => {
       const results = Array.from(event.results[0]).map((r: any) => r.transcript.toLowerCase());
       const command = results[0];
       setTranscript(command);
-      processCommand(command);
+      processCommandRef.current(command);
     };
 
     recognition.onerror = (event: any) => {
@@ -130,22 +131,22 @@ const VoiceCommands = ({ onNavigate, currentView }: VoiceCommandsProps) => {
   }, [continuous, enabled]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Process voice command
-  const processCommand = (text: string) => {
+  function processCommand(text: string) {
     const matched = commands.find(cmd =>
       cmd.patterns.some(pattern => text.includes(pattern))
     );
 
     if (matched) {
       setFeedback(`Navigating to ${matched.description}...`);
-      speak(`Opening ${matched.description}`);
+      speakRef.current(`Opening ${matched.description}`);
       setTimeout(() => {
         onNavigate(matched.action);
       }, 500);
     } else {
       setFeedback(`Command not recognized: "${text}"`);
-      speak('Sorry, I did not understand that command.');
+      speakRef.current('Sorry, I did not understand that command.');
     }
-  };
+  }
 
   // Text-to-speech feedback
   const speak = (text: string) => {
@@ -167,6 +168,11 @@ const VoiceCommands = ({ onNavigate, currentView }: VoiceCommandsProps) => {
 
     synthRef.current.speak(utterance);
   };
+
+  useEffect(() => {
+    processCommandRef.current = processCommand;
+    speakRef.current = speak;
+  }, [processCommand]);
 
   // Start listening
   const startListening = () => {

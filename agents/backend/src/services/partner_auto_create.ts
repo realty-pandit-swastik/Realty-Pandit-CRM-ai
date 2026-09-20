@@ -1,7 +1,7 @@
 /**
  * Partner Auto-Create Utility
  * When a lead is logged as PARTNER_REFERRAL and the referring partner is not registered,
- * this creates a minimal PartnerAgent record (status: PENDING_PAYMENT) so the link is preserved.
+ * this creates a minimal PartnerAgent record (status: ACTIVE) so the link is preserved.
  * The partner can be fully onboarded later via the admin panel.
  */
 
@@ -18,7 +18,7 @@ export interface PartnerAutoCreateResult {
 /**
  * Ensure a PartnerAgent record exists for the given phone number.
  * - If already registered: returns existing record (wasCreated = false)
- * - If not registered: creates minimal Contact + PartnerAgent with PENDING_PAYMENT status
+ * - If not registered: creates minimal Contact + PartnerAgent with ACTIVE status
  *
  * Caller is responsible for firing partner notifications non-blocking after this returns.
  */

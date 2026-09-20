@@ -106,7 +106,7 @@ export default function MarketingCampaign() {
       const response = await authedFetch(`${API_BASE_URL}/api/marketing/campaigns`);
       const data = await response.json();
       setCampaigns(data.campaigns || []);
-    } catch (err: any) {
+    } catch {
       setError('Failed to load campaigns');
     } finally {
       setLoading(false);
@@ -118,7 +118,7 @@ export default function MarketingCampaign() {
       const response = await authedFetch(`${API_BASE_URL}/api/marketing/templates`);
       const data = await response.json();
       setTemplates(data.templates || []);
-    } catch (err: any) {
+    } catch {
       setError('Failed to load templates');
     }
   };

@@ -103,6 +103,9 @@ export async function shareInventoryBrochure(
         filename: brochureFilename(inv),
         bodyParams: [buildPropertySummary(inv), `${seq.index + 1} of ${seq.total}`],
     });
+    // Partners asked for the listing itself, not just the forwardable PDF — send the photos,
+    // videos and details text too. No-ops outside Meta's 24h window (the PDF still lands).
+    await sendPropertyMediaAndDetails(phone, inv);
     return { sent: true, pdfUrl };
 }
 
@@ -511,35 +514,40 @@ export function buildPropertyShareContent(inv: any): { text: string; params: Rec
 }
 
 /**
+ * Send every photo and video as its own attachment, then the full property details as a
+ * separate text message. Free-form media is only permitted inside Meta's 24-hour
+ * customer-service window, so this returns false (sending nothing) when that window is
+ * closed and the caller must fall back to an approved template.
+ */
+export async function sendPropertyMediaAndDetails(phone: string, inv: any): Promise<boolean> {
+    // Never throws: this runs AFTER the brochure/card has already been accepted by Meta, so an
+    // error here must not make a delivered share look failed to the caller.
+    try {
+        if (!(await SessionTracker.isSessionActive(phone))) return false;
+
+        const { text } = buildPropertyShareContent(inv);
+        const media = collectPropertyShareMedia(inv);
+        for (const url of media.images) await whatsapp.sendMediaStrict(phone, 'image', url);
+        for (const url of media.videos) await whatsapp.sendMediaStrict(phone, 'video', url);
+        await whatsapp.sendTextStrict(phone, text);
+        logger.info(`[PropShare] Inventory ${inv.id} → ${phone}: ${media.images.length} photo(s), ${media.videos.length} video(s), then details text`);
+        return true;
+    } catch (mediaError) {
+        logger.warn(`[PropShare] Media/details send failed for ${inv?.id}: ${(mediaError as Error).message}`);
+        return false;
+    }
+}
+
+/**
  * Send one property without a website link. Inside an open customer-service window this sends
- * direct photo/video attachments, with the professional summary as the first caption. Outside
- * that window Meta only permits approved templates, so the approved image-card template is used.
+ * the photos/videos followed by the details text. Outside that window Meta only permits
+ * approved templates, so the approved image-card template is used instead.
  */
 export async function shareInventoryCard(phone: string, inv: any): Promise<boolean> {
-    const { text, params } = buildPropertyShareContent(inv);
-    const media = collectPropertyShareMedia(inv);
-
-    if (await SessionTracker.isSessionActive(phone)) {
-        try {
-            const items = [
-                ...media.images.map(url => ({ type: 'image' as const, url })),
-                ...media.videos.map(url => ({ type: 'video' as const, url })),
-            ];
-            if (!items.length) {
-                await whatsapp.sendTextStrict(phone, text);
-            } else {
-                for (const [index, item] of items.entries()) {
-                    await whatsapp.sendMediaStrict(phone, item.type, item.url, index === 0 ? text : undefined);
-                }
-            }
-            logger.info(`[PropShare] Inventory ${inv.id} → ${phone} as ${items.length} direct media attachment(s)`);
-            return true;
-        } catch (mediaError) {
-            logger.warn(`[PropShare] Direct media failed for ${inv.id}; using approved property card: ${(mediaError as Error).message}`);
-        }
-    }
+    if (await sendPropertyMediaAndDetails(phone, inv)) return true;
 
     try {
+        const { params } = buildPropertyShareContent(inv);
         const imageUrl = await pickSendableImage(inv.media_urls);
         await sendPropertyCard(phone, inv.intent, params, imageUrl);
         logger.info(`[PropShare] Inventory ${inv.id} → ${phone} via no-link property card`);

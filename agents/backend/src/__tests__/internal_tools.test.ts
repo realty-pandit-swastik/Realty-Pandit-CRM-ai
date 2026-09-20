@@ -476,8 +476,9 @@ describe('GET /webhooks/internal/tools/search-inventory', () => {
         expect(call.where.intent).toEqual({ in: ['rent', 'rent_lease', 'lease'] });
         expect(Array.isArray(call.where.OR)).toBe(true);
         expect(call.where.OR.length).toBeGreaterThanOrEqual(3);
-        expect(call.where.price.gte).toBe(15000);
-        expect(call.where.price.lte).toBe(30000);
+        // Budget filters the customer-facing display_price, not the raw price column.
+        expect(call.where.display_price.gte).toBe(15000);
+        expect(call.where.display_price.lte).toBe(30000);
     });
 
     it('maps "buy" intent to "sell" in DB', async () => {

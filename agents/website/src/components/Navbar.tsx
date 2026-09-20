@@ -62,8 +62,11 @@ export default function Navbar() {
     }, []);
 
     useEffect(() => {
-        setOpen(false);
-        setShowDropdown(false);
+        const closeMenus = window.setTimeout(() => {
+            setOpen(false);
+            setShowDropdown(false);
+        });
+        return () => window.clearTimeout(closeMenus);
     }, [pathname]);
 
     const isHome = pathname === '/';

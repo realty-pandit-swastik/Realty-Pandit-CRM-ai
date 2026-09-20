@@ -15,6 +15,17 @@ const MiniLabel: React.FC<{ children: React.ReactNode }> = ({ children }) => (
 
 const fmtDate = (d: Date) => d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
 
+const Drill: React.FC<{ filter?: Record<string, string>; children: React.ReactNode }> = ({ filter, children }) => {
+  const target: DrillTarget = filter ? { entity: 'leads', filter } : { entity: 'leads' };
+  return (
+    <div role="button" tabIndex={0} title="Open in Ext. Leads →" style={{ cursor: 'pointer' }}
+      onClick={() => drillTo(target)}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); drillTo(target); } }}>
+      {children}
+    </div>
+  );
+};
+
 export const LeadIntelligenceDashboard: React.FC = () => {
   const { agent } = useAuth();
   const isMobile = useIsMobile();
@@ -98,17 +109,6 @@ export const LeadIntelligenceDashboard: React.FC = () => {
 
   const pad = isMobile ? 16 : '24px 32px';
   const colTwo: React.CSSProperties = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 14 };
-  const Drill: React.FC<{ filter?: Record<string, string>; children: React.ReactNode }> = ({ filter, children }) => {
-    const target: DrillTarget = filter ? { entity: 'leads', filter } : { entity: 'leads' };
-    return (
-      <div role="button" tabIndex={0} title="Open in Ext. Leads →" style={{ cursor: 'pointer' }}
-        onClick={() => drillTo(target)}
-        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); drillTo(target); } }}>
-        {children}
-      </div>
-    );
-  };
-
   return (
     <div style={{ flex: 1, overflowY: 'auto', padding: pad, backgroundColor: 'var(--bg-primary)' }}>
       {/* Header */}

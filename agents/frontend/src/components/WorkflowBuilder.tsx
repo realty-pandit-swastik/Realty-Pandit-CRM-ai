@@ -115,7 +115,7 @@ export default function WorkflowBuilder() {
       const response = await authedFetch(`${API_BASE}/api/workflows`);
       const data = await response.json();
       setWorkflows(data.workflows || []);
-    } catch (err: any) {
+    } catch {
       setError('Failed to load workflows');
     } finally {
       setLoading(false);
@@ -128,7 +128,7 @@ export default function WorkflowBuilder() {
       const data = await response.json();
       setExecutionHistory(data.executions || []);
       setShowExecutions(true);
-    } catch (err: any) {
+    } catch {
       setError('Failed to load execution history');
     }
   };

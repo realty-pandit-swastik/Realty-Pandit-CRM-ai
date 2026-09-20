@@ -54,13 +54,13 @@ export function NotificationBell({ onNavigate }: { onNavigate?: (url: string) =>
         try {
             const data = await getUnreadNotificationCount();
             setUnreadCount(data.count || 0);
-        } catch {}
+        } catch { /* Keep the last known unread count. */ }
     }, []);
 
     useEffect(() => {
-        fetchUnread();
+        const initial = window.setTimeout(fetchUnread, 0);
         const interval = setInterval(fetchUnread, 30000);
-        return () => clearInterval(interval);
+        return () => { window.clearTimeout(initial); clearInterval(interval); };
     }, [fetchUnread]);
 
     // Load notifications when drawer opens
@@ -74,7 +74,7 @@ export function NotificationBell({ onNavigate }: { onNavigate?: (url: string) =>
                 setNotifications(data.data || []);
             }
             setHasMore(pageNum < (data.totalPages || 1));
-        } catch {}
+        } catch { /* Keep the existing notification list on failure. */ }
         setLoading(false);
     }, []);
 

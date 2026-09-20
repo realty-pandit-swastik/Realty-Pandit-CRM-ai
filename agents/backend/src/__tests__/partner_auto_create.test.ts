@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 vi.mock('../db', () => ({
     default: {
         partnerAgent: { findUnique: vi.fn(), create: vi.fn() },
-        contact: { upsert: vi.fn() },
+        contact: { findUnique: vi.fn(), upsert: vi.fn() },
         interaction: { create: vi.fn() },
     },
 }));
@@ -35,7 +35,7 @@ describe('ensurePartnerAgent', () => {
         expect(createCall.data.partner_type).toBe('BOTH');
         expect(createCall.data.managing_agent_id).toBe('agent-1');
         expect(createCall.data.onboarded_by_agent_id).toBe('agent-1');
-        expect(createCall.data.status).toBe('PENDING_PAYMENT');
+        expect(createCall.data.status).toBe('ACTIVE');
         expect(createCall.data.package_type).toBe('FREE');
     });
 
@@ -84,6 +84,6 @@ describe('ensurePartnerAgent', () => {
 
         const createCall = (prisma.partnerAgent.create as any).mock.calls[0][0];
         expect(createCall.data.name).toBe('Partner Agent');
-        expect(createCall.data.business_name).toBe('Pending Registration');
+        expect(createCall.data.business_name).toBeNull();
     });
 });

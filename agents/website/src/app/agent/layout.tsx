@@ -64,8 +64,10 @@ export default function AgentLayout({ children }: { children: React.ReactNode })
             const info = localStorage.getItem('agent_info');
             if (info) {
                 const parsed: AgentInfo = JSON.parse(info);
-                setAgentInfo(parsed);
-                setIsCompanyOwner(parsed.partner_category === 'COMPANY' && !parsed.parent_partner_id);
+                queueMicrotask(() => {
+                    setAgentInfo(parsed);
+                    setIsCompanyOwner(parsed.partner_category === 'COMPANY' && !parsed.parent_partner_id);
+                });
             }
         } catch {}
     }, [pathname, router]);
@@ -100,7 +102,7 @@ export default function AgentLayout({ children }: { children: React.ReactNode })
         ? agentInfo.name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2)
         : 'AG';
 
-    const SidebarContent = () => (
+    const sidebarContent = (
         <div className="flex flex-col h-full bg-gradient-to-b from-slate-900 via-slate-900 to-blue-950">
             {/* Header */}
             <div className="flex items-center justify-between h-16 px-5 border-b border-white/10 flex-shrink-0">
@@ -196,13 +198,13 @@ export default function AgentLayout({ children }: { children: React.ReactNode })
             {/* Sidebar — desktop static */}
             <aside className="hidden lg:flex lg:flex-col w-64 flex-shrink-0">
                 <div className="fixed top-0 left-0 bottom-0 w-64 z-30">
-                    <SidebarContent />
+                    {sidebarContent}
                 </div>
             </aside>
 
             {/* Sidebar — mobile slide-in */}
             <aside className={`fixed inset-y-0 left-0 z-30 w-64 transform transition-transform duration-300 ease-in-out lg:hidden ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
-                <SidebarContent />
+                {sidebarContent}
             </aside>
 
             {/* Main Content */}

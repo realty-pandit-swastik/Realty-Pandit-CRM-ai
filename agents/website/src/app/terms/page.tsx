@@ -37,7 +37,7 @@ export default function TermsOfServicePage() {
                             <FileText className="w-12 h-12 text-blue-400" />
                             <h1 className="text-4xl md:text-5xl font-bold text-white">Terms of Service</h1>
                         </div>
-                        <p className="text-slate-300 text-lg max-w-3xl">Please read these terms carefully before using Realty Pandit's services. By accessing or using our platform, you agree to be bound by these terms.</p>
+                        <p className="text-slate-300 text-lg max-w-3xl">Please read these terms carefully before using Realty Pandit&apos;s services. By accessing or using our platform, you agree to be bound by these terms.</p>
                         <p className="text-slate-500 text-sm mt-4">Last updated: February 11, 2025</p>
                     </motion.div>
                 </div>
@@ -69,7 +69,7 @@ export default function TermsOfServicePage() {
                         <div className="lg:col-span-3 prose prose-slate dark:prose-invert max-w-none">
                             <section id="acceptance" className="mb-12">
                                 <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-4">1. Acceptance of Terms</h2>
-                                <p className="text-slate-600 dark:text-slate-300 mb-4">By accessing or using Realty Pandit's website, mobile applications, WhatsApp services (Panditji AI assistant), or any related services (collectively, the "Platform"), you agree to comply with and be bound by these Terms of Service ("Terms").</p>
+                                <p className="text-slate-600 dark:text-slate-300 mb-4">By accessing or using Realty Pandit&apos;s website, mobile applications, WhatsApp services (Panditji AI assistant), or any related services (collectively, the &quot;Platform&quot;), you agree to comply with and be bound by these Terms of Service (&quot;Terms&quot;).</p>
                                 <p className="text-slate-600 dark:text-slate-300">If you do not agree to these Terms, please do not use our Platform. We reserve the right to modify these Terms at any time, and your continued use of the Platform after such modifications constitutes acceptance of the updated Terms.</p>
                             </section>
 
@@ -117,7 +117,7 @@ export default function TermsOfServicePage() {
                                     <li>Posting false, misleading, or fraudulent property listings</li>
                                     <li>Impersonating any person or entity or falsely stating affiliation with a person or entity</li>
                                     <li>Scraping, data mining, or automated extraction of data from our Platform</li>
-                                    <li>Attempting to gain unauthorized access to our systems or other users' accounts</li>
+                                    <li>Attempting to gain unauthorized access to our systems or other users&apos; accounts</li>
                                     <li>Transmitting viruses, malware, or any other malicious code</li>
                                     <li>Using the Platform to spam, phish, or conduct any fraudulent activities</li>
                                     <li>Posting content that violates intellectual property rights, privacy rights, or any applicable law</li>
@@ -141,7 +141,7 @@ export default function TermsOfServicePage() {
                                 <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-4">7. Limitation of Liability</h2>
                                 <p className="text-slate-600 dark:text-slate-300 mb-4">To the fullest extent permitted by law:</p>
                                 <ul className="space-y-2 text-slate-600 dark:text-slate-300">
-                                    <li><strong>Platform "As Is":</strong> The Platform is provided "as is" and "as available" without warranties of any kind, either express or implied.</li>
+                                    <li><strong>Platform &quot;As Is&quot;:</strong> The Platform is provided &quot;as is&quot; and &quot;as available&quot; without warranties of any kind, either express or implied.</li>
                                     <li><strong>No Warranty:</strong> We do not warrant that the Platform will be uninterrupted, error-free, or free of viruses or other harmful components.</li>
                                     <li><strong>Property Transactions:</strong> Realty Pandit is not a party to any property transaction between users. We do not guarantee the accuracy of listings or the reliability of any user.</li>
                                     <li><strong>Liability Cap:</strong> Our total liability to you for any claims arising from your use of the Platform shall not exceed the amount you paid us (if any) in the past 12 months.</li>

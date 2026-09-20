@@ -100,7 +100,7 @@ export default function AgentsPage() {
     const [page, setPage] = useState(1);
 
     useEffect(() => {
-        setLoading(true);
+        queueMicrotask(() => setLoading(true));
         const params: Record<string, string> = { page: String(page), limit: '18' };
         if (city) params.city = city;
         if (category) params.category = category;

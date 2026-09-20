@@ -18,11 +18,11 @@ export default function WishlistPage() {
             if (stored) {
                 const parsed = JSON.parse(stored);
                 if (Array.isArray(parsed)) {
-                    setWishlist(parsed);
+                    queueMicrotask(() => setWishlist(parsed));
                 }
             }
         } catch { /* ignore */ }
-        setLoaded(true);
+        queueMicrotask(() => setLoaded(true));
     }, []);
 
     const handleClearAll = () => {

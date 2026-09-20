@@ -42,7 +42,7 @@ const MEETING_TYPES = [
     { value: 'LOGGED_NOTE',     label: 'Called / WhatsApped customer' },
 ];
 
-export function LogActionModal({ dealId, stage: _stage, actionType, onClose, onSuccess }: LogActionModalProps) {
+export function LogActionModal({ dealId, actionType, onClose, onSuccess }: LogActionModalProps) {
     const [outcome, setOutcome]         = useState('');
     const [notes, setNotes]             = useState('');
     const [visitDate, setVisitDate]     = useState('');

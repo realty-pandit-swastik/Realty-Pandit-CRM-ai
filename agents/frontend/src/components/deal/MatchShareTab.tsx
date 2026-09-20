@@ -50,7 +50,8 @@ interface Props {
     onShared: () => void;
 }
 
-function formatPrice(price: number | null, _unit?: string | null): string {
+function formatPrice(price: number | null, unit?: string | null): string {
+    void unit;
     if (!price) return '-';
     if (price >= 10000000) return `₹${(price / 10000000).toFixed(1)}Cr`;
     if (price >= 100000)   return `₹${(price / 100000).toFixed(1)}L`;
@@ -378,13 +379,13 @@ export function MatchShareTab({ deal, onShared }: Props) {
     // ── Filter toggles ─────────────────────────────────────────────────────────
     const toggleBhk = (n: number) => {
         const next = new Set(bhkSet);
-        next.has(n) ? next.delete(n) : next.add(n);
+        if (next.has(n)) next.delete(n); else next.add(n);
         setBhkSet(next);
         runSearch({ bhkSet: next });
     };
     const toggleType = (id: string) => {
         const next = new Set(typeNodeSet);
-        next.has(id) ? next.delete(id) : next.add(id);
+        if (next.has(id)) next.delete(id); else next.add(id);
         setTypeNodeSet(next);
         runSearch({ typeNodeSet: next });
     };
@@ -453,7 +454,7 @@ export function MatchShareTab({ deal, onShared }: Props) {
         if (results.find(r => r.id === id)?.already_shared) return;
         setSelected(prev => {
             const next = new Set(prev);
-            next.has(id) ? next.delete(id) : next.add(id);
+            if (next.has(id)) next.delete(id); else next.add(id);
             return next;
         });
     };

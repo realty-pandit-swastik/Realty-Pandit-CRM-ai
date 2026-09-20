@@ -64,6 +64,8 @@ describe('POST /api/inventory/:id/share-to-client — placeholder/junk phone gua
             .post('/api/inventory/inv-1/share-to-client')
             .send({ client_name: 'No phone' });
         expect(res.status).toBe(400);
-        expect(res.body.error).toMatch(/client_phone required/i);
+        // The route also accepts deal_id in place of a phone (redaction-safe share), so the
+        // message names both.
+        expect(res.body.error).toMatch(/client_phone.*required/i);
     });
 });

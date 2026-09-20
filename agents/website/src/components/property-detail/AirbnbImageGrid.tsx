@@ -13,11 +13,10 @@ interface AirbnbImageGridProps {
 }
 
 export default function AirbnbImageGrid({ images, videoUrls, getMediaUrl, onOpenLightbox }: AirbnbImageGridProps) {
-    const [isDesktop, setIsDesktop] = useState(false);
+    const [isDesktop, setIsDesktop] = useState(() => typeof window !== 'undefined' && window.matchMedia('(min-width: 768px)').matches);
 
     useEffect(() => {
         const mq = window.matchMedia('(min-width: 768px)');
-        setIsDesktop(mq.matches);
         const handler = (e: MediaQueryListEvent) => setIsDesktop(e.matches);
         mq.addEventListener('change', handler);
         return () => mq.removeEventListener('change', handler);

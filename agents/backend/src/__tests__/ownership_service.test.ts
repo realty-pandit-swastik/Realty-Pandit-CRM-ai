@@ -2,13 +2,14 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // Local mock of the db module — replaces the setup.ts mock for this test file.
 vi.mock('../db', () => {
-    const partnerAgent = { findUnique: vi.fn(), update: vi.fn(), updateMany: vi.fn() };
+    const partnerAgent = { findUnique: vi.fn(), update: vi.fn(), updateMany: vi.fn(), count: vi.fn() };
     const agent = { findUnique: vi.fn(), findFirst: vi.fn(), update: vi.fn() };
     const inventory = { updateMany: vi.fn(), count: vi.fn() };
     const contact = { updateMany: vi.fn(), count: vi.fn() };
     const transaction = { updateMany: vi.fn(), count: vi.fn() };
+    const lead = { updateMany: vi.fn(), count: vi.fn() };
     const partnerReassignmentLog = { create: vi.fn() };
-    const tx = { partnerAgent, agent, inventory, contact, transaction, partnerReassignmentLog };
+    const tx = { partnerAgent, agent, inventory, contact, transaction, lead, partnerReassignmentLog };
     return {
         default: {
             ...tx,
@@ -85,8 +86,16 @@ describe('OwnershipService.cascadeOnAgentDeactivation', () => {
     it('transfers all owned assets to super_boss and marks agent inactive', async () => {
         (prisma.agent.findFirst as any).mockResolvedValue({ id: 'super-1' });
         (prisma.partnerAgent.updateMany as any).mockResolvedValue({ count: 2 });
-        (prisma as any).inventory.updateMany.mockResolvedValue({ count: 1 });
-        (prisma as any).contact.updateMany.mockResolvedValue({ count: 3 });
+        // Inventory and contacts each cascade TWICE — owning_manager_id then assigned_agent_id —
+        // and the reported count is the sum. Distinct values per call so a dropped
+        // assigned-cascade (the 2026-05-12 orphan bug) fails this test.
+        (prisma as any).inventory.updateMany
+            .mockResolvedValueOnce({ count: 1 })
+            .mockResolvedValueOnce({ count: 4 });
+        (prisma as any).lead.updateMany.mockResolvedValue({ count: 6 });
+        (prisma as any).contact.updateMany
+            .mockResolvedValueOnce({ count: 3 })
+            .mockResolvedValueOnce({ count: 2 });
         (prisma as any).transaction.updateMany.mockResolvedValue({ count: 2 });
         (prisma.agent.update as any).mockResolvedValue({});
 
@@ -96,17 +105,24 @@ describe('OwnershipService.cascadeOnAgentDeactivation', () => {
             where: { owning_manager_id: 'old' },
             data: { owning_manager_id: 'super-1' },
         });
+        expect((prisma as any).inventory.updateMany).toHaveBeenCalledWith({
+            where: { assigned_agent_id: 'old' },
+            data: { assigned_agent_id: 'super-1' },
+        });
         expect((prisma.agent.update as any)).toHaveBeenCalledWith({
             where: { id: 'old' },
             data: { status: 'inactive' },
         });
-        expect(result.counts).toEqual({ partners: 2, inventory: 1, contacts: 3, transactions: 2 });
+        expect(result.counts).toEqual({
+            partners: 2, inventory: 5, leads: 6, contacts: 5, transactions: 2,
+        });
     });
 
     it('uses explicit superBossId when provided', async () => {
         (prisma.agent.findUnique as any).mockResolvedValue({ id: 'chosen-super' });
         (prisma.partnerAgent.updateMany as any).mockResolvedValue({ count: 0 });
         (prisma as any).inventory.updateMany.mockResolvedValue({ count: 0 });
+        (prisma as any).lead.updateMany.mockResolvedValue({ count: 0 });
         (prisma as any).contact.updateMany.mockResolvedValue({ count: 0 });
         (prisma as any).transaction.updateMany.mockResolvedValue({ count: 0 });
         (prisma.agent.update as any).mockResolvedValue({});
@@ -145,11 +161,15 @@ describe('OwnershipService.resolveOwningManagerForPartner', () => {
 
 describe('OwnershipService.getOwnershipSummary', () => {
     it('counts assets owned by an internal agent', async () => {
+        // inventory and contacts are counted twice each (owned, then assigned) and summed.
         (prisma.partnerAgent.count as any) = vi.fn().mockResolvedValue(5);
-        (prisma as any).inventory.count = vi.fn().mockResolvedValue(10);
-        (prisma as any).contact.count = vi.fn().mockResolvedValue(20);
+        (prisma as any).inventory.count = vi.fn()
+            .mockResolvedValueOnce(10).mockResolvedValueOnce(7);
+        (prisma as any).contact.count = vi.fn()
+            .mockResolvedValueOnce(20).mockResolvedValueOnce(5);
+        (prisma as any).lead.count = vi.fn().mockResolvedValue(4);
         (prisma as any).transaction.count = vi.fn().mockResolvedValue(3);
         const out = await svc.getOwnershipSummary('mgr-1');
-        expect(out).toEqual({ partners: 5, inventory: 10, contacts: 20, transactions: 3 });
+        expect(out).toEqual({ partners: 5, inventory: 17, contacts: 25, leads: 4, transactions: 3 });
     });
 });

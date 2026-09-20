@@ -38,6 +38,14 @@ const iso = (d: Date) => d.toISOString();
 const inRange = (d: string, a: Date, b: Date) => { const t = new Date(d).getTime(); return t >= a.getTime() && t <= b.getTime(); };
 const pctDelta = (cur: number, prev: number): number | null => (prev > 0 ? ((cur - prev) / prev) * 100 : cur > 0 ? 100 : null);
 
+const Drill: React.FC<{ target: DrillTarget; children: React.ReactNode }> = ({ target, children }) => (
+  <div role="button" tabIndex={0} title="Open list →" style={{ cursor: 'pointer' }}
+    onClick={() => drillTo(target)}
+    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); drillTo(target); } }}>
+    {children}
+  </div>
+);
+
 async function loadCockpit(range: DateRange): Promise<Cockpit> {
   const { from, to } = range;
   const span = to.getTime() - from.getTime();
@@ -126,6 +134,7 @@ export const MainDashboard: React.FC = () => {
   const { agent } = useAuth();
   const isMobile = useIsMobile();
   const [range, setRange] = useState<DateRange>(defaultRange());
+  const [now] = useState(Date.now);
 
   const { status, data, reload } = useAsyncData<Cockpit>(
     () => loadCockpit(range),
@@ -140,7 +149,6 @@ export const MainDashboard: React.FC = () => {
 
   const alertBy = (type: string) => data?.alerts.find((a) => a.type === type)?.count ?? 0;
   const openByType = useMemo(() => {
-    const now = Date.now();
     const c = { callbacks: 0, visits: 0, overdue: 0 };
     for (const tk of data?.tasks || []) {
       if (tk.task_type === 'CALLBACK_REQUEST') c.callbacks++;
@@ -148,7 +156,7 @@ export const MainDashboard: React.FC = () => {
       if (tk.due_date && new Date(tk.due_date).getTime() < now) c.overdue++;
     }
     return c;
-  }, [data]);
+  }, [data, now]);
   const nextActions = useMemo(() => [...(data?.tasks || [])]
     .sort((a, b) => (PRIORITY_RANK[b.priority] ?? 1) - (PRIORITY_RANK[a.priority] ?? 1)
       || new Date(a.due_date).getTime() - new Date(b.due_date).getTime())
@@ -161,14 +169,6 @@ export const MainDashboard: React.FC = () => {
   const pad = isMobile ? 16 : '24px 32px';
   const kpiGrid: React.CSSProperties = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 'var(--bento-gap)' };
   const colTwo: React.CSSProperties = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 14 };
-  const Drill: React.FC<{ target: DrillTarget; children: React.ReactNode }> = ({ target, children }) => (
-    <div role="button" tabIndex={0} title="Open list →" style={{ cursor: 'pointer' }}
-      onClick={() => drillTo(target)}
-      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); drillTo(target); } }}>
-      {children}
-    </div>
-  );
-
   const actionTotal = openByType.callbacks + openByType.visits + openByType.overdue + alertBy('stale_leads') + alertBy('inventory_missing_photos');
   const stateLine = `${formatNum(d.pulse.leads.cur)} new leads · ${formatNum(d.pulse.visits.cur)} visits · ${formatNum(d.pulse.deals.cur)} deals closed this period — ${formatNum(actionTotal)} things need action.`;
 
@@ -219,7 +219,7 @@ export const MainDashboard: React.FC = () => {
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {nextActions.map((tk) => {
-                  const overdue = tk.due_date && new Date(tk.due_date).getTime() < Date.now();
+                  const overdue = tk.due_date && new Date(tk.due_date).getTime() < now;
                   return (
                     <div key={tk.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', borderRadius: 10, backgroundColor: 'var(--bg-tertiary)' }}>
                       <span style={{ fontSize: 11, fontWeight: 800, color: overdue ? '#ef4444' : 'var(--text-muted)', width: 58, flexShrink: 0 }}>{overdue ? 'OVERDUE' : (tk.priority || 'MEDIUM')}</span>

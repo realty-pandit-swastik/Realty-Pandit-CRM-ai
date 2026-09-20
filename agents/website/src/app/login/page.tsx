@@ -184,7 +184,7 @@ export default function LoginPage() {
                     className="text-center mt-12"
                 >
                     <p className="text-slate-600 dark:text-slate-400 text-sm">
-                        Don't have an account?{' '}
+                        Don&apos;t have an account?{' '}
                         <Link href="/join" className="text-blue-600 dark:text-blue-400 font-medium hover:underline">
                             Register here
                         </Link>

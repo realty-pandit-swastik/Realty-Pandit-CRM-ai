@@ -1,64 +1,80 @@
-# Deployment Runbook
+# Production deployment runbook
 
-## What deploys where
+Production deploys only from the protected GitHub Actions workflow at
+`.github/workflows/deploy-hostinger.yml`. Do not use the legacy SCP deploy agent or
+run `git pull` in production.
 
-| Component | Local path | Server path | PM2 process |
-|---|---|---|---|
-| Frontend (admin panel) | `frontend/` | `/var/www/realty-pandit/frontend/` | `realty-admin` |
-| Backend (API) | `backend/` | `/var/www/realty-pandit/backend/` | `realty-backend` |
-| Website (public) | `website/` | `/var/www/realty-pandit/website/` | `realty-website` |
+## One-time VPS cutover
 
-**Server:** `root@72.62.231.224`
-**SSH key:** `C:/Users/VARCHA~1/AppData/Local/Temp/rp_key` (auto-loaded by deploy script)
+Complete this under an approved maintenance window before enabling
+`HOSTINGER_GITHUB_DEPLOY_ENABLED`:
 
-## Deploy command
+1. Reconcile nginx and PM2 so they use `/var/www/realty-pandit/current`.
+   `realty-backend` runs in root PM2, `realty-website` runs in the `realty` user's
+   PM2, and nginx serves admin files from `current/frontend/dist`.
+2. Replace the legacy PM2 entries once with the versioned configs after `current`
+   points at the initial release:
 
-From `clients/sunny-sharma/projects/reality-pandit/agents/`:
+   ```bash
+   cd /var/www/realty-pandit/current/backend
+   pm2 delete realty-backend
+   HOSTINGER_DEPLOY_PATH=/var/www/realty-pandit pm2 start ecosystem.config.js
+   pm2 save
+
+   sudo -u realty -H bash -lc 'cd /var/www/realty-pandit/current/website && \
+     HOSTINGER_DEPLOY_PATH=/var/www/realty-pandit pm2 delete realty-website; \
+     HOSTINGER_DEPLOY_PATH=/var/www/realty-pandit pm2 start ecosystem.config.js; pm2 save'
+   ```
+3. Create a non-root deploy identity with only the sudo permission needed for
+   `sudo -u realty -H pm2 restart realty-website`.
+4. Create these persistent paths with least-privilege ownership:
+
+   ```text
+   /var/www/realty-pandit/
+   |-- releases/
+   |-- shared/
+   |   |-- backend.env
+   |   |-- website.env
+   |   |-- uploads/
+   |   `-- logs/
+   `-- current -> releases/<sha>/
+   ```
+
+5. Take and verify database and uploads backups, then restore them into an isolated
+   test target. Create a Hostinger snapshot for disaster recovery.
+6. Configure GitHub's protected `production` environment with a required reviewer,
+   protected-main restriction, and the secrets listed in the deployment assessment.
+7. Rehearse one deployment and one rollback, then enable
+   `HOSTINGER_GITHUB_DEPLOY_ENABLED`.
+
+## Release
+
+Merge a reviewed PR to `main`. The workflow tests, lints, builds, audits production
+dependencies, packages the exact Git SHA, builds it under `releases/<sha>`, switches
+`current` atomically, restarts services, verifies all three local endpoints, and
+keeps at least three releases.
+
+Keep `run_migrations=false` unless the approved revision contains a reviewed,
+backward-compatible migration and a fresh restore-tested backup exists. Migration
+rollback is intentionally manual.
+
+## Verify
+
+Confirm the deployed `current/REVISION` equals the approved SHA, both PM2 owners are
+stable, PostgreSQL and Redis are connected, BullMQ failed counts do not increase,
+only one scheduler owns recurring jobs, logs are clean, and disk/memory are healthy.
+Then smoke-test the public site, property data, admin login/read-only screens, and
+`admin.realtypandit.in/sw.js`. Do not trigger real provider sends.
+
+## Roll back
+
+Without a database migration, run the release script on the VPS with the previous
+SHA and repeat all verification:
 
 ```bash
-node deployment/deploy-agent.js <component>
-# <component> = website | backend | frontend | all
+HOSTINGER_DEPLOY_PATH=/var/www/realty-pandit \
+  bash /tmp/github-hostinger-release.sh rollback _ <previous-sha> 0
 ```
 
-Flags:
-- `--skip-build` — upload only, skip build step
-- `--skip-verify` — skip post-deploy browser QA
-- `--dry-run` — show commands without executing
-
-The script: (1) tars source, (2) SCPs to /tmp, (3) extracts to server path, (4) `npm install`, (5) builds (`npx tsc` for backend, `npm run build` for frontend), (6) `pm2 restart`, (7) Browser QA verification.
-
-## ⚠ Critical: nginx serving paths
-
-`admin.realtypandit.in` is served from `/var/www/realty-pandit/frontend/dist/` — NOT `/var/www/html/`. Uploading to the wrong path is a common mistake when bypassing the deploy script. **Always use the deploy script.**
-
-## ⚠ Critical: PWA cache invalidation
-
-The frontend uses Vite Plugin PWA with `registerType: 'autoUpdate'`. The service worker only auto-installs a new version when its content (the workbox precache manifest) changes. If `index.html` and chunks all keep the same hashes, the SW never refreshes and PWA users see stale UI.
-
-**Force-refresh trick:** bump a comment in `frontend/index.html`:
-```html
-<title>Realty Pandit - Dashboard</title>
-<!-- v20260509 -->
-```
-
-Change the date stamp on any non-cosmetic frontend change. This changes the precache manifest revision → new `sw.js` → browsers auto-update. Re-run the deploy.
-
-See: [`pwa-cache-bust.md`](pwa-cache-bust.md) for the full mechanism.
-
-## Post-deploy verification
-
-The deploy script runs `browser-qa/qa-agent.js` automatically. To re-run manually:
-```bash
-node browser-qa/task-verify.js --last
-```
-
-For UI verification, open `https://admin.realtypandit.in` in the Playwright MCP browser tools (configured in your session). Screenshot before + after the change.
-
-## Common failure modes
-
-| Symptom | Likely cause | Fix |
-|---|---|---|
-| Deploy succeeds, UI still old | Browser SW cache; force-bump `index.html` comment | See PWA section above |
-| Backend pm2 process keeps crashing | Prisma schema mismatch with DB | `npx prisma generate` on server; check migration state |
-| Frontend build OK locally, fails on server | Different Node version (server is v20) | Verify `node -v` on server; align local |
-| Browser QA reports 401s in console | GA analytics CSP — not a real failure | Ignore the GA-related 401s |
+After a migration, stop and make a reviewed database decision; never automatically
+reverse SQL or overwrite newer production data.

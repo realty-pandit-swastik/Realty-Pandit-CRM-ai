@@ -102,7 +102,10 @@ function PropertyCarousel({ properties }: { properties: Property[] }) {
     const prev = useCallback(() => setActiveIndex(i => (i - 1 + len) % len), [len]);
     const next = useCallback(() => setActiveIndex(i => (i + 1) % len), [len]);
 
-    useEffect(() => { setActiveIndex(0); }, [properties]);
+    useEffect(() => {
+        const resetIndex = window.setTimeout(() => setActiveIndex(0));
+        return () => window.clearTimeout(resetIndex);
+    }, [properties]);
 
     if (len === 0) return null;
 

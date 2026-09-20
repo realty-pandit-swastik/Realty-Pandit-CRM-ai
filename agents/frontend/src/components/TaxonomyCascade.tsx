@@ -36,23 +36,19 @@ export default function TaxonomyCascade({
     const [tree, setTree] = useState<TaxNode[]>([]);
     const [path, setPath] = useState<TaxNode[]>([]);
     const [loadErr, setLoadErr] = useState('');
-    const [inited, setInited] = useState(false);
 
     useEffect(() => {
         getTaxonomyTree()
-            .then((d: any) => setTree(d.tree || []))
+            .then((d: any) => {
+                const nextTree = d.tree || [];
+                setTree(nextTree);
+                if (value) {
+                    const nextPath = findPath(nextTree, value);
+                    if (nextPath) setPath(nextPath);
+                }
+            })
             .catch((e: any) => setLoadErr(e?.message || 'Failed to load taxonomy'));
     }, []);
-
-    // Pre-fill the dropdowns from the saved taxonomy_node_id once the tree arrives.
-    useEffect(() => {
-        if (inited || tree.length === 0) return;
-        if (value) {
-            const p = findPath(tree, value);
-            if (p) setPath(p);
-        }
-        setInited(true);
-    }, [tree, value, inited]);
 
     // Build the visible dropdown levels from the current path.
     const levels: TaxNode[][] = [];

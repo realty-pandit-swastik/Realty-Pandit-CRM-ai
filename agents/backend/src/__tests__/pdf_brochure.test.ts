@@ -62,9 +62,10 @@ describe('buildSpecRows — type-aware', () => {
 
 describe('generateInventoryPdfStream smoke (renders without crashing)', () => {
     it('produces a valid non-empty PDF for a brandless single property', async () => {
+        // Async: photos are resized with sharp before the synchronous pdfkit render.
+        const s = await generateInventoryPdfStream([inv], { variant: 'brandless', partnerName: 'Shiv', partnerPhone: '+9199' });
         const buf: Buffer = await new Promise((resolve, reject) => {
             const chunks: Buffer[] = [];
-            const s = generateInventoryPdfStream([inv], { variant: 'brandless', partnerName: 'Shiv', partnerPhone: '+9199' });
             s.on('data', (c: Buffer) => chunks.push(c));
             s.on('end', () => resolve(Buffer.concat(chunks)));
             s.on('error', reject);

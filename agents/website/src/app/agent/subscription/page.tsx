@@ -94,7 +94,7 @@ export default function AgentSubscription() {
     useEffect(() => {
         try {
             const info = localStorage.getItem('agent_info');
-            if (info) setAgentInfo(JSON.parse(info));
+            if (info) queueMicrotask(() => setAgentInfo(JSON.parse(info)));
         } catch {}
     }, []);
 
