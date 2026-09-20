@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -20,18 +20,16 @@ interface AccordionProps {
 
 export default function Accordion({ items, allowMultiple = false, className }: AccordionProps) {
     const [openIds, setOpenIds] = useState<Set<string>>(new Set());
-    const prevItemIdsRef = useRef<string>('');
-
     // Track new items and apply their defaultOpen state
     const currentItemIds = items.map(i => i.id).join(',');
-    if (currentItemIds !== prevItemIdsRef.current) {
-        prevItemIdsRef.current = currentItemIds;
-        const next = new Set(openIds);
-        items.forEach(item => {
-            if (item.defaultOpen && !openIds.has(item.id)) next.add(item.id);
-        });
-        if (next.size !== openIds.size) setOpenIds(next);
-    }
+    useEffect(() => {
+        const applyDefaults = window.setTimeout(() => setOpenIds(prev => {
+            const next = new Set(prev);
+            items.forEach(item => { if (item.defaultOpen) next.add(item.id); });
+            return next.size === prev.size ? prev : next;
+        }));
+        return () => window.clearTimeout(applyDefaults);
+    }, [currentItemIds]);
 
     const toggle = (id: string) => {
         setOpenIds(prev => {

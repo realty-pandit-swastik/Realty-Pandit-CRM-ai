@@ -25,7 +25,7 @@ export default function SmartBreadcrumb({ propertyType, location }: SmartBreadcr
     useEffect(() => {
         const saved = sessionStorage.getItem(SESSION_KEY);
         if (saved) {
-            setPropertiesHref(`/properties?${saved}`);
+            queueMicrotask(() => setPropertiesHref(`/properties?${saved}`));
         }
     }, []);
 

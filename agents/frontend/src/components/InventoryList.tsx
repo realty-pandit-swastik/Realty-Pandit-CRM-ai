@@ -867,7 +867,7 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
             // (furnishing/facing/property_age — Phase 2 dedup, 2026-05-28). Those now live
             // in specs.* via editSchemaValues; sending them at the top-level too would let
             // the backend's legacy-fold logic overwrite the canonical specs value.
-            const { bedrooms: _b, bathrooms: _ba, area: _a, area_unit: _au, furnishing: _f, facing: _fc, property_age: _pa, features: _ft, ...rest } = editData;
+            const rest = Object.fromEntries(Object.entries(editData).filter(([key]) => !['bedrooms', 'bathrooms', 'area', 'area_unit', 'furnishing', 'facing', 'property_age', 'features'].includes(key)));
             const payload: Record<string, any> = { ...rest, specs };
 
             // Parse numeric coordinate fields
@@ -1195,7 +1195,7 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
                             style={{ ...s.card, cursor: selectionMode ? 'default' : 'pointer' }}
                             onClick={() => { if (!selectionMode) setViewingId(item.id); }}
                         >
-                            {false ? (
+                            {editingId === '__legacy_edit__' ? (
                                 /* ── Edit Mode (now in overlay modal) ── */
                                 <div>
                                     {/* ── Section: Media Management ── */}
@@ -1575,7 +1575,7 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
                                         {/* Selection checkbox */}
                                         {selectionMode && (
                                             <div
-                                                onClick={e => { e.stopPropagation(); setSelectedIds(prev => { const s = new Set(prev); s.has(item.id) ? s.delete(item.id) : s.add(item.id); return s; }); }}
+                                                onClick={e => { e.stopPropagation(); setSelectedIds(prev => { const s = new Set(prev); if (s.has(item.id)) s.delete(item.id); else s.add(item.id); return s; }); }}
                                                 style={{
                                                     width: '18px', height: '18px', borderRadius: '4px', flexShrink: 0, cursor: 'pointer', alignSelf: 'center',
                                                     border: selectedIds.has(item.id) ? '2px solid #3b82f6' : '2px solid var(--border-secondary)',
@@ -3256,7 +3256,7 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
                     try {
                         const item = await getInventoryItem(invId);
                         if (item) handleEdit(item);
-                    } catch {}
+                    } catch { /* Leave the list visible if the detail reload fails. */ }
                 }}
             />
 

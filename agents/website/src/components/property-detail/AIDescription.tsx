@@ -22,7 +22,7 @@ export default function AIDescription({ propertyId, originalDescription }: AIDes
         // Already cached locally
         if (descriptions[language] !== null) return;
 
-        setLoading(true);
+        queueMicrotask(() => setLoading(true));
         const desc = await getAIDescription(propertyId, language);
         setDescriptions(prev => ({ ...prev, [language]: desc || '' }));
         setLoading(false);
@@ -31,7 +31,7 @@ export default function AIDescription({ propertyId, originalDescription }: AIDes
     // Fetch English on mount
     useEffect(() => {
         let cancelled = false;
-        setLoading(true);
+        queueMicrotask(() => setLoading(true));
         getAIDescription(propertyId, 'english').then(desc => {
             if (!cancelled) {
                 setDescriptions(prev => ({ ...prev, english: desc || '' }));

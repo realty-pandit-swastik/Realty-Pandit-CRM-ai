@@ -24,10 +24,10 @@ describe('App Security', () => {
         expect(res.body.status).toBe('ok');
     });
 
-    it('root route returns running message', async () => {
+    it('root route serves the API status page', async () => {
         const res = await request(app).get('/');
         expect(res.status).toBe(200);
-        expect(res.text).toContain('Backend API is running');
+        expect(res.text).toContain('Realty Pandit API');
     });
 });
 
@@ -46,10 +46,10 @@ describe('Input Validation', () => {
         expect(res.body.details).toBeDefined();
     });
 
-    it('rejects login with invalid email', async () => {
-        const res = await request(app).post('/auth/login').send({ email: 'bad', password: 'pass' });
+    it('rejects login with an invalid phone', async () => {
+        const res = await request(app).post('/auth/login').send({ phone: 'bad', password: 'pass' });
         expect(res.status).toBe(400);
-        expect(res.body.details.some((d: string) => d.includes('email'))).toBe(true);
+        expect(res.body.details.some((d: string) => d.includes('phone'))).toBe(true);
     });
 
     it('rejects newsletter with invalid email', async () => {

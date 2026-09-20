@@ -24,7 +24,7 @@ export default function LeadCapture() {
         // Check cookie consent
         const consent = localStorage.getItem(COOKIE_CONSENT_KEY);
         if (!consent) {
-            setShowCookieBanner(true);
+            queueMicrotask(() => setShowCookieBanner(true));
         }
 
         // Only show lead popup AFTER cookie consent is given

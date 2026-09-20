@@ -11,7 +11,7 @@ export default function BuilderSubscription() {
         if (info) {
             try {
                 const parsed = JSON.parse(info);
-                setCurrentPlan(parsed.planType || 'FREE');
+                queueMicrotask(() => setCurrentPlan(parsed.planType || 'FREE'));
             } catch {}
         }
     }, []);

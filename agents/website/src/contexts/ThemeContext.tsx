@@ -17,12 +17,12 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     const [mounted, setMounted] = useState(false);
 
     useEffect(() => {
-        setMounted(true);
+        queueMicrotask(() => setMounted(true));
         const stored = localStorage.getItem('rp-theme') as Theme | null;
         if (stored) {
-            setThemeState(stored);
+            queueMicrotask(() => setThemeState(stored));
         } else if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
-            setThemeState('dark');
+            queueMicrotask(() => setThemeState('dark'));
         }
     }, []);
 

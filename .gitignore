@@ -2,6 +2,7 @@
 agents/backend/node_modules/
 agents/frontend/node_modules/
 agents/website/node_modules/
+.graphifyignore
 
 # Build outputs
 agents/frontend/dist/
@@ -37,6 +38,10 @@ Thumbs.db
 # IDE
 .vscode/settings.json
 .idea/
+.code-review-graph
+.serena
+.vscode
+
 
 # Uploads / media (local only)
 agents/backend/uploads/
@@ -68,3 +73,6 @@ temp2.json
 # Temp scripts
 extract.py
 generate_*.py
+/agents/backend/create_admin.ts
+/agents/backend/create_mock_property.ts
+/agents/backend/fix_admin.ts

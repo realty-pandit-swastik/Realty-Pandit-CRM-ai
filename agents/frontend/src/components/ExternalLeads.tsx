@@ -249,7 +249,7 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
     const [leadReassignTarget, setLeadReassignTarget] = useState('');
     const [leadReassigning, setLeadReassigning] = useState(false);
     const [leadReassignMsg, setLeadReassignMsg] = useState('');
-    const toggleLeadSelect = (phone: string) => setSelectedLeadPhones(prev => { const s = new Set(prev); s.has(phone) ? s.delete(phone) : s.add(phone); return s; });
+    const toggleLeadSelect = (phone: string) => setSelectedLeadPhones(prev => { const s = new Set(prev); if (s.has(phone)) s.delete(phone); else s.add(phone); return s; });
     // 2026-05-13: active / archived / all — default hides lost+closed so the team
     // only sees workable leads. Recovered via toggle at top of page.
     const [activeFilter, setActiveFilter] = useState<'active' | 'archived' | 'all'>((initialFilter?.active as 'active' | 'archived' | 'all') || 'active');

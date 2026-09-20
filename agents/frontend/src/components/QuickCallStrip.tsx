@@ -31,7 +31,7 @@ export function QuickCallStrip({ lead, coordinator, owner, keyHolder, stage }: Q
     if (people.length === 0) return null;
 
     // Build links only from a canonical, country-coded number — never a raw/placeholder value.
-    const handleCall = (phone: string) => { const d = toDialablePhone(phone); if (d) window.location.href = `tel:${d}`; };
+    const handleCall = (phone: string) => { const d = toDialablePhone(phone); if (d) window.location.assign(`tel:${d}`); };
     const handleWA   = (phone: string) => { const d = toDialablePhone(phone); if (d) window.open(`https://wa.me/${d.slice(1)}`, '_blank'); };
 
     if (!expanded) {

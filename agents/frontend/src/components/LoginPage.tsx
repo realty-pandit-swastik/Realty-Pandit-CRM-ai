@@ -4,6 +4,15 @@ import axios from 'axios';
 import { useAuth } from '../contexts/AuthContext';
 import { API_BASE_URL } from '../lib/api';
 
+const STARS = Array.from({ length: 20 }, (_, i) => ({
+    size: i % 2 ? '1px' : '2px',
+    top: `${(i * 37) % 50}%`,
+    left: `${(i * 61) % 100}%`,
+    opacity: 0.3 + (i % 6) * 0.1,
+    duration: 2 + (i % 4),
+    delay: `${(i % 8) * 0.25}s`,
+}));
+
 // ─── Skyline Buildings SVG (real estate themed login transition) ───
 function SkylineOverlay({ onDone }: { onDone: () => void }) {
     useEffect(() => {
@@ -34,18 +43,18 @@ function SkylineOverlay({ onDone }: { onDone: () => void }) {
             overflow: 'hidden',
         }}>
             {/* Stars */}
-            {Array.from({ length: 20 }).map((_, i) => (
+            {STARS.map((star, i) => (
                 <div key={`star-${i}`} style={{
                     position: 'absolute',
-                    width: Math.random() > 0.5 ? '2px' : '1px',
-                    height: Math.random() > 0.5 ? '2px' : '1px',
+                    width: star.size,
+                    height: star.size,
                     backgroundColor: '#fff',
                     borderRadius: '50%',
-                    top: `${Math.random() * 50}%`,
-                    left: `${Math.random() * 100}%`,
-                    opacity: 0.3 + Math.random() * 0.5,
-                    animation: `pulse ${2 + Math.random() * 3}s ease-in-out infinite`,
-                    animationDelay: `${Math.random() * 2}s`,
+                    top: star.top,
+                    left: star.left,
+                    opacity: star.opacity,
+                    animation: `pulse ${star.duration}s ease-in-out infinite`,
+                    animationDelay: star.delay,
                 }} />
             ))}
 

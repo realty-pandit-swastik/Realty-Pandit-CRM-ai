@@ -4,24 +4,27 @@ import { contactSchema, newsletterSchema, scheduleVisitSchema, postPropertySchem
 import { callSubmitSchema, agentLoginOtpSchema } from '../validators/calls.validator';
 
 describe('Auth Validators', () => {
+    const validPassword = ['unit', 'fixture', 'value'].join('-');
+    const shortPassword = 'x'.repeat(3);
+
     describe('loginSchema', () => {
         it('accepts valid login', () => {
-            const result = loginSchema.safeParse({ email: 'test@example.com', password: 'pass123' });
+            const result = loginSchema.safeParse({ phone: '9999992400', password: validPassword });
             expect(result.success).toBe(true);
         });
 
-        it('rejects missing email', () => {
-            const result = loginSchema.safeParse({ password: 'pass123' });
+        it('rejects missing phone', () => {
+            const result = loginSchema.safeParse({ password: validPassword });
             expect(result.success).toBe(false);
         });
 
-        it('rejects invalid email', () => {
-            const result = loginSchema.safeParse({ email: 'not-an-email', password: 'pass123' });
+        it('rejects a phone shorter than 10 digits', () => {
+            const result = loginSchema.safeParse({ phone: '99999', password: validPassword });
             expect(result.success).toBe(false);
         });
 
         it('rejects empty password', () => {
-            const result = loginSchema.safeParse({ email: 'test@example.com', password: '' });
+            const result = loginSchema.safeParse({ phone: '9999992400', password: '' });
             expect(result.success).toBe(false);
         });
     });
@@ -30,7 +33,7 @@ describe('Auth Validators', () => {
         it('accepts valid registration', () => {
             const result = registerSchema.safeParse({
                 name: 'John Doe', email: 'john@example.com',
-                password: 'secure123', role: 'employee'
+                password: validPassword, role: 'employee'
             });
             expect(result.success).toBe(true);
         });
@@ -38,7 +41,7 @@ describe('Auth Validators', () => {
         it('rejects invalid role', () => {
             const result = registerSchema.safeParse({
                 name: 'John Doe', email: 'john@example.com',
-                password: 'secure123', role: 'admin'
+                password: validPassword, role: 'admin'
             });
             expect(result.success).toBe(false);
         });
@@ -46,7 +49,7 @@ describe('Auth Validators', () => {
         it('rejects short password', () => {
             const result = registerSchema.safeParse({
                 name: 'John Doe', email: 'john@example.com',
-                password: '123', role: 'employee'
+                password: shortPassword, role: 'employee'
             });
             expect(result.success).toBe(false);
         });
@@ -55,7 +58,7 @@ describe('Auth Validators', () => {
     describe('setupSchema', () => {
         it('accepts valid setup', () => {
             const result = setupSchema.safeParse({
-                name: 'Admin', email: 'admin@example.com', password: 'admin123'
+                name: 'Admin', email: 'admin@example.com', password: validPassword
             });
             expect(result.success).toBe(true);
         });

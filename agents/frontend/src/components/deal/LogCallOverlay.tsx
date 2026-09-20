@@ -779,7 +779,7 @@ export function ShareStep({ dealId, onAdvance, onCancel }: { dealId: string; onA
     useEffect(() => {
         getDealMatchedInventory(dealId).then((res: any) => { setMatches(res?.data || []); setLoading(false); }).catch(() => setLoading(false));
     }, [dealId]);
-    const toggle = (id: string) => setSelected(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
+    const toggle = (id: string) => setSelected(s => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
     const fmtPrice = (p: number) => p >= 1e7 ? `₹${(p / 1e7).toFixed(2)} Cr` : p >= 1e5 ? `₹${(p / 1e5).toFixed(1)} L` : `₹${p.toLocaleString('en-IN')}`;
     const share = async () => {
         if (!selected.size) return;

@@ -50,7 +50,7 @@ export const MatchClientsModal: React.FC<MatchClientsModalProps> = ({ inventoryI
     const toggle = (dealId: string) => {
         setSelected((prev) => {
             const next = new Set(prev);
-            next.has(dealId) ? next.delete(dealId) : next.add(dealId);
+        if (next.has(dealId)) next.delete(dealId); else next.add(dealId);
             return next;
         });
     };

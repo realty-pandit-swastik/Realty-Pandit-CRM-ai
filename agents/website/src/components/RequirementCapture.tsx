@@ -56,7 +56,6 @@ export default function RequirementCapture({
 
     // Load the canonical taxonomy tree once (SoT — same as inventory + post-property flow).
     useEffect(() => {
-        setLoadingTree(true);
         getTaxonomyTree().then(setTree).catch(() => setTree([])).finally(() => setLoadingTree(false));
     }, []);
 
@@ -65,10 +64,11 @@ export default function RequirementCapture({
 
     // Auto-set budget_type based on intent
     useEffect(() => {
-        setForm(prev => ({
+        const syncBudgetType = window.setTimeout(() => setForm(prev => ({
             ...prev,
             budget_type: prev.intent === 'buy' ? 'one_time' : 'per_month',
-        }));
+        })));
+        return () => window.clearTimeout(syncBudgetType);
     }, [form.intent]);
 
     const canProceedStep1 = form.intent && catNodeId;

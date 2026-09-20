@@ -101,7 +101,7 @@ export default function TaskBoard() {
       const response = await authedFetch(`${API_BASE_URL}/api/tasks?${params}`);
       const data = await response.json();
       setTasks(data.tasks || []);
-    } catch (err: any) {
+    } catch {
       setError('Failed to load tasks');
     } finally {
       setLoading(false);

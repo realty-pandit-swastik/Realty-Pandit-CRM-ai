@@ -1,4 +1,4 @@
-const WebSocket = require('ws');
+import WebSocket from 'ws';
 let msgId = 1;
 async function cdp(ws, method, params = {}) {
     const id = msgId++;

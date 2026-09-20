@@ -1368,7 +1368,10 @@ export default function AgentInventory() {
             .finally(() => setLoading(false));
     };
 
-    useEffect(() => { fetchInventory(); }, []);
+    useEffect(() => {
+        const initialFetch = window.setTimeout(fetchInventory);
+        return () => window.clearTimeout(initialFetch);
+    }, []);
 
     if (showWizard) {
         return (

@@ -149,6 +149,8 @@ jobs:
           scp -P "$HOSTINGER_PORT" "$archive" "$target:$archive"
           scp -P "$HOSTINGER_PORT" deploy/github-hostinger-release.sh "$target:/tmp/github-hostinger-release.sh"
           ssh -p "$HOSTINGER_PORT" "$target" \
+            "HOSTINGER_DEPLOY_PATH='$HOSTINGER_DEPLOY_PATH' bash /tmp/github-hostinger-release.sh preflight"
+          ssh -p "$HOSTINGER_PORT" "$target" \
             "HOSTINGER_DEPLOY_PATH='$HOSTINGER_DEPLOY_PATH' bash /tmp/github-hostinger-release.sh deploy '$archive' '$GITHUB_SHA' '$RUN_MIGRATIONS'"
 
       - name: Remove runner key

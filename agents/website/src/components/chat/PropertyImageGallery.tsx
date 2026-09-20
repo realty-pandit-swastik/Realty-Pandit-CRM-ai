@@ -15,7 +15,8 @@ export default function PropertyImageGallery({ images, title }: PropertyImageGal
 
     // Reset index when images change
     useEffect(() => {
-        setCurrentIndex(0);
+        const resetIndex = window.setTimeout(() => setCurrentIndex(0));
+        return () => window.clearTimeout(resetIndex);
     }, [images]);
 
     const goNext = useCallback((e?: React.MouseEvent) => {

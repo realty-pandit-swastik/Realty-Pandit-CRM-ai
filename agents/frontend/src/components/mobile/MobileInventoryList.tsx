@@ -150,7 +150,7 @@ export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryLis
     }, [search]);
 
     const toggleSelect = (id: string) => {
-        setSelectedIds(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s; });
+        setSelectedIds(prev => { const s = new Set(prev); if (s.has(id)) s.delete(id); else s.add(id); return s; });
     };
 
     // Contact search for batch share (ported from InventoryList.tsx:350-364)

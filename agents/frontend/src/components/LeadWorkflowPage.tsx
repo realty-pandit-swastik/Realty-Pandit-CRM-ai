@@ -491,7 +491,7 @@ export default function LeadWorkflowPage() {
                 {feedbackNextAction && (
                     <button onClick={() => {
                         const feedback = Object.entries(feedbackEntries).map(([invId, fb]) => ({ inventoryId: invId, result: fb.result, reason: fb.reason || undefined }));
-                        const interestedIds = Object.entries(feedbackEntries).filter(([_, fb]) => fb.result === 'INTERESTED').map(([id]) => id);
+                        const interestedIds = Object.entries(feedbackEntries).filter(([, fb]) => fb.result === 'INTERESTED').map(([id]) => id);
                         handleComplete(task.id, task.task_type, {
                             feedback,
                             nextAction: feedbackNextAction,

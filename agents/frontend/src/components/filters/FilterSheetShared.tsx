@@ -103,7 +103,8 @@ export function FilterTaxonomySection({
     // Reset internal drill when the parent clears the filter (e.g. "Clear all").
     useEffect(() => {
         if (value.nodeIds.length === 0 && value.bhk.length === 0 && (path.length || leafIds.length)) {
-            setPath([]); setLeafIds([]);
+            const reset = window.setTimeout(() => { setPath([]); setLeafIds([]); });
+            return () => window.clearTimeout(reset);
         }
     }, [value.nodeIds.length, value.bhk.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -116,9 +117,11 @@ export function FilterTaxonomySection({
         if (!chain || chain.length === 0) return;
         const last = chain[chain.length - 1];
         if (!last.children || last.children.length === 0) {
-            setPath(chain.slice(0, -1)); setLeafIds(value.nodeIds);  // leaf(s) → drill to parent, select leaves
+            const sync = window.setTimeout(() => { setPath(chain.slice(0, -1)); setLeafIds(value.nodeIds); }); // leaf(s) → drill to parent, select leaves
+            return () => window.clearTimeout(sync);
         } else {
-            setPath(chain); setLeafIds([]);                          // branch → drill into it, show its children
+            const sync = window.setTimeout(() => { setPath(chain); setLeafIds([]); }); // branch → drill into it, show its children
+            return () => window.clearTimeout(sync);
         }
     }, [tree.length, value.nodeIds.join(',')]); // eslint-disable-line react-hooks/exhaustive-deps
 

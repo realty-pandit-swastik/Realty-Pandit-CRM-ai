@@ -89,7 +89,7 @@ export default function ProjectDetailPage() {
                 <div className="text-center">
                     <Building2 className="w-16 h-16 text-slate-300 dark:text-slate-600 mx-auto mb-4" />
                     <h2 className="text-2xl font-bold text-slate-700 dark:text-slate-200 mb-2">Project Not Found</h2>
-                    <p className="text-slate-500 dark:text-slate-400 mb-6">The project you're looking for doesn't exist.</p>
+                    <p className="text-slate-500 dark:text-slate-400 mb-6">The project you&apos;re looking for doesn&apos;t exist.</p>
                     <Link href="/properties?tab=projects" className="px-6 py-3 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 transition-colors inline-block">
                         Browse All Projects
                     </Link>
@@ -344,7 +344,7 @@ export default function ProjectDetailPage() {
                         <div className="sticky top-24 bg-white dark:bg-slate-900 rounded-2xl p-6 shadow-lg border border-slate-100 dark:border-slate-800">
                             <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-4">Get in Touch</h3>
                             <p className="text-sm text-slate-600 dark:text-slate-400 mb-6">
-                                Interested in this project? Submit your details and we'll get back to you.
+                                Interested in this project? Submit your details and we&apos;ll get back to you.
                             </p>
                             <button
                                 onClick={() => setShowEnquiryModal(true)}
@@ -391,7 +391,7 @@ export default function ProjectDetailPage() {
                             <div className="text-center py-8">
                                 <CheckCircle2 className="w-16 h-16 text-green-500 mx-auto mb-4" />
                                 <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-2">Enquiry Submitted!</h3>
-                                <p className="text-slate-600 dark:text-slate-400">We'll get back to you shortly.</p>
+                                <p className="text-slate-600 dark:text-slate-400">We&apos;ll get back to you shortly.</p>
                             </div>
                         ) : (
                             <>

@@ -57,8 +57,6 @@ export const ChatView: React.FC<Props> = ({ contact, interactions, onReportNoSho
     const score = contact.lead_score;
     const displayName = contact.name || contact.phone_number;
 
-    // Group messages by date
-    let lastDate = '';
 
     return (
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', height: '100vh', backgroundColor: 'var(--bg-primary)' }}>
@@ -166,10 +164,10 @@ export const ChatView: React.FC<Props> = ({ contact, interactions, onReportNoSho
                     </div>
                 )}
 
-                {interactions.map((msg) => {
+                {interactions.map((msg, index) => {
                     const msgDate = formatDateSeparator(msg.created_at);
-                    const showSeparator = msgDate !== lastDate;
-                    lastDate = msgDate;
+                    const previousDate = index > 0 ? formatDateSeparator(interactions[index - 1].created_at) : null;
+                    const showSeparator = msgDate !== previousDate;
                     const isOut = msg.direction === 'outbound';
 
                     return (

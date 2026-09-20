@@ -20,6 +20,10 @@ function fmtPrice(p: any): string {
     return `₹${n.toLocaleString('en-IN')}`;
 }
 
+function humanize(value: unknown): string {
+    return String(value || '').replace(/[_-]+/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+}
+
 export function buildWhatsAppShareText(items: ShareTextItem[], mode: 'direct' | 'dealer'): string {
     const blocks = items.map(({ inv, link }, i) => {
         const s = (inv?.specs || {}) as Record<string, any>;
@@ -30,9 +34,25 @@ export function buildWhatsAppShareText(items: ShareTextItem[], mode: 'direct' | 
         const intent = inv?.intent === 'rent' ? 'for Rent'
             : (inv?.intent === 'sell' || inv?.intent === 'sale') ? 'for Sale' : '';
         const loc = [inv?.apartment_name, inv?.locality, inv?.city].filter(Boolean).join(', ');
+        const area = s['plot-area'] ?? s.area;
+        const areaUnit = s['plot-area-unit'] || s.area_unit || 'sqft';
+        const floor = inv?.display_floor || inv?.floor_label
+            || (inv?.floor_number != null ? String(inv.floor_number) : s.floors);
+        const baths = s.bathrooms;
+        const amenityList: string[] = Array.isArray(s.amenities)
+            ? s.amenities
+            : Object.keys(s.amenities || {}).filter(k => s.amenities[k]);
+
         const lines = [`*${i + 1}.* 🏡 ${bhk}${typeName}${intent ? ' — ' + intent : ''}`.trim()];
         if (loc) lines.push(`📍 ${loc}`);
         lines.push(`💰 ${fmtPrice(inv?.display_price ?? inv?.price)}`);
+        if (area) lines.push(`📐 ${area} ${areaUnit}`);
+        if (s.furnishing) lines.push(`🛋️ ${humanize(s.furnishing)}`);
+        if (baths) lines.push(`🚿 ${baths} Bathroom${Number(baths) > 1 ? 's' : ''}`);
+        if (floor) lines.push(`🏢 Floor: ${floor}`);
+        if (s.facing) lines.push(`🧭 ${humanize(s.facing)} Facing`);
+        if (s['ownership-tenure']) lines.push(`📜 ${humanize(s['ownership-tenure'])}`);
+        if (amenityList.length) lines.push(`✨ ${amenityList.slice(0, 5).map(humanize).join(' · ')}`);
         if (link) lines.push(`🔗 ${link}`);
         return lines.join('\n');
     });

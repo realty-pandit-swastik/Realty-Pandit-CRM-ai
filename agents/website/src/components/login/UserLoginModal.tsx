@@ -256,7 +256,7 @@ export default function UserLoginModal({ isOpen, onClose }: UserLoginModalProps)
                                             onClick={handleSendOTP}
                                             className="w-full text-sm text-blue-600 dark:text-blue-400 hover:underline"
                                         >
-                                            Didn't receive OTP? Resend
+                                            Didn&apos;t receive OTP? Resend
                                         </button>
                                     </motion.div>
                                 )}

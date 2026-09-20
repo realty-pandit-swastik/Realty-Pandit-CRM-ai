@@ -36,7 +36,7 @@ export default function ChatMessages({ messages, isTyping, onQuickReply, onPrope
                             <span className="text-4xl">🙏</span>
                         </div>
                         <h3 className="text-2xl font-bold text-slate-900 dark:text-white mb-3">
-                            Namaste! I'm Panditji
+                            Namaste! I&apos;m Panditji
                         </h3>
                         <p className="text-slate-600 dark:text-slate-400 mb-6">
                             Your AI property assistant. Ask me anything about properties!

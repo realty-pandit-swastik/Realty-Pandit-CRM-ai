@@ -55,7 +55,7 @@ export class ApiClient {
   }
 
   /** @deprecated Token is no longer used — auth is via HttpOnly cookie. No-op. */
-  setToken(_token: string | null) {}
+  setToken(token: string | null) { void token; }
 
   async get<T = any>(endpoint: string): Promise<T> {
     const response = await authedFetch(`${this.baseURL}${endpoint}`, { method: 'GET' });

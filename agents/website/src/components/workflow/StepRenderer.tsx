@@ -125,7 +125,7 @@ export default function StepRenderer({
                         {currentValue?.ownership_type === 'EXTERNAL_AGENT' && (
                             <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-xl border border-blue-200 dark:border-blue-800 text-sm text-blue-700 dark:text-blue-300 flex items-start gap-2">
                                 <span className="text-base">ℹ️</span>
-                                <span>We'll ask for the property owner's contact details in the next step.</span>
+                                <span>We&apos;ll ask for the property owner&apos;s contact details in the next step.</span>
                             </div>
                         )}
                         <UploaderBlockInput value={currentValue} onSubmit={v => onAnswer(v)} />
@@ -1216,7 +1216,7 @@ function UploaderBlockInput({ value, onSubmit }: {
                 />
                 {errors.uploader_phone && <p className={errCls}>{errors.uploader_phone}</p>}
                 <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
-                    We'll use this to send property updates and confirmations.
+                    We&apos;ll use this to send property updates and confirmations.
                 </p>
             </div>
 

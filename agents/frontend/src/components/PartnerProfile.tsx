@@ -100,7 +100,7 @@ export function PartnerProfile({ partnerId, onBack }: { partnerId: string; onBac
         }
     };
 
-    useEffect(() => { load(); /* eslint-disable-next-line */ }, [partnerId]);
+    useEffect(() => { load();   }, [partnerId]);
 
     // Lazy-load tab data
     useEffect(() => {

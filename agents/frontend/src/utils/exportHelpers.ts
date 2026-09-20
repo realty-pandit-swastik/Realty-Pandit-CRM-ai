@@ -3,7 +3,6 @@
  * CSV, PDF, and Excel export functionality for reports
  */
 
-import * as XLSX from 'xlsx';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import Papa from 'papaparse';
@@ -66,6 +65,27 @@ export const exportToCSV = (data: any[], filename: string) => {
   document.body.removeChild(link);
 };
 
+const escapeXml = (value: unknown) => String(value ?? '')
+  .replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')
+  .replaceAll('"', '&quot;').replaceAll("'", '&apos;');
+
+const downloadWorkbook = (sheets: Array<{ name: string; rows: any[] }>, filename: string) => {
+  const worksheets = sheets.map(({ name, rows }) => {
+    const headers = Object.keys(rows[0] || {});
+    const tableRows = [headers, ...rows.map(row => headers.map(header => row[header]))]
+      .map(row => `<Row>${row.map(value => `<Cell><Data ss:Type="String">${escapeXml(value)}</Data></Cell>`).join('')}</Row>`)
+      .join('');
+    return `<Worksheet ss:Name="${escapeXml(name)}"><Table>${tableRows}</Table></Worksheet>`;
+  }).join('');
+  const xml = `<?xml version="1.0"?><Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">${worksheets}</Workbook>`;
+  const url = URL.createObjectURL(new Blob([xml], { type: 'application/vnd.ms-excel' }));
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `${filename}_${formatDateForFilename()}.xls`;
+  link.click();
+  URL.revokeObjectURL(url);
+};
+
 /**
  * Export to Excel
  */
@@ -76,29 +96,7 @@ export const exportToExcel = (data: any[], filename: string) => {
 
   const preparedData = prepareDataForExport(data);
 
-  // Create worksheet
-  const ws = XLSX.utils.json_to_sheet(preparedData);
-
-  // Auto-size columns
-  const colWidths: any[] = [];
-  const headers = Object.keys(preparedData[0] || {});
-
-  headers.forEach((header, idx) => {
-    const maxLength = Math.max(
-      header.length,
-      ...preparedData.map(row => String(row[header] || '').length)
-    );
-    colWidths[idx] = { wch: Math.min(maxLength + 2, 50) };
-  });
-
-  ws['!cols'] = colWidths;
-
-  // Create workbook
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, 'Report');
-
-  // Save file
-  XLSX.writeFile(wb, `${filename}_${formatDateForFilename()}.xlsx`);
+  downloadWorkbook([{ name: 'Report', rows: preparedData }], filename);
 };
 
 /**
@@ -222,38 +220,22 @@ export const exportSummaryToCSV = (summaryData: any, filename: string) => {
  * Export summary to Excel with multiple sheets
  */
 export const exportSummaryToExcel = (summaryData: any, filename: string) => {
-  const wb = XLSX.utils.book_new();
+  const sheets: Array<{ name: string; rows: any[] }> = [];
 
   Object.entries(summaryData).forEach(([key, value]) => {
     if (Array.isArray(value) && value.length > 0) {
       const preparedData = prepareDataForExport(value);
-      const ws = XLSX.utils.json_to_sheet(preparedData);
-
-      // Auto-size columns
-      const headers = Object.keys(preparedData[0] || {});
-      const colWidths = headers.map((header) => ({
-        wch: Math.min(
-          Math.max(header.length, ...preparedData.map(row => String(row[header] || '').length)) + 2,
-          50
-        ),
-      }));
-      ws['!cols'] = colWidths;
-
-      // Sheet name (max 31 chars, no special chars)
-      const sheetName = key.replace(/_/g, ' ').substring(0, 31);
-      XLSX.utils.book_append_sheet(wb, ws, sheetName);
+      sheets.push({ name: key.replace(/_/g, ' ').substring(0, 31), rows: preparedData });
     }
   });
 
   // If no sheets were added, create a summary sheet
-  if (wb.SheetNames.length === 0) {
+  if (sheets.length === 0) {
     const summaryRows = Object.entries(summaryData).map(([key, value]) => ({
       metric: key.replace(/_/g, ' '),
       value: typeof value === 'object' ? JSON.stringify(value) : value,
     }));
-    const ws = XLSX.utils.json_to_sheet(summaryRows);
-    XLSX.utils.book_append_sheet(wb, ws, 'Summary');
+    sheets.push({ name: 'Summary', rows: summaryRows });
   }
-
-  XLSX.writeFile(wb, `${filename}_${formatDateForFilename()}.xlsx`);
+  downloadWorkbook(sheets, filename);
 };

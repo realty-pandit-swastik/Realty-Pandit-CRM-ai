@@ -388,7 +388,7 @@ export default function AgentLeads() {
                             <h3 className="font-semibold text-gray-900">Mark Lead as Done?</h3>
                         </div>
                         <p className="text-sm text-gray-600 mb-6">
-                            This means you've handled this client with your own inventory. The lead will be removed from Realty Pandit's follow-up queue. <strong>This cannot be undone.</strong>
+                                    This means you&apos;ve handled this client with your own inventory. The lead will be removed from Realty Pandit&apos;s follow-up queue. <strong>This cannot be undone.</strong>
                         </p>
                         <p className="text-xs text-gray-400 mb-5">Realty Pandit team will be notified automatically.</p>
                         <div className="flex gap-3">

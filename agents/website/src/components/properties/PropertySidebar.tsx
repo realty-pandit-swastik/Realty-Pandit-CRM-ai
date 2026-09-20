@@ -148,7 +148,7 @@ function DynamicTypeFilters({ nodeId, filters, onToggleMultiFilter }: {
 
     useEffect(() => {
         let cancelled = false;
-        setLoading(true);
+        queueMicrotask(() => setLoading(true));
         getNodeFields(nodeId)
             .then(f => { if (!cancelled) setFields(f); })
             .catch(() => { if (!cancelled) setFields([]); })

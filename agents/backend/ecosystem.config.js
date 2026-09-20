@@ -1,10 +1,11 @@
+const appRoot = process.env.HOSTINGER_DEPLOY_PATH || '/var/www/realty-pandit';
+
 module.exports = {
     apps: [
         {
             name: 'realty-backend',
-            script: 'src/server.ts',
-            interpreter: 'node',
-            interpreter_args: '-r ts-node/register/transpile-only',
+      cwd: `${appRoot}/current/backend`,
+      script: 'server-bootstrap.js',
             instances: 2,
             exec_mode: 'cluster',
             max_memory_restart: '1G',

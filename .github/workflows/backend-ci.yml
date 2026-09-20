@@ -32,12 +32,23 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
 
     env:
       DATABASE_URL: postgresql://test:test@localhost:5432/test_db?schema=public
       JWT_SECRET: ci-test-jwt-secret
       AGENT_JWT_SECRET: ci-test-agent-jwt-secret
       NODE_ENV: test
+      REDIS_HOST: localhost
+      REDIS_PORT: '6379'
 
     steps:
       - uses: actions/checkout@v4

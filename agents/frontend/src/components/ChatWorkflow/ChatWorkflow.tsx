@@ -579,7 +579,7 @@ function SummaryCardWidget({ summary, onConfirm, onEdit, sending }: { summary: R
 
 function MultiSelectWidget({ options, onDone, sending }: { options: Array<{ value: string; label: string }>; onDone: (selected: string[]) => void; sending: boolean }) {
     const [selected, setSelected] = useState<Set<string>>(new Set());
-    const toggle = (v: string) => setSelected(prev => { const n = new Set(prev); n.has(v) ? n.delete(v) : n.add(v); return n; });
+    const toggle = (v: string) => setSelected(prev => { const n = new Set(prev); if (n.has(v)) n.delete(v); else n.add(v); return n; });
 
     return (
         <div className={styles.multiSelectContainer}>
@@ -615,7 +615,7 @@ function ContactFormWidget({ mode, onSubmit, sending }: { mode: 'owner_block' | 
     const [phone, setPhone] = useState('');
     const [email, setEmail] = useState('');
     const isOwner = mode === 'owner_block';
-    const isValid = name.trim().length >= 2 && /^\d{10}$/.test(phone.replace(/[\s+\-]/g, '').replace(/^91/, ''));
+    const isValid = name.trim().length >= 2 && /^\d{10}$/.test(phone.replace(/[\s+-]/g, '').replace(/^91/, ''));
 
     const handleSubmit = () => {
         if (!isValid) return;

@@ -65,11 +65,11 @@ export function useChatWorkflow(): ChatWorkflowState {
     }, [updateCurrentStep]);
 
     const saveSession = useCallback((id: string) => {
-        try { localStorage.setItem(SESSION_KEY, id); } catch {}
+    try { localStorage.setItem(SESSION_KEY, id); } catch { /* Session persistence is best effort. */ }
     }, []);
 
     const clearSession = useCallback(() => {
-        try { localStorage.removeItem(SESSION_KEY); } catch {}
+    try { localStorage.removeItem(SESSION_KEY); } catch { /* Session persistence is best effort. */ }
     }, []);
 
     const extractSuccess = useCallback((msgs: ChatMessage[]) => {

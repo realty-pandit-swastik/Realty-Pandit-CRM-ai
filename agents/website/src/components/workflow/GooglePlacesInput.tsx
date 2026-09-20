@@ -74,7 +74,7 @@ export function GooglePlacesInput({
     const inputRef = useRef<HTMLInputElement>(null);
     const autocompleteRef = useRef<any>(null);
     const [ready, setReady] = useState(false);
-    const [failed, setFailed] = useState(false);
+    const [failed, setFailed] = useState(() => !GOOGLE_MAPS_KEY);
     const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const internalChangeRef = useRef(false);
 
@@ -87,10 +87,7 @@ export function GooglePlacesInput({
     }, [value]);
 
     useEffect(() => {
-        if (!GOOGLE_MAPS_KEY) {
-            setFailed(true);
-            return;
-        }
+        if (!GOOGLE_MAPS_KEY) return;
         loadGoogleMapsScript(() => {
             const google = (window as any).google;
             if (google?.maps?.places) {

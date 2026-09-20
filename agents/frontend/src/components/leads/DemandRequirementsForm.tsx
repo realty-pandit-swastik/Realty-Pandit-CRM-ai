@@ -181,36 +181,27 @@ const DemandRequirementsForm = forwardRef<DemandRequirementsFormHandle, DemandRe
                 ? data
                 : (data?.tree || data?.roots || []);
             setTree(roots);
+            if (nodeId) {
+                const path: string[] = [];
+                const walk = (nodes: TaxonomyTreeNode[], ancestors: string[]): boolean => {
+                    for (const n of nodes) {
+                        if (n.id === nodeId) { path.push(...ancestors, n.id); return true; }
+                        if (n.children?.length && walk(n.children, [...ancestors, n.id])) return true;
+                    }
+                    return false;
+                };
+                walk(roots, []);
+                if (path[0]) setCatId(path[0]);
+                if (path[1]) setSubCatId(path[1]);
+                if (path[2]) setTypeId(path[2]);
+            }
         }).catch(() => {});
         return () => { cancelled = true; };
     }, []);
 
-    // If we got an initial nodeId, walk the tree to populate the cascade dropdowns.
-    useEffect(() => {
-        if (!nodeId || !tree.length) return;
-        // BFS to find the node and its ancestors.
-        const path: string[] = [];
-        function walk(nodes: TaxonomyTreeNode[], ancestors: string[]): boolean {
-            for (const n of nodes) {
-                if (n.id === nodeId) {
-                    path.push(...ancestors, n.id);
-                    return true;
-                }
-                if (n.children?.length && walk(n.children, [...ancestors, n.id])) return true;
-            }
-            return false;
-        }
-        walk(tree, []);
-        // path = [catId, subCatId?, typeId?, leafId?] — set what we have
-        if (path[0]) setCatId(path[0]);
-        if (path[1]) setSubCatId(path[1]);
-        if (path[2]) setTypeId(path[2]);
-        // last element is the leaf == nodeId (already set)
-    }, [tree, nodeId]);
-
     // Whenever the picked node changes, fetch its NodeField schema.
     useEffect(() => {
-        if (!nodeId) { setNodeFields([]); return; }
+        if (!nodeId) return;
         let cancelled = false;
         getNodeFields(nodeId).then((data: any) => {
             if (cancelled) return;
@@ -228,18 +219,22 @@ const DemandRequirementsForm = forwardRef<DemandRequirementsFormHandle, DemandRe
 
     // When cascade selection changes, derive the effective nodeId (most-specific picked).
     const onPickCat = (id: string) => {
+        setNodeFields([]);
         setCatId(id); setSubCatId(''); setTypeId('');
         setNodeId(id || null);
     };
     const onPickSubCat = (id: string) => {
+        setNodeFields([]);
         setSubCatId(id); setTypeId('');
         setNodeId(id || catId || null);
     };
     const onPickType = (id: string) => {
+        setNodeFields([]);
         setTypeId(id);
         setNodeId(id || subCatId || catId || null);
     };
     const onPickLeaf = (id: string) => {
+        setNodeFields([]);
         setNodeId(id || typeId || subCatId || catId || null);
     };
 

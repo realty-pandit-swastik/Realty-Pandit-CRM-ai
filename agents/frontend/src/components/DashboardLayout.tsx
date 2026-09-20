@@ -15,20 +15,18 @@ export function DashboardLayout({ activeView, onViewChange, children }: Dashboar
     const { agent, logout, hasPermission, isPartnerOwner } = useAuth();
     const { theme, toggleTheme } = useTheme();
     const isMobile = useIsMobile();
-    const [collapsed, setCollapsed] = useState(false);
-    const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [collapsed, setCollapsed] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [isStandalone] = useState(() =>
+    window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone === true,
+  );
     const navRef = useRef<HTMLElement>(null);
 
     // PWA Install Prompt
     const [installPrompt, setInstallPrompt] = useState<any>(null);
-    const [isStandalone, setIsStandalone] = useState(false);
     useEffect(() => {
         // Check if already running as installed PWA
-        const standalone = window.matchMedia('(display-mode: standalone)').matches
-            || (window.navigator as any).standalone === true;
-        setIsStandalone(standalone);
-
-        const handler = (e: Event) => {
+    const handler = (e: Event) => {
             e.preventDefault();
             setInstallPrompt(e);
         };

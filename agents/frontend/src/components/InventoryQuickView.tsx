@@ -50,7 +50,7 @@ export function InventoryQuickView({ inventoryId, onClose }: InventoryQuickViewP
     };
 
     const call = (phone: string | null | undefined) => {
-        const d = toDialablePhone(phone); if (d) window.location.href = `tel:${d}`;
+        const d = toDialablePhone(phone); if (d) window.location.assign(`tel:${d}`);
     };
     const wa = (phone: string | null | undefined) => {
         const d = toDialablePhone(phone); if (d) window.open(`https://wa.me/${d.slice(1)}`, '_blank');

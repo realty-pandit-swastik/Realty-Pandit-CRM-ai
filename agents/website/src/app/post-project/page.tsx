@@ -73,7 +73,7 @@ export default function PostProjectPage() {
         if (draft) {
             try {
                 const parsed = JSON.parse(draft);
-                setFormData({ ...formData, ...parsed });
+                queueMicrotask(() => setFormData(current => ({ ...current, ...parsed })));
             } catch (e) {
                 console.error('Failed to load draft:', e);
             }
@@ -617,7 +617,7 @@ export default function PostProjectPage() {
                     <CheckCircle2 className="w-20 h-20 text-green-500 mx-auto mb-6" />
                     <h2 className="text-3xl font-bold text-slate-900 dark:text-white mb-3">Success!</h2>
                     <p className="text-slate-600 dark:text-slate-400 mb-6">
-                        Your project has been submitted successfully. We'll review it and get back to you shortly.
+                        Your project has been submitted successfully. We&apos;ll review it and get back to you shortly.
                     </p>
                     <p className="text-sm text-slate-500 dark:text-slate-400">Redirecting to projects...</p>
                 </motion.div>
