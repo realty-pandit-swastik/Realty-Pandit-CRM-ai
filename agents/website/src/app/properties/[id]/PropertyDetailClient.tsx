@@ -8,6 +8,7 @@ import { getPropertyById, getSimilarProperties, getNearbyLandmarks, formatPrice,
 import { formatPropertyTitle, formatAddress, resolveBedroomCount, getAmenities, getTypeLabel, getDisplaySpecs, getRoomLabel } from '@/lib/propertyUtils';
 import { COMPANY_WHATSAPP } from '@/lib/constants';
 import { getDisplayFloor } from '@/lib/floor';
+import { sharePropertyOnWhatsApp } from '@/lib/propertyShare';
 import PropertyCard from '@/components/PropertyCard';
 import InternalLinks from '@/components/InternalLinks';
 import ScheduleVisitForm from '@/components/property-detail/ScheduleVisitForm';
@@ -87,12 +88,13 @@ function groupLandmarks(landmarks: Landmark[]) {
 
 // === Main Component ===
 export default function PropertyDetailClient({ id }: { id: string }) {
-    const [property, setProperty] = useState<(Property & { owner_name?: string; contact?: any; latitude?: number; longitude?: number }) | null>(null);
+    const [property, setProperty] = useState<(Property & { latitude?: number; longitude?: number }) | null>(null);
     const [loading, setLoading] = useState(true);
 
     const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
     const [saved, setSaved] = useState(false);
     const [linkCopied, setLinkCopied] = useState(false);
+    const [sharingWhatsApp, setSharingWhatsApp] = useState(false);
     const [similarProperties, setSimilarProperties] = useState<Property[]>([]);
     const [similarLoading, setSimilarLoading] = useState(true);
     const [landmarks, setLandmarks] = useState<Landmark[]>([]);
@@ -194,9 +196,14 @@ export default function PropertyDetailClient({ id }: { id: string }) {
         return `${bhk}${type} for ${intent} in ${loc} - ${price}`;
     };
 
-    const handleWhatsAppShare = () => {
-        const text = `${getShareText()}\n\nView on Realty Pandit: ${window.location.href}`;
-        window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
+    const handleWhatsAppShare = async () => {
+        if (!property || sharingWhatsApp) return;
+        setSharingWhatsApp(true);
+        try {
+            await sharePropertyOnWhatsApp(property);
+        } finally {
+            setSharingWhatsApp(false);
+        }
     };
 
     const handleTwitterShare = () => {
@@ -354,7 +361,7 @@ export default function PropertyDetailClient({ id }: { id: string }) {
                                 className="flex items-center gap-2 mb-6 flex-wrap"
                             >
                                 <span className="text-sm text-slate-500 dark:text-slate-400 mr-1">Share:</span>
-                                <button onClick={handleWhatsAppShare} className="p-2 rounded-lg bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800 text-green-600 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-900 transition-colors" title="Share on WhatsApp" aria-label="Share on WhatsApp">
+                                <button disabled={sharingWhatsApp} onClick={handleWhatsAppShare} className="p-2 rounded-lg bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800 text-green-600 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-900 disabled:opacity-50 transition-colors" title={sharingWhatsApp ? 'Preparing photos and videos…' : 'Share media on WhatsApp'} aria-label="Share media on WhatsApp">
                                     <MessageCircle className="w-4 h-4" />
                                 </button>
                                 <button onClick={handleTwitterShare} className="p-2 rounded-lg bg-sky-50 dark:bg-sky-950 border border-sky-200 dark:border-sky-800 text-sky-600 dark:text-sky-400 hover:bg-sky-100 dark:hover:bg-sky-900 transition-colors" title="Share on Twitter" aria-label="Share on Twitter">

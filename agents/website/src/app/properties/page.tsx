@@ -13,8 +13,8 @@ import PropertyToolbar from '@/components/properties/PropertyToolbar';
 import PropertyPagination from '@/components/properties/PropertyPagination';
 import FilterChips from '@/components/properties/FilterChips';
 import ScheduleVisitModal from '@/components/properties/ScheduleVisitModal';
-import ShareWhatsAppModal from '@/components/properties/ShareWhatsAppModal';
 import { getProperties, getProjects, getMediaUrl, type Property, type Project } from '@/lib/api';
+import { sharePropertyOnWhatsApp } from '@/lib/propertyShare';
 
 function PropertiesContent() {
     const searchParams = useSearchParams();
@@ -35,7 +35,6 @@ function PropertiesContent() {
     const [viewMode, setViewMode] = useState<'grid' | 'list'>('list');
     const [mobileFilterOpen, setMobileFilterOpen] = useState(false);
     const [scheduleVisitProperty, setScheduleVisitProperty] = useState<Property | null>(null);
-    const [shareWhatsAppProperty, setShareWhatsAppProperty] = useState<Property | null>(null);
 
     // Filter state — taxonomy-driven (taxonomy_node_id) + per-type specs filters.
     const [filters, setFilters] = useState({
@@ -325,7 +324,7 @@ function PropertiesContent() {
                                             property={p}
                                             index={i}
                                             onScheduleVisit={setScheduleVisitProperty}
-                                            onShareWhatsApp={setShareWhatsAppProperty}
+                                            onShareWhatsApp={(property) => void sharePropertyOnWhatsApp(property)}
                                         />
                                     ))}
                                 </div>
@@ -384,13 +383,6 @@ function PropertiesContent() {
                 />
             )}
 
-            {/* Share WhatsApp modal */}
-            {shareWhatsAppProperty && (
-                <ShareWhatsAppModal
-                    property={shareWhatsAppProperty}
-                    onClose={() => setShareWhatsAppProperty(null)}
-                />
-            )}
         </div>
     );
 }

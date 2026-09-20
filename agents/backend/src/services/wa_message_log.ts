@@ -27,7 +27,7 @@ const RANK: Record<string, number> = { sent: 1, delivered: 2, read: 3, failed: 9
 
 export interface RecordOutboundArgs {
     to: string;
-    messageType: 'text' | 'template' | 'image' | 'interactive' | 'document';
+    messageType: 'text' | 'template' | 'image' | 'video' | 'interactive' | 'document';
     body?: string | null;
     mediaUrl?: string | null;
     templateName?: string | null;
