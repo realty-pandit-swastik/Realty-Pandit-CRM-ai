@@ -25,8 +25,9 @@ Complete this under an approved maintenance window before enabling
      HOSTINGER_DEPLOY_PATH=/var/www/realty-pandit pm2 delete realty-website; \
      HOSTINGER_DEPLOY_PATH=/var/www/realty-pandit pm2 start ecosystem.config.js; pm2 save'
    ```
-3. Create a non-root deploy identity with only the sudo permission needed for
-   `sudo -u realty -H pm2 restart realty-website`.
+3. Create a non-root deploy identity with narrowly scoped passwordless sudo for
+   `pm2 reload realty-backend --update-env` as root and
+   `sudo -u realty -H pm2 restart realty-website`. Do not grant a general root shell.
 4. Create these persistent paths with least-privilege ownership:
 
    ```text

@@ -36,7 +36,7 @@ preflight() {
 }
 
 reload_services() {
-  pm2 reload realty-backend --update-env
+  sudo -n pm2 reload realty-backend --update-env
   sudo -u realty -H pm2 restart realty-website
 }
 
