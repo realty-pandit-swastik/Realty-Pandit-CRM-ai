@@ -189,6 +189,7 @@ export class ChatHandler {
                     // features dropped Phase 4 — read from specs.amenities
                     location: true,
                     price: true,
+                    display_price: true,
                     price_unit: true,
                     status: true,
                     intent: true,
@@ -228,7 +229,7 @@ export class ChatHandler {
                 const bedrooms = specs.bedrooms || '';
                 const area = specs.area || 'N/A';
                 const bhkLabel = bedrooms ? `${bedrooms} BHK` : '';
-                return `${i + 1}. ${bhkLabel} ${p.type || 'Property'} in ${p.location || 'Location'} - ₹${this.formatPrice(Number(p.price) || 0)} - ${area} sqft - ${p.status || 'Available'}`;
+                return `${i + 1}. ${bhkLabel} ${p.type || 'Property'} in ${p.location || 'Location'} - ₹${this.formatPrice(Number((p as any).display_price ?? p.price) || 0)} - ${area} sqft - ${p.status || 'Available'}`;
             }).join('\n')
             : 'No properties found matching these criteria.';
 
@@ -353,6 +354,7 @@ IMPORTANT:
                     type: true,
                     location: true,
                     price: true,
+                    display_price: true,
                     status: true,
                     specs: true,
                     media_urls: true,
@@ -448,7 +450,7 @@ IMPORTANT:
             const bedrooms = specs.bedrooms || '';
             const bhkLabel = bedrooms ? `${bedrooms} BHK` : '';
             const propertyTitle = `${bhkLabel} ${property.type || 'Property'} in ${property.location || 'Location'}`;
-            const propertyPrice = this.formatPrice(Number(property.price) || 0);
+            const propertyPrice = this.formatPrice(Number((property as any).display_price ?? property.price) || 0);
             const propertyAddress = property.location || 'Location';
             const customerName = contact.name || 'Customer';
             const customerPhone = normalizedPhone;

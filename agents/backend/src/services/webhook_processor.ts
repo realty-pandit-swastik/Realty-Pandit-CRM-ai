@@ -580,10 +580,18 @@ How can I help you find your perfect property today? 🏡`;
 
                 // Move deal to ON_HOLD + pause AI
                 try {
+                    // Through the state machine (2026-08-09). Was a direct `status` write, so it skipped
+                    // validation, logged no TransactionLog row, and would bypass the lead-stage sync.
+                    // ai_paused / last_team_action_at are not part of a transition, so they are written
+                    // straight after. The existing catch below still swallows an illegal transition
+                    // (e.g. an already-closed deal, where ON_HOLD is not a valid next status).
+                    const { transitionTransaction } = await import('./transaction_state_machine');
+                    await transitionTransaction(activeDeal.id, 'ON_HOLD' as any, from, 'whatsapp', {
+                        reason: isFinalizedElsewhere ? 'finalized-elsewhere' : 'withdrawing',
+                    });
                     await prisma.transaction.update({
                         where: { id: activeDeal.id },
                         data: {
-                            status: 'ON_HOLD' as any,
                             ai_paused: true,
                             last_team_action_at: new Date(),
                         },

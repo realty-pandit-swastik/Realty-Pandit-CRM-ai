@@ -68,7 +68,7 @@ export default function CityPageClient({ city }: { city: string }) {
         <div className="min-h-screen bg-slate-50 dark:bg-slate-950 pt-20">
             {/* Hero */}
             <section className="relative bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 text-white">
-                <div className="absolute inset-0 bg-[url('/grid.svg')] opacity-10" />
+                <div className="absolute inset-0 bg-[url(/grid.svg)] opacity-10" />
                 <div className="max-w-7xl mx-auto px-4 py-12 md:py-16 relative z-10">
                     <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
                         <nav className="flex items-center gap-2 text-sm text-slate-400 mb-6">

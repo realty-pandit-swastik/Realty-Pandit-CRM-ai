@@ -14,6 +14,7 @@ import prisma from '../db';
 import logger from '../utils/logger';
 import { normalizePhone } from '../utils/phone';
 import { notifyDealEvent } from '../services/deal_notifications';
+import { transitionTransaction } from '../services/transaction_state_machine';
 import { captureRouteError } from '../utils/capture';
 
 const router = Router();
@@ -133,9 +134,18 @@ const CLOSED_LOST_OUTCOMES = new Set([
 
 async function applyOmnidimOutcome(dealId: string, outcome: string, payload: any): Promise<void> {
     if (outcome === 'VERIFIED') {
-        await prisma.transaction.update({
-            where: { id: dealId },
-            data: { status: 'QUALIFIED' as any, updated_at: new Date() },
+        // Through the state machine (2026-08-09). This used to write `status` directly, which
+        // skipped transition validation, wrote NO TransactionLog row, and — now that the
+        // lead-stage sync lives inside transitionTransaction — would have left the Leads page
+        // showing "New" for an AI-qualified lead. Measured: 118 of 501 QUALIFIED deals (24%)
+        // arrived this way with no audit trail.
+        //
+        // An illegal transition (e.g. the deal already CLOSED_WON, which is terminal) now throws.
+        // That is intentional and safe: the caller already try/catches and still returns 200
+        // (see the applyOmnidimOutcome call site), and skipping the notify below is correct —
+        // we must not announce a transition that did not happen.
+        await transitionTransaction(dealId, 'QUALIFIED' as any, 'omnidim', 'voice', {
+            reason: 'AI qualified via Omnidim', outcome,
         });
         await notifyDealEvent({ dealId, event: 'status_changed', newStatus: 'QUALIFIED', reason: 'AI qualified via Omnidim' });
         // Auto-share first matching property (Stage 2 KRA on-entry behaviour).
@@ -159,10 +169,17 @@ async function applyOmnidimOutcome(dealId: string, outcome: string, payload: any
             PARTNER_AGENT: 'Partner agent enquiry — not an end customer',
             NO_ANSWER_MAX: 'No answer after maximum attempts',
         };
+        // Through the state machine (2026-08-09) — see the note on the VERIFIED branch above.
+        // `closed_at` is set by the machine itself for terminal states, so it is dropped here;
+        // `close_reason` is not part of the transition, so it is persisted after, exactly as the
+        // admin close path does (routes/deals.ts CLOSED_LOST branch).
+        await transitionTransaction(dealId, 'CLOSED_LOST' as any, 'omnidim', 'voice', {
+            reason: reasonMap[outcome], outcome,
+        });
         await prisma.transaction.update({
             where: { id: dealId },
-            data: { status: 'CLOSED_LOST' as any, close_reason: reasonMap[outcome], closed_at: new Date(), updated_at: new Date() },
-        });
+            data: { close_reason: reasonMap[outcome] },
+        }).catch(err => logger.warn('[Omnidim] close_reason persist failed:', err));
         await notifyDealEvent({ dealId, event: 'closed_lost', reason: reasonMap[outcome] });
         logger.info(`[Omnidim] Deal ${dealId} ${outcome} → CLOSED_LOST`);
         return;

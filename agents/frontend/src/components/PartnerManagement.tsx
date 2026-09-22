@@ -8,6 +8,7 @@ import { useToast } from '../contexts/ToastContext';
 import { useConfirm } from '../contexts/ConfirmContext';
 import { PartnerReassignDialog } from './PartnerReassignDialog';
 import PartnerProfile from './PartnerProfile';
+import { RevertToCustomerDialog } from './RevertToCustomerDialog';
 
 interface Partner {
     id: string;
@@ -93,6 +94,7 @@ export function PartnerManagement() {
     const [formError, setFormError] = useState('');
     // Reassignment dialog state (super_boss only — see middleman model 2026-04-17)
     const [reassignTarget, setReassignTarget] = useState<Partner | null>(null);
+    const [revertTarget, setRevertTarget] = useState<any | null>(null);
     const [profileId, setProfileId] = useState<string | null>(null);
     const isSuperBoss = agent?.role === 'super_boss';
 
@@ -357,6 +359,7 @@ export function PartnerManagement() {
                                 ) : (
                                     <button onClick={() => handleStatusChange(p.id, 'ACTIVE')} style={{ ...btnStyle, backgroundColor: '#3b82f6', padding: '6px 12px' }}>Activate</button>
                                 )}
+                                <button onClick={() => setRevertTarget(p)} title="Undo an accidental conversion — turns them back into a normal customer" style={{ ...btnStyle, backgroundColor: '#f97316', padding: '6px 12px' }}>↩ Revert</button>
                                 {isSuperBoss && (
                                     <button onClick={() => setReassignTarget(p)} style={{ ...btnStyle, backgroundColor: '#8b5cf6', padding: '6px 12px' }}>Reassign</button>
                                 )}
@@ -431,6 +434,7 @@ export function PartnerManagement() {
                                             ) : (
                                                 <button onClick={() => handleStatusChange(p.id, 'ACTIVE')} style={{ ...btnStyle, backgroundColor: '#3b82f6' }}>Activate</button>
                                             )}
+                                            <button onClick={() => setRevertTarget(p)} title="Undo an accidental conversion — turns them back into a normal customer" style={{ ...btnStyle, backgroundColor: '#f97316' }}>↩ Revert</button>
                                             {isSuperBoss && (
                                                 <button onClick={() => setReassignTarget(p)} style={{ ...btnStyle, backgroundColor: '#8b5cf6' }}>Reassign</button>
                                             )}
@@ -451,6 +455,15 @@ export function PartnerManagement() {
             )}
 
             {/* Reassignment dialog (super_boss only) */}
+            {revertTarget && (
+                <RevertToCustomerDialog
+                    partnerId={revertTarget.id}
+                    partnerName={revertTarget.name}
+                    phone={revertTarget.phone_number}
+                    onClose={() => setRevertTarget(null)}
+                    onReverted={() => { setRevertTarget(null); loadPartners(); }}
+                />
+            )}
             {reassignTarget && (
                 <PartnerReassignDialog
                     partnerId={reassignTarget.id}

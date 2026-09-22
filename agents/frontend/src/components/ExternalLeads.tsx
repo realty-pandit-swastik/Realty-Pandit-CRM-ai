@@ -1,7 +1,7 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react';
 import PhoneInput from './PhoneInput';
-import client, { getPartnerAssignable, assignLeadToTeammate, shareLead } from '../api/client';
+import client, { getPartnerAssignable, assignLeadToTeammate, shareLead, rosterForPickers } from '../api/client';
 import { isPlaceholderPhone, isDialablePhone, isValidPhoneInput, toDialablePhone, normalizePhoneInput } from '../lib/phone';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
@@ -143,16 +143,6 @@ const LIFECYCLE_STAGES = ['NEW', 'QUALIFIED', 'MATCHING_APPOINTMENT', 'VISIT_SCH
 const SOURCES = ['99acres', 'magicbricks', 'housing', 'website', 'whatsapp', 'voice', 'manual', 'admin_created', 'inventory_workflow', 'website_popup', 'agent_registration'];
 const PRIVILEGED_ROLES = ['super_boss', 'manager'];
 
-// Lead-source roles for the Add-Lead wizard (Step 2 cards). Single source of truth —
-// the rendered cards, step indicator and submit payload all derive from these keys.
-// Visuals (icon/title/subtitle/accent) are part of the config so a future role is a
-// one-row addition, not a new hardcoded card.
-type LeadSourceRole = 'DIRECT_OWNER' | 'PARTNER_REFERRAL';
-const LEAD_SOURCE_ROLES: Array<{ key: LeadSourceRole; icon: string; title: string; subtitle: string; accent: string; hoverBg: string }> = [
-    { key: 'DIRECT_OWNER', icon: '👤', title: 'Client', subtitle: 'Client contacted directly', accent: '#3b82f6', hoverBg: 'rgba(59,130,246,0.06)' },
-    { key: 'PARTNER_REFERRAL', icon: '🤝', title: 'Partner Agent', subtitle: 'Referred by a partner', accent: '#7c3aed', hoverBg: 'rgba(124,58,237,0.06)' },
-];
-
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function scoreColor(s: number) { return s >= 80 ? '#ef4444' : s >= 60 ? '#f59e0b' : '#6b7280'; }
@@ -249,7 +239,12 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
     const [leadReassignTarget, setLeadReassignTarget] = useState('');
     const [leadReassigning, setLeadReassigning] = useState(false);
     const [leadReassignMsg, setLeadReassignMsg] = useState('');
-    const toggleLeadSelect = (phone: string) => setSelectedLeadPhones(prev => { const s = new Set(prev); if (s.has(phone)) s.delete(phone); else s.add(phone); return s; });
+    const toggleLeadSelect = (phone: string) => setSelectedLeadPhones(prev => {
+        const selected = new Set(prev);
+        if (selected.has(phone)) selected.delete(phone);
+        else selected.add(phone);
+        return selected;
+    });
     // 2026-05-13: active / archived / all — default hides lost+closed so the team
     // only sees workable leads. Recovered via toggle at top of page.
     const [activeFilter, setActiveFilter] = useState<'active' | 'archived' | 'all'>((initialFilter?.active as 'active' | 'archived' | 'all') || 'active');
@@ -327,10 +322,9 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
     const [dealError, setDealError] = useState('');
 
     // ── Create modal steps ──
-    // Step 1=identity (phone + autocomplete) → 2=source (role cards) →
-    // DIRECT_OWNER: 3=contact search → 4=details form
-    // PARTNER_REFERRAL: 3=details form (with partner search at top)
-    const [createStep, setCreateStep] = useState<1 | 2 | 3 | 4>(1);
+    // DIRECT_OWNER:   1=source → 2=contact search → 3=details form
+    // PARTNER_REFERRAL: 1=source → 2=details form (with partner search at top)
+    const [createStep, setCreateStep] = useState<1 | 2 | 3>(1);
 
     // ── Client contact search (Step 2 for DIRECT_OWNER) ──
     const [clientSearchQuery, setClientSearchQuery] = useState('');
@@ -338,17 +332,6 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
     const [clientSearching, setClientSearching] = useState(false);
     const clientSearchTimer = useRef<any>(null);
     const [preselectedContact, setPreselectedContact] = useState<{ phone_number: string; name: string | null } | null>(null);
-    // Identity step (Step 1): role-card suggestion derived from the entered phone.
-    // If the digits belong to a registered partner we pre-highlight "Partner Agent";
-    // otherwise "Client". The user can always override — this is a hint, not a lock.
-    const [suggestedLeadType, setSuggestedLeadType] = useState<LeadSourceRole | null>(null);
-    const suggestTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-    const suggestSeq = useRef(0);
-    // Identity step: the digits the user confirmed as "new" (no existing contact).
-    // Compared against the live query — editing the number after confirming
-    // invalidates the confirmation automatically.
-    const [identityNewPhone, setIdentityNewPhone] = useState<string | null>(null);
-    const roleCardRefs = useRef<Array<HTMLDivElement | null>>([]);
     // Pause the 30s auto-refresh while the user is working (a modal/detail open) or the tab is unfocused. (2026-07-09)
     const busyRef = useRef(false);
     useEffect(() => {
@@ -507,7 +490,7 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
     // no roster at all because they cannot assign.
     useEffect(() => {
         if (!isPartner) {
-            client.get('/api/team/members-list').then(r => setTeamMembers(r.data)).catch(() => {});
+            client.get('/api/team/members-list').then(r => setTeamMembers(rosterForPickers(r.data))).catch(() => {});
         } else if (isPartnerOwner) {
             getPartnerAssignable().then(r => setPartnerRoster(r.members || [])).catch(() => {});
         }
@@ -723,8 +706,6 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
         setPartnerSearchQuery(''); setPartnerSearchResults([]); setPartnerSelected(null); setShowPartnerRegister(false); setPartnerSearchDone(false);
         setNewPartnerForm({ phone: '', name: '', email: '', city: '' });
         setClientSearchQuery(''); setClientSearchResults([]); setClientSearching(false); setPreselectedContact(null);
-        setSuggestedLeadType(null); suggestSeq.current++;
-        setIdentityNewPhone(null);
         setCreateError('');
     };
 
@@ -745,9 +726,9 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
         setCreateLeadType(type);
         if (type === 'DIRECT_OWNER') {
             clearPartnerSelection();
-            setCreateStep(3); // → contact search step
+            setCreateStep(2); // → contact search step
         } else {
-            setCreateStep(3); // → details form (partner search at top)
+            setCreateStep(2); // → details form (partner search at top)
         }
     };
 
@@ -777,7 +758,7 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
     const handleSelectExistingClient = (contact: { phone_number: string; name: string | null }) => {
         setPreselectedContact(contact);
         setCreateForm(p => ({ ...p, name: contact.name || '', phone: isPlaceholderPhone(contact.phone_number) ? '' : contact.phone_number }));
-        setCreateStep(4);
+        setCreateStep(3);
     };
 
     const handleCreateNewClient = () => {
@@ -785,66 +766,7 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
         // clientSearchQuery is always digits-only, so always treat as phone
         setCreateForm(p => ({ ...p, phone: q }));
         setPreselectedContact(null);
-        setCreateStep(4);
-    };
-
-    // ── Identity step (Step 1): phone-first with autocomplete ─────────────────
-    // Reuses the same search state as the contact-search step, so whatever is typed
-    // or picked here is already visible when the old search step renders (it acts as
-    // confirmation, not a re-typing step). DB rule: an unknown number is NOT written
-    // here — it rides createForm.phone into POST /api/leads at submit (backend
-    // normalises via normalizePhone and 400s junk).
-
-    const suggestLeadType = (digits: string) => {
-        if (suggestTimer.current) clearTimeout(suggestTimer.current);
-        if (digits.length < 10 || !/^[6-9]/.test(digits)) { setSuggestedLeadType(null); return; }
-        const seq = ++suggestSeq.current;
-        suggestTimer.current = setTimeout(async () => {
-            try {
-                const res = await client.get('/api/partners/search', { params: { q: digits } });
-                if (seq !== suggestSeq.current) return;
-                const hits = res.data || [];
-                setSuggestedLeadType(hits.length > 0 ? 'PARTNER_REFERRAL' : 'DIRECT_OWNER');
-            } catch {
-                if (seq === suggestSeq.current) setSuggestedLeadType('DIRECT_OWNER');
-            }
-        }, 350);
-    };
-
-    const handleIdentitySelectExisting = (contact: { phone_number: string; name: string | null }) => {
-        setPreselectedContact(contact);
-        setCreateForm(p => ({ ...p, name: contact.name || '', phone: isPlaceholderPhone(contact.phone_number) ? '' : contact.phone_number }));
-        setIdentityNewPhone(null);
-        setCreateError('');
-        suggestLeadType(clientSearchQuery.trim());
-    };
-
-    const handleIdentityUseNew = () => {
-        const q = clientSearchQuery.trim();
-        setCreateForm(p => ({ ...p, phone: q }));
-        setPreselectedContact(null);
-        setIdentityNewPhone(q);
-        setCreateError('');
-        suggestLeadType(q);
-    };
-
-    const handleIdentityClear = () => {
-        setPreselectedContact(null);
-        setIdentityNewPhone(null);
-        setCreateForm(p => ({ ...p, name: '', phone: '' }));
-        setSuggestedLeadType(null); suggestSeq.current++;
-    };
-
-    const handleIdentityContinue = () => {
-        const q = clientSearchQuery.trim();
-        if (!isValidPhoneInput(q)) { setCreateError('Enter a valid 10-digit mobile number to continue.'); return; }
-        if (!preselectedContact && !createForm.phone) {
-            // Typed a valid number but never picked a row — treat as new, don't block.
-            setCreateForm(p => ({ ...p, phone: q }));
-            suggestLeadType(q);
-        }
-        setCreateError('');
-        setCreateStep(2);
+        setCreateStep(3);
     };
 
     // ─── Handlers ─────────────────────────────────────────────────────────────
@@ -978,14 +900,25 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
         setSavingAll(true);
         setSaveError(null);
         const errs: string[] = [];
+        // Stage now routes through the deal's state machine, which rejects illegal jumps with a
+        // message naming the allowed next stages. Keep it verbatim instead of collapsing it to "stage".
+        let stageError: string | null = null;
         try {
             if (editName.trim() !== (leadDetail.name || '')) { try { await handleSaveName(); } catch { errs.push('name'); } }
             if (editNotes !== (leadDetail.notes || '')) { try { await handleSaveNotes(); } catch { errs.push('notes'); } }
             if (editLifecycle !== (leadDetail.lifecycle_stage || 'NEW')) {
                 try {
-                    await client.patch(`/api/leads/${encodeURIComponent(selectedPhone)}/requirements`, { lifecycle_stage: editLifecycle });
-                    setRecentLeads(prev => prev.map(l => l.phone_number === selectedPhone ? { ...l, lifecycle_stage: editLifecycle } : l));
-                } catch { errs.push('stage'); }
+                    const resp = await client.patch(`/api/leads/${encodeURIComponent(selectedPhone)}/requirements`, { lifecycle_stage: editLifecycle });
+                    // Trust the server's value, not the requested one: when a lead has more than
+                    // one deal the resulting stage is derived from all of them and can legitimately
+                    // differ from the pick (e.g. another deal is further along).
+                    const applied = (resp as any)?.data?.lifecycle_stage || editLifecycle;
+                    if (applied !== editLifecycle) setEditLifecycle(applied);
+                    setRecentLeads(prev => prev.map(l => l.phone_number === selectedPhone ? { ...l, lifecycle_stage: applied } : l));
+                } catch (e: any) {
+                    stageError = e?.response?.data?.error || null;
+                    errs.push('stage');
+                }
             }
             if (editAgent !== (leadDetail.assigned_agent_id || '')) {
                 try {
@@ -1006,7 +939,7 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
             // Buyer requirements — always commit via the sub-form (idempotent PATCH).
             try { await demandFormRef.current?.submit(); } catch { errs.push('requirements'); }
 
-            if (errs.length) { setSaveError('Could not save: ' + errs.join(', ')); showToast('Some changes failed to save', 'error'); }
+            if (errs.length) { setSaveError(stageError || ('Could not save: ' + errs.join(', '))); showToast(stageError || 'Some changes failed to save', 'error'); }
             else showToast('Lead saved', 'success');
         } finally {
             setSavingAll(false);
@@ -1162,22 +1095,6 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
         return true;
     });
 
-    // ── Select-all (header checkbox only) ──
-    // Operates on currently loaded + filtered rows (not the server-side recentTotal).
-    const allVisibleSelected = filteredLeads.length > 0 && filteredLeads.every(l => selectedLeadPhones.has(l.phone_number));
-    const someVisibleSelected = filteredLeads.some(l => selectedLeadPhones.has(l.phone_number));
-    const toggleSelectAllVisible = () => {
-        setSelectedLeadPhones(prev => {
-            const next = new Set(prev);
-            if (allVisibleSelected) {
-                filteredLeads.forEach(l => next.delete(l.phone_number));
-            } else {
-                filteredLeads.forEach(l => next.add(l.phone_number));
-            }
-            return next;
-        });
-    };
-
 
     // editSubCategories cascade removed Phase 2 demand-side unification (2026-05-29) —
     // the taxonomy cascade now lives inside <DemandRequirementsForm>.
@@ -1270,7 +1187,14 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
                         <button
                             type="button"
                             title="Leads someone else owns but shared with you"
-                            onClick={() => setSharedWithMe(v => !v)}
+                            onClick={() => setSharedWithMe(v => {
+                                const next = !v;
+                                // "When was this shared with me" only means anything inside this filter, so the
+                                // chip applies the order and hands the list back to date order when switched off.
+                                if (next) { setLeadSortKey('shared_at'); setLeadSortDir('desc'); }
+                                else if (leadSortKey === 'shared_at') { setLeadSortKey('date'); setLeadSortDir('desc'); }
+                                return next;
+                            })}
                             style={{
                                 padding: '6px 14px', fontSize: 12, fontWeight: 600, cursor: 'pointer', borderRadius: 10,
                                 border: '1px solid ' + (sharedWithMe ? '#7c3aed' : 'var(--border-secondary)'),
@@ -1278,6 +1202,19 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
                                 color: sharedWithMe ? '#fff' : 'var(--text-secondary)', whiteSpace: 'nowrap',
                             }}
                         >🤝 Shared with me</button>
+                        {sharedWithMe && (
+                            <button
+                                type="button"
+                                title="Order by when the lead was shared with you, not by the age of the lead"
+                                onClick={() => { setLeadSortDir(leadSortKey === 'shared_at' && leadSortDir === 'desc' ? 'asc' : 'desc'); setLeadSortKey('shared_at'); }}
+                                style={{
+                                    padding: '6px 12px', fontSize: 12, fontWeight: 600, cursor: 'pointer', borderRadius: 10,
+                                    border: '1px solid ' + (leadSortKey === 'shared_at' ? '#7c3aed' : 'var(--border-secondary)'),
+                                    backgroundColor: 'var(--bg-secondary)',
+                                    color: leadSortKey === 'shared_at' ? '#7c3aed' : 'var(--text-secondary)', whiteSpace: 'nowrap',
+                                }}
+                            >{leadSortKey === 'shared_at' && leadSortDir === 'asc' ? '▲ Oldest share' : '▼ Newest share'}</button>
+                        )}
                         {/* Row 1: Search + Filters button */}
                         <div style={{ display: 'flex', gap: '8px' }}>
                             <input
@@ -1383,7 +1320,7 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
                                 )}
                                 <button
                                     type="button"
-                                    onClick={() => { setStatusFilter(''); setSourceFilter(''); setAgentFilter(''); setDateFrom(''); setDateTo(''); setIntentFilter(''); setFilterTaxonomy({ nodeIds: [], bhk: [] }); setLocationSelection({ label: '', lat: null, lng: null, radiusKm: 2 }); setNotContactedDays(0); setNoShowcaseDays(0); setBudgetMinFilter(''); setBudgetMaxFilter(''); setSharedWithMe(false); }}
+                                    onClick={() => { setStatusFilter(''); setSourceFilter(''); setAgentFilter(''); setDateFrom(''); setDateTo(''); setIntentFilter(''); setFilterTaxonomy({ nodeIds: [], bhk: [] }); setLocationSelection({ label: '', lat: null, lng: null, radiusKm: 2 }); setNotContactedDays(0); setNoShowcaseDays(0); setBudgetMinFilter(''); setBudgetMaxFilter(''); setSharedWithMe(false); if (leadSortKey === 'shared_at') { setLeadSortKey('date'); setLeadSortDir('desc'); } }}
                                     style={{ padding: '4px 10px', borderRadius: '20px', fontSize: '12px', fontWeight: 600, backgroundColor: 'transparent', border: '1px solid var(--border-secondary)', color: 'var(--text-muted)', cursor: 'pointer' }}
                                 >
                                     Clear all
@@ -1417,7 +1354,14 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
                             <button
                                 type="button"
                                 title="Leads someone else owns but shared with you"
-                                onClick={() => setSharedWithMe(v => !v)}
+                                onClick={() => setSharedWithMe(v => {
+                                    const next = !v;
+                                    // "When was this shared with me" only means anything inside this filter, so the
+                                    // chip applies the order and hands the list back to date order when switched off.
+                                    if (next) { setLeadSortKey('shared_at'); setLeadSortDir('desc'); }
+                                    else if (leadSortKey === 'shared_at') { setLeadSortKey('date'); setLeadSortDir('desc'); }
+                                    return next;
+                                })}
                                 style={{
                                     padding: '6px 14px', fontSize: 12, fontWeight: 600, cursor: 'pointer', borderRadius: 8,
                                     border: '1px solid ' + (sharedWithMe ? '#7c3aed' : 'var(--border-secondary)'),
@@ -1425,6 +1369,19 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
                                     color: sharedWithMe ? '#fff' : 'var(--text-secondary)', whiteSpace: 'nowrap',
                                 }}
                             >🤝 Shared with me</button>
+                            {sharedWithMe && (
+                                <button
+                                    type="button"
+                                    title="Order by when the lead was shared with you, not by the age of the lead"
+                                    onClick={() => { setLeadSortDir(leadSortKey === 'shared_at' && leadSortDir === 'desc' ? 'asc' : 'desc'); setLeadSortKey('shared_at'); }}
+                                    style={{
+                                        padding: '6px 12px', fontSize: 12, fontWeight: 600, cursor: 'pointer', borderRadius: 8,
+                                        border: '1px solid ' + (leadSortKey === 'shared_at' ? '#7c3aed' : 'var(--border-secondary)'),
+                                        backgroundColor: 'var(--bg-secondary)',
+                                        color: leadSortKey === 'shared_at' ? '#7c3aed' : 'var(--text-secondary)', whiteSpace: 'nowrap',
+                                    }}
+                                >{leadSortKey === 'shared_at' && leadSortDir === 'asc' ? '▲ Oldest share' : '▼ Newest share'}</button>
+                            )}
                             <input type="text" placeholder="Search name, phone, email..." value={searchQuery}
                                 onChange={e => setSearchQuery(e.target.value)}
                                 style={{ flex: 1, minWidth: '200px', padding: '7px 12px', borderRadius: 8, border: '1px solid var(--border-secondary)', backgroundColor: 'var(--bg-secondary)', color: 'var(--text-primary)', fontSize: 13, boxSizing: 'border-box' }} />
@@ -1452,7 +1409,7 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
                                 }}
                             >{leadSelectMode ? `✓ ${selectedLeadPhones.size} Selected` : '☐ Select'}</button>}
                             {(searchQuery || activeFilterCount > 0) && (
-                                <button type="button" onClick={() => { setSearchQuery(''); setStatusFilter(''); setSourceFilter(''); setAgentFilter(''); setDateFrom(''); setDateTo(''); setIntentFilter(''); setFilterTaxonomy({ nodeIds: [], bhk: [] }); setLocationSelection({ label: '', lat: null, lng: null, radiusKm: 2 }); setNotContactedDays(0); setNoShowcaseDays(0); setBudgetMinFilter(''); setBudgetMaxFilter(''); setSharedWithMe(false); }}
+                                <button type="button" onClick={() => { setSearchQuery(''); setStatusFilter(''); setSourceFilter(''); setAgentFilter(''); setDateFrom(''); setDateTo(''); setIntentFilter(''); setFilterTaxonomy({ nodeIds: [], bhk: [] }); setLocationSelection({ label: '', lat: null, lng: null, radiusKm: 2 }); setNotContactedDays(0); setNoShowcaseDays(0); setBudgetMinFilter(''); setBudgetMaxFilter(''); setSharedWithMe(false); if (leadSortKey === 'shared_at') { setLeadSortKey('date'); setLeadSortDir('desc'); } }}
                                     style={{ padding: '6px 12px', borderRadius: 8, border: '1px solid var(--border-secondary)', backgroundColor: 'transparent', color: '#ef4444', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>
                                     Clear
                                 </button>
@@ -1494,21 +1451,7 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
                 {/* Table */}
                 <div style={{ backgroundColor: 'var(--bg-secondary)', borderRadius: '8px', overflow: 'hidden', border: '1px solid var(--border-secondary)' }}>
                     <div style={{ padding: '8px 12px', borderBottom: isMobile ? 'none' : '1px solid var(--border-secondary)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span style={{ color: 'var(--text-primary)', fontSize: '13px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            {leadSelectMode && isMobile && (
-                                <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', cursor: filteredLeads.length === 0 ? 'not-allowed' : 'pointer' }}>
-                                    <input
-                                        type="checkbox"
-                                        checked={allVisibleSelected}
-                                        ref={el => { if (el) el.indeterminate = !allVisibleSelected && someVisibleSelected; }}
-                                        onChange={toggleSelectAllVisible}
-                                        disabled={filteredLeads.length === 0}
-                                        aria-label={allVisibleSelected ? 'Deselect all leads' : 'Select all leads'}
-                                        style={{ width: 16, height: 16, cursor: filteredLeads.length === 0 ? 'not-allowed' : 'pointer', accentColor: '#8b5cf6' }}
-                                    />
-                                    All
-                                </label>
-                            )}
+                        <span style={{ color: 'var(--text-primary)', fontSize: '13px', fontWeight: 600 }}>
                             Showing {filteredLeads.length.toLocaleString('en-IN')}{recentTotal > recentLeads.length ? ` of ${recentTotal.toLocaleString('en-IN')}` : ''} leads
                         </span>
                         {recentLeads.length < recentTotal ? (
@@ -1550,23 +1493,7 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
                         <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '700px' }}>
                             <thead>
                                 <tr style={{ borderBottom: '1px solid var(--border-secondary)' }}>
-                                    {leadSelectMode && (
-                                        <th style={{ padding: '6px 10px', width: '34px' }}>
-                                            <label title={allVisibleSelected ? 'Deselect all (visible)' : 'Select all (visible)'} style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: filteredLeads.length === 0 ? 'not-allowed' : 'pointer', fontSize: '10px', fontWeight: 600, textTransform: 'uppercase', color: 'var(--text-secondary)' }}>
-                                                <input
-                                                    type="checkbox"
-                                                    checked={allVisibleSelected}
-                                                    ref={el => { if (el) el.indeterminate = !allVisibleSelected && someVisibleSelected; }}
-                                                    onChange={toggleSelectAllVisible}
-                                                    onClick={e => e.stopPropagation()}
-                                                    disabled={filteredLeads.length === 0}
-                                                    aria-label={allVisibleSelected ? 'Deselect all leads' : 'Select all leads'}
-                                                    style={{ width: 16, height: 16, cursor: filteredLeads.length === 0 ? 'not-allowed' : 'pointer', accentColor: '#8b5cf6', margin: 0 }}
-                                                />
-                                                All
-                                            </label>
-                                        </th>
-                                    )}
+                                    {leadSelectMode && <th style={{ padding: '6px 10px', width: '34px' }} />}
                                     {([['Name', 'name'], ['Phone', 'phone'], ['Source', 'source'], ['Status', 'status'], ['Stage', 'stage'], ['Assigned to', 'assigned_to'], ['Budget', 'budget'], ['Score', 'score'], ['Intent', 'intent'], ['Location', 'location'], ['Date', 'date'], ['', '']] as Array<[string, string]>).map(([h, key]) => {
                                         const active = !!key && leadSortKey === key;
                                         return (
@@ -1898,6 +1825,8 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
                                         <ConvertToPartnerModal
                                             phone={selectedPhone}
                                             defaultName={leadDetail?.name || ''}
+                                            contactType={leadDetail?.contact_type}
+                                            leadStatus={leadDetail?.lead_status}
                                             onClose={() => setShowConvert(false)}
                                             onConverted={() => {
                                                 setRecentLeads(prev => prev.map(l => l.phone_number === selectedPhone ? { ...l, contact_type: 'PARTNER_AGENT' } : l));
@@ -2118,12 +2047,12 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
                         {/* Step Indicator */}
                         <div style={{ display: 'flex', alignItems: 'center', marginBottom: '20px' }}>
                             {(createLeadType === 'DIRECT_OWNER'
-                                ? ['Identity', 'Source', 'Search', 'Details']
-                                : ['Identity', 'Source', 'Details']
+                                ? ['Source', 'Search', 'Details']
+                                : ['Source', 'Details']
                             ).map((label, idx) => {
                                 const stepNum = idx + 1;
                                 const active = createStep >= stepNum;
-                                const totalSteps = createLeadType === 'DIRECT_OWNER' ? 4 : 3;
+                                const totalSteps = createLeadType === 'DIRECT_OWNER' ? 3 : 2;
                                 return (
                                     <div key={label} style={{ display: 'flex', alignItems: 'center', flex: idx < totalSteps - 1 ? 1 : 0 }}>
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
@@ -2138,149 +2067,36 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
 
                         {createError && <div style={{ marginBottom: '12px', padding: '8px 12px', borderRadius: '6px', backgroundColor: '#fef2f2', color: '#dc2626', fontSize: '13px' }}>{createError}</div>}
 
-                        {/* ── STEP 1: Identity — phone first + autocomplete ──
-                            An existing contact autocompletes name/phone into the form;
-                            an unknown number rides createForm.phone into POST /api/leads
-                            at submit (nothing is written to the DB from this step). */}
+                        {/* ── STEP 1: Source Selection ── */}
                         {createStep === 1 && (
                             <div>
-                                <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '12px' }}>Who is this lead? Start with the mobile number.</div>
-                                <div style={{ position: 'relative' }}>
-                                    <PhoneInput
-                                        autoFocus
-                                        value={clientSearchQuery}
-                                        onChange={handleClientSearchChange}
-                                        placeholder="Enter phone number (any format)"
-                                        style={{ ...inputStyle, fontSize: '14px', padding: '10px 14px' }}
-                                    />
-                                    <span style={{
-                                        position: 'absolute', right: '14px', top: '50%', transform: 'translateY(-50%)',
-                                        fontSize: '12px', fontWeight: 600,
-                                        color: clientSearchQuery.length === 10 ? '#22c55e' : 'var(--text-muted)',
-                                        pointerEvents: 'none',
-                                    }}>
-                                        {clientSearchQuery.length}/10
-                                    </span>
-                                </div>
-                                {clientSearchQuery.length > 0 && clientSearchQuery.length < 10 && (
-                                    <p style={{ fontSize: '12px', color: 'var(--text-muted)', margin: '6px 0 0 4px' }}>
-                                        {10 - clientSearchQuery.length} more digits needed
-                                    </p>
-                                )}
-                                {clientSearching && <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '6px' }}>Searching...</div>}
-
-                                {/* Confirmed: existing contact picked */}
-                                {preselectedContact && (
-                                    <div style={{ marginTop: '10px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', backgroundColor: 'rgba(59,130,246,0.08)', borderRadius: '8px', padding: '10px 14px', border: '1px solid rgba(59,130,246,0.3)' }}>
-                                        <div>
-                                            <div style={{ fontWeight: 600, fontSize: '13px', color: 'var(--text-primary)' }}>{preselectedContact.name || 'Unknown'}</div>
-                                            <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{isPlaceholderPhone(preselectedContact.phone_number) ? 'No phone on file — you will add it in Details' : preselectedContact.phone_number}</div>
-                                        </div>
-                                        <button type="button" onClick={handleIdentityClear} style={{ ...outlineBtn, padding: '4px 10px', fontSize: '12px' }}>Change</button>
-                                    </div>
-                                )}
-
-                                {/* Confirmed: new number (nothing written yet — added at submit) */}
-                                {!preselectedContact && identityNewPhone && identityNewPhone === clientSearchQuery.trim() && (
-                                    <div style={{ marginTop: '10px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', backgroundColor: 'rgba(34,197,94,0.08)', borderRadius: '8px', padding: '10px 14px', border: '1px solid rgba(34,197,94,0.3)' }}>
-                                        <div>
-                                            <div style={{ fontWeight: 600, fontSize: '13px', color: 'var(--text-primary)' }}>✓ New number ready</div>
-                                            <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{identityNewPhone} — will be added when you create the lead</div>
-                                        </div>
-                                        <button type="button" onClick={handleIdentityClear} style={{ ...outlineBtn, padding: '4px 10px', fontSize: '12px' }}>Change</button>
-                                    </div>
-                                )}
-
-                                {/* Results */}
-                                {!preselectedContact && !(identityNewPhone && identityNewPhone === clientSearchQuery.trim()) && clientSearchQuery.trim().length === 10 && !clientSearching && clientSearchResults.length > 0 && (
-                                    <div style={{ marginTop: '8px', border: '1px solid var(--border-secondary)', borderRadius: '8px', overflow: 'hidden' }}>
-                                        {clientSearchResults.map(r => {
-                                            const isTemp = isPlaceholderPhone(r.phone_number);
-                                            const statusColors: Record<string, string> = { cold: '#94a3b8', warm: '#f59e0b', hot: '#ef4444', closed: '#22c55e', lost: '#6b7280' };
-                                            const sc = statusColors[r.lead_status || ''] || '#94a3b8';
-                                            return (
-                                                <div key={r.phone_number} onClick={() => handleIdentitySelectExisting(r)}
-                                                    style={{ padding: '10px 14px', cursor: 'pointer', borderBottom: '1px solid var(--border-secondary)', display: 'flex', alignItems: 'center', gap: '10px', transition: 'background 0.1s' }}
-                                                    onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'rgba(59,130,246,0.06)')}
-                                                    onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}>
-                                                    <div style={{ width: '34px', height: '34px', borderRadius: '50%', backgroundColor: 'rgba(59,130,246,0.12)', color: '#3b82f6', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '14px', flexShrink: 0 }}>
-                                                        {(r.name || '?')[0].toUpperCase()}
-                                                    </div>
-                                                    <div style={{ flex: 1, minWidth: 0 }}>
-                                                        <div style={{ fontWeight: 600, fontSize: '13px', color: 'var(--text-primary)' }}>{r.name || 'Unknown'}</div>
-                                                        <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{isTemp ? 'No phone' : r.phone_number}</div>
-                                                    </div>
-                                                    {r.lead_status && (
-                                                        <span style={{ backgroundColor: `${sc}22`, color: sc, padding: '2px 8px', borderRadius: '8px', fontSize: '10px', fontWeight: 600, flexShrink: 0 }}>{r.lead_status}</span>
-                                                    )}
-                                                </div>
-                                            );
-                                        })}
-                                    </div>
-                                )}
-
-                                {/* Not found — confirm the number (still not written — added at submit) */}
-                                {!preselectedContact && !(identityNewPhone && identityNewPhone === clientSearchQuery.trim()) && clientSearchQuery.trim().length === 10 && !clientSearching && clientSearchResults.length === 0 && (
-                                    <div style={{ marginTop: '10px', padding: '14px', backgroundColor: 'var(--bg-secondary)', borderRadius: '8px', border: '1px solid var(--border-secondary)', textAlign: 'center' }}>
-                                        <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '10px' }}>No contact found for "{clientSearchQuery}"</div>
-                                        <button type="button" onClick={handleIdentityUseNew} style={{ ...primaryBtn, padding: '7px 18px', fontSize: '13px' }}>
-                                            + Use this number
-                                        </button>
-                                    </div>
-                                )}
-
-                                {suggestedLeadType && (preselectedContact || (identityNewPhone && identityNewPhone === clientSearchQuery.trim())) && (
-                                    <p style={{ fontSize: '12px', color: 'var(--text-muted)', margin: '8px 0 0 4px' }}>
-                                        Suggested role: {LEAD_SOURCE_ROLES.find(r => r.key === suggestedLeadType)?.title} — preselected on the next step, changeable.
-                                    </p>
-                                )}
-
-                                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '20px' }}>
-                                    <button type="button" onClick={closeCreateModal} style={outlineBtn}>Cancel</button>
-                                    <button type="button" onClick={handleIdentityContinue} style={primaryBtn}>Continue →</button>
-                                </div>
-                            </div>
-                        )}
-
-                        {/* ── STEP 2: Source Selection (role cards) ── */}
-                        {createStep === 2 && (
-                            <div>
                                 <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '16px' }}>Where is this lead coming from?</div>
-                                <div role="radiogroup" aria-label="Lead source role" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                                    {LEAD_SOURCE_ROLES.map((r, i) => {
-                                        const suggested = suggestedLeadType === r.key;
-                                        return (
-                                            <div key={r.key}
-                                                ref={el => { roleCardRefs.current[i] = el; }}
-                                                role="radio" aria-checked={suggested} tabIndex={0}
-                                                autoFocus={i === 0}
-                                                onClick={() => handleSourceTypeSelect(r.key)}
-                                                onKeyDown={e => {
-                                                    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleSourceTypeSelect(r.key); }
-                                                    else if (e.key === 'ArrowRight' || e.key === 'ArrowDown') { e.preventDefault(); roleCardRefs.current[(i + 1) % LEAD_SOURCE_ROLES.length]?.focus(); }
-                                                    else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') { e.preventDefault(); roleCardRefs.current[(i - 1 + LEAD_SOURCE_ROLES.length) % LEAD_SOURCE_ROLES.length]?.focus(); }
-                                                }}
-                                                style={{ padding: '20px 16px', borderRadius: '12px', border: `2px solid ${suggested ? r.accent : 'var(--border-secondary)'}`, backgroundColor: suggested ? r.hoverBg : 'var(--bg-secondary)', cursor: 'pointer', textAlign: 'center', transition: 'all 0.15s', outline: 'none' }}
-                                                onMouseEnter={e => { e.currentTarget.style.borderColor = r.accent; e.currentTarget.style.backgroundColor = r.hoverBg; }}
-                                                onMouseLeave={e => { e.currentTarget.style.borderColor = suggested ? r.accent : 'var(--border-secondary)'; e.currentTarget.style.backgroundColor = suggested ? r.hoverBg : 'var(--bg-secondary)'; }}
-                                                onFocus={e => { e.currentTarget.style.borderColor = r.accent; }}
-                                                onBlur={e => { if (!suggested) e.currentTarget.style.borderColor = 'var(--border-secondary)'; }}>
-                                                <div style={{ fontSize: '28px', marginBottom: '8px' }}>{r.icon}</div>
-                                                <div style={{ fontWeight: 700, fontSize: '14px', color: 'var(--text-primary)', marginBottom: '4px' }}>{r.title}{suggested ? ' ✓' : ''}</div>
-                                                <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{r.subtitle}</div>
-                                            </div>
-                                        );
-                                    })}
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                                    <div onClick={() => handleSourceTypeSelect('DIRECT_OWNER')}
+                                        style={{ padding: '20px 16px', borderRadius: '12px', border: '2px solid var(--border-secondary)', backgroundColor: 'var(--bg-secondary)', cursor: 'pointer', textAlign: 'center', transition: 'all 0.15s' }}
+                                        onMouseEnter={e => { e.currentTarget.style.borderColor = '#3b82f6'; e.currentTarget.style.backgroundColor = 'rgba(59,130,246,0.06)'; }}
+                                        onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border-secondary)'; e.currentTarget.style.backgroundColor = 'var(--bg-secondary)'; }}>
+                                        <div style={{ fontSize: '28px', marginBottom: '8px' }}>👤</div>
+                                        <div style={{ fontWeight: 700, fontSize: '14px', color: 'var(--text-primary)', marginBottom: '4px' }}>Client</div>
+                                        <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Client contacted directly</div>
+                                    </div>
+                                    <div onClick={() => handleSourceTypeSelect('PARTNER_REFERRAL')}
+                                        style={{ padding: '20px 16px', borderRadius: '12px', border: '2px solid var(--border-secondary)', backgroundColor: 'var(--bg-secondary)', cursor: 'pointer', textAlign: 'center', transition: 'all 0.15s' }}
+                                        onMouseEnter={e => { e.currentTarget.style.borderColor = '#7c3aed'; e.currentTarget.style.backgroundColor = 'rgba(124,58,237,0.06)'; }}
+                                        onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border-secondary)'; e.currentTarget.style.backgroundColor = 'var(--bg-secondary)'; }}>
+                                        <div style={{ fontSize: '28px', marginBottom: '8px' }}>🤝</div>
+                                        <div style={{ fontWeight: 700, fontSize: '14px', color: 'var(--text-primary)', marginBottom: '4px' }}>Partner Agent</div>
+                                        <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Referred by a partner</div>
+                                    </div>
                                 </div>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '20px' }}>
-                                    <button type="button" onClick={() => setCreateStep(1)} style={{ ...outlineBtn, fontSize: '12px' }}>← Back</button>
+                                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '20px' }}>
                                     <button type="button" onClick={closeCreateModal} style={outlineBtn}>Cancel</button>
                                 </div>
                             </div>
                         )}
 
-                        {/* ── STEP 3 (DIRECT_OWNER): Contact Search (confirmation — Step 1 already searched) ── */}
-                        {createStep === 3 && createLeadType === 'DIRECT_OWNER' && (
+                        {/* ── STEP 2 (DIRECT_OWNER): Contact Search ── */}
+                        {createStep === 2 && createLeadType === 'DIRECT_OWNER' && (
                             <div>
                                 <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '12px' }}>Search if this client already exists</div>
                                 <div style={{ position: 'relative' }}>
@@ -2348,21 +2164,21 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
                                 {/* Skip search — go straight to new client form */}
                                 {clientSearchQuery.trim().length < 10 && (
                                     <div style={{ marginTop: '10px', textAlign: 'center' }}>
-                                        <button type="button" onClick={() => { setPreselectedContact(null); setCreateStep(4); }} style={{ fontSize: '12px', color: 'var(--text-muted)', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}>
+                                        <button type="button" onClick={() => { setPreselectedContact(null); setCreateStep(3); }} style={{ fontSize: '12px', color: 'var(--text-muted)', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}>
                                             Skip — add new client directly
                                         </button>
                                     </div>
                                 )}
 
                                 <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '20px' }}>
-                                    <button type="button" onClick={() => setCreateStep(2)} style={{ ...outlineBtn, fontSize: '12px' }}>← Back</button>
+                                    <button type="button" onClick={() => setCreateStep(1)} style={{ ...outlineBtn, fontSize: '12px' }}>← Back</button>
                                     <button type="button" onClick={closeCreateModal} style={outlineBtn}>Cancel</button>
                                 </div>
                             </div>
                         )}
 
-                        {/* ── STEP 3 (PARTNER_REFERRAL) or STEP 4 (DIRECT_OWNER): Details form ── */}
-                        {((createStep === 3 && createLeadType === 'PARTNER_REFERRAL') || createStep === 4) && (
+                        {/* ── STEP 2 (PARTNER_REFERRAL) or STEP 3 (DIRECT_OWNER): Details form ── */}
+                        {((createStep === 2 && createLeadType === 'PARTNER_REFERRAL') || createStep === 3) && (
                         <div>
                             <div style={{ display: 'grid', gap: '12px' }}>
 
@@ -2501,7 +2317,7 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
 
                             {/* Wizard back nav */}
                             <div style={{ marginTop: '16px', marginBottom: '8px' }}>
-                                <button type="button" onClick={() => setCreateStep(createLeadType === 'DIRECT_OWNER' ? 3 : 2)} style={{ ...outlineBtn, fontSize: '12px' }}>← Back</button>
+                                <button type="button" onClick={() => setCreateStep(createLeadType === 'DIRECT_OWNER' ? 2 : 1)} style={{ ...outlineBtn, fontSize: '12px' }}>← Back</button>
                             </div>
 
                             {/* Buyer Requirements — shared taxonomy picker + dynamic per-type fields.

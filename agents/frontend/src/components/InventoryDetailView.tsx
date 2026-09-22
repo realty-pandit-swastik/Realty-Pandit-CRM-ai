@@ -41,8 +41,10 @@ export function InventoryDetailView({ inventoryId, onClose, onEdit }: Props) {
 
     const [inv, setInv] = useState<any>(null);
     const [contacts, setContacts] = useState<Contacts | null>(null);
-    const [loading, setLoading] = useState(true);
+    const [completedInventoryId, setCompletedInventoryId] = useState<string | null>(null);
     const [activeIdx, setActiveIdx] = useState(0);
+
+    const loading = completedInventoryId !== inventoryId;
 
     useEffect(() => {
         let alive = true;
@@ -53,7 +55,7 @@ export function InventoryDetailView({ inventoryId, onClose, onEdit }: Props) {
             if (!alive) return;
             setInv(invRes.data?.data ?? invRes.data);
             setContacts(ctRes.data?.data ?? ctRes.data ?? null);
-        }).catch(console.error).finally(() => { if (alive) setLoading(false); });
+        }).catch(console.error).finally(() => { if (alive) setCompletedInventoryId(inventoryId); });
         return () => { alive = false; };
     }, [inventoryId]);
 

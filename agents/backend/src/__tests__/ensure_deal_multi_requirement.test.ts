@@ -5,7 +5,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 vi.mock('../db', () => ({
     default: {
         contact: { findUnique: vi.fn(), update: vi.fn() },
-        transaction: { findFirst: vi.fn(), create: vi.fn() },
+        transaction: { findFirst: vi.fn(), findMany: vi.fn().mockResolvedValue([]), create: vi.fn() },
         task: { create: vi.fn() },
     },
 }));

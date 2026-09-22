@@ -61,7 +61,7 @@ export async function notifyDealEvent(ctx: DealEventContext): Promise<void> {
                 coordinator: { select: { name: true, phone: true, email: true } },
                 inventory: {
                     select: {
-                        type: true, location: true, price: true, latitude: true, longitude: true,
+                        type: true, location: true, price: true, display_price: true, latitude: true, longitude: true,
                         referral_partner: { select: { name: true, phone_number: true, managing_agent: { select: { name: true } } } },
                     },
                 },
@@ -172,7 +172,8 @@ export async function notifyDealEvent(ctx: DealEventContext): Promise<void> {
 async function notifyPartnersOnMatch(deal: any, coordinatorName: string): Promise<void> {
     const propertyType = deal.demand_property_type || deal.inventory?.type || 'Property';
     const location = deal.demand_location || deal.inventory?.location || 'Unknown';
-    const price = deal.inventory?.price ? formatPrice(deal.inventory.price) : formatBudgetRange(deal.demand_budget_min, deal.demand_budget_max);
+    const invPublicPrice = deal.inventory?.display_price ?? deal.inventory?.price;
+    const price = invPublicPrice ? formatPrice(invPublicPrice) : formatBudgetRange(deal.demand_budget_min, deal.demand_budget_max);
     const customerName = deal.demand_contact?.name || 'Customer';
 
     // Notify the partner who owns the matched inventory (supply side)
