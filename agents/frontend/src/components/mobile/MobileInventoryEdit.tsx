@@ -80,7 +80,7 @@ function MobileEditContactSection({ currentPhone, currentName, color, onContactS
     );
 }
 
-export function MobileInventoryEdit({ item, onSaved, onCancel: _onCancel }: MobileInventoryEditProps) {
+export function MobileInventoryEdit({ item, onSaved }: MobileInventoryEditProps) {
     const { showToast } = useToast();
     const confirm = useConfirm();
     const specs = item.specs || {};
@@ -256,8 +256,9 @@ export function MobileInventoryEdit({ item, onSaved, onCancel: _onCancel }: Mobi
             // Strip UI-only fields (Phase 3, 2026-05-28): furnishing/facing/property_age
             // are no longer in `data` since Phase 3 read-fallback removal — they live
             // exclusively in schemaValues now and round-trip through specsObj above.
-            const { bedrooms: _b, bathrooms: _ba, area: _a, area_unit: _au, features: _ft, ...rest } = data;
-            await updateInventory(item.id, { ...rest, specs: specsObj });
+            const payload: Record<string, any> = { ...data, specs: specsObj };
+            for (const field of ['bedrooms', 'bathrooms', 'area', 'area_unit', 'features']) delete payload[field];
+            await updateInventory(item.id, payload);
             onSaved();
         } catch (err: any) {
             showToast(err.response?.data?.error || 'Failed to save', 'error');

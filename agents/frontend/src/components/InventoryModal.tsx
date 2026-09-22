@@ -962,7 +962,7 @@ function flattenAnswers(answers: Record<string, any>): Record<string, string> {
         const label = labelMap[key] || key.replace(/_/g, ' ');
         if (typeof val === 'object' && !Array.isArray(val)) {
             if (key === 'features' || key === 'amenities') {
-                const selected = Object.entries(val).filter(([_, v]) => v === true).map(([k]) => k.replace(/_/g, ' ')).join(', ');
+                const selected = Object.entries(val).filter(([, value]) => value === true).map(([key]) => key.replace(/_/g, ' ')).join(', ');
                 if (selected) result[label] = selected;
             } else if (key === 'address_block') {
                 if (val.locality) result['Locality'] = val.locality;

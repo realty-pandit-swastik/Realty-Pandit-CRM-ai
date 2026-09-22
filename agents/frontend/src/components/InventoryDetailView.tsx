@@ -41,12 +41,13 @@ export function InventoryDetailView({ inventoryId, onClose, onEdit }: Props) {
 
     const [inv, setInv] = useState<any>(null);
     const [contacts, setContacts] = useState<Contacts | null>(null);
-    const [loading, setLoading] = useState(true);
+    const [completedInventoryId, setCompletedInventoryId] = useState<string | null>(null);
     const [activeIdx, setActiveIdx] = useState(0);
+
+    const loading = completedInventoryId !== inventoryId;
 
     useEffect(() => {
         let alive = true;
-        setLoading(true);
         Promise.all([
             client.get(`/api/inventory/${inventoryId}`),
             client.get(`/api/inventory/${inventoryId}/contacts`).catch(() => ({ data: null })),
@@ -54,11 +55,11 @@ export function InventoryDetailView({ inventoryId, onClose, onEdit }: Props) {
             if (!alive) return;
             setInv(invRes.data?.data ?? invRes.data);
             setContacts(ctRes.data?.data ?? ctRes.data ?? null);
-        }).catch(console.error).finally(() => { if (alive) setLoading(false); });
+        }).catch(console.error).finally(() => { if (alive) setCompletedInventoryId(inventoryId); });
         return () => { alive = false; };
     }, [inventoryId]);
 
-    const call = (phone?: string | null) => { const d = toDialablePhone(phone); if (d) window.location.href = `tel:${d}`; };
+    const call = (phone?: string | null) => { const d = toDialablePhone(phone); if (d) window.location.assign(`tel:${d}`); };
     const wa = (phone?: string | null) => { const d = toDialablePhone(phone); if (d) window.open(`https://wa.me/${d.slice(1)}`, '_blank'); };
 
     const formatPrice = (p?: number, intent?: string) => {

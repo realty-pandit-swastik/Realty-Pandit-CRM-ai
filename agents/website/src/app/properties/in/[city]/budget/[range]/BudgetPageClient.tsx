@@ -26,25 +26,31 @@ function formatCityName(slug: string): string {
 
 export default function BudgetPageClient({ city, range }: { city: string; range: string }) {
     const [properties, setProperties] = useState<Property[]>([]);
-    const [loading, setLoading] = useState(true);
+    const [completedQuery, setCompletedQuery] = useState<string | null>(null);
     const [total, setTotal] = useState(0);
 
     const cityName = formatCityName(city);
     const budget = budgetRanges[range];
+    const query = `${city}/${range}`;
+    const loading = completedQuery !== query;
 
     useEffect(() => {
         if (!budget) return;
-        setLoading(true);
+        let cancelled = false;
         getProperties({
             location: cityName,
             price_min: budget.min || undefined,
             price_max: budget.max,
             limit: 24,
         }).then(data => {
+            if (cancelled) return;
             setProperties(data.properties || []);
             setTotal(data.pagination?.total || 0);
-        }).catch(() => {}).finally(() => setLoading(false));
-    }, [city, range, budget, cityName]);
+        }).catch(() => {}).finally(() => {
+            if (!cancelled) setCompletedQuery(query);
+        });
+        return () => { cancelled = true; };
+    }, [budget, cityName, query]);
 
     if (!budget) {
         return (
