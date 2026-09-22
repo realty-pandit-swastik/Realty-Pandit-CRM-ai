@@ -301,6 +301,8 @@ export function DealWorkspace({
                     <ConvertToPartnerModal
                         phone={deal.demand_contact.phone_number}
                         defaultName={deal.demand_contact?.name || ''}
+                        contactType={(deal.demand_contact as any)?.contact_type}
+                        leadStatus={(deal.demand_contact as any)?.lead_status}
                         onClose={() => setShowConvert(false)}
                         onConverted={() => { onRefresh(); }}
                     />

@@ -822,7 +822,9 @@ RULES:
         const bhk = specs.bedrooms ? `${specs.bedrooms} BHK ` : '';
         const area = specs.area ? `${specs.area} ${specs.area_unit || 'sqft'}` : '';
 
-        const priceStr = formatPropertyPrice(property.price, { intent: property.intent, unit: (property as any).price_unit });
+        const priceStr = (property as any).display_price
+            ? formatPropertyPrice((property as any).display_price, { intent: property.intent })
+            : formatPropertyPrice(property.price, { intent: property.intent, unit: (property as any).price_unit });
 
         let msg = `*Property ${index}/${total}*\n\n`;
         msg += `🏠 *${bhk}${property.type.toUpperCase()}*\n`;

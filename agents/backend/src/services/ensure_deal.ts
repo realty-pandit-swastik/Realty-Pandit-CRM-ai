@@ -22,6 +22,7 @@ import logger from '../utils/logger';
 import { TransactionStatus, TransactionType } from '@prisma/client';
 import { assignViaRoundRobin, assignViaManagerRoundRobin } from './lead_assignment';
 import { assignContact } from './assign_contact';
+import { syncLeadStageForContact } from './lead_stage_sync';
 // foldLegacyDemand import retired in Phase 5 — Contact now carries the
 // canonical demand_taxonomy_node_id + demand_schema_values directly.
 
@@ -156,6 +157,11 @@ export async function ensureDealForLead(args: EnsureDealArgs): Promise<EnsureDea
             ai_paused: false,
         },
     });
+    // Deal CREATION is not a transition, so the sync hook in transitionTransaction never
+    // fires here. Without this a deal born at a non-NEW status leaves its lead behind —
+    // observed live 2026-08-10. Awaited, not best-effort: the contact row is guaranteed by
+    // the required FK, so the only way this fails is a real fault worth surfacing.
+    await syncLeadStageForContact(deal.demand_contact_id);
 
     logger.info(`[ensureDealForLead] Created ${status} deal ${deal.id} for ${args.contactPhone} (source=${args.source}, assigned=${assignedAgentId})`);
 

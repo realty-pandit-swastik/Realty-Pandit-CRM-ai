@@ -962,7 +962,7 @@ function flattenAnswers(answers: Record<string, any>): Record<string, string> {
         const label = labelMap[key] || key.replace(/_/g, ' ');
         if (typeof val === 'object' && !Array.isArray(val)) {
             if (key === 'features' || key === 'amenities') {
-                const selected = Object.entries(val).filter(([, v]) => v === true).map(([k]) => k.replace(/_/g, ' ')).join(', ');
+                const selected = Object.entries(val).filter(([_, v]) => v === true).map(([k]) => k.replace(/_/g, ' ')).join(', ');
                 if (selected) result[label] = selected;
             } else if (key === 'address_block') {
                 if (val.locality) result['Locality'] = val.locality;
@@ -1265,7 +1265,7 @@ function VideoUpload({ value, onSubmit, onUpload }: {
         <div>
             <div onClick={() => inputRef.current?.click()} style={{ border: '2px dashed var(--border-secondary)', borderRadius: '12px', padding: '30px', textAlign: 'center', cursor: 'pointer', marginBottom: '12px' }}>
                 <p style={{ color: 'var(--text-muted)', fontSize: '14px' }}>{uploading ? 'Uploading...' : 'Click to upload videos (MP4, WebM, MOV, AVI) — Max 50MB each, up to 3'}</p>
-                <input ref={inputRef} type="file" accept="video/mp4,video/webm,video/quicktime,video/x-msvideo" multiple style={{ display: 'none' }} onChange={e => handleFiles(e.target.files)} />
+                <input ref={inputRef} type="file" accept="video/mp4,video/quicktime,video/webm,video/3gpp,video/3gpp2,video/x-matroska,video/x-msvideo,video/x-m4v,.mp4,.mov,.webm,.3gp,.mkv,.avi,.m4v" multiple style={{ display: 'none' }} onChange={e => handleFiles(e.target.files)} />
             </div>
             {uploadError && <div style={{ padding: '12px', marginBottom: '12px', backgroundColor: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '8px', color: '#ef4444', fontSize: '14px' }}>{uploadError}</div>}
             {urls.length > 0 && (

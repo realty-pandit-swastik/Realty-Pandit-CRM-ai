@@ -1,7 +1,7 @@
 
 import { useEffect, useState, useRef } from 'react';
 import { formatInventoryAddress, formatUnitLabel } from '../../lib/address';
-import { getInventory, getTeamMembers, updateInventory, markInventorySold, markInventoryOnHold } from '../../api/client';
+import { getInventory, getTeamMembers, updateInventory, markInventorySold, markInventoryOnHold, rosterForPickers } from '../../api/client';
 import client from '../../api/client';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
@@ -123,8 +123,7 @@ export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryLis
             .then((r: any) => setTaxonomyTree(r.data.tree || []))
             .catch(() => {});
         getTeamMembers().then(d => {
-            if (Array.isArray(d)) setAgentsList(d);
-            else if (d?.data) setAgentsList(d.data);
+            setAgentsList(rosterForPickers(d));
         }).catch(() => {});
     }, []);
 
@@ -150,7 +149,7 @@ export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryLis
     }, [search]);
 
     const toggleSelect = (id: string) => {
-        setSelectedIds(prev => { const s = new Set(prev); if (s.has(id)) s.delete(id); else s.add(id); return s; });
+        setSelectedIds(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s; });
     };
 
     // Contact search for batch share (ported from InventoryList.tsx:350-364)

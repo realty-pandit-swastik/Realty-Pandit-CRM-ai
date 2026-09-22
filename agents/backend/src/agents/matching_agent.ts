@@ -352,7 +352,9 @@ export class MatchingAgent implements BaseAgent {
                 ? specs.amenities.reduce((acc: Record<string, boolean>, label: string) => { acc[label] = true; return acc; }, {})
                 : {};
 
-            const price = formatPropertyPrice(prop.price, { intent: prop.intent, unit: prop.price_unit });
+            const price = (prop as any).display_price
+                    ? formatPropertyPrice((prop as any).display_price, { intent: prop.intent })
+                    : formatPropertyPrice(prop.price, { intent: prop.intent, unit: prop.price_unit });
 
             let detail = `*🏠 Property Details*\n\n`;
             detail += `*Type:* ${prop.type.toUpperCase()} (${prop.category})\n`;

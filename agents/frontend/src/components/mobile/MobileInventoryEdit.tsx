@@ -1,7 +1,7 @@
 
 import type React from 'react';
 import { useEffect, useState, useRef } from 'react';
-import { updateInventory, getCategoryTree, uploadInventoryImages, deleteInventoryMedia, getTeamMembersList, transferInventory, uploadInventoryDocument, deleteInventoryDocument, getInventoryItem, getNodeFields } from '../../api/client';
+import { updateInventory, getCategoryTree, uploadInventoryImages, deleteInventoryMedia, getTeamMembersList, transferInventory, uploadInventoryDocument, deleteInventoryDocument, inventoryDocumentUrl, getInventoryItem, getNodeFields } from '../../api/client';
 import { useToast } from '../../contexts/ToastContext';
 import { useConfirm } from '../../contexts/ConfirmContext';
 
@@ -80,7 +80,7 @@ function MobileEditContactSection({ currentPhone, currentName, color, onContactS
     );
 }
 
-export function MobileInventoryEdit({ item, onSaved }: MobileInventoryEditProps) {
+export function MobileInventoryEdit({ item, onSaved, onCancel: _onCancel }: MobileInventoryEditProps) {
     const { showToast } = useToast();
     const confirm = useConfirm();
     const specs = item.specs || {};
@@ -256,7 +256,7 @@ export function MobileInventoryEdit({ item, onSaved }: MobileInventoryEditProps)
             // Strip UI-only fields (Phase 3, 2026-05-28): furnishing/facing/property_age
             // are no longer in `data` since Phase 3 read-fallback removal — they live
             // exclusively in schemaValues now and round-trip through specsObj above.
-            const rest = Object.fromEntries(Object.entries(data).filter(([key]) => !['bedrooms', 'bathrooms', 'area', 'area_unit', 'features'].includes(key)));
+            const { bedrooms: _b, bathrooms: _ba, area: _a, area_unit: _au, features: _ft, ...rest } = data;
             await updateInventory(item.id, { ...rest, specs: specsObj });
             onSaved();
         } catch (err: any) {
@@ -739,7 +739,7 @@ export function MobileInventoryEdit({ item, onSaved }: MobileInventoryEditProps)
                                                     )}
                                                 </div>
                                             </div>
-                                            <a href={doc.file_url} target="_blank" rel="noreferrer"
+                                            <a href={inventoryDocumentUrl(item.id, doc.id)} target="_blank" rel="noreferrer"
                                                 style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid var(--border-secondary)', fontSize: '12px', color: 'var(--text-link)', textDecoration: 'none', minHeight: '32px', display: 'flex', alignItems: 'center' }}>
                                                 View
                                             </a>

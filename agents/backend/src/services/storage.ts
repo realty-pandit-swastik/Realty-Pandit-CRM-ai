@@ -44,6 +44,12 @@ export class StorageService {
             throw new Error(`File too large: ${(file.size / 1024 / 1024).toFixed(1)}MB. Max: 10MB`);
         }
 
+        // 2026-08-11: the media route now uses multer diskStorage (a 100MB video buffered in
+        // RAM would blow the ~2GB Node heap), so `file.buffer` is undefined there and the bytes
+        // live at `file.path`. sharp accepts either a path or a Buffer, so support both and stay
+        // compatible with any caller still using memoryStorage.
+        const sharpSource: string | Buffer = (file as any).path || file.buffer;
+
         // Create directory for this property
         const propertyDir = path.join(UPLOADS_DIR, inventoryId);
         fs.mkdirSync(propertyDir, { recursive: true });
@@ -53,20 +59,20 @@ export class StorageService {
 
         // Original → WebP (optimized)
         const originalPath = path.join(propertyDir, `${baseName}.webp`);
-        await sharp(file.buffer)
+        await sharp(sharpSource)
             .webp({ quality: 85 })
             .toFile(originalPath);
 
         // Medium (800x600) → for property detail page
         const mediumPath = path.join(propertyDir, `${baseName}_medium.webp`);
-        await sharp(file.buffer)
+        await sharp(sharpSource)
             .resize(800, 600, { fit: 'cover' })
             .webp({ quality: 80 })
             .toFile(mediumPath);
 
         // Thumbnail (400x300) → for listing cards
         const thumbPath = path.join(propertyDir, `${baseName}_thumb.webp`);
-        await sharp(file.buffer)
+        await sharp(sharpSource)
             .resize(400, 300, { fit: 'cover' })
             .webp({ quality: 75 })
             .toFile(thumbPath);

@@ -15,6 +15,7 @@ import { TransactionStatus, TransactionLogAction } from '@prisma/client';
 import prisma from '../db';
 import logger from '../utils/logger';
 import { ValidationError } from '../middleware/error_handler';
+import { deriveLeadStage } from './lead_stage_sync';
 
 // ─── Valid Transitions Map ──────────────────────────────────────
 
@@ -154,11 +155,42 @@ export async function transitionTransaction(
         updateData.previous_status = null;
     }
 
-    // Execute transition + log in a single transaction
+    // ── Lead stage sync (2026-08-09) ──────────────────────────────────────────────────────
+    // The Leads page reads contacts.lifecycle_stage; the Deal Pipeline reads this status. They
+    // were never connected, so 52% of single-deal leads disagreed and moving a deal to
+    // QUALIFIED left the lead showing New. The deal is the source of truth — it is validated,
+    // the lead's dropdown is not.
+    //
+    // ⚠ This sits INSIDE the atomic $transaction below, deliberately UNLIKE the NEG-1 inventory
+    // lock further down which is best-effort after the commit. Do not "fix" the inconsistency:
+    // the entire point here is that the two can never diverge, and Transaction.demand_contact_id
+    // is a required FK, so the contact row is guaranteed to exist.
+    //
+    // Only re-query when the lead has more than one deal (14 leads on prod). For the normal
+    // single-deal case the new status IS the answer, so the common path costs one cheap count.
+    const dealCount = await prisma.transaction.count({
+        where: { demand_contact_id: transaction.demand_contact_id },
+    });
+    let leadStage: string | null = newStatus as string;
+    if (dealCount > 1) {
+        const siblings = await prisma.transaction.findMany({
+            where: { demand_contact_id: transaction.demand_contact_id },
+            select: { id: true, status: true, updated_at: true },
+        });
+        // Use the value this transition is about to write, not the stale row we just read.
+        leadStage = deriveLeadStage(siblings.map(d =>
+            d.id === transactionId ? { status: newStatus, updated_at: new Date() } : d));
+    }
+
+    // Execute transition + log + lead stage in a single transaction
     const [updated] = await prisma.$transaction([
         prisma.transaction.update({
             where: { id: transactionId },
             data: updateData,
+        }),
+        prisma.contact.update({
+            where: { phone_number: transaction.demand_contact_id },
+            data: { lifecycle_stage: leadStage as string },
         }),
         prisma.transactionLog.create({
             data: {

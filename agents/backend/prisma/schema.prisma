@@ -89,10 +89,10 @@ model Contact {
   preferred_lng Float? // Longitude - used for radius-based property matching
 
   // State Management
-  lead_status       String  @default("cold") // cold, warm, hot, closed, lost
-  lifecycle_stage   String  @default("NEW") // NEW, QUALIFIED, MATCHED, VISIT_SCHEDULED, VISITED, NEGOTIATION, CLOSED_WON, CLOSED_LOST
+  lead_status       String   @default("cold") // cold, warm, hot, closed, lost
+  lifecycle_stage   String   @default("NEW") // NEW, QUALIFIED, MATCHED, VISIT_SCHEDULED, VISITED, NEGOTIATION, CLOSED_WON, CLOSED_LOST
   assigned_agent_id String?
-  assigned_agent    Agent?  @relation(fields: [assigned_agent_id], references: [id])
+  assigned_agent    Agent?   @relation(fields: [assigned_agent_id], references: [id])
   shared_with_ids   String[] @default([]) // Agent IDs this LEAD is shared with for collaboration (2026-07-31) — mirrors Inventory.shared_with_ids
   // Phase 5C (2026-07-17) — how this contact's agent was chosen (routing method). Nullable; legacy
   // rows + unassigned contacts stay null. See services/assign_contact.ts for the vocabulary.
@@ -161,6 +161,8 @@ model Contact {
   voice_calls            VoiceCall[]
   emails                 Email[]
   lead_score             LeadScore?
+  // Per-person share records (2026-08-09). Mirror of shared_with_ids while 4a/4b roll out.
+  shares                 ContactShare[]
   inventory              Inventory[]
   key_holder_properties  Inventory[]             @relation("KeyHolderProperties")
   owned_properties       Inventory[]             @relation("OwnedProperties")
@@ -647,7 +649,7 @@ model Inventory {
   pre_rented_monthly_rent Decimal? // Current monthly rent the sitting tenant pays
   // Commercial use (2026-07-29): a RESIDENTIAL property that can also be used commercially.
   commercial_use          Boolean  @default(false) // Residential property also usable commercially
-  commercial_use_type     String?  // office | shop | showroom | other (set only when commercial_use)
+  commercial_use_type     String? // office | shop | showroom | other (set only when commercial_use)
 
   documents        InventoryDocument[] // Attached documents (title deed, NOC, etc.)
   appointments     Appointment[] // Calendar system appointments
@@ -1025,6 +1027,13 @@ model PartnerAgent {
   // Onboarding metadata
   onboarded_by_agent_id String?
   onboarded_at          DateTime?
+
+  /// Set when an accidental lead->partner conversion is undone (2026-08-10). The Partner Agents
+  /// list filters on `reverted_at: null`, so a reverted partner disappears from it. Status is set
+  /// to SUSPENDED at the same time, which the existing ACTIVE-only login gate already blocks —
+  /// this column exists so reverted partners stay distinguishable from genuinely suspended ones.
+  reverted_at DateTime?
+  reverted_by String?
 
   created_at DateTime @default(now())
   updated_at DateTime @updatedAt
@@ -2611,4 +2620,40 @@ model PartnerReassignmentLog {
   @@index([partner_agent_id])
   @@index([to_agent_id])
   @@map("partner_reassignment_logs")
+}
+
+/// A single "this lead was shared with this person" record (2026-08-09).
+///
+/// Replaces what Contact.shared_with_ids could not express: WHEN a teammate received a
+/// lead and WHO sent it. Without those, "shared with me, newest first" is unbuildable and
+/// there is no audit trail of sharing.
+///
+/// Phase 4a is EXPAND-ONLY — this table is written but not yet read. Contact.shared_with_ids
+/// stays the source of truth for every read until 4b, and remains a synchronised mirror
+/// after it, so a rollback never strands data.
+///
+/// ⚠ BACKFILLED HISTORY IS APPROXIMATE. Of the 35 rows created on 2026-08-09, only 9 had a
+/// `lead_shared` interaction to derive an exact time and actor from; the other 26 fall back to
+/// contacts.updated_at with shared_by = null. The gap is real, not an oversight: portal re-ingest
+/// (services/lead_reingest.ts) shares a lead but logs `lead_regenerated`, never `lead_shared`, so
+/// those shares left no dedicated trace. Legacy rows are: shared_by IS NULL AND shared_at < 2026-08-09.
+/// Do not present those timestamps as exact in any UI.
+model ContactShare {
+  id        String @id @default(uuid())
+  tenant_id String
+
+  phone_number String
+  contact      Contact @relation(fields: [phone_number], references: [phone_number], onDelete: Cascade)
+
+  /// Agent the lead is shared WITH. Bare id, no FK — mirrors shared_with_ids and
+  /// Transaction.demand_handler_id: a stale id stops matching instead of blocking a delete.
+  agent_id  String
+  /// Agent who did the sharing. Null for rows backfilled from history with no known actor.
+  shared_by String?
+  shared_at DateTime @default(now())
+
+  @@unique([phone_number, agent_id])
+  @@index([agent_id, shared_at])
+  @@index([tenant_id])
+  @@map("contact_shares")
 }

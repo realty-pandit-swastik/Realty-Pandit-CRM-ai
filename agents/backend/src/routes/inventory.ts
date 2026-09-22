@@ -45,23 +45,91 @@ async function activeStaffOwnerName(phone: string | null | undefined): Promise<s
 const stateMachine = new InventoryStateMachine();
 const storageService = new StorageService();
 
-// Multer config: memory storage (buffer), max 50MB per file (videos need more)
+// ─── Inventory media upload (photos + videos) ────────────────────────────────────────────
+//
+// 🔴 diskStorage, NOT memoryStorage (2026-08-11). multer buffers whole files in RAM, and this
+// route accepts 20 files — at 100MB each that is 2GB against a ~2,096MB Node heap, i.e. a
+// guaranteed OOM of the cluster worker. On disk it costs nothing; videos are moved into place
+// and sharp reads images straight from the path.
+const TMP_UPLOAD_DIR = path.join(process.cwd(), 'uploads', 'tmp');
+fs.mkdirSync(TMP_UPLOAD_DIR, { recursive: true });
+
+// Cap is 100MB, but Cloudflare Free rejects request bodies over 100MB at the EDGE, before this
+// server ever sees them — so the practical ceiling users are told about is 95MB, leaving room
+// for multipart overhead. Keep the two numbers in step with the frontend guard.
+const MAX_UPLOAD_MB = 100;
+export const ADVERTISED_MAX_UPLOAD_MB = 95;
+
+const IMAGE_MIMES = [
+    'image/jpeg', 'image/png', 'image/webp', 'image/avif',
+    'image/heic', 'image/heif', 'image/gif', 'image/bmp',
+];
+// Formats phones actually produce: iPhone .mov, Android .mp4, budget Android .3gp, plus the
+// .avi/.mkv the picker has always allowed users to choose. Non-h264 is transcoded after upload
+// by ensureH264Playable, so accepting them here is safe.
+const VIDEO_MIMES = [
+    'video/mp4', 'video/webm', 'video/quicktime', 'video/3gpp', 'video/3gpp2',
+    'video/x-matroska', 'video/x-msvideo', 'video/x-m4v', 'video/mpeg',
+];
+const VIDEO_EXTS = ['.mp4', '.mov', '.webm', '.3gp', '.3g2', '.mkv', '.avi', '.m4v', '.mpeg', '.mpg'];
+const IMAGE_EXTS = ['.jpg', '.jpeg', '.png', '.webp', '.avif', '.heic', '.heif', '.gif', '.bmp'];
+
+const extOf = (name: string) => path.extname(name || '').toLowerCase();
+
+/**
+ * Is this a video? Decided by mimetype OR extension.
+ *
+ * 🔴 The extension half is load-bearing. Some Android pickers hand over a perfectly good .mp4 as
+ * `application/octet-stream`; the old code keyed purely on `mimetype.startsWith('video/')`, so
+ * such a file was routed to sharp as an image and the whole request 500'd. Verified on prod.
+ */
+export function isVideoUpload(file: { mimetype?: string; originalname?: string }): boolean {
+    const mt = (file.mimetype || '').toLowerCase();
+    if (mt.startsWith('video/')) return true;
+    return VIDEO_EXTS.includes(extOf(file.originalname || ''));
+}
+
 const upload = multer({
-    storage: multer.memoryStorage(),
-    limits: { fileSize: 50 * 1024 * 1024 },
+    storage: multer.diskStorage({
+        destination: (_req, _file, cb) => cb(null, TMP_UPLOAD_DIR),
+        filename: (_req, file, cb) =>
+            cb(null, `${Date.now()}-${Math.random().toString(36).slice(2, 8)}${extOf(file.originalname)}`),
+    }),
+    limits: { fileSize: MAX_UPLOAD_MB * 1024 * 1024 },
     fileFilter: (_req, file, cb) => {
-        const allowed = [
-            'image/jpeg', 'image/png', 'image/webp', 'image/avif',
-            'image/heic', 'image/heif', 'image/gif', 'image/bmp',
-            'video/mp4', 'video/webm', 'video/quicktime',
-        ];
-        if (allowed.includes(file.mimetype)) {
-            cb(null, true);
-        } else {
-            cb(new Error('Only images and videos (mp4, webm, mov) are allowed'));
+        const mt = (file.mimetype || '').toLowerCase();
+        const ext = extOf(file.originalname);
+        if (IMAGE_MIMES.includes(mt) || VIDEO_MIMES.includes(mt)) return cb(null, true);
+        // Unknown/omitted mimetype from a phone picker — trust a known media extension instead.
+        if ((!mt || mt === 'application/octet-stream') && (VIDEO_EXTS.includes(ext) || IMAGE_EXTS.includes(ext))) {
+            return cb(null, true);
         }
-    }
+        cb(new Error(`"${file.originalname}" is not a supported file. Please upload a photo (JPG, PNG, HEIC) or a video (MP4, MOV, WebM, 3GP, MKV, AVI).`));
+    },
 });
+
+/**
+ * multer wrapper that turns upload rejections into a readable 400.
+ *
+ * Without this the fileFilter error escapes as an unhandled error: the user sees
+ * "Internal server error" with no idea what was wrong, and every rejected file fires an
+ * [Alert:CRITICAL] server_5xx. (2026-08-11)
+ */
+const uploadMedia = (req: any, res: any, next: any) => {
+    upload.array('images', 20)(req, res, (err: any) => {
+        if (!err) return next();
+        if (err.code === 'LIMIT_FILE_SIZE') {
+            return res.status(400).json({
+                error: `That file is too large. The maximum is ${ADVERTISED_MAX_UPLOAD_MB} MB per file — for a long video, record at 1080p instead of 4K, or trim it.`,
+            });
+        }
+        if (err.code === 'LIMIT_FILE_COUNT') {
+            return res.status(400).json({ error: 'Too many files at once. Please upload up to 20 at a time.' });
+        }
+        logger.warn(`[Upload] rejected: ${err.message}`);
+        return res.status(400).json({ error: err.message || 'Upload failed' });
+    });
+};
 
 
 // POST /inventory - Create single inventory record (authenticated)
@@ -828,6 +896,10 @@ router.get('/:id', authMiddleware, async (req, res, next) => {
                 return res.status(403).json({ error: 'Not available' });
             }
             const maskedDetail: any = applyRoleMask(inventory as any, viewerFromPartner(meDetail.id));
+            // Documents (2026-08-11): owner paperwork - title deeds, registries, NOCs. An external
+            // partner never receives them, not even on their own listing. applyRoleMask strips them
+            // too; this is the belt to that braces.
+            delete maskedDetail.documents;
             return res.json({ ...maskedDetail, source: null, mine: isOwn, can_edit: isOwn });
         }
 
@@ -841,6 +913,12 @@ router.get('/:id', authMiddleware, async (req, res, next) => {
         redactedDetail.can_edit = meDetail.role === 'super_boss'
             || detailTeamIds.includes(inventory.assigned_agent_id)
             || detailTeamIds.includes(inventory.uploaded_by_agent_id);
+        // Documents (2026-08-11, owner-set rule): visible ONLY to the listing's own agent +
+        // super_boss - the same rule mayAccessDocuments() enforces on the download/write routes.
+        // Note this is deliberately NARROWER than redactInventoryForStaff, which also lets a
+        // shared-with teammate through: sharing a listing does NOT share its paperwork.
+        // The KEY is omitted, not set to [], so the UI can tell "none uploaded" from "not yours".
+        if (!redactedDetail.can_edit) delete redactedDetail.documents;
         res.json(redactedDetail);
     } catch (error) {
         captureRouteError(error, req, { route: 'inventory#3' });
@@ -2621,7 +2699,7 @@ router.post('/commit', async (req, res) => {
 });
 
 // POST /inventory/:id/upload - Upload property images and videos (max 20 files)
-router.post('/:id/upload', upload.array('images', 20), async (req, res) => {
+router.post('/:id/upload', uploadMedia, async (req, res) => {
     try {
         const id = req.params.id as string;
         const files = req.files as Express.Multer.File[];
@@ -2639,13 +2717,13 @@ router.post('/:id/upload', upload.array('images', 20), async (req, res) => {
         const newVideoUrls: string[] = [];
 
         for (const file of files) {
-            if (file.mimetype.startsWith('video/')) {
-                // Write video to disk directly (no sharp processing)
+            if (isVideoUpload(file)) {
+                // Move the already-on-disk temp file into place — no buffering, any size.
                 const videoDir = path.join(process.cwd(), 'uploads', 'properties', id);
                 fs.mkdirSync(videoDir, { recursive: true });
                 const ext = (file.originalname.split('.').pop() || 'mp4').toLowerCase();
                 const filename = `${Date.now()}-video.${ext}`;
-                fs.writeFileSync(path.join(videoDir, filename), file.buffer);
+                fs.renameSync(file.path, path.join(videoDir, filename));
                 newVideoUrls.push(`/uploads/properties/${id}/${filename}`);
                 // 2026-07-29: HEVC/iPhone videos don't play in Chrome/FF — transcode to H.264 in the
                 // background (non-blocking; website falls back to photos until it finishes).
@@ -2678,6 +2756,17 @@ router.post('/:id/upload', upload.array('images', 20), async (req, res) => {
         captureRouteError(error, req, { route: 'inventory#15' });
         logger.error('[Upload] Error:', error);
         res.status(500).json({ error: (error as Error).message });
+    } finally {
+        // diskStorage writes every upload to uploads/tmp first. Videos are renamed out of there,
+        // but images are only READ by sharp — without this they accumulate forever. Also covers
+        // the error path, where nothing was moved at all. (2026-08-11)
+        for (const f of ((req.files as Express.Multer.File[]) || [])) {
+            try {
+                if (f.path && fs.existsSync(f.path)) fs.unlinkSync(f.path);
+            } catch (e) {
+                logger.warn(`[Upload] temp files left behind: ${f.path} — ${(e as Error).message}`);
+            }
+        }
     }
 });
 
@@ -3066,36 +3155,102 @@ router.patch('/:id/enrich', authMiddleware, async (req, res) => {
 
 // ─── Document Management ─────────────────────────────────────────────────────
 
+/**
+ * Document access guard (2026-08-11, owner-set rule).
+ *
+ * A property document - title deed, registry, NOC - may be viewed, downloaded,
+ * uploaded, renamed, deleted or shared ONLY by:
+ *   - super_boss, or
+ *   - the listing's own agent (its assigned OR uploading agent).
+ * A manager inherits their direct reports' listings because getTeamIds() returns
+ * [self, ...reports]. This mirrors the PATCH /:id edit guard above - keep the two
+ * in step if either changes.
+ *
+ * External partner agents get NOTHING here, even on their own listing: documents are
+ * the owner's paperwork, not marketing material. partnerMayMutateInventory() runs
+ * first on the write paths and is deliberately NOT sufficient on its own.
+ *
+ * Responds 403/404 and returns false when denied - same shape as
+ * partnerMayMutateInventory, so each call site stays one line.
+ */
+async function mayAccessDocuments(req: any, res: any, inventoryId: string | string[]): Promise<boolean> {
+    const me = req.agent!;
+    const invId = Array.isArray(inventoryId) ? inventoryId[0] : inventoryId;
+    const inv = await prisma.inventory.findUnique({
+        where: { id: invId },
+        select: { id: true, assigned_agent_id: true, uploaded_by_agent_id: true },
+    });
+    if (!inv) {
+        res.status(404).json({ error: "Inventory not found" });
+        return false;
+    }
+    if (me.role === "super_boss") return true;
+    if (me.role === "partner") {
+        res.status(403).json({ error: "Property documents are not available to partner agents." });
+        return false;
+    }
+    const teamIds = await getTeamIds(me);
+    const owners = [inv.assigned_agent_id, inv.uploaded_by_agent_id].filter((id): id is string => !!id);
+    if (owners.some((id) => teamIds.includes(id))) return true;
+    res.status(403).json({ error: "Only the property's assigned manager or a super boss can access its documents." });
+    return false;
+}
+
 // Multer config for document uploads (PDF, images, Word, Excel)
+const DOC_MAX_MB = 20;
+const DOC_MIMES = [
+    'application/pdf',
+    'image/jpeg', 'image/png', 'image/webp',
+    'application/msword',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'application/vnd.ms-excel',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+];
+const DOC_EXTS = ['.pdf', '.jpg', '.jpeg', '.png', '.webp', '.doc', '.docx', '.xls', '.xlsx'];
+
 const docUpload = multer({
     storage: multer.memoryStorage(),
-    limits: { fileSize: 20 * 1024 * 1024 }, // 20MB
+    limits: { fileSize: DOC_MAX_MB * 1024 * 1024 },
     fileFilter: (_req, file, cb) => {
-        const allowed = [
-            'application/pdf',
-            'image/jpeg', 'image/png', 'image/webp',
-            'application/msword',
-            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-            'application/vnd.ms-excel',
-            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        ];
-        if (allowed.includes(file.mimetype)) {
-            cb(null, true);
-        } else {
-            cb(new Error('Only PDF, images, Word, and Excel files are allowed'));
-        }
+        const mt = (file.mimetype || '').toLowerCase();
+        const ext = extOf(file.originalname);
+        if (DOC_MIMES.includes(mt)) return cb(null, true);
+        // Android pickers hand over a perfectly good PDF as application/octet-stream (or with
+        // no mimetype at all) - trust a known document extension instead. Exactly the rule the
+        // media route needed in cde4667; documents had the same bug.
+        if ((!mt || mt === 'application/octet-stream') && DOC_EXTS.includes(ext)) return cb(null, true);
+        cb(new Error(`"${file.originalname}" is not a supported document. Please upload a PDF, a photo (JPG, PNG, WebP), or a Word or Excel file.`));
     },
 });
+
+/**
+ * multer wrapper that turns a document-upload rejection into a readable 400.
+ *
+ * Without it the fileFilter error escapes unhandled: the user is told "Internal server
+ * error" with no idea what was wrong, and every rejected file fires a false
+ * [Alert:CRITICAL] server_5xx. Same fix as uploadMedia above. (2026-08-11)
+ */
+const uploadDocument = (req: any, res: any, next: any) => {
+    docUpload.single('document')(req, res, (err: any) => {
+        if (!err) return next();
+        if (err.code === 'LIMIT_FILE_SIZE') {
+            return res.status(400).json({ error: `That document is too large. The maximum is ${DOC_MAX_MB} MB.` });
+        }
+        logger.warn(`[Documents] upload rejected: ${err.message}`);
+        return res.status(400).json({ error: err.message || 'Upload failed' });
+    });
+};
 
 /**
  * POST /inventory/:id/documents
  * Upload a document and attach it to an inventory item.
  */
-router.post('/:id/documents', authMiddleware, checkPermission('edit_inventory'), docUpload.single('document'), async (req, res) => {
+router.post('/:id/documents', authMiddleware, checkPermission('edit_inventory'), uploadDocument, async (req, res) => {
     try {
         const inventoryId = req.params.id as string;
         // Partner write-guard: a partner may only mutate their OWN listing.
         if (!(await partnerMayMutateInventory(req, res, inventoryId))) return;
+        if (!(await mayAccessDocuments(req, res, inventoryId))) return;
         const file = req.file;
         const { doc_type, title } = req.body;
 
@@ -3164,6 +3319,7 @@ router.delete('/:id/documents/:docId', authMiddleware, checkPermission('edit_inv
         const { id: inventoryId, docId } = req.params;
         // Partner write-guard: a partner may only mutate their OWN listing.
         if (!(await partnerMayMutateInventory(req, res, inventoryId))) return;
+        if (!(await mayAccessDocuments(req, res, inventoryId))) return;
 
         const doc = await prisma.inventoryDocument.findUnique({ where: { id: docId } });
         if (!doc || doc.inventory_id !== inventoryId) {
@@ -3209,6 +3365,7 @@ router.patch('/:id/documents/:docId', authMiddleware, checkPermission('edit_inve
         const { id: inventoryId, docId } = req.params;
         // Partner write-guard: a partner may only mutate their OWN listing.
         if (!(await partnerMayMutateInventory(req, res, inventoryId))) return;
+        if (!(await mayAccessDocuments(req, res, inventoryId))) return;
         const title = (req.body?.title ?? '').toString().trim();
         if (!title) {
             return res.status(400).json({ error: 'title is required' });
@@ -3230,6 +3387,98 @@ router.patch('/:id/documents/:docId', authMiddleware, checkPermission('edit_inve
     }
 });
 
+/**
+ * GET /inventory/:id/documents/:docId/download
+ *   ?thumb=1   serve the *_thumb.* preview instead of the original (for <img> in the tab)
+ *   ?inline=1  render in the browser instead of forcing a save dialog
+ *
+ * The ONLY way to read a property document: the raw /uploads path is blocked in app.ts
+ * because documents are owner paperwork. Same rule as every other document route -
+ * super_boss or the listing's own agent.
+ */
+router.get('/:id/documents/:docId/download', authMiddleware, async (req, res) => {
+    try {
+        const { id: inventoryId, docId } = req.params;
+        if (!(await mayAccessDocuments(req, res, inventoryId))) return;
+
+        const doc = await prisma.inventoryDocument.findUnique({ where: { id: String(docId) } });
+        if (!doc || doc.inventory_id !== inventoryId) {
+            return res.status(404).json({ error: 'Document not found' });
+        }
+
+        // file_url is app-relative ('/uploads/properties/<id>/documents/<file>'). Resolve it
+        // and refuse anything that escapes uploads/ - the value is DB-held, but a traversal
+        // here would read arbitrary server files.
+        const uploadsRoot = path.resolve(process.cwd(), 'uploads');
+        let abs = path.resolve(process.cwd(), String(doc.file_url).replace(/^\/+/, ''));
+        const wantThumb = req.query.thumb === '1';
+        if (wantThumb) {
+            const t = abs.replace(/(\.[^.]+)$/, '_thumb$1');
+            if (fs.existsSync(t)) abs = t;
+        }
+        if (abs !== uploadsRoot && !abs.startsWith(uploadsRoot + path.sep)) {
+            return res.status(400).json({ error: 'Invalid document path' });
+        }
+        if (!fs.existsSync(abs)) {
+            logger.warn(`[Documents] Record ${docId} points at a missing file: ${abs}`);
+            return res.status(404).json({ error: 'File is missing on the server' });
+        }
+
+        if (wantThumb) {
+            res.type(path.extname(abs) || '.jpg');
+            res.setHeader('Content-Disposition', 'inline');
+        } else {
+            if (doc.mime_type) res.type(doc.mime_type);
+            const name = String(doc.file_name || 'document');
+            const disp = req.query.inline === '1' ? 'inline' : 'attachment';
+            res.setHeader(
+                'Content-Disposition',
+                `${disp}; filename="${name.replace(/["\r\n]/g, '')}"; filename*=UTF-8''${encodeURIComponent(name)}`,
+            );
+        }
+        // Never let a shared cache hold owner paperwork.
+        res.setHeader('Cache-Control', 'private, no-store');
+        fs.createReadStream(abs).pipe(res);
+    } catch (error) {
+        captureRouteError(error, req, { route: 'inventory#doc-download' });
+        logger.error(error);
+        if (!res.headersSent) res.status(500).json({ error: 'Failed to fetch document' });
+    }
+});
+
+// GET /inventory/:id/documents/:docId/public?token=...
+// PUBLIC, token-gated - the customer or dealer who was sent this document opens it with
+// no admin login. The raw /uploads path is blocked, so this is the only public door, and
+// the HMAC token binds the DOCUMENT id + an expiry: a forwarded link dies on its own and
+// cannot be re-pointed at another document. Same scheme as the brochure PDFs above.
+router.get('/:id/documents/:docId/public', async (req: any, res) => {
+    try {
+        const { id: inventoryId, docId } = req.params;
+        const { verifyPdfToken } = await import('../utils/pdf_token');
+        if (!verifyPdfToken(String(docId), 'document', String(req.query.token || ''))) {
+            return res.status(403).send('This document link has expired. Please ask for a new one.');
+        }
+        const doc = await prisma.inventoryDocument.findUnique({ where: { id: String(docId) } });
+        if (!doc || doc.inventory_id !== inventoryId) return res.status(404).send('Document not found');
+
+        const uploadsRoot = path.resolve(process.cwd(), 'uploads');
+        const abs = path.resolve(process.cwd(), String(doc.file_url).replace(/^\/+/, ''));
+        if (abs !== uploadsRoot && !abs.startsWith(uploadsRoot + path.sep)) {
+            return res.status(400).send('Invalid document path');
+        }
+        if (!fs.existsSync(abs)) return res.status(404).send('File is missing on the server');
+
+        if (doc.mime_type) res.type(doc.mime_type);
+        res.setHeader('Content-Disposition', 'inline');
+        res.setHeader('Cache-Control', 'private, no-store');
+        fs.createReadStream(abs).pipe(res);
+    } catch (error) {
+        captureRouteError(error, req, { route: 'inventory#doc-public' });
+        logger.error(error);
+        if (!res.headersSent) res.status(500).send('Failed to fetch document');
+    }
+});
+
 // POST /inventory/:id/documents/:docId/share — share ONE inventory document to a contact as a link,
 // via WhatsApp (rp_document_share template, falls back to in-window text) and/or email. Gated to
 // edit_inventory (inventory manager / manager / super_boss) — the roles that can edit inventory. (#8, 2026-07-09)
@@ -3238,6 +3487,7 @@ router.post('/:id/documents/:docId/share', authMiddleware, checkPermission('edit
         const { id: inventoryId, docId } = req.params;
         // Partner write-guard: a partner may only mutate their OWN listing.
         if (!(await partnerMayMutateInventory(req, res, inventoryId))) return;
+        if (!(await mayAccessDocuments(req, res, inventoryId))) return;
         const agent = req.agent!;
         const phoneRaw = (req.body?.contact_phone ?? '').toString().trim();
         const email = (req.body?.email ?? '').toString().trim();
@@ -3262,9 +3512,15 @@ router.post('/:id/documents/:docId/share', authMiddleware, checkPermission('edit
 
         // Public link — the file is served statically by the backend at /uploads/… (same URL the
         // in-app "View" button opens). file_url is stored as a leading-slash path.
-        const fileUrl = doc.file_url.startsWith('http')
-            ? doc.file_url
-            : `https://api.realtypandit.in${doc.file_url.startsWith('/') ? '' : '/'}${doc.file_url}`;
+        // Documents are no longer publicly readable (the raw /uploads path is blocked), so
+        // share a SIGNED, EXPIRING link. 7 days is long enough for a customer to act on it and
+        // short enough that an onward-forwarded link stops working. Same HMAC scheme as the
+        // brochure PDFs; the token is bound to this document id, so it cannot be re-pointed.
+        const { signPdfToken } = await import('../utils/pdf_token');
+        const shareExp = Math.floor(Date.now() / 1000) + 7 * 24 * 3600;
+        const shareToken = signPdfToken(String(docId), 'document', shareExp);
+        const apiBase = process.env.API_BASE_URL || 'https://api.realtypandit.in';
+        const fileUrl = `${apiBase}/inventory/${inventoryId}/documents/${docId}/public?token=${shareToken}`;
         const docTitle = doc.title || doc.file_name || 'Document';
         const propertyLabel = `${inventory.type ? inventory.type.toUpperCase() + ' · ' : ''}${inventory.locality || inventory.city || inventory.location || inventory.full_address || inventory.display_id || 'Property'}`;
 

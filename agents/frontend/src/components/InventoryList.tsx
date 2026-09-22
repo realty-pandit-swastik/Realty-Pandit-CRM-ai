@@ -2,7 +2,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { formatInventoryAddress, formatUnitLabel } from '../lib/address';
 
-import { getPartnerAssignable, assignListingToTeammate, getInventory, getInventoryItem, updateInventory, deleteInventory, approveInventory, rejectInventory, getCategoryTree, getStates, getTeamMembers, getTeamMembersList, uploadInventoryImages, deleteInventoryMedia, transferInventory, uploadInventoryDocument, deleteInventoryDocument, renameInventoryDocument, shareInventoryDocument, getNodeFields, markInventorySold, markInventoryOnHold } from '../api/client';
+import { getPartnerAssignable, assignListingToTeammate, getInventory, getInventoryItem, updateInventory, deleteInventory, approveInventory, rejectInventory, getCategoryTree, getStates, getTeamMembers, getTeamMembersList, uploadInventoryImages, deleteInventoryMedia, transferInventory, uploadInventoryDocument, deleteInventoryDocument, renameInventoryDocument, shareInventoryDocument, inventoryDocumentUrl, getNodeFields, markInventorySold, markInventoryOnHold, rosterForPickers } from '../api/client';
 import client from '../api/client';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
@@ -32,6 +32,7 @@ import {
     StalenessSection,
 } from './filters/FilterSheetShared';
 import type { TaxonomySelection, LocationSelection } from './filters/FilterSheetShared';
+import { compressVideo, isCompressionSupported } from '../utils/video_compress';
 
 function formatPrice(price: number | null, intent: string): string {
     if (!price || price === 0) return 'Price on request';
@@ -116,6 +117,25 @@ function EditContactSection({ label, color, currentPhone, currentName, onContact
             )}
         </div>
     );
+}
+
+// Upload limits (2026-08-11). The backend accepts 100MB, but Cloudflare Free rejects request
+// bodies over 100MB at the EDGE — before our server sees them — and that error cannot be
+// customised. So we stop the user at 95MB with a message that actually helps. Keep in step with
+// ADVERTISED_MAX_UPLOAD_MB in backend/src/routes/inventory.ts.
+const MAX_UPLOAD_MB = 95;
+
+// Formats phones actually produce. Must stay a subset of the backend whitelist — the previous
+// wildcard let users pick .flv/.ogv that the server then rejected with an opaque error.
+const VIDEO_ACCEPT = 'video/mp4,video/quicktime,video/webm,video/3gpp,video/3gpp2,video/x-matroska,video/x-msvideo,video/x-m4v,.mp4,.mov,.webm,.3gp,.mkv,.avi,.m4v';
+const IMAGE_ACCEPT = 'image/jpeg,image/png,image/webp,image/avif,image/heic,image/heif,.jpg,.jpeg,.png,.webp,.heic';
+
+/** First file that exceeds the cap, as a user-facing message — or null when all are fine. */
+function oversizeError(files: File[]): string | null {
+    const bad = files.find(f => f.size > MAX_UPLOAD_MB * 1024 * 1024);
+    if (!bad) return null;
+    const mb = Math.round(bad.size / 1024 / 1024);
+    return `"${bad.name}" is ${mb} MB — the maximum is ${MAX_UPLOAD_MB} MB. Phone videos shot in 4K are often far larger; record at 1080p or trim the clip, then try again.`;
 }
 
 interface InventoryListProps {
@@ -268,6 +288,7 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
     const [editMediaUrls, setEditMediaUrls] = useState<string[]>([]);
     const [editVideoUrls, setEditVideoUrls] = useState<string[]>([]);
     const [mediaUploading, setMediaUploading] = useState(false);
+    const [compressMsg, setCompressMsg] = useState<string | null>(null);
     const imageUploadRef = useRef<HTMLInputElement>(null);
     const videoUploadRef = useRef<HTMLInputElement>(null);
 
@@ -351,13 +372,11 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
         }
         if (!isPartner) {
             getTeamMembers().then(data => {
-                const members = Array.isArray(data) ? data : data?.data || data?.members || [];
-                setAgentsList(members.map((m: any) => ({ id: m.id, name: m.name, role: m.role })));
+                setAgentsList(rosterForPickers(data));
             }).catch(() => {
                 // Fallback for employees who lack manage_team permission
                 getTeamMembersList().then(data => {
-                    const members = Array.isArray(data) ? data : [];
-                    setAgentsList(members.map((m: any) => ({ id: m.id, name: m.name, role: m.role })));
+                    setAgentsList(rosterForPickers(data));
                 }).catch(() => {});
             });
         }
@@ -808,6 +827,10 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
 
     const handleUploadImages = async (invId: string, files: FileList) => {
         if (!files.length) return;
+        // Stop oversized files here: Cloudflare would reject them at the edge with an error
+        // we cannot explain, so the user would just see a generic failure.
+        const tooBig = oversizeError(Array.from(files));
+        if (tooBig) { showToast(tooBig, 'error'); return; }
         setMediaUploading(true);
         try {
             const result = await uploadInventoryImages(invId, Array.from(files));
@@ -822,9 +845,36 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
 
     const handleUploadVideos = async (invId: string, files: FileList) => {
         if (!files.length) return;
+        // Phone video is 4K by default — ~350-400MB/minute — so almost any walkthrough exceeds the
+        // limit. Re-encode to 1080p in the browser first (WebCodecs, hardware-accelerated). Only
+        // files that are actually too big pay the cost; anything already small is passed straight
+        // through. If the browser lacks WebCodecs, compressVideo returns the original untouched and
+        // the size guard below gives the user a clear message instead.
+        let list = Array.from(files);
+        const oversized = list.filter(f => f.size > MAX_UPLOAD_MB * 1024 * 1024);
+        if (oversized.length && isCompressionSupported()) {
+            try {
+                const out: File[] = [];
+                for (let idx = 0; idx < list.length; idx++) {
+                    const f = list[idx];
+                    if (f.size <= MAX_UPLOAD_MB * 1024 * 1024) { out.push(f); continue; }
+                    setCompressMsg(`Compressing ${list.length > 1 ? `${idx + 1}/${list.length} ` : ''}— 0%`);
+                    const done = await compressVideo(f, p =>
+                        setCompressMsg(`Compressing ${list.length > 1 ? `${idx + 1}/${list.length} ` : ''}— ${p.percent}%`));
+                    out.push(done);
+                }
+                list = out;
+            } finally {
+                setCompressMsg(null);
+            }
+        }
+        // Anything still over the limit could not be compressed enough (or this browser cannot
+        // compress at all). Cloudflare would reject it at the edge with an error we cannot explain.
+        const tooBig = oversizeError(list);
+        if (tooBig) { showToast(tooBig, 'error'); return; }
         setMediaUploading(true);
         try {
-            const result = await uploadInventoryImages(invId, Array.from(files));
+            const result = await uploadInventoryImages(invId, list);
             if (result.video_urls) setEditVideoUrls(result.video_urls);
         } catch (err: any) {
             showToast(err.response?.data?.error || 'Upload failed', 'error');
@@ -867,7 +917,7 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
             // (furnishing/facing/property_age — Phase 2 dedup, 2026-05-28). Those now live
             // in specs.* via editSchemaValues; sending them at the top-level too would let
             // the backend's legacy-fold logic overwrite the canonical specs value.
-            const rest = Object.fromEntries(Object.entries(editData).filter(([key]) => !['bedrooms', 'bathrooms', 'area', 'area_unit', 'furnishing', 'facing', 'property_age', 'features'].includes(key)));
+            const { bedrooms: _b, bathrooms: _ba, area: _a, area_unit: _au, furnishing: _f, facing: _fc, property_age: _pa, features: _ft, ...rest } = editData;
             const payload: Record<string, any> = { ...rest, specs };
 
             // Parse numeric coordinate fields
@@ -1195,13 +1245,13 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
                             style={{ ...s.card, cursor: selectionMode ? 'default' : 'pointer' }}
                             onClick={() => { if (!selectionMode) setViewingId(item.id); }}
                         >
-                            {editingId === '__legacy_edit__' ? (
+                            {false ? (
                                 /* ── Edit Mode (now in overlay modal) ── */
                                 <div>
                                     {/* ── Section: Media Management ── */}
                                     <div style={{ marginBottom: '16px' }}>
                                         <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-link)', marginBottom: '8px', borderBottom: '1px solid var(--border-secondary)', paddingBottom: '4px' }}>
-                                            Photos & Videos {mediaUploading && <span style={{ color: '#fbbf24', fontWeight: 400 }}> (uploading...)</span>}
+                                            Photos & Videos {compressMsg ? <span style={{ color: '#38bdf8', fontWeight: 400 }}> ({compressMsg})</span> : mediaUploading && <span style={{ color: '#fbbf24', fontWeight: 400 }}> (uploading...)</span>}
                                         </div>
                                         {/* Images */}
                                         <div style={{ marginBottom: '8px' }}>
@@ -1225,7 +1275,7 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
                                                 </div>
                                             )}
                                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                                <input ref={imageUploadRef} type="file" multiple accept="image/*" title="Upload photos" style={{ display: 'none' }} onChange={e => e.target.files && handleUploadImages(editingId!, e.target.files)} />
+                                                <input ref={imageUploadRef} type="file" multiple accept={IMAGE_ACCEPT} title="Upload photos" style={{ display: 'none' }} onChange={e => e.target.files && handleUploadImages(editingId!, e.target.files)} />
                                                 <button style={{ ...s.smallBtn }} onClick={() => imageUploadRef.current?.click()} disabled={mediaUploading}>+ Add Photos</button>
                                             </div>
                                         </div>
@@ -1243,7 +1293,7 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
                                                 </div>
                                             )}
                                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                                <input ref={videoUploadRef} type="file" multiple accept="video/*" title="Upload videos" style={{ display: 'none' }} onChange={e => e.target.files && handleUploadVideos(editingId!, e.target.files)} />
+                                                <input ref={videoUploadRef} type="file" multiple accept={VIDEO_ACCEPT} title="Upload videos" style={{ display: 'none' }} onChange={e => e.target.files && handleUploadVideos(editingId!, e.target.files)} />
                                                 <button style={{ ...s.smallBtn }} onClick={() => videoUploadRef.current?.click()} disabled={mediaUploading}>+ Add Videos</button>
                                             </div>
                                         </div>
@@ -1575,7 +1625,7 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
                                         {/* Selection checkbox */}
                                         {selectionMode && (
                                             <div
-                                                onClick={e => { e.stopPropagation(); setSelectedIds(prev => { const s = new Set(prev); if (s.has(item.id)) s.delete(item.id); else s.add(item.id); return s; }); }}
+                                                onClick={e => { e.stopPropagation(); setSelectedIds(prev => { const s = new Set(prev); s.has(item.id) ? s.delete(item.id) : s.add(item.id); return s; }); }}
                                                 style={{
                                                     width: '18px', height: '18px', borderRadius: '4px', flexShrink: 0, cursor: 'pointer', alignSelf: 'center',
                                                     border: selectedIds.has(item.id) ? '2px solid #3b82f6' : '2px solid var(--border-secondary)',
@@ -2125,7 +2175,7 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
                             {editTab === 'media' && (
                                 <div>
                                     <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-link)', marginBottom: '12px' }}>
-                                        Photos & Videos {mediaUploading && <span style={{ color: '#fbbf24', fontWeight: 400 }}>(uploading...)</span>}
+                                        Photos & Videos {compressMsg ? <span style={{ color: '#38bdf8', fontWeight: 400 }}>({compressMsg})</span> : mediaUploading && <span style={{ color: '#fbbf24', fontWeight: 400 }}>(uploading...)</span>}
                                     </div>
                                     <div style={{ marginBottom: '16px' }}>
                                         <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '8px' }}>Photos ({editMediaUrls.length})</div>
@@ -2147,7 +2197,7 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
                                                 ))}
                                             </div>
                                         )}
-                                        <input ref={imageUploadRef} type="file" multiple accept="image/*" title="Upload photos" style={{ display: 'none' }} onChange={e => e.target.files && handleUploadImages(editingId!, e.target.files)} />
+                                        <input ref={imageUploadRef} type="file" multiple accept={IMAGE_ACCEPT} title="Upload photos" style={{ display: 'none' }} onChange={e => e.target.files && handleUploadImages(editingId!, e.target.files)} />
                                         <button style={s.smallBtn} onClick={() => imageUploadRef.current?.click()} disabled={mediaUploading}>+ Add Photos</button>
                                     </div>
                                     <div>
@@ -2162,7 +2212,7 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
                                                 ))}
                                             </div>
                                         )}
-                                        <input ref={videoUploadRef} type="file" multiple accept="video/*" title="Upload videos" style={{ display: 'none' }} onChange={e => e.target.files && handleUploadVideos(editingId!, e.target.files)} />
+                                        <input ref={videoUploadRef} type="file" multiple accept={VIDEO_ACCEPT} title="Upload videos" style={{ display: 'none' }} onChange={e => e.target.files && handleUploadVideos(editingId!, e.target.files)} />
                                         <button style={s.smallBtn} onClick={() => videoUploadRef.current?.click()} disabled={mediaUploading}>+ Add Videos</button>
                                     </div>
                                 </div>
@@ -2758,7 +2808,7 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
                                                             onClick={() => { setSharingDocId(sharingDocId === doc.id ? null : doc.id); setSharePhone(''); setShareEmail(''); setShareName(''); }}
                                                         >Share</button>
                                                         <a
-                                                            href={doc.file_url}
+                                                            href={inventoryDocumentUrl(editingId!, doc.id)}
                                                             target="_blank"
                                                             rel="noreferrer"
                                                             style={{ ...s.smallBtn, textDecoration: 'none', color: 'var(--text-link)' }}
@@ -3256,7 +3306,7 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
                     try {
                         const item = await getInventoryItem(invId);
                         if (item) handleEdit(item);
-                    } catch { /* Leave the list visible if the detail reload fails. */ }
+                    } catch {}
                 }}
             />
 

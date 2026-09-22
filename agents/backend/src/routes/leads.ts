@@ -26,6 +26,8 @@ const matchingEngine = new MatchingEngine();
 import { buildContactVisibilityFilter, buildFullContactVisibilityFilter } from '../middleware/contact_visibility';
 import { captureRouteError } from '../utils/capture';
 import logger from '../utils/logger';
+import { syncContactShares } from '../services/contact_shares';
+import { applyLeadStageEdit } from '../services/lead_stage_sync';
 
 const PRIVILEGED_ROLES = ['super_boss', 'manager'];
 
@@ -249,7 +251,7 @@ router.get('/recent-external', async (req: any, res) => {
             // of this file and applyPartnerLeadScope.
             where.AND = [
                 ...(where.AND || []),
-                { OR: [{ assigned_agent_id: agentId }, { shared_with_ids: { has: agentId } }] },
+                { OR: [{ assigned_agent_id: agentId }, { shares: { some: { agent_id: agentId } } }] },
             ];
         }
 
@@ -259,7 +261,7 @@ router.get('/recent-external', async (req: any, res) => {
         // lead can sit thousands of rows down. (2026-08-09)
         // ⚠ where.AND, never where.OR — see the note above.
         if (String(req.query.shared_with_me) === 'true') {
-            where.AND = [...(where.AND || []), { shared_with_ids: { has: req.agent.id } }];
+            where.AND = [...(where.AND || []), { shares: { some: { agent_id: req.agent.id } } }];
         }
 
         // PARTNER: only their own leads (referred by OR assigned to them / their sub-agents).
@@ -361,12 +363,42 @@ router.get('/recent-external', async (req: any, res) => {
         const sortDir: 'asc' | 'desc' = String(req.query.direction || 'desc') === 'asc' ? 'asc' : 'desc';
         const leadOrderBy = (LEAD_SORTS[sortKey] || LEAD_SORTS.date)(sortDir);
 
+        // "Recently shared with me" (2026-08-09, phase 4c) — the point of the whole
+        // contact_shares table. Deliberately NOT in LEAD_SORTS: Prisma cannot orderBy a field
+        // across a to-MANY relation, so this cannot be expressed as a Prisma orderBy at all.
+        //
+        // It also implies the shared-with-me restriction, because "when was this shared with
+        // me" is undefined for a lead that was never shared with the viewer — ranking their
+        // other 5,000 leads by a null share time would be noise, not an ordering.
+        //
+        // The candidate set is therefore bounded by the viewer's own share count (largest on
+        // prod today: 12), which is why the page is ordered and sliced in memory instead of by
+        // the DB. SHARE_SORT_CAP keeps that bounded if someone ever accumulates thousands.
+        const SHARE_SORT_CAP = 2000;
+        let shareRank: Map<string, number> | null = null;
+        if (sortKey === 'shared_at') {
+            const shareRows = await prisma.contactShare.findMany({
+                where: { agent_id: req.agent.id },
+                orderBy: { shared_at: sortDir },
+                select: { phone_number: true },
+                take: SHARE_SORT_CAP + 1,
+            });
+            if (shareRows.length > SHARE_SORT_CAP) {
+                logger.warn(`[Leads] shared_at sort capped at ${SHARE_SORT_CAP} for agent ${req.agent.id}; older shares omitted from this ordering`);
+                shareRows.length = SHARE_SORT_CAP;
+            }
+            const phones = shareRows.map(r => r.phone_number);
+            shareRank = new Map(phones.map((ph, i) => [ph, i]));
+            where.AND = [...(where.AND || []), { phone_number: { in: phones } }];
+        }
+
         const [leads, total] = await Promise.all([
             prisma.contact.findMany({
                 where,
                 orderBy: leadOrderBy,
-                take: limit,
-                skip: (page - 1) * limit,
+                // shared_at re-orders below, so it must not receive a pre-paginated slice.
+                take: shareRank ? undefined : limit,
+                skip: shareRank ? undefined : (page - 1) * limit,
                 select: {
                     phone_number: true,
                     name: true,
@@ -408,7 +440,17 @@ router.get('/recent-external', async (req: any, res) => {
             prisma.contact.count({ where }),
         ]);
 
-        res.json({ leads, total, page, limit });
+        // Apply the share ordering and paginate here rather than in SQL (see above).
+        let pageLeads = leads;
+        if (shareRank) {
+            const start = (page - 1) * limit;
+            pageLeads = [...leads]
+                .sort((a, b) => (shareRank!.get(a.phone_number) ?? Number.MAX_SAFE_INTEGER)
+                              - (shareRank!.get(b.phone_number) ?? Number.MAX_SAFE_INTEGER))
+                .slice(start, start + limit);
+        }
+
+        res.json({ leads: pageLeads, total, page, limit });
     } catch (error) {
         captureRouteError(error, req, { route: 'leads#2' });
         res.status(500).json({ error: (error as Error).message });
@@ -425,7 +467,22 @@ router.patch('/:phone/status', async (req, res) => {
 
         const updateData: any = {};
         if (lead_status) updateData.lead_status = lead_status;
-        if (lifecycle_stage) updateData.lifecycle_stage = lifecycle_stage;
+        // Stage edits go through the DEAL (2026-08-09, phase 3). Writing lifecycle_stage here
+        // directly is what let the lead page instantly contradict the deal. applyLeadStageEdit
+        // transitions the governing deal and the sync hook writes the stage back; it only
+        // returns handled:false for a lead with no deal (the 399 supply-side contacts), which
+        // is the one case we still write ourselves.
+        if (lifecycle_stage) {
+            try {
+                const r = await applyLeadStageEdit({ phone, requestedStage: lifecycle_stage, actorId: (req as any).agent?.id || 'system' });
+                if (!r.handled) updateData.lifecycle_stage = lifecycle_stage;
+            } catch (e: any) {
+                // The state machine rejects illegal jumps and its message already names the
+                // allowed next stages — surface it as a 400, same as the Deal Pipeline does.
+                if (e?.statusCode === 400) return res.status(400).json({ error: e.message });
+                throw e;
+            }
+        }
         if (notes !== undefined) updateData.notes = notes;
 
         const contact = await prisma.contact.update({
@@ -475,7 +532,13 @@ router.post('/:phone/share', async (req: any, res) => {
         const valid = await prisma.agent.findMany({ where: { id: { in: agent_ids }, status: 'active' }, select: { id: true } });
         const next = Array.from(new Set(valid.map(a => a.id).filter(id => id && id !== contact.assigned_agent_id)));
         const previous: string[] = contact.shared_with_ids || [];
-        await prisma.contact.update({ where: { phone_number: phone }, data: { shared_with_ids: next } });
+        // Dual-write (2026-08-09, phase 4a): the array stays the source of truth for every READ,
+        // but contact_shares records WHO shared and WHEN, which the array cannot. Same transaction
+        // so the two can never disagree. Reads move to the relation in 4b.
+        await prisma.$transaction(async (tx) => {
+            await tx.contact.update({ where: { phone_number: phone }, data: { shared_with_ids: next } });
+            await syncContactShares(tx, { tenantId: contact.tenant_id, phone, next, sharedBy: actor.id });
+        });
         await prisma.interaction.create({ data: {
             tenant_id: contact.tenant_id, phone_number: phone, channel: 'system', direction: 'outbound',
             event_type: 'lead_shared', content: `Lead shared with ${next.length} teammate(s)`,
@@ -730,11 +793,20 @@ router.post('/:phone/convert-to-partner', checkPermission('act_on_deals'), async
         if (!contact) return res.status(404).json({ error: 'Lead not found' });
 
         // Idempotent: already a partner → no-op.
-        if (contact.contact_type === 'PARTNER_AGENT') {
-            const existing = await prisma.partnerAgent.findUnique({
-                where: { phone_number: phone }, select: { id: true },
-            });
-            return res.json({ success: true, partner_id: existing?.id ?? null, reframed_deal_ids: [], already_partner: true });
+        //
+        // 🔴 Keyed on the PartnerAgent row, NOT contact_type (fixed 2026-08-10). The old check was
+        // `contact.contact_type === 'PARTNER_AGENT'`, which never fired for the leads that matter:
+        // the 2026-07-28 `_keepDemand` guard in partner_auto_create.ts deliberately refuses to move a
+        // live BUYER/TENANT contact to that type (it was hiding real leads from the Leads list). So a
+        // second click on a real buyer re-ran the whole conversion — re-tagging deals and re-sending
+        // the customer a partner welcome WhatsApp.
+        // Proven on prod: +919555562204 (a HOT buyer) had one partner row but TWO
+        // `converted_to_partner` interactions, 09:12 on 4 Aug, from two different agents.
+        const existingPartner = await prisma.partnerAgent.findUnique({
+            where: { phone_number: phone }, select: { id: true },
+        });
+        if (existingPartner) {
+            return res.json({ success: true, partner_id: existingPartner.id, reframed_deal_ids: [], already_partner: true });
         }
 
         const partnerName = (name || contact.name || '').trim();
@@ -760,9 +832,13 @@ router.post('/:phone/convert-to-partner', checkPermission('act_on_deals'), async
         // 2) Reframe the contact's OPEN deals as this partner's deals.
         const openDeals = await prisma.transaction.findMany({
             where: { demand_contact_id: phone, status: { notIn: ['CLOSED_WON', 'CLOSED_LOST'] } },
-            select: { id: true },
+            select: { id: true, owning_manager_id: true },
         });
         const dealIds = openDeals.map(d => d.id);
+        // Snapshot what we are about to overwrite so a later revert restores it exactly rather
+        // than guessing the owner (2026-08-10).
+        const dealPrevOwners: Record<string, string | null> = {};
+        for (const d of openDeals) dealPrevOwners[d.id] = d.owning_manager_id ?? null;
 
         await prisma.$transaction([
             prisma.contact.update({
@@ -787,7 +863,12 @@ router.post('/:phone/convert-to-partner', checkPermission('act_on_deals'), async
                     direction: 'outbound',
                     event_type: 'converted_to_partner',
                     content: `Converted ${contact.name || phone} to Partner Agent by ${actorName}. Reframed ${dealIds.length} deal(s).`,
-                    metadata: { partner_id: partnerId, deal_ids: dealIds, actor_id: actor.id, partner_category: category },
+                    metadata: {
+                        partner_id: partnerId, deal_ids: dealIds, actor_id: actor.id, partner_category: category,
+                        // Revert inputs (2026-08-10) — the reverse path reads these instead of guessing.
+                        previous_contact_type: contact.contact_type,
+                        deal_prev_owners: dealPrevOwners,
+                    },
                 },
             }),
         ]);
@@ -1895,7 +1976,22 @@ router.patch('/:phone/requirements', async (req, res) => {
         if (category_id !== undefined) updateData.category_id = category_id || null;
         if (sub_category_id !== undefined) updateData.sub_category_id = sub_category_id || null;
         if (type_id !== undefined) updateData.type_id = type_id || null;
-        if (lifecycle_stage !== undefined) updateData.lifecycle_stage = lifecycle_stage;
+        // Stage edits go through the DEAL (2026-08-09, phase 3). Writing lifecycle_stage here
+        // directly is what let the lead page instantly contradict the deal. applyLeadStageEdit
+        // transitions the governing deal and the sync hook writes the stage back; it only
+        // returns handled:false for a lead with no deal (the 399 supply-side contacts), which
+        // is the one case we still write ourselves.
+        if (lifecycle_stage !== undefined && lifecycle_stage !== null && lifecycle_stage !== '') {
+            try {
+                const r = await applyLeadStageEdit({ phone, requestedStage: lifecycle_stage, actorId: (req as any).agent?.id || 'system' });
+                if (!r.handled) updateData.lifecycle_stage = lifecycle_stage;
+            } catch (e: any) {
+                // The state machine rejects illegal jumps and its message already names the
+                // allowed next stages — surface it as a 400, same as the Deal Pipeline does.
+                if (e?.statusCode === 400) return res.status(400).json({ error: e.message });
+                throw e;
+            }
+        }
         if (notes !== undefined) updateData.notes = notes;
         if (timeline !== undefined) updateData.timeline = timeline || null;
         if (intent !== undefined) updateData.intent = intent || null;

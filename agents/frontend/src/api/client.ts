@@ -338,6 +338,30 @@ export const getStates = async () => {
     return res.data;
 };
 
+/**
+ * Roster for FILTER CHIPS and ASSIGN DROPDOWNS: active members only, sorted by NAME.
+ *
+ * Why: /api/team/members and /members-list both order by [role asc, name asc].
+ * 'employee' < 'manager' < 'super_boss', so every manager/super_boss sorts BELOW all
+ * ~35 employees. In a flat chip list that reads as "the name is missing" — Ashwani
+ * (manager) sat at position 36 of 41 instead of 3. Role order is right for the Team
+ * Management table, wrong for a flat picker, so we re-sort here instead of changing the API.
+ *
+ * Also drops status!=='active': those 6 agents own 0 listings and 0 contacts, so filtering
+ * by them can only return nothing. /members-list already filters server-side and omits
+ * `status`, hence the `!m.status` guard.
+ *
+ * Objects are passed through UNCHANGED (filter + sort only) so each caller keeps its own
+ * element type — reshaping here broke the TeamMember type in ExternalLeads.
+ */
+export const rosterForPickers = (raw: any): any[] => {
+    const list: any[] = Array.isArray(raw) ? raw : raw?.data || raw?.members || [];
+    return list
+        .filter((m: any) => !m.status || m.status === 'active')
+        .slice()
+        .sort((a: any, b: any) => String(a?.name || '').localeCompare(String(b?.name || '')));
+};
+
 export const getTeamMembers = async () => {
     const res = await client.get('/api/team/members');
     return res.data;
@@ -414,6 +438,13 @@ export const createPartner = async (data: {
 
 export const verifyPartner = async (id: string, verify: boolean) => {
     const res = await client.patch(`/api/partners/${id}/verify`, { verify });
+    return res.data;
+};
+
+// Undo an accidental lead -> partner conversion. 409 when the partner has referred inventory,
+// commission entries or sub-agents — the caller shows that message verbatim.
+export const revertPartnerToCustomer = async (id: string) => {
+    const res = await client.post(`/api/partners/${id}/revert-to-customer`);
     return res.data;
 };
 
@@ -722,6 +753,18 @@ export const deleteInventoryDocument = async (inventoryId: string, documentId: s
     const res = await client.delete(`/api/inventory/${inventoryId}/documents/${documentId}`);
     return res.data;
 };
+
+/**
+ * Absolute URL for reading an inventory document.
+ *
+ * Documents are the owner's paperwork (title deeds, registries, NOCs) and are NOT public:
+ * the raw /uploads path is blocked server-side, so this authenticated route is the only
+ * way to read one. A same-site <a> / <img> sends the session cookie automatically, and the
+ * server re-checks that the viewer is the listing's own agent or a super boss.
+ *   thumb -> the *_thumb.* preview, for showing an image document inline
+ */
+export const inventoryDocumentUrl = (inventoryId: string, documentId: string, thumb = false) =>
+    `${baseURL}/api/inventory/${inventoryId}/documents/${documentId}/download?${thumb ? 'thumb=1' : 'inline=1'}`;
 
 // ─── PARTNER TEAMS (2026-07-13) — a partner company manages its OWN sub-agents. ────────────────
 // Owner-only on the server (requirePartnerOwner). The roster returned here holds PartnerAgent ids —

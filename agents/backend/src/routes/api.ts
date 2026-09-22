@@ -653,7 +653,9 @@ router.get('/partners/search', async (req: any, res) => {
 // GET /api/partners - List partner agents (visibility: super_boss=all, others=own managed)
 router.get('/partners', checkPermission('manage_agents'), async (req, res) => {
     try {
-        const whereClause: any = {};
+        // Reverted partners are hidden entirely (2026-08-10). Filtering on reverted_at — NOT on
+        // status — deliberately: the 13 genuinely SUSPENDED partners must stay visible and manageable.
+        const whereClause: any = { reverted_at: null };
         // Non-super_boss only see their managed partners
         if (req.agent!.role !== 'super_boss') {
             whereClause.managing_agent_id = req.agent!.id;
@@ -788,6 +790,110 @@ router.patch('/partners/:id/verify', checkPermission('manage_agents'), async (re
 });
 
 // PATCH /api/partners/:id/status - Update partner status
+// POST /api/partners/:id/revert-to-customer
+// Undo an accidental lead -> partner conversion. The convert endpoint is forward-only and staff
+// click it by mistake (16 partner agents on prod are still BUYER/TENANT contacts, one a HOT buyer).
+//
+// Refuses rather than half-reverts when the partner has accumulated real history. Deactivates
+// instead of deleting: transactions reference demand_handler_id with NO foreign key, so a delete
+// would leave dangling ids. See docs/runbooks/partner-conversion.md.
+router.post('/partners/:id/revert-to-customer', checkPermission('manage_agents'), async (req: any, res) => {
+    try {
+        const partner = await prisma.partnerAgent.findUnique({
+            where: { id: req.params.id },
+            select: { id: true, name: true, phone_number: true, reverted_at: true },
+        });
+        if (!partner) return res.status(404).json({ error: 'Partner agent not found' });
+        if (partner.reverted_at) return res.json({ success: true, already_reverted: true });
+
+        // Block on real history. Half-reverting would strand these records.
+        const [inv, comm, subs] = await Promise.all([
+            prisma.inventory.count({ where: { referral_partner_id: partner.id } }),
+            prisma.dealCommissionEntry.count({ where: { partner_agent_id: partner.id } }),
+            prisma.partnerAgent.count({ where: { parent_partner_id: partner.id } }),
+        ]);
+        const blockers: string[] = [];
+        if (inv) blockers.push(inv + ' referred ' + (inv === 1 ? 'property' : 'properties'));
+        if (comm) blockers.push(comm + ' commission ' + (comm === 1 ? 'entry' : 'entries'));
+        if (subs) blockers.push(subs + ' sub-agent' + (subs === 1 ? '' : 's'));
+        if (blockers.length) {
+            return res.status(409).json({
+                error: 'Cannot revert ' + partner.name + ': they have ' + blockers.join(', ') + '. Reassign or remove those first.',
+                blockers: { referred_inventory: inv, commission_entries: comm, sub_agents: subs },
+            });
+        }
+
+        const contact = await prisma.contact.findUnique({
+            where: { phone_number: partner.phone_number },
+            select: { contact_type: true, assigned_agent_id: true, tenant_id: true },
+        });
+
+        // What the conversion overwrote. Conversions from 2026-08-10 record this; older ones do
+        // not, hence the inference fallback below.
+        const convLog = await prisma.interaction.findFirst({
+            where: { phone_number: partner.phone_number, event_type: 'converted_to_partner' },
+            orderBy: { created_at: 'desc' },
+            select: { metadata: true },
+        });
+        const meta: any = convLog?.metadata ?? {};
+        const dealIds: string[] = Array.isArray(meta.deal_ids) ? meta.deal_ids : [];
+        const prevOwners: Record<string, string | null> = meta.deal_prev_owners ?? {};
+
+        // Restore contact_type: recorded value > leave a live demand type alone > infer.
+        let restoredType: string | null = meta.previous_contact_type ?? null;
+        if (!restoredType) {
+            const cur = String(contact?.contact_type || '');
+            if (['BUYER', 'TENANT'].includes(cur)) {
+                restoredType = cur; // _keepDemand never flipped it — nothing to restore
+            } else {
+                const ownsInventory = await prisma.inventory.count({ where: { owner_phone: partner.phone_number } });
+                const rentDeal = await prisma.transaction.count({ where: { demand_contact_id: partner.phone_number, type: 'RENT' } });
+                const saleDeal = await prisma.transaction.count({ where: { demand_contact_id: partner.phone_number, type: 'SALE' } });
+                restoredType = ownsInventory ? 'LANDLORD' : rentDeal ? 'TENANT' : saleDeal ? 'BUYER' : 'UNKNOWN';
+            }
+        }
+
+        const ops: any[] = [
+            prisma.partnerAgent.update({
+                where: { id: partner.id },
+                data: { status: 'SUSPENDED', reverted_at: new Date(), reverted_by: req.agent!.id },
+            }),
+            prisma.contact.update({
+                where: { phone_number: partner.phone_number },
+                data: { contact_type: restoredType as any, verification_status: null, updated_at: new Date() },
+            }),
+        ];
+        // Un-tag only the deals the conversion itself changed — never a deal it did not create.
+        for (const id of dealIds) {
+            ops.push(prisma.transaction.update({
+                where: { id },
+                data: {
+                    deal_scenario: 'DIRECT_INTERNAL',
+                    demand_handler_type: 'DIRECT',
+                    demand_handler_id: null,
+                    owning_manager_id: prevOwners[id] ?? contact?.assigned_agent_id ?? null,
+                    updated_at: new Date(),
+                },
+            }));
+        }
+        ops.push(prisma.interaction.create({
+            data: {
+                tenant_id: contact?.tenant_id || 'default',
+                phone_number: partner.phone_number,
+                channel: 'admin', direction: 'outbound', event_type: 'reverted_to_customer',
+                content: 'Reverted ' + partner.name + ' from Partner Agent back to ' + restoredType + '. Restored ' + dealIds.length + ' deal(s).',
+                metadata: { partner_id: partner.id, restored_contact_type: restoredType, deal_ids: dealIds, actor_id: req.agent!.id },
+            },
+        }));
+        await prisma.$transaction(ops);
+
+        res.json({ success: true, partner_id: partner.id, restored_contact_type: restoredType, restored_deal_ids: dealIds });
+    } catch (error) {
+        captureRouteError(error, req, { route: 'api#partner-revert' });
+        res.status(500).json({ error: (error as Error).message });
+    }
+});
+
 router.patch('/partners/:id/status', checkPermission('manage_agents'), async (req, res) => {
     const { id } = req.params;
     const { status } = req.body;

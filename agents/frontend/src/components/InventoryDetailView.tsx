@@ -46,6 +46,7 @@ export function InventoryDetailView({ inventoryId, onClose, onEdit }: Props) {
 
     useEffect(() => {
         let alive = true;
+        setLoading(true);
         Promise.all([
             client.get(`/api/inventory/${inventoryId}`),
             client.get(`/api/inventory/${inventoryId}/contacts`).catch(() => ({ data: null })),
@@ -57,7 +58,7 @@ export function InventoryDetailView({ inventoryId, onClose, onEdit }: Props) {
         return () => { alive = false; };
     }, [inventoryId]);
 
-    const call = (phone?: string | null) => { const d = toDialablePhone(phone); if (d) window.location.assign(`tel:${d}`); };
+    const call = (phone?: string | null) => { const d = toDialablePhone(phone); if (d) window.location.href = `tel:${d}`; };
     const wa = (phone?: string | null) => { const d = toDialablePhone(phone); if (d) window.open(`https://wa.me/${d.slice(1)}`, '_blank'); };
 
     const formatPrice = (p?: number, intent?: string) => {
