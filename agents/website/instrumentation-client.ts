@@ -1,5 +1,4 @@
-// GlitchTip error reporting (browser). File is named sentry.* because @sentry/nextjs
-// auto-discovers it by that exact filename — do not rename. Transport is wire-compatible.
+// GlitchTip error reporting (browser). Transport is wire-compatible.
 import * as SentrySDK from "@sentry/nextjs";
 
 // Accepts NEXT_PUBLIC_GLITCHTIP_DSN (new) or NEXT_PUBLIC_SENTRY_DSN (legacy) — drop the legacy fallback once all servers are migrated.
@@ -19,3 +18,5 @@ if (GLITCHTIP_DSN) {
     ],
   });
 }
+
+export const onRouterTransitionStart = SentrySDK.captureRouterTransitionStart;

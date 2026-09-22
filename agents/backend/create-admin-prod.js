@@ -5,10 +5,12 @@ const prisma = new PrismaClient();
 
 async function createAdmin() {
   const phone = '+919958860411';
-  const password = 'noteplz@123';
-  const hashedPassword = await bcrypt.hash(password, 10);
 
   try {
+    const password = process.env.ADMIN_PASSWORD;
+    if (!password) throw new Error('ADMIN_PASSWORD must be set');
+    const hashedPassword = await bcrypt.hash(password, 10);
+
     // Find or create tenant
     let tenant = await prisma.tenant.findFirst();
     if (!tenant) {

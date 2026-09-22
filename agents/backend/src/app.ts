@@ -387,7 +387,7 @@ app.use('/api/inventory', apiLimiter, inventoryRouter); // Also mount under /api
 
 // Health Check — Enhanced with circuit breaker + memory stats + queue stats
 import { geminiCircuit, whatsappCircuit } from './utils/circuit_breaker';
-import { cacheGet } from './utils/redis';
+import { isRedisHealthy } from './utils/redis';
 import { getQueueStats } from './queues/index';
 
 app.get('/health', async (req, res) => {
@@ -413,10 +413,12 @@ app.get('/health', async (req, res) => {
     // Redis check
     try {
         const start = Date.now();
-        const pong = await cacheGet('health_ping');
-        checks.redis = { status: pong !== null || true ? 'connected' : 'unknown', latency_ms: Date.now() - start };
+        const connected = await isRedisHealthy();
+        checks.redis = { status: connected ? 'connected' : 'unavailable', latency_ms: Date.now() - start };
+        if (!connected) isHealthy = false;
     } catch {
         checks.redis = { status: 'unavailable' };
+        isHealthy = false;
     }
 
     // Circuit breaker states

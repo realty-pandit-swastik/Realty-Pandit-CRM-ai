@@ -57,3 +57,15 @@ vi.mock('../utils/logger', () => ({
         debug: vi.fn(),
     }
 }));
+
+vi.mock('../utils/redis', () => ({
+    cacheGet: vi.fn().mockResolvedValue(null),
+    cacheSet: vi.fn().mockResolvedValue(undefined),
+    cacheDel: vi.fn().mockResolvedValue(undefined),
+    isRedisHealthy: vi.fn().mockResolvedValue(true),
+    default: {
+        get: vi.fn().mockResolvedValue(null),
+        set: vi.fn().mockResolvedValue(undefined),
+        del: vi.fn().mockResolvedValue(undefined),
+    },
+}));

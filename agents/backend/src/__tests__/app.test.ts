@@ -24,6 +24,16 @@ describe('App Security', () => {
         expect(res.body.status).toBe('ok');
     });
 
+    it('reports degraded when Redis is unavailable', async () => {
+        const { isRedisHealthy } = await import('../utils/redis');
+        vi.mocked(isRedisHealthy).mockResolvedValueOnce(false);
+
+        const res = await request(app).get('/health');
+        expect(res.status).toBe(503);
+        expect(res.body.status).toBe('degraded');
+        expect(res.body.redis.status).toBe('unavailable');
+    });
+
     it('root route serves the API status page', async () => {
         const res = await request(app).get('/');
         expect(res.status).toBe(200);

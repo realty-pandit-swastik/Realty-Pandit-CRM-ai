@@ -5,7 +5,7 @@
  * 2026-08-06 — especially the hangup lag, which is the one most likely to cause
  * a production incident (dialling over a live call).
  *
- * Run: node test/protocol.test.ts
+ * Run: npm test
  */
 
 process.env.CALL_GATEWAY_PORT ??= '7099';
@@ -223,6 +223,23 @@ async function main(): Promise<void> {
     console.log('\n=== 7. auth ===');
     const noAuth = await fetch(`${BASE}/lines`);
     check('internal API rejects missing token', noAuth.status === 401);
+
+    const oversized = await api('/calls', {
+        method: 'POST',
+        body: JSON.stringify({ number: '+919958860411', padding: 'x'.repeat(65 * 1024) }),
+    });
+    check('oversized internal request rejected', oversized.status === 413, `got ${oversized.status}`);
+
+    const attacker = new WebSocket(`ws://127.0.0.1:${PORT}/phone`);
+    await new Promise<void>((resolve, reject) => {
+        attacker.onopen = () => resolve();
+        attacker.onerror = () => reject(new Error('attacker ws failed'));
+    });
+    attacker.send(JSON.stringify({ type: 'hello', deviceId: 'attacker', deviceToken: 'wrong' }));
+    await sleep(100);
+    h = await api('/health');
+    check('bad websocket handshake cannot evict the authenticated phone', h.body.deviceId === 'fake-lancelot');
+    attacker.close();
 
     console.log('\n=== 8. disconnect ===');
     phone.ws.close();

@@ -2,6 +2,7 @@ import Redis from 'ioredis';
 import logger from './logger';
 
 let redis: Redis | null = null;
+const REDIS_HEALTH_TIMEOUT_MS = 1_000;
 
 function getRedis(): Redis | null {
     if (redis) return redis;
@@ -57,6 +58,21 @@ export async function cacheGet(key: string): Promise<string | null> {
         return await client.get(key);
     } catch {
         return null;
+    }
+}
+
+/** Redis backs queues, deduplication, and session flows; health must not report it as optional. */
+export async function isRedisHealthy(): Promise<boolean> {
+    const client = getRedis();
+    if (!client) return false;
+    try {
+        const result = await Promise.race([
+            client.ping(),
+            new Promise<null>((resolve) => setTimeout(() => resolve(null), REDIS_HEALTH_TIMEOUT_MS)),
+        ]);
+        return result === 'PONG';
+    } catch {
+        return false;
     }
 }
 

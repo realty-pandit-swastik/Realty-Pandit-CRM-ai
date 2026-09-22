@@ -5,10 +5,12 @@ const prisma = new PrismaClient();
 
 async function updatePassword() {
   const phone = '+919958860411';
-  const password = 'noteplz@123';
-  const hashedPassword = await bcrypt.hash(password, 10);
 
   try {
+    const password = process.env.ADMIN_PASSWORD;
+    if (!password) throw new Error('ADMIN_PASSWORD must be set');
+    const hashedPassword = await bcrypt.hash(password, 10);
+
     const agent = await prisma.agent.findFirst({ where: { phone } });
 
     if (!agent) {
@@ -24,7 +26,6 @@ async function updatePassword() {
 
     console.log('✅ Password updated for:', agent.name);
     console.log('Phone:', phone);
-    console.log('New password: noteplz@123');
 
     await prisma.$disconnect();
   } catch (error) {

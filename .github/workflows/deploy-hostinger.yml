@@ -27,6 +27,7 @@ concurrency:
 jobs:
   backend-check:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     defaults:
       run:
         working-directory: agents/backend
@@ -53,8 +54,8 @@ jobs:
       AGENT_JWT_SECRET: ci-test-agent-jwt-secret
       NODE_ENV: test
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: '20'
           cache: npm
@@ -66,12 +67,13 @@ jobs:
 
   frontend-check:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     defaults:
       run:
         working-directory: agents/frontend
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: '20'
           cache: npm
@@ -83,6 +85,7 @@ jobs:
 
   website-check:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     defaults:
       run:
         working-directory: agents/website
@@ -90,8 +93,8 @@ jobs:
       NEXT_PUBLIC_API_URL: http://localhost:7071
       NEXT_PUBLIC_SITE_URL: http://localhost:3000
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: '20'
           cache: npm
@@ -105,6 +108,7 @@ jobs:
     # Keep automatic delivery off until the server preflight in the handover is complete.
     if: github.ref == 'refs/heads/main' && vars.HOSTINGER_GITHUB_DEPLOY_ENABLED == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     needs: [backend-check, frontend-check, website-check]
     environment: production
     env:
@@ -116,7 +120,7 @@ jobs:
       HOSTINGER_DEPLOY_PATH: ${{ secrets.HOSTINGER_DEPLOY_PATH }}
       RUN_MIGRATIONS: ${{ inputs.run_migrations && '1' || '0' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Validate deployment configuration
         run: |

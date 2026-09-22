@@ -6,16 +6,12 @@ import type { NextRequest } from 'next/server';
  *
  * Property slugs were re-generated to drop the flat/plot number. Any old, shared, or
  * indexed URL (a leaky old slug, a bare UUID, or an RP-* display_id) is 308-redirected
- * to the clean canonical /properties/<slug>. This lives in middleware (not the page
- * component) because under Next 16 streaming an in-component redirect() renders the page
- * shell instead of emitting an HTTP redirect; middleware runs before any render.
- *
- * The backend resolver matches by the trailing 12-hex id, so the lookup below resolves
- * old slugs too, and the redirect target (the canonical slug) never loops.
+ * to the clean canonical /properties/<slug>. The proxy runs before render so it can
+ * issue a true HTTP redirect rather than rendering a page shell first.
  */
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.realtypandit.in';
 
-export async function middleware(req: NextRequest) {
+export async function proxy(req: NextRequest) {
     const m = req.nextUrl.pathname.match(/^\/properties\/([^/]+)\/?$/);
     if (!m) return NextResponse.next();
 
@@ -33,7 +29,7 @@ export async function middleware(req: NextRequest) {
             return NextResponse.redirect(url, 308);
         }
     } catch {
-        // network/timeout — let the request through; the page still renders + canonical tag points clean
+        // Network/timeout — let the request through; the page's canonical tag stays correct.
     }
     return NextResponse.next();
 }
