@@ -24,8 +24,16 @@ import { LineManager } from './lines.ts';
 import { CommandTracker } from './commands.ts';
 
 const PORT = Number(process.env.CALL_GATEWAY_PORT ?? 7075);
-const DEVICE_TOKEN = process.env.CALL_GATEWAY_DEVICE_TOKEN ?? 'dev-token';
-const INTERNAL_TOKEN = process.env.CALL_GATEWAY_INTERNAL_TOKEN ?? 'dev-internal';
+const MAX_REQUEST_BODY_BYTES = 64 * 1024;
+
+function requireEnv(name: string): string {
+    const value = process.env[name]?.trim();
+    if (!value) throw new Error(`Missing required environment variable: ${name}`);
+    return value;
+}
+
+const DEVICE_TOKEN = requireEnv('CALL_GATEWAY_DEVICE_TOKEN');
+const INTERNAL_TOKEN = requireEnv('CALL_GATEWAY_INTERNAL_TOKEN');
 const HEARTBEAT_SEC = 20;
 
 type CallOutcome =
@@ -225,14 +233,26 @@ function json(res: http.ServerResponse, code: number, body: unknown): void {
     res.end(payload);
 }
 
-async function readBody(req: http.IncomingMessage): Promise<any> {
+async function readBody(req: http.IncomingMessage): Promise<{ body: Record<string, unknown>; tooLarge: boolean }> {
     const chunks: Buffer[] = [];
-    for await (const c of req) chunks.push(c as Buffer);
-    if (!chunks.length) return {};
+    let size = 0;
+    for await (const chunk of req) {
+        const buffer = chunk as Buffer;
+        size += buffer.length;
+        if (size <= MAX_REQUEST_BODY_BYTES) chunks.push(buffer);
+    }
+    if (size > MAX_REQUEST_BODY_BYTES) return { body: {}, tooLarge: true };
+    if (!chunks.length) return { body: {}, tooLarge: false };
     try {
-        return JSON.parse(Buffer.concat(chunks).toString());
+        const parsed: unknown = JSON.parse(Buffer.concat(chunks).toString());
+        return {
+            body: parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+                ? parsed as Record<string, unknown>
+                : {},
+            tooLarge: false,
+        };
     } catch {
-        return {};
+        return { body: {}, tooLarge: false };
     }
 }
 
@@ -259,8 +279,9 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (url.pathname === '/calls' && req.method === 'POST') {
-        const body = await readBody(req);
-        const number: string = body.number ?? '';
+        const { body, tooLarge } = await readBody(req);
+        if (tooLarge) return json(res, 413, { error: 'request body too large' });
+        const number = typeof body.number === 'string' ? body.number : '';
         if (!/^\+\d{8,15}$/.test(number)) {
             // Normalisation is the caller's job — we refuse ambiguous input rather
             // than guess, because dialling the wrong number is unrecoverable.
@@ -355,17 +376,48 @@ const server = http.createServer(async (req, res) => {
 const wss = new WebSocketServer({ server, path: '/phone' });
 
 wss.on('connection', (ws) => {
-    if (phone && phone.readyState === phone.OPEN) {
-        // One handset per gateway for now. A reconnect supersedes the stale socket.
-        log('replacing existing phone socket');
-        phone.close(4000, 'superseded');
-    }
-    phone = ws;
-    log('phone socket connected');
+    let authenticated = false;
+    const authTimer = setTimeout(() => {
+        if (!authenticated) {
+            log('closing phone socket that did not authenticate');
+            ws.close(4001, 'authentication required');
+        }
+    }, 10_000);
+    authTimer.unref?.();
 
-    ws.on('message', (data) => onPhoneMessage(data.toString()));
+    ws.on('message', (data) => {
+        const raw = data.toString();
+        if (!authenticated) {
+            let hello: PhoneToServer;
+            try {
+                hello = JSON.parse(raw);
+            } catch {
+                ws.close(4001, 'invalid handshake');
+                return;
+            }
+            if (hello.type !== 'hello' || hello.deviceToken !== DEVICE_TOKEN) {
+                log('AUTH FAIL from unauthenticated phone socket');
+                ws.close(4001, 'bad device token');
+                return;
+            }
+
+            // Authenticate before replacing the active handset. Otherwise any
+            // internet client can connect to /phone and evict the real device.
+            const previousPhone = phone;
+            phone = ws;
+            authenticated = true;
+            clearTimeout(authTimer);
+            if (previousPhone && previousPhone.readyState === previousPhone.OPEN) {
+                log('replacing authenticated phone socket');
+                previousPhone.close(4000, 'superseded');
+            }
+            log('authenticated phone socket connected');
+        }
+        onPhoneMessage(raw);
+    });
 
     ws.on('close', (code, reason) => {
+        clearTimeout(authTimer);
         log('phone socket closed', code, reason.toString());
         if (phone === ws) {
             phone = null;

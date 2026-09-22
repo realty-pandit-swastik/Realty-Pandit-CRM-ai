@@ -3,6 +3,8 @@ agents/backend/node_modules/
 agents/frontend/node_modules/
 agents/website/node_modules/
 .graphifyignore
+.gitignore
+.codex
 
 # Build outputs
 agents/frontend/dist/
@@ -13,6 +15,9 @@ agents/website/out/
 *.tar.gz
 
 # Environment files — NEVER commit
+.env
+.env.*
+!.env.example
 agents/backend/.env
 agents/backend/.env.*
 agents/website/.env
@@ -76,3 +81,10 @@ generate_*.py
 /agents/backend/create_admin.ts
 /agents/backend/create_mock_property.ts
 /agents/backend/fix_admin.ts
+
+# QA tooling — generated, never commit
+agents/browser-qa/node_modules/
+agents/browser-qa/screenshots/
+
+# Archives — never commit
+*.zip

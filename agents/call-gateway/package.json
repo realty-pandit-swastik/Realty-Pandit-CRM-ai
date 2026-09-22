@@ -5,8 +5,11 @@
   "type": "module",
   "description": "VPS bridge between the Realty Pandit Android call agent and the CRM backend",
   "scripts": {
-    "start": "node src/server.ts",
-    "test": "node test/protocol.test.ts"
+    "start": "node --experimental-strip-types src/server.ts",
+    "test": "node --experimental-strip-types test/protocol.test.ts"
+  },
+  "engines": {
+    "node": ">=22.6.0"
   },
   "dependencies": {
     "ws": "^8.18.0"

@@ -5,7 +5,8 @@ const prisma = new PrismaClient();
 (async () => {
   try {
     const phone = '+919958860411'; // Normalized E.164 format
-    const password = 'noteplz@123';
+    const password = process.env.ADMIN_PASSWORD;
+    if (!password) throw new Error('ADMIN_PASSWORD must be set');
     const hashedPassword = await bcrypt.hash(password, 10);
 
     // First, ensure tenant exists
@@ -57,9 +58,7 @@ const prisma = new PrismaClient();
       });
     }
 
-    console.log('\n✅ You can now login with:');
-    console.log('   Phone:', '9958860411');
-    console.log('   Password: noteplz@123');
+    console.log('✅ Admin account is ready. Use the password supplied via ADMIN_PASSWORD.');
 
   } catch (error) {
     console.error('Error:', error.message);

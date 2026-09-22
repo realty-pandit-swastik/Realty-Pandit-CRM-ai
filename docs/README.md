@@ -14,6 +14,10 @@ This directory is the **single source of truth** for project knowledge. Memory f
 | Pending work + future tooling | [`backlog/`](backlog/) |
 | Skills + tools we use | [`tools-and-skills/`](tools-and-skills/) |
 | Live project status | [`PROJECT_STATUS.md`](PROJECT_STATUS.md) |
+| Engineering audit and scorecard | [`engineering-audit.md`](engineering-audit.md) |
+| Functionality verification matrix | [`functionality-verification.md`](functionality-verification.md) |
+| Current audit progress and evidence | [`engineering-progress.md`](engineering-progress.md) |
+| Developer and operations guide | [`developer-operations.md`](developer-operations.md) |
 | Historical bug logs, old snapshots | [`archive/`](archive/) |
 | In-flight spec/audit working docs | [`superpowers/`](superpowers/) |
 
