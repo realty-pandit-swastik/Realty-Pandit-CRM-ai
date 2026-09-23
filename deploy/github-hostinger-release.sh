@@ -24,15 +24,17 @@ shared="$app_root/shared"
 current="$app_root/current"
 
 preflight() {
-  local target backend_mode website_mode
+  local target backend_mode frontend_mode website_mode
   [[ -d "$releases" && -d "$shared/uploads" && -d "$shared/logs" ]] || die 'release/shared directory layout is not prepared'
-  [[ -f "$shared/backend.env" && -f "$shared/website.env" ]] || die 'shared environment files are missing'
+  [[ -f "$shared/backend.env" && -f "$shared/frontend.env" && -f "$shared/website.env" ]] || die 'shared environment files are missing'
+  grep -Eq '^VITE_API_BASE_URL=.+$' "$shared/frontend.env" || die 'frontend.env must define VITE_API_BASE_URL'
   [[ -L "$current" ]] || die "$current must be a symlink"
   target=$(realpath "$current")
   [[ "$target" == "$releases/"* && -d "$target" ]] || die 'current must target an existing release directory'
   backend_mode=$(stat -c '%a' "$shared/backend.env" 2>/dev/null || stat -f '%Lp' "$shared/backend.env")
+  frontend_mode=$(stat -c '%a' "$shared/frontend.env" 2>/dev/null || stat -f '%Lp' "$shared/frontend.env")
   website_mode=$(stat -c '%a' "$shared/website.env" 2>/dev/null || stat -f '%Lp' "$shared/website.env")
-  [[ "$backend_mode" == *0 && "$website_mode" == *0 ]] || die 'shared environment files must not be world-accessible'
+  [[ "$backend_mode" == *0 && "$frontend_mode" == *0 && "$website_mode" == *0 ]] || die 'shared environment files must not be world-accessible'
 }
 
 reload_services() {
@@ -62,10 +64,12 @@ activate() {
 prepare_release() {
   local release=$1
   [[ -f "$shared/backend.env" ]] || die "missing $shared/backend.env"
+  [[ -f "$shared/frontend.env" ]] || die "missing $shared/frontend.env"
   [[ -f "$shared/website.env" ]] || die "missing $shared/website.env"
   [[ -d "$shared/uploads" && -d "$shared/logs" ]] || die 'missing shared uploads or logs directory'
 
   ln -s "$shared/backend.env" "$release/backend/.env"
+  ln -s "$shared/frontend.env" "$release/frontend/.env.production"
   ln -s "$shared/website.env" "$release/website/.env"
   ln -s "$shared/uploads" "$release/backend/uploads"
   ln -s "$shared/logs" "$release/backend/logs"
