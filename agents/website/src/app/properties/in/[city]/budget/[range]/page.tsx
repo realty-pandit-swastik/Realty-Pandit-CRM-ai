@@ -4,7 +4,7 @@ import BudgetPageClient from './BudgetPageClient';
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://www.realtypandit.in';
 
-export const budgetRanges: Record<string, { label: string; min: number; max: number; display: string }> = {
+const budgetRanges: Record<string, { label: string; min: number; max: number; display: string }> = {
     'below-10-lakhs': { label: 'Below 10 Lakhs', min: 0, max: 1000000, display: '₹10 Lakh' },
     'below-20-lakhs': { label: 'Below 20 Lakhs', min: 0, max: 2000000, display: '₹20 Lakh' },
     'below-30-lakhs': { label: 'Below 30 Lakhs', min: 0, max: 3000000, display: '₹30 Lakh' },
