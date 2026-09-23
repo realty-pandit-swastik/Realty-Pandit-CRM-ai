@@ -518,28 +518,38 @@ export function buildPropertyShareContent(inv: any): { text: string; params: Rec
  * direct photo/video attachments, with the professional summary as the first caption. Outside
  * that window Meta only permits approved templates, so the approved image-card template is used.
  */
-export async function shareInventoryCard(phone: string, inv: any): Promise<boolean> {
-    const { text, params } = buildPropertyShareContent(inv);
-    const media = collectPropertyShareMedia(inv);
+export async function sendPropertyMediaAndDetails(phone: string, inv: any, throwOnError = false): Promise<boolean> {
+    try {
+        if (!(await SessionTracker.isSessionActive(phone))) return false;
 
-    if (await SessionTracker.isSessionActive(phone)) {
-        try {
-            const items = [
-                ...media.images.map(url => ({ type: 'image' as const, url })),
-                ...media.videos.map(url => ({ type: 'video' as const, url })),
-            ];
-            if (!items.length) {
-                await whatsapp.sendTextStrict(phone, text);
-            } else {
-                for (const [index, item] of items.entries()) {
-                    await whatsapp.sendMediaStrict(phone, item.type, item.url, index === 0 ? text : undefined);
-                }
+        const { text } = buildPropertyShareContent(inv);
+        const media = collectPropertyShareMedia(inv);
+        
+        const items = [
+            ...media.images.map(url => ({ type: 'image' as const, url })),
+            ...media.videos.map(url => ({ type: 'video' as const, url })),
+        ];
+        if (!items.length) {
+            await whatsapp.sendTextStrict(phone, text);
+        } else {
+            for (const [index, item] of items.entries()) {
+                await whatsapp.sendMediaStrict(phone, item.type, item.url, index === 0 ? text : undefined);
             }
-            logger.info(`[PropShare] Inventory ${inv.id} → ${phone} as ${items.length} direct media attachment(s)`);
-            return true;
-        } catch (mediaError) {
-            logger.warn(`[PropShare] Direct media failed for ${inv.id}; using approved property card: ${(mediaError as Error).message}`);
         }
+        logger.info(`[PropShare] Inventory ${inv.id} → ${phone} as ${items.length} direct media attachment(s)`);
+        return true;
+    } catch (mediaError) {
+        if (throwOnError) throw mediaError;
+        logger.warn(`[PropShare] Media/details send failed for ${inv?.id}: ${(mediaError as Error).message}`);
+        return false;
+    }
+}
+
+export async function shareInventoryCard(phone: string, inv: any): Promise<boolean> {
+    try {
+        if (await sendPropertyMediaAndDetails(phone, inv, true)) return true;
+    } catch (mediaError) {
+        logger.warn(`[PropShare] Direct media failed for ${inv.id}; using approved property card: ${(mediaError as Error).message}`);
     }
 
     try {
