@@ -93,7 +93,7 @@ case "$command" in
     [[ ! -e "$release" ]] || die "release already exists: $release"
     mkdir -p "$releases"
     mkdir "$release"
-    trap 'rm -rf "$release"' EXIT
+    trap 'chmod -R u+w "$release" 2>/dev/null || true; rm -rf "$release"' EXIT
     tar -xzf "$archive" -C "$release" --strip-components=1
     for component in backend frontend website; do
       [[ -f "$release/$component/package.json" ]] || die "artifact missing $component/package.json"
@@ -117,7 +117,7 @@ case "$command" in
       die 'deployment verification failed'
     fi
     find "$releases" -mindepth 1 -maxdepth 1 -type d -printf '%T@ %p\n' | sort -nr | tail -n "+$((keep_releases + 1))" | cut -d' ' -f2- | while IFS= read -r old; do
-      [[ "$old" == "$previous" ]] || rm -rf "$old"
+      [[ "$old" == "$previous" ]] || { chmod -R u+w "$old" 2>/dev/null || true; rm -rf "$old"; }
     done
     printf 'Deployment verified: %s\n' "$release_id"
     ;;
