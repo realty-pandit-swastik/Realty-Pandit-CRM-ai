@@ -7,6 +7,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { useConfirm } from '../../contexts/ConfirmContext';
 import ShareToClientModal from '../ShareToClientModal';
+import ShareContentPicker, { DEFAULT_SHARE_CONTENT } from '../ShareContentPicker';
 import BookVisitModal from '../BookVisitModal';
 import { InventoryDetailView } from '../InventoryDetailView';
 import { toDialablePhone } from '../../lib/phone';
@@ -107,6 +108,7 @@ export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryLis
     const [showBatchShareModal, setShowBatchShareModal] = useState(false);
     const [batchShareContact, setBatchShareContact] = useState<{ phone_number: string; name: string | null } | null>(null);
     const [batchShareLoading, setBatchShareLoading] = useState(false);
+    const [batchShareContent, setBatchShareContent] = useState(DEFAULT_SHARE_CONTENT);
     const [batchShareResults, setBatchShareResults] = useState<{ id: string; title: string; status: 'sent' | 'already_shared' | 'error'; message: string; link?: string }[]>([]);
     const [batchShareMode, setBatchShareMode] = useState<'direct' | 'dealer' | null>(null);
     const [batchContactSearch, setBatchContactSearch] = useState('');
@@ -232,6 +234,7 @@ export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryLis
                 inventory_ids: ids,
                 client_phone: batchShareContact.phone_number,
                 client_name: batchShareContact.name || undefined,
+                content: batchShareContent,
             });
             const mode = (res.data.mode === 'dealer' ? 'dealer' : 'direct') as 'direct' | 'dealer';
             setBatchShareMode(mode);
@@ -240,7 +243,7 @@ export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryLis
                 title: titleFor(r.inventory_id),
                 status: (r.whatsapp_sent ? 'sent' : 'error') as 'sent' | 'error',
                 message: r.whatsapp_sent
-                    ? (mode === 'dealer' ? 'Sent as brand-free brochure (partner)' : 'Sent via WhatsApp')
+                    ? `Sent via WhatsApp${r.pdf_sent ? ' + PDF' : batchShareContent.pdf ? ' (PDF failed)' : ''}${mode === 'dealer' ? ' (partner)' : ''}`
                     : 'Not delivered — WhatsApp send failed (try again)',
                 link: r.property_link,
             }));
@@ -903,6 +906,7 @@ export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryLis
                                     <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '12px' }}>
                                         {selectedIds.size} propert{selectedIds.size === 1 ? 'y' : 'ies'} will be sent. Already-shared properties will be flagged, not re-sent.
                                     </div>
+                                    <ShareContentPicker value={batchShareContent} onChange={setBatchShareContent} disabled={batchShareLoading} />
                                     <button
                                         type="button"
                                         onClick={handleBatchShare}

@@ -184,6 +184,7 @@ export const shareToClient = async (inventoryId: string, data: {
     client_phone?: string;   // omit when sharing to a redacted (other-agent) lead…
     client_name?: string;
     deal_id?: string;        // …and pass deal_id instead — backend resolves the phone server-side
+    content?: { photos: boolean; videos: boolean; pdf: boolean }; // omitted → photos + videos, no PDF
 }) => {
     const res = await client.post(`/api/inventory/${inventoryId}/share-to-client`, data);
     return res.data;

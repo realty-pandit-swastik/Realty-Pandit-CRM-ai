@@ -933,7 +933,8 @@ router.post('/:id/share-properties', checkPermission('act_on_deals'), async (req
         const blkRows = blkIds.length ? await prisma.agent.findMany({ where: { id: { in: blkIds } }, select: { id: true, name: true } }) : [];
         const blkName = new Map<string, string>(blkRows.map((a: any) => [a.id, a.name]));
 
-        const { shareSpecificProperty } = await import('../services/property_sharing');
+        const { shareSpecificProperty, parseShareContent } = await import('../services/property_sharing');
+        const content = parseShareContent(req.body?.content);
         const results: { inventory_id: string; sent: boolean; reason?: string; shared_by_name?: string | null }[] = [];
         for (const invId of inventory_ids) {
             if (sharedBy.has(invId)) {
@@ -941,7 +942,7 @@ router.post('/:id/share-properties', checkPermission('act_on_deals'), async (req
                 results.push({ inventory_id: invId, sent: false, reason: 'already_shared', shared_by_name: byId ? (blkName.get(byId) || null) : null });
                 continue;
             }
-            const sent = await shareSpecificProperty(id, invId, agent.id);
+            const sent = await shareSpecificProperty(id, invId, agent.id, content);
             results.push({ inventory_id: invId, sent });
         }
 
