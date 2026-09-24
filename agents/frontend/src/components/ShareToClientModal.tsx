@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { shareToClient } from '../api/client';
+import ShareContentPicker, { DEFAULT_SHARE_CONTENT } from './ShareContentPicker';
 
 interface ShareToClientModalProps {
     item: any;
@@ -10,8 +11,9 @@ interface ShareToClientModalProps {
 export default function ShareToClientModal({ item, onClose, onShared }: ShareToClientModalProps) {
     const [phone, setPhone] = useState('');
     const [clientName, setClientName] = useState('');
+    const [content, setContent] = useState(DEFAULT_SHARE_CONTENT);
     const [sending, setSending] = useState(false);
-    const [result, setResult] = useState<{ share_link: string; whatsapp_sent: boolean; already_shared?: boolean; previously_shared_at?: string | null } | null>(null);
+    const [result, setResult] = useState<{ share_link: string; whatsapp_sent: boolean; pdf_requested?: boolean; pdf_sent?: boolean; already_shared?: boolean; previously_shared_at?: string | null } | null>(null);
     const [error, setError] = useState('');
     const [copied, setCopied] = useState(false);
 
@@ -25,7 +27,7 @@ export default function ShareToClientModal({ item, onClose, onShared }: ShareToC
         setSending(true);
         setError('');
         try {
-            const res = await shareToClient(item.id, { client_phone: phone, client_name: clientName || undefined });
+            const res = await shareToClient(item.id, { client_phone: phone, client_name: clientName || undefined, content });
             setResult(res);
         } catch (err: any) {
             setError(err?.response?.data?.error || 'Failed to share property');
@@ -143,6 +145,8 @@ export default function ShareToClientModal({ item, onClose, onShared }: ShareToC
                             onChange={e => setClientName(e.target.value)}
                         />
 
+                        <ShareContentPicker value={content} onChange={setContent} disabled={sending} />
+
                         {error && (
                             <div style={{ color: '#ef4444', fontSize: '13px', marginBottom: '12px' }}>
                                 {error}
@@ -171,6 +175,12 @@ export default function ShareToClientModal({ item, onClose, onShared }: ShareToC
                                     : 'WhatsApp delivery pending (client may need to message first)'}
                             </span>
                         </div>
+
+                        {result.pdf_requested && !result.pdf_sent && (
+                            <div style={{ fontSize: '12px', color: '#f59e0b', marginBottom: '12px' }}>
+                                ⚠ PDF could not be delivered — try sharing again with PDF ticked.
+                            </div>
+                        )}
 
                         {/* Non-blocking re-share notice (the send still went out). */}
                         {result.already_shared && (

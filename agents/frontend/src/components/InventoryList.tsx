@@ -18,6 +18,7 @@ import { relativeAge } from '../lib/age';
 import { MatchClientsModal } from './inventory/MatchClientsModal';
 import { GooglePlacesInput } from './GooglePlacesInput';
 import ShareToClientModal from './ShareToClientModal';
+import ShareContentPicker, { DEFAULT_SHARE_CONTENT } from './ShareContentPicker';
 import { buildWhatsAppShareText } from '../lib/buildWhatsAppShareText';
 import SharePropertyOptions from './SharePropertyOptions';
 import { pickSpecChips } from '../lib/specChips';
@@ -323,6 +324,7 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
     const [showBatchShareModal, setShowBatchShareModal] = useState(false);
     const [batchShareContact, setBatchShareContact] = useState<{ phone_number: string; name: string | null } | null>(null);
     const [batchShareLoading, setBatchShareLoading] = useState(false);
+    const [batchShareContent, setBatchShareContent] = useState(DEFAULT_SHARE_CONTENT);
     const [batchShareResults, setBatchShareResults] = useState<{ id: string; title: string; status: 'sent' | 'already_shared' | 'error'; message: string; link?: string }[]>([]);
     const [batchShareMode, setBatchShareMode] = useState<'direct' | 'dealer' | null>(null);
     // Post-send personal-share (2026-06-27): after the v5 card is sent, the user can also forward
@@ -493,13 +495,14 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
         setBatchShareMode(null);
         const ids = Array.from(selectedIds);
         try {
-            // One recipient-aware call: the server detects dealer vs direct, sends the brand-free
-            // brochure (partner) or the v5 card (direct), tags each share with deal_id, and returns
-            // a per-property link (brochure PDF link for dealers, website link for direct customers).
+            // One call: the server sends photos/videos + details (PDF too when ticked) to any
+            // recipient, tags each share with deal_id, and returns a per-property link
+            // (brandless brochure link for partners, website link for direct customers).
             const res = await client.post('/api/inventory/share-batch-to-client', {
                 inventory_ids: ids,
                 client_phone: batchShareContact.phone_number,
                 client_name: batchShareContact.name || undefined,
+                content: batchShareContent,
             });
             const mode = (res.data.mode === 'dealer' ? 'dealer' : 'direct') as 'direct' | 'dealer';
             setBatchShareMode(mode);
@@ -508,7 +511,7 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
                 title: titleFor(r.inventory_id),
                 status: (r.whatsapp_sent ? 'sent' : 'error') as 'sent' | 'error',
                 message: r.whatsapp_sent
-                    ? (mode === 'dealer' ? 'Sent as brand-free brochure (partner)' : 'Sent via WhatsApp')
+                    ? `Sent via WhatsApp${r.pdf_sent ? ' + PDF' : batchShareContent.pdf ? ' (PDF failed)' : ''}${mode === 'dealer' ? ' (partner)' : ''}`
                     : 'Not delivered — WhatsApp send failed (try again)',
                 link: r.property_link,
             }));
@@ -3273,6 +3276,7 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
                                         <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '12px' }}>
                                             {selectedIds.size} propert{selectedIds.size === 1 ? 'y' : 'ies'} will be sent. Already-shared properties will be flagged, not re-sent.
                                         </div>
+                                        <ShareContentPicker value={batchShareContent} onChange={setBatchShareContent} disabled={batchShareLoading} />
                                         <button
                                             onClick={handleBatchShare}
                                             disabled={batchShareLoading}

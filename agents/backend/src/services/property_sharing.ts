@@ -19,6 +19,7 @@ import { checkBudgetSanity, budgetReaskPrompt } from '../utils/budget_sanity';
 import { phoneVariants, isPlaceholderPhone } from '../utils/phone';
 import { BROCHURE_TEMPLATE_NAME } from '../config/whatsapp_templates';
 import { SessionTracker } from './session_tracker';
+import { resolveShareMode, type ShareMode, type ShareModeResult } from './share_recognition';
 
 const whatsapp = new WhatsAppService();
 const EVT_PROPERTY_SHARED = 'property_shared';
@@ -77,12 +78,44 @@ export async function resolveActiveDealId(phone: string): Promise<string | null>
 }
 
 /**
- * Dealer/partner brochure send: a brand-free single-property PDF delivered as a
- * WhatsApp document attachment (rp_property_brochure_v1, DOCUMENT header). One
- * call = one property. The PDF is served from the public token-signed brochure
- * endpoint, optionally watermarked with the partner's name/phone. Returns the
- * signed pdfUrl so the caller can record it + reuse it for the own-WhatsApp share.
- * Throws strictly on Meta failure (via sendDocumentTemplate).
+ * What a manual WhatsApp property share delivers (2026-09-24). The details text always goes;
+ * photos + videos are on by default for EVERY recipient (client, partner, employee, self);
+ * the PDF brochure is opt-in. Recipient type no longer decides the format.
+ */
+export type ShareContent = { photos: boolean; videos: boolean; pdf: boolean };
+export const DEFAULT_SHARE_CONTENT: ShareContent = { photos: true, videos: true, pdf: false };
+
+/** Coerce an untrusted request-body value into ShareContent; missing/invalid keys fall back to defaults. */
+export function parseShareContent(raw: any): ShareContent {
+    const c = raw && typeof raw === 'object' ? raw : {};
+    const pick = (k: keyof ShareContent) => (typeof c[k] === 'boolean' ? c[k] : DEFAULT_SHARE_CONTENT[k]);
+    return { photos: pick('photos'), videos: pick('videos'), pdf: pick('pdf') };
+}
+
+/**
+ * Signed public link to the brandless brochure PDF (owner data redacted), optionally
+ * watermarked with the partner's name/phone. Used for the WhatsApp document send and as
+ * the partner's forwardable link.
+ */
+export async function buildBrochureUrl(
+    inv: any,
+    partner?: { name?: string | null; phone_number?: string | null } | null,
+): Promise<string> {
+    const { signPdfToken } = await import('../utils/pdf_token');
+    const exp = Math.floor(Date.now() / 1000) + BROCHURE_LINK_TTL_SEC;
+    const token = signPdfToken(inv.id, 'brandless', exp);
+    let pdfUrl = `${BROCHURE_API_BASE}/inventory/${inv.id}/brochure.pdf?variant=brandless&token=${token}`;
+    if (partner?.name) {
+        pdfUrl += `&pn=${encodeURIComponent(partner.name)}&pp=${encodeURIComponent(partner.phone_number || '')}`;
+    }
+    return pdfUrl;
+}
+
+/**
+ * Brochure send: a brand-free single-property PDF delivered as a WhatsApp document
+ * attachment (BROCHURE_TEMPLATE_NAME, DOCUMENT header). One call = one property, PDF
+ * only — photos/videos/details are sent by shareInventoryCard. Throws strictly on Meta
+ * failure (via sendDocumentTemplate).
  */
 export async function shareInventoryBrochure(
     phone: string,
@@ -90,23 +123,41 @@ export async function shareInventoryBrochure(
     seq: { index: number; total: number },
     partner?: { name?: string | null; phone_number?: string | null } | null,
 ): Promise<{ sent: boolean; pdfUrl: string }> {
-    const { signPdfToken } = await import('../utils/pdf_token');
     const { brochureFilename } = await import('./pdf_generator');
-    const exp = Math.floor(Date.now() / 1000) + BROCHURE_LINK_TTL_SEC;
-    const token = signPdfToken(inv.id, 'brandless', exp);
-    let pdfUrl = `${BROCHURE_API_BASE}/inventory/${inv.id}/brochure.pdf?variant=brandless&token=${token}`;
-    if (partner?.name) {
-        pdfUrl += `&pn=${encodeURIComponent(partner.name)}&pp=${encodeURIComponent(partner.phone_number || '')}`;
-    }
+    const pdfUrl = await buildBrochureUrl(inv, partner);
     await whatsapp.sendDocumentTemplate(phone, BROCHURE_TEMPLATE_NAME, {
         pdfUrl,
         filename: brochureFilename(inv),
         bodyParams: [buildPropertySummary(inv), `${seq.index + 1} of ${seq.total}`],
     });
-    // Partners asked for the listing itself, not just the forwardable PDF — send the photos,
-    // videos and details text too. No-ops outside Meta's 24h window (the PDF still lands).
-    await sendPropertyMediaAndDetails(phone, inv);
     return { sent: true, pdfUrl };
+}
+
+/**
+ * The single manual-share entry point for any recipient: photos/videos + details text
+ * (or the approved card template outside the 24h window), then the PDF if requested.
+ * `mode`/`partner` are still resolved so partner PDFs carry their watermark and callers
+ * can give partners the brandless forwardable link.
+ */
+export async function sharePropertyToRecipient(
+    phone: string,
+    inv: any,
+    content: ShareContent = DEFAULT_SHARE_CONTENT,
+    seq: { index: number; total: number } = { index: 0, total: 1 },
+): Promise<{ sent: boolean; pdfSent: boolean; pdfUrl: string | null; mode: ShareMode; partner: ShareModeResult['partner'] }> {
+    const { mode, partner } = await resolveShareMode(phone);
+    const sent = await shareInventoryCard(phone, inv, content);
+    let pdfSent = false;
+    let pdfUrl: string | null = null;
+    if (content.pdf) {
+        try {
+            pdfUrl = (await shareInventoryBrochure(phone, inv, seq, partner)).pdfUrl;
+            pdfSent = true;
+        } catch (err) {
+            logger.error(`[PropShare] PDF brochure send failed for ${inv.id}:`, err);
+        }
+    }
+    return { sent, pdfSent, pdfUrl, mode, partner };
 }
 
 /**
@@ -358,7 +409,7 @@ export async function shareNextPropertyDetailed(dealId: string, opts?: { bypassP
  * Share a specific inventory item for a deal — called from Deal Workspace.
  * Agent manually selects the property; no auto-dedup logic applied.
  */
-export async function shareSpecificProperty(dealId: string, inventoryId: string, sharedByAgentId?: string | null): Promise<boolean> {
+export async function shareSpecificProperty(dealId: string, inventoryId: string, sharedByAgentId?: string | null, content: ShareContent = DEFAULT_SHARE_CONTENT): Promise<boolean> {
     const deal = await prisma.transaction.findUnique({
         where: { id: dealId },
         include: { demand_contact: { select: { phone_number: true, name: true, referral_partner_id: true } } },
@@ -403,13 +454,8 @@ export async function shareSpecificProperty(dealId: string, inventoryId: string,
         logger.warn(`[PropShare] Deal ${dealId} manually re-sharing inventory ${inventoryId} to ${recipientPhone} — already shared within the last 7 days`);
     }
 
-    // Auto-detect direct customer vs partner agent (same recognition the inventory share uses):
-    // partner ⇒ brandless brochure (PDF), direct ⇒ media + no-link property card.
-    const { resolveShareMode } = await import('./share_recognition');
-    const { mode, partner } = await resolveShareMode(recipientPhone);
-    const sent = mode === 'dealer'
-        ? (await shareInventoryBrochure(recipientPhone, inv, { index: 0, total: 1 }, partner)).sent
-        : await shareInventoryCard(recipientPhone, inv);
+    // Same content for every recipient: photos/videos + details, PDF only when requested.
+    const { sent, pdfSent, mode } = await sharePropertyToRecipient(recipientPhone, inv, content);
     if (!sent) {
         logger.error(`[PropShare] Failed to send specific property card for deal ${dealId} inv ${inventoryId}`);
         return false;
@@ -422,7 +468,7 @@ export async function shareSpecificProperty(dealId: string, inventoryId: string,
             channel: 'whatsapp',
             direction: 'outbound',
             event_type: EVT_PROPERTY_SHARED,
-            content: `Shared property card (manual${mode === 'dealer' ? ', partner brochure' : ''}): ${bhk} at ${society}`,
+            content: `Shared property card (manual${mode === 'dealer' ? ', partner' : ''}${pdfSent ? ' + PDF' : ''}): ${bhk} at ${society}`,
             metadata: { deal_id: dealId, inventory_id: inventoryId, manual: true, recipient: mode, shared_by_agent_id: sharedByAgentId ?? null },
         },
     });
@@ -518,16 +564,18 @@ export function buildPropertyShareContent(inv: any): { text: string; params: Rec
  * direct photo/video attachments, with the professional summary as the first caption. Outside
  * that window Meta only permits approved templates, so the approved image-card template is used.
  */
-export async function sendPropertyMediaAndDetails(phone: string, inv: any, throwOnError = false): Promise<boolean> {
+export async function sendPropertyMediaAndDetails(
+    phone: string, inv: any, throwOnError = false, content: ShareContent = DEFAULT_SHARE_CONTENT,
+): Promise<boolean> {
     try {
         if (!(await SessionTracker.isSessionActive(phone))) return false;
 
         const { text } = buildPropertyShareContent(inv);
         const media = collectPropertyShareMedia(inv);
-        
+
         const items = [
-            ...media.images.map(url => ({ type: 'image' as const, url })),
-            ...media.videos.map(url => ({ type: 'video' as const, url })),
+            ...(content.photos ? media.images : []).map(url => ({ type: 'image' as const, url })),
+            ...(content.videos ? media.videos : []).map(url => ({ type: 'video' as const, url })),
         ];
         if (!items.length) {
             await whatsapp.sendTextStrict(phone, text);
@@ -545,14 +593,15 @@ export async function sendPropertyMediaAndDetails(phone: string, inv: any, throw
     }
 }
 
-export async function shareInventoryCard(phone: string, inv: any): Promise<boolean> {
+export async function shareInventoryCard(phone: string, inv: any, content: ShareContent = DEFAULT_SHARE_CONTENT): Promise<boolean> {
     try {
-        if (await sendPropertyMediaAndDetails(phone, inv, true)) return true;
+        if (await sendPropertyMediaAndDetails(phone, inv, true, content)) return true;
     } catch (mediaError) {
         logger.warn(`[PropShare] Direct media failed for ${inv.id}; using approved property card: ${(mediaError as Error).message}`);
     }
 
     try {
+        const { params } = buildPropertyShareContent(inv);
         const imageUrl = await pickSendableImage(inv.media_urls);
         await sendPropertyCard(phone, inv.intent, params, imageUrl);
         logger.info(`[PropShare] Inventory ${inv.id} → ${phone} via no-link property card`);

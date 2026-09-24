@@ -5,6 +5,13 @@
 
 > This file is the **live state**. When you see contradictions with anything else in /docs/, this wins. Update the timestamp on each meaningful change.
 
+## 2026-09-24 — WhatsApp property share: photos/videos by default, PDF opt-in (CODE, NOT DEPLOYED)
+
+- **Bug:** sharing a property to any number registered as an ACTIVE PartnerAgent sent the PDF brochure instead of the listing (`resolveShareMode` → `shareInventoryBrochure`); photos/videos only followed inside a 24h window. Separately, commit `5a85234` dropped `params` from `shareInventoryCard`, so the approved card-template fallback (outside the 24h window) threw on every share.
+- **Fix:** one entry point `sharePropertyToRecipient` (`services/property_sharing.ts`) used by `/inventory/:id/share-to-client`, `/inventory/share-batch-to-client` and `/deals/:id/share-properties`. Every recipient gets photos + videos + details text by default; the brandless PDF (partner-watermarked for partners) only when `content.pdf` is ticked. Inventory WhatsApp dialogs (single + batch, desktop + mobile) show Photos/Videos (checked) and PDF (unchecked) via `ShareContentPicker`.
+- **Meta limit:** outside the recipient's 24h window free-form photos/videos cannot be sent; the approved image card template (one photo + details) goes instead, and the PDF (document template) still goes if ticked.
+- **Checks:** `share_property_content_options.test.ts` (client + partner, default/PDF/unticked/outside-window); backend 409/409 tests; CRM build passes.
+
 ## 2026-08-02 — CTWA ad attribution + Conversions-API fix + WhatsApp-Status ad LIVE (SHIPPED)
 
 Owner asked to run a WhatsApp-**Status** ad into the bot (₹300/day, Vaishali/Kaushambi/

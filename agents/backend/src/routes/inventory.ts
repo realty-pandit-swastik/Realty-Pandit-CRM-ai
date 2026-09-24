@@ -1766,20 +1766,20 @@ router.post('/:id/share-to-client', authMiddleware, async (req, res) => {
             ? `https://www.realtypandit.in/properties/${inventory.display_id}`
             : `https://www.realtypandit.in/properties/${inventory.id}`;
 
-        // typeName is kept for the interaction-log content below; the actual WhatsApp message
-        // (Image + body + 3 buttons) is built + sent inside shareInventoryCard.
+        // typeName is kept for the interaction-log content below; the actual WhatsApp messages
+        // are built + sent inside sharePropertyToRecipient.
         const typeName = inventory.flat_property_type?.name || inventory.type?.toUpperCase() || 'Property';
 
-        // Send the approved v4 property-card TEMPLATE — the SAME path the deal "Company WhatsApp"
-        // share uses. The UTILITY template delivers even outside the 24h customer-service window,
-        // unlike the old raw sendText/sendImage which Meta rejected with a silent 400. shareInventoryCard
-        // returns the REAL outcome (sendTemplate throws strictly), so whatsapp_sent is accurate.
+        // Photos/videos + details text (approved card template outside the 24h window), plus the
+        // brochure PDF when the sender ticked it. Same content for every recipient type.
+        const { sharePropertyToRecipient, parseShareContent } = await import('../services/property_sharing');
+        const content = parseShareContent(req.body.content);
         let whatsappSent = false;
+        let pdfSent = false;
         try {
-            const { shareInventoryCard } = await import('../services/property_sharing');
-            whatsappSent = await shareInventoryCard(normalized, inventory);
+            ({ sent: whatsappSent, pdfSent } = await sharePropertyToRecipient(normalized, inventory, content));
         } catch (err) {
-            logger.error('[ShareToClient] WhatsApp template send failed:', err);
+            logger.error('[ShareToClient] WhatsApp send failed:', err);
         }
 
         // Create PropertyShare record. agent_id is an Agent FK — for a partner share it is recorded
@@ -1819,6 +1819,7 @@ router.post('/:id/share-to-client', authMiddleware, async (req, res) => {
                     + (isPartnerShare ? ' (by partner agent)' : ''),
                 metadata: {
                     inventory_id: inventory.id, share_id: share.id, property_link: propertyLink,
+                    share_content: content, pdf_sent: pdfSent,
                     ...(sharedDealId ? { deal_id: sharedDealId } : {}),
                     ...(isPartnerShare ? { partner_agent_id: agent.id, recorded_under_agent_id: actingAgentId } : {}),
                 },
@@ -1830,6 +1831,8 @@ router.post('/:id/share-to-client', authMiddleware, async (req, res) => {
             success: true,
             share_link: propertyLink,
             whatsapp_sent: whatsappSent,
+            pdf_requested: content.pdf,
+            pdf_sent: pdfSent,
             // Non-blocking re-share notice: true if this property was shared to this client before.
             already_shared: !!existingShare,
             previously_shared_at: previouslySharedAt,
@@ -1844,9 +1847,9 @@ router.post('/:id/share-to-client', authMiddleware, async (req, res) => {
 });
 
 // POST /inventory/share-batch-to-client — recipient-aware multi-property share.
-// Detects the recipient: an ACTIVE PartnerAgent (dealer) → a brand-free single-property
-// PDF brochure per property (document template, "k of N"); anyone else (direct customer)
-// → the existing v5 property card per property (UNCHANGED path). Every share is tagged
+// Every recipient gets photos/videos + details per property (`content` from the share dialog;
+// default photos+videos, no PDF) plus the brochure PDF ("k of N") when ticked. An ACTIVE
+// PartnerAgent (dealer) gets the partner-watermarked brandless PDF/link. Every share is tagged
 // with the recipient's deal_id so it surfaces in the deal pipeline timeline + already-shared set.
 router.post('/share-batch-to-client', authMiddleware, async (req: any, res) => {
     try {
@@ -1875,7 +1878,8 @@ router.post('/share-batch-to-client', authMiddleware, async (req: any, res) => {
 
         const { resolveShareMode } = await import('../services/share_recognition');
         const { mode, partner } = await resolveShareMode(normalized);
-        const { shareInventoryCard, shareInventoryBrochure, resolveActiveDealId } = await import('../services/property_sharing');
+        const { sharePropertyToRecipient, buildBrochureUrl, parseShareContent, resolveActiveDealId } = await import('../services/property_sharing');
+        const content = parseShareContent(req.body?.content);
         const dealId = await resolveActiveDealId(normalized);
 
         const inventories = await prisma.inventory.findMany({
@@ -1907,25 +1911,22 @@ router.post('/share-batch-to-client', authMiddleware, async (req: any, res) => {
         for (let i = 0; i < ordered.length; i++) {
             const inv = ordered[i];
             let whatsappSent = false;
-            let propertyLink = inv.display_id
-                ? `https://www.realtypandit.in/properties/${inv.display_id}`
-                : `https://www.realtypandit.in/properties/${inv.id}`;
+            let pdfSent = false;
+            let pdfUrl: string | null = null;
             try {
-                if (mode === 'dealer') {
-                    const r = await shareInventoryBrochure(normalized, inv, { index: i, total }, partner);
-                    whatsappSent = r.sent;
-                    propertyLink = r.pdfUrl;
-                } else {
-                    whatsappSent = await shareInventoryCard(normalized, inv);
-                }
+                ({ sent: whatsappSent, pdfSent, pdfUrl } = await sharePropertyToRecipient(normalized, inv, content, { index: i, total }));
             } catch (err) {
                 logger.error(`[ShareBatch] send failed for ${inv.id} (${mode}):`, err);
             }
+            // Partners get the brandless brochure link (forwardable, no RP trace); clients the website link.
+            const propertyLink = mode === 'dealer'
+                ? (pdfUrl || await buildBrochureUrl(inv, partner))
+                : `https://www.realtypandit.in/properties/${inv.display_id || inv.id}`;
 
             const share = await prisma.propertyShare.create({
                 data: {
                     tenant_id: agent.tenant_id, inventory_id: inv.id, agent_id: agent.id,
-                    client_phone: normalized, channel: mode === 'dealer' ? 'whatsapp_brochure' : 'whatsapp_api',
+                    client_phone: normalized, channel: pdfSent ? 'whatsapp_brochure' : 'whatsapp_api',
                     property_link: propertyLink, whatsapp_sent: whatsappSent,
                 },
             });
@@ -1934,10 +1935,10 @@ router.post('/share-batch-to-client', authMiddleware, async (req: any, res) => {
                     tenant_id: agent.tenant_id, phone_number: normalized, channel: 'whatsapp',
                     direction: 'outbound', event_type: 'property_shared',
                     content: `Property shared (${mode}): ${inv.flat_property_type?.name || inv.type || 'Property'} in ${inv.locality || inv.location || 'N/A'}`,
-                    metadata: { inventory_id: inv.id, share_id: share.id, property_link: propertyLink, deal_id: dealId, variant: mode },
+                    metadata: { inventory_id: inv.id, share_id: share.id, property_link: propertyLink, deal_id: dealId, variant: mode, share_content: content, pdf_sent: pdfSent },
                 },
             });
-            results.push({ inventory_id: inv.id, whatsapp_sent: whatsappSent, property_link: propertyLink });
+            results.push({ inventory_id: inv.id, whatsapp_sent: whatsappSent, pdf_sent: pdfSent, property_link: propertyLink });
         }
 
         logger.info(`[ShareBatch] Agent ${agent.id} shared ${results.length} props with ${normalized} as ${mode} (deal=${dealId || 'none'})`);
