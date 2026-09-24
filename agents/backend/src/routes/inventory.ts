@@ -2892,6 +2892,34 @@ router.get('/:id/brochure.pdf', async (req: any, res) => {
     }
 });
 
+// GET /inventory/:id/wa-image.jpg?src=/uploads/...&token=...
+// PUBLIC, token-gated. CRM photos are stored as WebP, which WhatsApp rejects for image
+// messages (JPEG/PNG only) — Meta fetches this JPEG copy instead. The token binds
+// inventory id + src path + expiry (signed by property_sharing.whatsappImageUrl), so this
+// can't be used to convert arbitrary files.
+router.get('/:id/wa-image.jpg', async (req: any, res) => {
+    try {
+        const id = req.params.id as string;
+        const src = String(req.query.src || '');
+        const { verifyPdfToken } = await import('../utils/pdf_token');
+        if (!src.startsWith('/uploads/') || src.includes('..') || !verifyPdfToken(id, `wa-jpeg:${src}`, String(req.query.token || ''))) {
+            return res.status(403).send('Invalid or expired link');
+        }
+        const { resolveMediaPath, resizeImageForPdf } = await import('../services/pdf_generator');
+        const abs = resolveMediaPath(src);
+        if (!abs) return res.status(404).send('Image not found');
+        const jpeg = await resizeImageForPdf(abs);
+        if (typeof jpeg === 'string') return res.status(500).send('Could not convert image');
+        res.setHeader('Content-Type', 'image/jpeg');
+        res.setHeader('Cache-Control', 'public, max-age=86400');
+        res.send(jpeg);
+    } catch (err) {
+        captureRouteError(err, req, { route: 'inventory#wa-image' });
+        logger.error('[WaImage] Error:', err);
+        if (!res.headersSent) res.status(500).send('Could not convert image');
+    }
+});
+
 // ================================================================
 // ENRICHMENT ENDPOINTS (v3 - Post-save optional details)
 // ================================================================

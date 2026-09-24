@@ -105,7 +105,7 @@ function formatPrice(p: number | null | undefined): string {
     return `₹${n.toLocaleString('en-IN')}`;
 }
 
-function resolveMediaPath(mediaUrl: string): string | null {
+export function resolveMediaPath(mediaUrl: string): string | null {
     if (!mediaUrl) return null;
     // Strip leading slash for relative
     let rel = mediaUrl.startsWith('/') ? mediaUrl.slice(1) : mediaUrl;
@@ -130,7 +130,7 @@ function resolveMediaPath(mediaUrl: string): string | null {
  * so a 6-photo brochure lands ~1–2MB. Falls back to the original path on any sharp
  * failure (doc.image accepts a path too). (2026-06-28)
  */
-async function resizeImageForPdf(absPath: string): Promise<Buffer | string> {
+export async function resizeImageForPdf(absPath: string): Promise<Buffer | string> {
     try {
         // require lazily — keeps the module loadable in environments without sharp.
         const sharp = require('sharp');

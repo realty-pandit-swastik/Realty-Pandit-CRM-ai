@@ -199,12 +199,13 @@ export class WhatsAppService {
         }
     }
 
-    /** Send a direct image/video attachment and throw when Meta rejects it. */
+    /** Send a direct image/video/document attachment and throw when Meta rejects it. */
     public async sendMediaStrict(
         to: string,
-        type: 'image' | 'video',
+        type: 'image' | 'video' | 'document',
         mediaUrl: string,
         caption?: string,
+        filename?: string,
     ): Promise<void> {
         logger.info(`[WhatsAppService] Sending ${type} (strict) to ${to}: ${mediaUrl}`);
 
@@ -218,7 +219,7 @@ export class WhatsAppService {
                 messaging_product: 'whatsapp',
                 to,
                 type,
-                [type]: { link: mediaUrl, ...(caption ? { caption } : {}) },
+                [type]: { link: mediaUrl, ...(caption ? { caption } : {}), ...(filename ? { filename } : {}) },
             });
             recordOutbound({
                 to,
@@ -236,6 +237,60 @@ export class WhatsAppService {
                 body: caption,
                 mediaUrl,
                 sentBy: 'property_sharing',
+                error: (error as WhatsAppSendError)?.info ?? classifyMetaError(error),
+            }).catch(() => {});
+            throw error;
+        }
+    }
+
+    /**
+     * Interactive media carousel (free-form, so 24h customer-service window only): one body
+     * text + 2–10 horizontally scrolling image/video cards. Meta requires every card to carry
+     * the same button set, so each gets one quick-reply `buttonTitle`. Throws when Meta rejects it.
+     */
+    public async sendCarouselStrict(
+        to: string,
+        bodyText: string,
+        cards: { type: 'image' | 'video'; url: string }[],
+        buttonTitle: string,
+        buttonIdPrefix: string,
+    ): Promise<void> {
+        logger.info(`[WhatsAppService] Sending carousel (${cards.length} cards, strict) to ${to}`);
+
+        if (process.env.NODE_ENV === 'development') {
+            logger.info(`[WhatsAppService] Mock carousel sent: ${cards.map(c => c.url).join(', ')}`);
+            return;
+        }
+
+        const body = bodyText.slice(0, 1024);
+        try {
+            const res = await this.callWhatsAppAPIStrict({
+                messaging_product: 'whatsapp',
+                recipient_type: 'individual',
+                to,
+                type: 'interactive',
+                interactive: {
+                    type: 'carousel',
+                    body: { text: body },
+                    action: {
+                        cards: cards.map((c, i) => ({
+                            card_index: i,
+                            type: 'cta_url', // present in Meta's own quick-reply example; harmless
+                            header: { type: c.type, [c.type]: { link: c.url } },
+                            action: {
+                                buttons: [{ type: 'quick_reply', quick_reply: { id: `${buttonIdPrefix}:${i}`, title: buttonTitle } }],
+                            },
+                        })),
+                    },
+                },
+            });
+            recordOutbound({
+                to, messageType: 'interactive', body, mediaUrl: cards[0]?.url, sentBy: 'property_sharing',
+                waMessageId: res?.waMessageId ?? null, error: res?.error ?? null,
+            }).catch(() => {});
+        } catch (error) {
+            recordOutbound({
+                to, messageType: 'interactive', body, mediaUrl: cards[0]?.url, sentBy: 'property_sharing',
                 error: (error as WhatsAppSendError)?.info ?? classifyMetaError(error),
             }).catch(() => {});
             throw error;

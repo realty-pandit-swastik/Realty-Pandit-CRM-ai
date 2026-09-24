@@ -36,10 +36,9 @@ describe('property WhatsApp share content', () => {
         expect(content.text).not.toContain('58');
         expect(content.text).not.toMatch(/https?:\/\//);
         expect(content.params.p7).not.toMatch(/https?:\/\//);
-        expect(media.images).toEqual(['https://api.realtypandit.in/uploads/home.jpg']);
-        expect(media.videos).toEqual([
-            'https://api.realtypandit.in/uploads/walkthrough.mp4',
-            'https://cdn.example.com/tour.mov',
-        ]);
+        // Local photos go through the signed JPEG route; .mov is dropped (WhatsApp takes MP4/3GPP only).
+        expect(media.images).toHaveLength(1);
+        expect(media.images[0]).toMatch(/^https:\/\/api\.realtypandit\.in\/inventory\/inv-1\/wa-image\.jpg\?src=%2Fuploads%2Fhome\.jpg&token=/);
+        expect(media.videos).toEqual(['https://api.realtypandit.in/uploads/walkthrough.mp4']);
     });
 });

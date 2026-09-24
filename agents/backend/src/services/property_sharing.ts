@@ -20,6 +20,9 @@ import { phoneVariants, isPlaceholderPhone } from '../utils/phone';
 import { BROCHURE_TEMPLATE_NAME } from '../config/whatsapp_templates';
 import { SessionTracker } from './session_tracker';
 import { resolveShareMode, type ShareMode, type ShareModeResult } from './share_recognition';
+import { resolveMediaPath } from './pdf_generator';
+import { signPdfToken } from '../utils/pdf_token';
+import * as fs from 'fs';
 
 const whatsapp = new WhatsAppService();
 const EVT_PROPERTY_SHARED = 'property_shared';
@@ -113,9 +116,9 @@ export async function buildBrochureUrl(
 
 /**
  * Brochure send: a brand-free single-property PDF delivered as a WhatsApp document
- * attachment (BROCHURE_TEMPLATE_NAME, DOCUMENT header). One call = one property, PDF
- * only — photos/videos/details are sent by shareInventoryCard. Throws strictly on Meta
- * failure (via sendDocumentTemplate).
+ * attachment, captioned with the property details. One call = one property, PDF only —
+ * photos/videos are sent by shareInventoryCard. Throws strictly on Meta failure of the
+ * template fallback (via sendDocumentTemplate).
  */
 export async function shareInventoryBrochure(
     phone: string,
@@ -125,6 +128,16 @@ export async function shareInventoryBrochure(
 ): Promise<{ sent: boolean; pdfUrl: string }> {
     const { brochureFilename } = await import('./pdf_generator');
     const pdfUrl = await buildBrochureUrl(inv, partner);
+    // Inside the 24h window the PDF goes as a plain document with the full details as its
+    // caption; outside it (or if Meta rejects that) the approved document template carries a summary.
+    if (await SessionTracker.isSessionActive(phone)) {
+        try {
+            await whatsapp.sendMediaStrict(phone, 'document', pdfUrl, buildPropertyShareContent(inv).text, brochureFilename(inv));
+            return { sent: true, pdfUrl };
+        } catch (docError) {
+            logger.warn(`[PropShare] PDF document send failed for ${inv.id}; using brochure template: ${(docError as Error).message}`);
+        }
+    }
     await whatsapp.sendDocumentTemplate(phone, BROCHURE_TEMPLATE_NAME, {
         pdfUrl,
         filename: brochureFilename(inv),
@@ -560,9 +573,12 @@ export function buildPropertyShareContent(inv: any): { text: string; params: Rec
 }
 
 /**
- * Send one property without a website link. Inside an open customer-service window this sends
- * direct photo/video attachments, with the professional summary as the first caption. Outside
- * that window Meta only permits approved templates, so the approved image-card template is used.
+ * Send one property without a website link. Inside an open customer-service window:
+ * 2+ photos/videos → one interactive carousel with the details as its body (each card has a
+ * "Schedule Visit" quick reply, routed by property_card_reply_handler); if Meta rejects the
+ * carousel, or there's a single item, each attachment is sent individually with the details
+ * as the first caption. Outside that window Meta only permits approved templates, so this
+ * returns false and shareInventoryCard sends the image-card template.
  */
 export async function sendPropertyMediaAndDetails(
     phone: string, inv: any, throwOnError = false, content: ShareContent = DEFAULT_SHARE_CONTENT,
@@ -579,12 +595,30 @@ export async function sendPropertyMediaAndDetails(
         ];
         if (!items.length) {
             await whatsapp.sendTextStrict(phone, text);
-        } else {
-            for (const [index, item] of items.entries()) {
-                await whatsapp.sendMediaStrict(phone, item.type, item.url, index === 0 ? text : undefined);
+            return true;
+        }
+        if (items.length >= 2) {
+            try {
+                await whatsapp.sendCarouselStrict(phone, text, items, 'Schedule Visit', `prop_visit:${inv.id}`);
+                logger.info(`[PropShare] Inventory ${inv.id} → ${phone} as a ${items.length}-card carousel`);
+                return true;
+            } catch (carouselError) {
+                logger.warn(`[PropShare] Carousel rejected for ${inv.id}; sending attachments individually: ${(carouselError as Error).message}`);
             }
         }
-        logger.info(`[PropShare] Inventory ${inv.id} → ${phone} as ${items.length} direct media attachment(s)`);
+        // The first attachment carries the details; if it fails the caller falls back to the card
+        // template. Later failures are logged only — the recipient already has the details.
+        await whatsapp.sendMediaStrict(phone, items[0].type, items[0].url, text);
+        let sentCount = 1;
+        for (const item of items.slice(1)) {
+            try {
+                await whatsapp.sendMediaStrict(phone, item.type, item.url);
+                sentCount++;
+            } catch (itemError) {
+                logger.warn(`[PropShare] ${item.type} failed for ${inv.id} (${item.url}): ${(itemError as Error).message}`);
+            }
+        }
+        logger.info(`[PropShare] Inventory ${inv.id} → ${phone} as ${sentCount}/${items.length} direct media attachment(s)`);
         return true;
     } catch (mediaError) {
         if (throwOnError) throw mediaError;
@@ -602,7 +636,7 @@ export async function shareInventoryCard(phone: string, inv: any, content: Share
 
     try {
         const { params } = buildPropertyShareContent(inv);
-        const imageUrl = await pickSendableImage(inv.media_urls);
+        const imageUrl = await pickSendableImage(collectPropertyShareMedia(inv).images); // JPEG copies — Meta rejects WebP headers
         await sendPropertyCard(phone, inv.intent, params, imageUrl);
         logger.info(`[PropShare] Inventory ${inv.id} → ${phone} via no-link property card`);
         return true;
@@ -656,19 +690,45 @@ const API_BASE = process.env.API_BASE_URL || 'https://api.realtypandit.in';
 // Brandless fallback header image used when a property has no reachable photo.
 const DEFAULT_CARD_IMAGE = 'https://realtypandit.in/logo.png';
 
+const WA_IMAGE_LINK_TTL_SEC = 7 * 24 * 3600;
+const WA_MAX_VIDEO_BYTES = 16 * 1024 * 1024; // Meta's video message limit
+
+/**
+ * Signed public JPEG copy of a stored CRM photo (served by GET /inventory/:id/wa-image.jpg).
+ * Uploads are WebP, which WhatsApp rejects for image messages — JPEG/PNG only.
+ */
+export function whatsappImageUrl(inventoryId: string, src: string): string {
+    const exp = Math.floor(Date.now() / 1000) + WA_IMAGE_LINK_TTL_SEC;
+    const token = signPdfToken(inventoryId, `wa-jpeg:${src}`, exp);
+    return `${BROCHURE_API_BASE}/inventory/${inventoryId}/wa-image.jpg?src=${encodeURIComponent(src)}&token=${token}`;
+}
+
+/**
+ * Photos + videos in the form WhatsApp accepts: local photos (any stored format) via the
+ * JPEG route, external photos only if already JPEG/PNG; videos only MP4/3GPP (uploads are
+ * remuxed to .mp4) and, for local files, only within Meta's 16MB limit — an oversized
+ * video would make Meta drop the whole carousel.
+ */
 export function collectPropertyShareMedia(inv: any): { images: string[]; videos: string[] } {
-    const normalize = (url: string) => url.startsWith('http') ? url : `${API_BASE}${url.startsWith('/') ? '' : '/'}${url}`;
-    const isVideo = (url: string) => /\.(mp4|webm|ogg|mov)(?:\?|$)/i.test(url);
-    const isImage = (url: string) => /\.(jpe?g|png|webp)(?:\?|$)/i.test(url);
-    const all = [...(inv.media_urls || []), ...(inv.video_urls || [])]
-        .filter((url: unknown): url is string => typeof url === 'string' && url.length > 0)
-        .map(normalize);
-    const unique = [...new Set(all)];
-    // ponytail: cap one share at 10 attachments; use a queued album sender if larger galleries become common.
-    return {
-        images: unique.filter(isImage).slice(0, 8),
-        videos: unique.filter(isVideo).slice(0, 2),
-    };
+    const clean = (list: unknown) => [...new Set(((list as unknown[]) || [])
+        .filter((u): u is string => typeof u === 'string' && u.length > 0)
+        .map((u) => (u.startsWith('http') || u.startsWith('/') ? u : `/${u}`)))];
+    const isVideo = (u: string) => /\.(mp4|webm|ogg|mov|m4v|3gp|avi|mkv)(?:\?|$)/i.test(u);
+    const sendableVideo = (u: string) => /\.(mp4|3gp)(?:\?|$)/i.test(u);
+    const all = clean([...(inv.media_urls || []), ...(inv.video_urls || [])]);
+
+    const images = all.filter((u) => !isVideo(u)).flatMap((u) => {
+        if (u.startsWith('/uploads/')) return [whatsappImageUrl(inv.id, u)];
+        return u.startsWith('http') && /\.(jpe?g|png)(?:\?|$)/i.test(u) ? [u] : [];
+    });
+    const videos = all.filter(sendableVideo).filter((u) => {
+        if (u.startsWith('http')) return true;
+        const abs = resolveMediaPath(u);
+        return !abs || fs.statSync(abs).size <= WA_MAX_VIDEO_BYTES;
+    }).map((u) => (u.startsWith('http') ? u : `${API_BASE}${u}`));
+
+    // 8 + 2 = a carousel's 10-card maximum.
+    return { images: images.slice(0, 8), videos: videos.slice(0, 2) };
 }
 
 // HEAD-check (with GET fallback) that an image URL is actually fetchable as an image.
