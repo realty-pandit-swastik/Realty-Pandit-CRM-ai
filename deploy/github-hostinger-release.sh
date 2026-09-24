@@ -116,8 +116,12 @@ case "$command" in
       [[ "$run_migrations" == 0 ]] || printf 'Database rollback is manual after a migration.\n' >&2
       die 'deployment verification failed'
     fi
+    # Pruning is best-effort: the new release is already live and verified, so a release this
+    # user can't delete (e.g. one unpacked by hand as root) must warn, not fail the deploy.
     find "$releases" -mindepth 1 -maxdepth 1 -type d -printf '%T@ %p\n' | sort -nr | tail -n "+$((keep_releases + 1))" | cut -d' ' -f2- | while IFS= read -r old; do
-      [[ "$old" == "$previous" ]] || { chmod -R u+w "$old" 2>/dev/null || true; rm -rf "$old"; }
+      [[ "$old" == "$previous" ]] && continue
+      chmod -R u+w "$old" 2>/dev/null || true
+      rm -rf "$old" 2>/dev/null || printf 'WARNING: could not prune %s (owned by %s); remove it as root.\n' "$old" "$(stat -c '%U' "$old" 2>/dev/null || echo '?')" >&2
     done
     printf 'Deployment verified: %s\n' "$release_id"
     ;;
