@@ -1,7 +1,7 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react';
 import PhoneInput from './PhoneInput';
-import client, { getPartnerAssignable, assignLeadToTeammate, shareLead, rosterForPickers } from '../api/client';
+import client, { getPartnerAssignable, assignLeadToTeammate, shareLead, rosterForPickers, updateContactProfile } from '../api/client';
 import { isPlaceholderPhone, isDialablePhone, isValidPhoneInput, toDialablePhone, normalizePhoneInput } from '../lib/phone';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
@@ -308,10 +308,15 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
     const [savingNotes, setSavingNotes] = useState(false);
     const [editName, setEditName] = useState('');
     const [savingName, setSavingName] = useState(false);
+    const [editPhone, setEditPhone] = useState('');
+    const [savingPhone, setSavingPhone] = useState(false);
     const [editLifecycle, setEditLifecycle] = useState('');
     const [editAgent, setEditAgent] = useState('');
     const [sharedWith, setSharedWith] = useState<string[]>([]); // 2026-07-31 lead collaboration
     const demandFormRef = useRef<DemandRequirementsFormHandle>(null); // 2026-08-01 single-save
+    // In-batch re-keyed phone: set during handleSaveAll so the requirements
+    // sub-form (submitted via ref) uses the NEW key, not stale selectedPhone state.
+    const saveKeyRef = useRef<string | null>(null);
     const [savingAll, setSavingAll] = useState(false);
     const [saveError, setSaveError] = useState<string | null>(null);
     const [editPartnerAssignee, setEditPartnerAssignee] = useState('');   // PartnerAgent id — NOT an Agent id
@@ -643,6 +648,9 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
             setLeadDetail(d);
             setEditNotes(d.notes || '');
             setEditName(d.name || '');
+            // Placeholders seed empty: PhoneInput strips letters on first keystroke,
+            // so mounting "PENDING-…"/"TEMP_…" raw would visibly mutate under the user.
+            setEditPhone(isPlaceholderPhone(d.phone_number) ? '' : (d.phone_number || ''));
             setEditLifecycle(d.lifecycle_stage || 'NEW');
             setEditAgent(d.assigned_agent_id || '');
             setSharedWith((d as any).shared_with_ids || []);
@@ -869,26 +877,66 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
         setEditAgent(agentId); // staged — committed by Save changes
     };
 
-    const handleSaveNotes = async () => {
-        if (!selectedPhone) return;
+    const handleSaveNotes = async (phoneOverride?: string) => {
+        const key = phoneOverride ?? selectedPhone;
+        if (!key) return;
         setSavingNotes(true);
         try {
-            await client.patch(`/api/leads/${encodeURIComponent(selectedPhone)}/requirements`, { notes: editNotes });
-            setRecentLeads(prev => prev.map(l => l.phone_number === selectedPhone ? { ...l, notes: editNotes } : l));
+            await client.patch(`/api/leads/${encodeURIComponent(key)}/requirements`, { notes: editNotes });
+            setRecentLeads(prev => prev.map(l => l.phone_number === key ? { ...l, notes: editNotes } : l));
         } catch (err) { console.error('[ExternalLeads] Operation failed:', err); } finally { setSavingNotes(false); }
     };
 
-    const handleSaveName = async () => {
-        if (!selectedPhone) return;
+    const handleSaveName = async (phoneOverride?: string) => {
+        const key = phoneOverride ?? selectedPhone;
+        if (!key) return;
         const trimmed = editName.trim();
         setSavingName(true);
         try {
-            await client.patch(`/api/leads/${encodeURIComponent(selectedPhone)}`, { name: trimmed });
+            await client.patch(`/api/leads/${encodeURIComponent(key)}`, { name: trimmed });
             setLeadDetail(prev => prev ? { ...prev, name: trimmed } : prev);
-            setRecentLeads(prev => prev.map(l => l.phone_number === selectedPhone ? { ...l, name: trimmed } : l));
+            setRecentLeads(prev => prev.map(l => l.phone_number === key ? { ...l, name: trimmed } : l));
         } catch (err: any) {
             alert(err?.response?.data?.error || 'Failed to update name');
         } finally { setSavingName(false); }
+    };
+
+    // Canonical phone equality: the input normalizes to bare digits ("9999000022")
+    // while stored keys are E.164 ("+919999000022") — raw !== must not count as a change.
+    const samePhone = (a: string, b: string): boolean => {
+        if (a === b) return true;
+        const ca = toDialablePhone(a);
+        const cb = toDialablePhone(b);
+        // Both placeholders (null) with different keys are NOT the same — but placeholders
+        // are never valid new input (rejected below), so treating null/null as same only
+        // skips a meaningless placeholder→placeholder "change".
+        return ca !== null && ca === cb;
+    };
+
+    // Phone re-key (2026-09-28): a wrongly-entered or placeholder (PENDING-/TEMP_)
+    // number can be corrected after submit. Reuses PATCH /api/contacts/:phone/profile
+    // which cascades via ON UPDATE CASCADE to deals/inventory/interactions.
+    // Returns the new phone when re-keyed, null when unchanged.
+    const handleSavePhone = async (): Promise<string | null> => {
+        if (!selectedPhone) return null;
+        const trimmed = editPhone.trim();
+        if (!trimmed || samePhone(trimmed, selectedPhone)) return null;
+        if (!isValidPhoneInput(trimmed)) {
+            throw new Error('Enter a valid 10-digit mobile number');
+        }
+        setSavingPhone(true);
+        try {
+            const res = await updateContactProfile(selectedPhone, { new_phone: trimmed });
+            // Backend normalizes and no-ops when the number is unchanged (rekeyed:false)
+            // — don't report a change or rewrite state in that case.
+            if (!res.rekeyed) return null;
+            const newPhone = res.new_phone || trimmed;
+            setSelectedPhone(newPhone);
+            setEditPhone(newPhone);
+            setLeadDetail(prev => prev ? { ...prev, phone_number: newPhone } : prev);
+            setRecentLeads(prev => prev.map(l => l.phone_number === selectedPhone ? { ...l, phone_number: newPhone } : l));
+            return newPhone;
+        } finally { setSavingPhone(false); }
     };
 
     // handleSaveRequirements (legacy inline-form save) removed Phase 2 demand-side
@@ -899,7 +947,10 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
     // alongside the legacy intent/budget/area/timeline/preferred_location fields. The
     // backend (Phase 1) deep-merges schema_values onto whatever was already there.
     const handleSaveDemandCanonical = async (payload: DemandPayload) => {
-        if (!selectedPhone) return;
+        // Prefer the in-batch re-keyed phone (saveKeyRef) over stale state:
+        // after a number change, selectedPhone state hasn't flushed yet.
+        const key = saveKeyRef.current ?? selectedPhone;
+        if (!key) return;
         setSavingReqs(true);
         try {
             // Derive a single demand_bhk Int from canonical bhk for legacy mirror — keeps
@@ -921,7 +972,7 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
             // demand_amenities columns dropped. POST canonical SoT only —
             // including any legacy mirror keys causes the backend to attempt
             // Unknown-argument writes → 500.
-            await client.patch(`/api/leads/${encodeURIComponent(selectedPhone)}/requirements`, {
+            await client.patch(`/api/leads/${encodeURIComponent(key)}/requirements`, {
                 intent: payload.intent || null,
                 budget_min: payload.budget_min,
                 budget_max: payload.budget_max,
@@ -937,7 +988,7 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
                 demand_taxonomy_node_id: payload.demand_taxonomy_node_id,
                 demand_schema_values: payload.demand_schema_values,
             });
-            setRecentLeads(prev => prev.map(l => l.phone_number === selectedPhone ? {
+            setRecentLeads(prev => prev.map(l => l.phone_number === key ? {
                 ...l,
                 budget_min: payload.budget_min != null ? String(payload.budget_min) : null,
                 budget_max: payload.budget_max != null ? String(payload.budget_max) : null,
@@ -979,18 +1030,33 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
         // Stage now routes through the deal's state machine, which rejects illegal jumps with a
         // message naming the allowed next stages. Keep it verbatim instead of collapsing it to "stage".
         let stageError: string | null = null;
+        // Local key: phone re-key changes the lead's identity mid-save, so every
+        // subsequent call in this batch must use the NEW key, not stale state.
+        let key = selectedPhone;
+        saveKeyRef.current = selectedPhone;
         try {
-            if (editName.trim() !== (leadDetail.name || '')) { try { await handleSaveName(); } catch { errs.push('name'); } }
-            if (editNotes !== (leadDetail.notes || '')) { try { await handleSaveNotes(); } catch { errs.push('notes'); } }
+            // Phone first: it re-keys the contact (cascade), so later saves use the new key.
+            if (editPhone.trim() && !samePhone(editPhone.trim(), selectedPhone)) {
+                try {
+                    const newPhone = await handleSavePhone();
+                    if (newPhone) { key = newPhone; saveKeyRef.current = newPhone; showToast('Phone number updated', 'success'); }
+                } catch (e: any) {
+                    const msg = e?.response?.data?.error || e?.message || 'Could not save phone number';
+                    setSaveError(msg); showToast(msg, 'error');
+                    return;
+                }
+            }
+            if (editName.trim() !== (leadDetail.name || '')) { try { await handleSaveName(key); } catch { errs.push('name'); } }
+            if (editNotes !== (leadDetail.notes || '')) { try { await handleSaveNotes(key); } catch { errs.push('notes'); } }
             if (editLifecycle !== (leadDetail.lifecycle_stage || 'NEW')) {
                 try {
-                    const resp = await client.patch(`/api/leads/${encodeURIComponent(selectedPhone)}/requirements`, { lifecycle_stage: editLifecycle });
+                    const resp = await client.patch(`/api/leads/${encodeURIComponent(key)}/requirements`, { lifecycle_stage: editLifecycle });
                     // Trust the server's value, not the requested one: when a lead has more than
                     // one deal the resulting stage is derived from all of them and can legitimately
                     // differ from the pick (e.g. another deal is further along).
                     const applied = (resp as any)?.data?.lifecycle_stage || editLifecycle;
                     if (applied !== editLifecycle) setEditLifecycle(applied);
-                    setRecentLeads(prev => prev.map(l => l.phone_number === selectedPhone ? { ...l, lifecycle_stage: applied } : l));
+                    setRecentLeads(prev => prev.map(l => l.phone_number === key ? { ...l, lifecycle_stage: applied } : l));
                 } catch (e: any) {
                     stageError = e?.response?.data?.error || null;
                     errs.push('stage');
@@ -998,18 +1064,18 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
             }
             if (editAgent !== (leadDetail.assigned_agent_id || '')) {
                 try {
-                    if (editAgent) await client.patch(`/api/leads/${encodeURIComponent(selectedPhone)}/reassign`, { agent_id: editAgent });
-                    else await client.patch(`/api/leads/${encodeURIComponent(selectedPhone)}/assign`, { agent_id: null });
-                    setRecentLeads(prev => prev.map(l => l.phone_number === selectedPhone ? { ...l, assigned_agent_id: editAgent || null } : l));
+                    if (editAgent) await client.patch(`/api/leads/${encodeURIComponent(key)}/reassign`, { agent_id: editAgent });
+                    else await client.patch(`/api/leads/${encodeURIComponent(key)}/assign`, { agent_id: null });
+                    setRecentLeads(prev => prev.map(l => l.phone_number === key ? { ...l, assigned_agent_id: editAgent || null } : l));
                 } catch { errs.push('assigned agent'); }
             }
             const origShared = ((leadDetail as any).shared_with_ids || []) as string[];
             const changedShared = origShared.length !== sharedWith.length || origShared.some(id => !sharedWith.includes(id));
             if (changedShared) {
                 try {
-                    const res = await shareLead(selectedPhone, sharedWith);
+                    const res = await shareLead(key, sharedWith);
                     setSharedWith(res.shared_with_ids || sharedWith);
-                    setRecentLeads(pl => pl.map(l => l.phone_number === selectedPhone ? ({ ...l, shared_with_ids: res.shared_with_ids || sharedWith } as any) : l));
+                    setRecentLeads(pl => pl.map(l => l.phone_number === key ? ({ ...l, shared_with_ids: res.shared_with_ids || sharedWith } as any) : l));
                 } catch { errs.push('shared-with'); }
             }
             // Buyer requirements — always commit via the sub-form (idempotent PATCH).
@@ -1018,6 +1084,7 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
             if (errs.length) { setSaveError(stageError || ('Could not save: ' + errs.join(', '))); showToast(stageError || 'Some changes failed to save', 'error'); }
             else showToast('Lead saved', 'success');
         } finally {
+            saveKeyRef.current = null;
             setSavingAll(false);
         }
     };
@@ -1789,6 +1856,20 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
                                         </div>
                                     )}
 
+                                    {/* Edit Phone (privileged) — correct a wrong number after submit.
+                                        Placeholder PENDING-/TEMP_ leads show a hint to set the real number. */}
+                                    {isPrivileged && (
+                                        <div>
+                                            <label style={soLabel}>Phone number</label>
+                                            <PhoneInput value={editPhone} onChange={v => setEditPhone(v)} style={soInput} />
+                                            {isPlaceholderPhone(leadDetail.phone_number) && (
+                                                <div style={{ fontSize: '11px', color: '#f59e0b', marginTop: '4px' }}>
+                                                    This lead has a placeholder number — enter the client's real mobile number.
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+
                                     {/* Lifecycle + Agent + collaboration — single column (2026-08-01) */}
                                     <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '12px' }}>
                                         <div>
@@ -2144,7 +2225,7 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
                                 {/* 2026-08-01: single sticky Save-changes footer (replaces the per-field save buttons) */}
                                 <div style={{ position: 'sticky', bottom: 0, marginTop: 'auto', padding: '12px 20px', borderTop: '1px solid var(--border-secondary)', backgroundColor: 'var(--bg-primary)', display: 'flex', flexDirection: 'column', gap: '6px', zIndex: 6, boxShadow: '0 -4px 12px rgba(0,0,0,0.06)' }}>
                                     {saveError && <div style={{ fontSize: '12px', color: '#ef4444' }}>{saveError}</div>}
-                                    <button onClick={handleSaveAll} disabled={savingAll || savingName || savingNotes} style={{ ...primaryBtn, width: '100%', opacity: savingAll ? 0.7 : 1 }}>
+                                    <button onClick={handleSaveAll} disabled={savingAll || savingName || savingNotes || savingPhone} style={{ ...primaryBtn, width: '100%', opacity: savingAll ? 0.7 : 1 }}>
                                         {savingAll ? 'Saving…' : '💾 Save changes'}
                                     </button>
                                 </div>
