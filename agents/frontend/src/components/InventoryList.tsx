@@ -977,8 +977,14 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
         if (!deletingId) return;
         setDeleting(true);
         try {
-            await deleteInventory(deletingId);
+            const res: any = await deleteInventory(deletingId);
             setDeletingId(null);
+            // Backend now soft-withdraws when visits/deals exist (withdrawn:true), hard-deletes otherwise
+            if (res?.withdrawn) {
+                showToast(res?.message || 'Property moved to Withdrawn — you can re-activate it later.', 'success');
+            } else {
+                showToast(res?.message || 'Property deleted', 'success');
+            }
             await loadInventory();
         } catch (err: any) {
             showToast(err.response?.data?.error || 'Failed to delete', 'error');
@@ -1952,27 +1958,36 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
                 </div>
             )}
 
-            {/* Delete Confirmation Modal */}
-            {deletingId && (
+            {/* Delete Confirmation Modal - soft-withdraw by default, hard delete only when safe */}
+            {deletingId && (() => {
+                const delItem = inventory.find(i => i.id === deletingId);
+                const hasHistory = (delItem?.stats && (delItem.stats.visits_scheduled > 0 || delItem.stats.shares > 0)) || false;
+                return (
                 <div style={s.overlay} onClick={e => e.target === e.currentTarget && setDeletingId(null)}>
-                    <div style={{ ...s.modal, width: '400px' }}>
-                        <h3 style={s.modalTitle}>Confirm Delete</h3>
-                        <p style={{ color: 'var(--text-secondary)', marginBottom: '20px' }}>
-                            Are you sure you want to permanently delete this inventory record? This action cannot be undone.
+                    <div style={{ ...s.modal, width: '420px' }}>
+                        <h3 style={s.modalTitle}>Remove property?</h3>
+                        <p style={{ color: 'var(--text-secondary)', marginBottom: '12px', fontSize: '14px', lineHeight: '1.5' }}>
+                            {hasHistory
+                                ? 'This property has visits or shares. It will be moved to Withdrawn (hidden from active listings and website) instead of permanent delete, so deal history is kept. You can re-activate it later from the Status filter.'
+                                : 'No visits or deals found — this will permanently delete the property and its shares/saves.'}
+                        </p>
+                        <p style={{ color: 'var(--text-muted)', fontSize: '12px', marginBottom: '20px' }}>
+                            {delItem?.display_id ? `ID: ${delItem.display_id}` : ''} {delItem?.full_address || delItem?.locality || ''}
                         </p>
                         <div style={s.btnRow}>
                             <button style={s.cancelBtn} onClick={() => setDeletingId(null)}>Cancel</button>
                             <button
-                                style={{ ...s.btnPrimary, backgroundColor: '#ef4444', opacity: deleting ? 0.6 : 1 }}
+                                style={{ ...s.btnPrimary, backgroundColor: hasHistory ? '#f59e0b' : '#ef4444', opacity: deleting ? 0.6 : 1 }}
                                 disabled={deleting}
                                 onClick={handleDelete}
                             >
-                                {deleting ? 'Deleting...' : 'Delete'}
+                                {deleting ? 'Processing...' : hasHistory ? 'Move to Withdrawn' : 'Delete permanently'}
                             </button>
                         </div>
                     </div>
                 </div>
-            )}
+                );
+            })()}
 
             {/* Bulk Upload Modal */}
             {showUploadModal && (

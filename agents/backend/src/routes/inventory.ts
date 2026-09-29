@@ -2545,7 +2545,10 @@ router.post('/:id/reject', authMiddleware, checkPermission('edit_inventory'), as
     }
 });
 
-// DELETE /inventory/:id - Delete inventory (requires delete_inventory permission)
+// DELETE /inventory/:id - Soft-withdraw by default; hard-delete only when safe
+// Requires delete_inventory permission. Mirrors PATCH edit guard (team ownership + partner guard).
+// - If property has visits/deals -> soft withdraw (status='withdrawn'), keep history, remove from catalog
+// - Else hard delete with cleanup of shares/saves/shortlists + catalog + uploads
 router.delete('/:id', authMiddleware, checkPermission('delete_inventory'), async (req, res) => {
     try {
         const id = req.params.id as string;
@@ -2555,14 +2558,93 @@ router.delete('/:id', authMiddleware, checkPermission('delete_inventory'), async
             return res.status(404).json({ error: 'Inventory not found' });
         }
 
-        await prisma.inventory.delete({ where: { id } });
+        // Partner write-guard: a partner may only mutate their OWN listing (same as PATCH)
+        if (!(await partnerMayMutateInventory(req as any, res as any, id))) return;
 
-        logger.info(`[Inventory] Deleted ${id} by agent ${req.agent!.id}`);
-        res.json({ message: 'Inventory deleted successfully', id });
-    } catch (error) {
+        // Team ownership guard (same as PATCH): super_boss bypass, else must own via team
+        {
+            const me: any = req.agent!;
+            if (me.role !== 'partner') {
+                const editTeamIds = await getTeamIds(me);
+                const canEdit = me.role === 'super_boss'
+                    || editTeamIds.includes(existing.assigned_agent_id as string)
+                    || editTeamIds.includes(existing.uploaded_by_agent_id as string);
+                if (!canEdit) return res.status(403).json({ error: 'You can only delete listings owned by you or your team.' });
+            }
+        }
+
+        // Already withdrawn -> treat as success (idempotent)
+        if (existing.status === 'withdrawn') {
+            return res.json({ message: 'Property already withdrawn', id, status: 'withdrawn', withdrawn: true });
+        }
+
+        // Check blocking relations that must never be hard-deleted (visit/deal = audit trail)
+        const [visitCount, dealCount] = await Promise.all([
+            prisma.appointment.count({ where: { property_id: id } }),
+            prisma.transaction.count({ where: { inventory_id: id } }),
+        ]);
+
+        const hasBlockingHistory = visitCount > 0 || dealCount > 0;
+
+        if (hasBlockingHistory) {
+            // Soft-withdraw: keep row + history, hide from active catalog
+            await prisma.inventory.update({
+                where: { id },
+                data: { status: 'withdrawn' },
+            });
+            deleteCatalogProduct(id).catch(e => logger.warn('[Catalog] post-withdraw delete failed:', e.message));
+            cacheDel('cache:/public/featured*').catch(() => {});
+            cacheDel('cache:/public/properties*').catch(() => {});
+            logger.info(`[Inventory] Soft-withdrawn ${id} by agent ${(req as any).agent!.id} (visits:${visitCount} deals:${dealCount})`);
+            return res.json({
+                message: visitCount || dealCount
+                    ? `Property has ${visitCount} visit(s) and ${dealCount} deal(s) — moved to Withdrawn instead of permanent delete. You can re-activate it later.`
+                    : 'Property moved to Withdrawn',
+                id,
+                status: 'withdrawn',
+                withdrawn: true,
+                visitCount,
+                dealCount,
+            });
+        }
+
+        // No blocking history -> safe hard delete with cleanup of removable relations
+        await prisma.$transaction(async (tx) => {
+            // Removable relations without cascade (would otherwise P2003)
+            await tx.propertyShare.deleteMany({ where: { inventory_id: id } });
+            await tx.savedProperty.deleteMany({ where: { inventory_id: id } });
+            await tx.leadPropertyShortlist.deleteMany({ where: { inventory_id: id } });
+            // InventoryDocument cascades, Task SetNull, Appointment/Transaction already checked ==0
+            await tx.inventory.delete({ where: { id } });
+        });
+
+        deleteCatalogProduct(id).catch(e => logger.warn('[Catalog] post-delete delete failed:', e.message));
+        cacheDel('cache:/public/featured*').catch(() => {});
+        cacheDel('cache:/public/properties*').catch(() => {});
+        // Best-effort disk cleanup (uploads/properties/:id) - never fail the request
+        try {
+            const dir = path.join(process.cwd(), 'uploads', 'properties', id);
+            if (fs.existsSync(dir)) fs.rmSync(dir, { recursive: true, force: true });
+        } catch (e) {
+            logger.warn(`[Inventory DELETE] disk cleanup failed for ${id}:`, e);
+        }
+
+        logger.info(`[Inventory] Hard-deleted ${id} by agent ${(req as any).agent!.id}`);
+        res.json({ message: 'Inventory deleted successfully', id, status: 'deleted', withdrawn: false });
+    } catch (error: any) {
+        // Prisma FK violation fallback -> soft withdraw instead of 500
+        if (error?.code === 'P2003' || String(error?.message || '').includes('Foreign key constraint')) {
+            try {
+                await prisma.inventory.update({ where: { id: req.params.id }, data: { status: 'withdrawn' } });
+                deleteCatalogProduct(req.params.id).catch(() => {});
+                logger.warn(`[Inventory DELETE] FK fallback soft-withdraw for ${req.params.id}`);
+                return res.json({ message: 'Property has linked records — moved to Withdrawn instead of permanent delete.', id: req.params.id, status: 'withdrawn', withdrawn: true });
+            } catch {}
+        }
         captureRouteError(error, req, { route: 'inventory#11' });
         logger.error('[Inventory DELETE] Error:', error);
-        res.status(500).json({ error: 'Failed to delete inventory' });
+        const msg = error?.status === 403 || error?.statusCode === 403 ? error.message : 'Failed to delete inventory';
+        res.status(error?.status || 500).json({ error: msg });
     }
 });
 
