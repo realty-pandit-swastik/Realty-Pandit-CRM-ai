@@ -1,12 +1,24 @@
 /**
  * Call Log Management - Phase 4.1
  * View call history with audio playback, transcripts, and AI summaries
+ *
+ * Styling note (2026-09-28): this screen was originally written with Tailwind
+ * utility classes, but the admin SPA ships NO Tailwind (no tailwindcss dep, no
+ * PostCSS plugin, no @tailwind directive — index.css is a CSS-custom-property
+ * theme). Those class names compiled to inert strings, so the page rendered
+ * unstyled in production. It is now ported to the app's house style: inline
+ * styles driven by the --* theme tokens in index.css, like every other CRM tab.
+ *
+ * Data note: reads through the shared axios client (api/client.ts), which fails
+ * loudly in production when VITE_API_BASE_URL is unset. The previous local
+ * `authedFetch` + API_BASE_URL pair (lib/api.ts) silently fell back to
+ * http://localhost:7071 in a production build.
  */
 
 import { useState, useEffect, useRef } from 'react';
 import { Phone, PhoneIncoming, PhoneOutgoing, PhoneMissed, Play, Pause, Download, Filter, Calendar, Clock, FileText, MessageSquare } from 'lucide-react';
+import client from '../api/client';
 import { useAuth } from '../contexts/AuthContext';
-import { API_BASE_URL, authedFetch } from '../lib/api';
 import { useToast } from '../contexts/ToastContext';
 
 interface VoiceCall {
@@ -36,6 +48,39 @@ const DIRECTIONS = [
   { value: 'inbound', label: 'Incoming' },
   { value: 'outbound', label: 'Outgoing' },
 ];
+
+// ─── House styles (index.css theme tokens — light + dark aware) ───────────────
+const s = {
+  page: { padding: '24px', maxWidth: '1280px', margin: '0 auto' } as React.CSSProperties,
+  h1: { fontSize: '24px', fontWeight: 700, color: 'var(--text-primary)', margin: '0 0 4px' } as React.CSSProperties,
+  subtitle: { fontSize: '13px', color: 'var(--text-secondary)', margin: '0 0 20px' } as React.CSSProperties,
+  card: { backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-secondary)', borderRadius: '10px', padding: '16px' } as React.CSSProperties,
+  sectionTitle: { fontSize: '16px', fontWeight: 600, color: 'var(--text-primary)' } as React.CSSProperties,
+  label: { display: 'block', fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '4px' } as React.CSSProperties,
+  input: {
+    width: '100%', padding: '8px 10px', borderRadius: '8px', boxSizing: 'border-box',
+    border: '1px solid var(--border-secondary)', backgroundColor: 'var(--bg-secondary)',
+    color: 'var(--text-primary)', fontSize: '13px',
+  } as React.CSSProperties,
+  statValue: { fontSize: '22px', fontWeight: 700, color: 'var(--text-primary)' } as React.CSSProperties,
+  statLabel: { fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' } as React.CSSProperties,
+  row: { padding: '16px', borderBottom: '1px solid var(--border-secondary)' } as React.CSSProperties,
+  iconBtn: {
+    display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '34px', height: '34px',
+    borderRadius: '999px', border: 'none', backgroundColor: 'var(--accent-primary)', color: '#fff',
+    cursor: 'pointer', flexShrink: 0,
+  } as React.CSSProperties,
+  ghostBtn: {
+    display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '34px', height: '34px',
+    borderRadius: '8px', border: 'none', backgroundColor: 'transparent', color: 'var(--text-secondary)',
+    cursor: 'pointer', flexShrink: 0,
+  } as React.CSSProperties,
+  linkBtn: {
+    display: 'inline-flex', alignItems: 'center', gap: '6px', background: 'none', border: 'none',
+    padding: 0, fontSize: '13px', color: 'var(--text-link)', cursor: 'pointer', fontWeight: 600,
+  } as React.CSSProperties,
+  badge: { display: 'inline-block', padding: '2px 8px', borderRadius: '10px', fontSize: '11px', fontWeight: 700 } as React.CSSProperties,
+};
 
 export default function CallLog() {
   const { hasPermission } = useAuth();
@@ -78,7 +123,8 @@ export default function CallLog() {
   const fetchCalls = async () => {
     try {
       setLoading(true);
-      const response = await authedFetch(`${API_BASE_URL}/api/calls/voice-log/all`);
+      setError('');
+      const response = await client.get('/api/calls/voice-log/all');
 
       if (response.status === 403) {
         // User doesn't have permission - don't show error, just don't render
@@ -87,12 +133,15 @@ export default function CallLog() {
         return;
       }
 
-      if (!response.ok) throw new Error('Failed to fetch calls');
-
-      const data = await response.json();
-      setCalls(data.calls || []);
+      const data: any = response.data;
+      setCalls(data?.calls || []);
     } catch (err: any) {
-      setError(err.message || 'Failed to load call log');
+      const status = err?.response?.status;
+      setError(
+        status === 403
+          ? 'You do not have permission to view call logs'
+          : (err?.response?.data?.error || err?.message || 'Failed to load call log')
+      );
     } finally {
       setLoading(false);
     }
@@ -125,11 +174,12 @@ export default function CallLog() {
 
     // Search query
     if (searchQuery) {
+      const q = searchQuery.toLowerCase();
       filtered = filtered.filter(call =>
-        call.phone_number.includes(searchQuery) ||
-        call.contact?.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        call.transcript?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        call.ai_call_summary?.toLowerCase().includes(searchQuery.toLowerCase())
+        (call.phone_number || '').includes(searchQuery) ||
+        (call.contact?.name || '').toLowerCase().includes(q) ||
+        (call.transcript || '').toLowerCase().includes(q) ||
+        (call.ai_call_summary || '').toLowerCase().includes(q)
       );
     }
 
@@ -201,20 +251,19 @@ export default function CallLog() {
 
   const getCallIcon = (call: VoiceCall) => {
     if (call.direction === 'inbound') {
-      return call.call_status === 'answered' ?
-        <PhoneIncoming className="w-5 h-5 text-green-600" /> :
-        <PhoneMissed className="w-5 h-5 text-red-600" />;
-    } else {
-      return <PhoneOutgoing className="w-5 h-5 text-blue-600" />;
+      return call.call_status === 'answered'
+        ? <PhoneIncoming size={20} color="var(--success-text)" />
+        : <PhoneMissed size={20} color="var(--error-text)" />;
     }
+    return <PhoneOutgoing size={20} color="var(--btn-blue-text)" />;
   };
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'answered': return 'bg-green-100 text-green-700';
-      case 'missed': return 'bg-red-100 text-red-700';
-      case 'failed': return 'bg-gray-100 text-gray-700';
-      default: return 'bg-gray-100 text-gray-700';
+      case 'answered': return { backgroundColor: 'var(--success-bg)', color: 'var(--success-text)' };
+      case 'missed': return { backgroundColor: 'var(--error-bg)', color: 'var(--error-text)' };
+      case 'failed': return { backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-secondary)' };
+      default: return { backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-secondary)' };
     }
   };
 
@@ -236,89 +285,90 @@ export default function CallLog() {
   };
 
   if (loading) {
-    return <div className="p-6">Loading call log...</div>;
+    return <div style={{ padding: '24px', color: 'var(--text-secondary)' }}>Loading call log...</div>;
   }
 
   return (
-    <div className="p-6 max-w-7xl mx-auto">
+    <div style={s.page}>
       {/* Header */}
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold text-gray-900">📞 Call Log</h1>
-        <p className="text-gray-600 mt-1">View call history with audio playback and AI summaries</p>
+      <div>
+        <h1 style={s.h1}>📞 Call Log</h1>
+        <p style={s.subtitle}>View call history with audio playback and AI summaries</p>
       </div>
 
       {/* Error Alert */}
       {error && (
-        <div className="mb-4 p-4 bg-red-50 border border-red-200 text-red-700 rounded-lg">
+        <div style={{ marginBottom: '16px', padding: '12px 14px', backgroundColor: 'var(--error-bg)', border: '1px solid var(--error-text)', color: 'var(--error-text)', borderRadius: '8px', fontSize: '13px' }}>
           {error}
         </div>
       )}
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-6 gap-4 mb-6">
-        <div className="bg-white p-4 rounded-lg shadow">
-          <div className="text-2xl font-bold text-gray-900">{stats.total}</div>
-          <div className="text-sm text-gray-600">Total Calls</div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '12px', marginBottom: '20px' }}>
+        <div style={{ ...s.card }}>
+          <div style={s.statValue}>{stats.total}</div>
+          <div style={s.statLabel}>Total Calls</div>
         </div>
-        <div className="bg-green-50 p-4 rounded-lg shadow">
-          <div className="text-2xl font-bold text-green-600">{stats.answered}</div>
-          <div className="text-sm text-green-700">Answered</div>
+        <div style={{ ...s.card, backgroundColor: 'var(--success-bg)' }}>
+          <div style={{ ...s.statValue, color: 'var(--success-text)' }}>{stats.answered}</div>
+          <div style={{ ...s.statLabel, color: 'var(--success-text)' }}>Answered</div>
         </div>
-        <div className="bg-red-50 p-4 rounded-lg shadow">
-          <div className="text-2xl font-bold text-red-600">{stats.missed}</div>
-          <div className="text-sm text-red-700">Missed</div>
+        <div style={{ ...s.card, backgroundColor: 'var(--error-bg)' }}>
+          <div style={{ ...s.statValue, color: 'var(--error-text)' }}>{stats.missed}</div>
+          <div style={{ ...s.statLabel, color: 'var(--error-text)' }}>Missed</div>
         </div>
-        <div className="bg-blue-50 p-4 rounded-lg shadow">
-          <div className="text-2xl font-bold text-blue-600">{stats.inbound}</div>
-          <div className="text-sm text-blue-700">Incoming</div>
+        <div style={{ ...s.card, backgroundColor: 'var(--btn-blue-bg)' }}>
+          <div style={{ ...s.statValue, color: 'var(--btn-blue-text)' }}>{stats.inbound}</div>
+          <div style={{ ...s.statLabel, color: 'var(--btn-blue-text)' }}>Incoming</div>
         </div>
-        <div className="bg-purple-50 p-4 rounded-lg shadow">
-          <div className="text-2xl font-bold text-purple-600">{stats.outbound}</div>
-          <div className="text-sm text-purple-700">Outgoing</div>
+        <div style={{ ...s.card, backgroundColor: 'var(--btn-purple-bg)' }}>
+          <div style={{ ...s.statValue, color: 'var(--btn-purple-text)' }}>{stats.outbound}</div>
+          <div style={{ ...s.statLabel, color: 'var(--btn-purple-text)' }}>Outgoing</div>
         </div>
-        <div className="bg-orange-50 p-4 rounded-lg shadow">
-          <div className="text-2xl font-bold text-orange-600">{formatDuration(stats.totalDuration)}</div>
-          <div className="text-sm text-orange-700">Total Duration</div>
+        <div style={{ ...s.card, backgroundColor: 'var(--btn-orange-bg)' }}>
+          <div style={{ ...s.statValue, color: 'var(--btn-orange-text)' }}>{formatDuration(stats.totalDuration)}</div>
+          <div style={{ ...s.statLabel, color: 'var(--btn-orange-text)' }}>Total Duration</div>
         </div>
       </div>
 
       {/* Filters */}
-      <div className="bg-white p-4 rounded-lg shadow mb-6">
-        <div className="flex items-center gap-2 mb-3">
-          <Filter className="w-5 h-5 text-gray-600" />
-          <h2 className="font-semibold text-gray-900">Filters</h2>
+      <div style={{ ...s.card, marginBottom: '20px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+          <Filter size={18} color="var(--text-secondary)" />
+          <span style={s.sectionTitle}>Filters</span>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '12px' }}>
           <div>
-            <label className="block text-sm text-gray-600 mb-1">Search</label>
+            <label htmlFor="calllog-search" style={s.label}>Search</label>
             <input
+              id="calllog-search"
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Phone, name, transcript..."
-              className="w-full px-3 py-2 border rounded-lg text-sm"
+              style={s.input}
             />
           </div>
           <div>
-            <label htmlFor="status-filter" className="block text-sm text-gray-600 mb-1">Status</label>
+            <label htmlFor="status-filter" style={s.label}>Status</label>
             <select
               id="status-filter"
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
-              className="w-full px-3 py-2 border rounded-lg text-sm"
+              style={s.input}
             >
-              {CALL_STATUSES.map(s => (
-                <option key={s.value} value={s.value}>{s.label}</option>
+              {CALL_STATUSES.map(st => (
+                <option key={st.value} value={st.value}>{st.label}</option>
               ))}
             </select>
           </div>
           <div>
-            <label htmlFor="direction-filter" className="block text-sm text-gray-600 mb-1">Direction</label>
+            <label htmlFor="direction-filter" style={s.label}>Direction</label>
             <select
               id="direction-filter"
               value={directionFilter}
               onChange={(e) => setDirectionFilter(e.target.value)}
-              className="w-full px-3 py-2 border rounded-lg text-sm"
+              style={s.input}
             >
               {DIRECTIONS.map(d => (
                 <option key={d.value} value={d.value}>{d.label}</option>
@@ -326,138 +376,131 @@ export default function CallLog() {
             </select>
           </div>
           <div>
-            <label htmlFor="date-from" className="block text-sm text-gray-600 mb-1">From Date</label>
+            <label htmlFor="date-from" style={s.label}>From Date</label>
             <input
               id="date-from"
               type="date"
               value={dateFrom}
               onChange={(e) => setDateFrom(e.target.value)}
-              className="w-full px-3 py-2 border rounded-lg text-sm"
+              style={s.input}
             />
           </div>
           <div>
-            <label htmlFor="date-to" className="block text-sm text-gray-600 mb-1">To Date</label>
+            <label htmlFor="date-to" style={s.label}>To Date</label>
             <input
               id="date-to"
               type="date"
               value={dateTo}
               onChange={(e) => setDateTo(e.target.value)}
-              className="w-full px-3 py-2 border rounded-lg text-sm"
+              style={s.input}
             />
           </div>
         </div>
       </div>
 
       {/* Call List */}
-      <div className="bg-white rounded-lg shadow">
-        <div className="p-4 border-b">
-          <h2 className="text-xl font-semibold">Call History ({filteredCalls.length})</h2>
+      <div style={s.card}>
+        <div style={{ paddingBottom: '12px', borderBottom: '1px solid var(--border-secondary)' }}>
+          <span style={s.sectionTitle}>Call History ({filteredCalls.length})</span>
         </div>
 
         {filteredCalls.length === 0 ? (
-          <div className="p-12 text-center text-gray-500">
-            <Phone className="w-12 h-12 mx-auto mb-3 text-gray-300" />
-            <p className="text-lg mb-1">No calls found</p>
-            <p className="text-sm">Try adjusting your filters</p>
+          <div style={{ padding: '48px 16px', textAlign: 'center', color: 'var(--text-muted)' }}>
+            <Phone size={48} color="var(--border-secondary)" style={{ marginBottom: '12px' }} />
+            <div style={{ fontSize: '16px', color: 'var(--text-secondary)' }}>No calls found</div>
+            <div style={{ fontSize: '13px', marginTop: '2px' }}>Try adjusting your filters</div>
           </div>
         ) : (
-          <div className="divide-y">
+          <div>
             {filteredCalls.map(call => (
-              <div key={call.id} className="p-4 hover:bg-gray-50">
-                <div className="flex items-start gap-4">
+              <div key={call.id} style={s.row}>
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '16px' }}>
                   {/* Icon */}
-                  <div className="mt-1">
-                    {getCallIcon(call)}
-                  </div>
+                  <div style={{ marginTop: '2px' }}>{getCallIcon(call)}</div>
 
                   {/* Main Info */}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-start justify-between mb-2">
-                      <div>
-                        <h3 className="font-semibold text-gray-900">
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '12px', marginBottom: '8px' }}>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
                           {call.contact?.name || call.phone_number}
-                        </h3>
+                        </div>
                         {call.contact?.name && (
-                          <p className="text-sm text-gray-500">{call.phone_number}</p>
+                          <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{call.phone_number}</div>
                         )}
                       </div>
-                      <div className="text-right">
-                        <span className={`inline-block px-2 py-1 rounded text-xs font-medium ${getStatusColor(call.call_status)}`}>
-                          {call.call_status.toUpperCase()}
-                        </span>
-                      </div>
+                      <span style={{ ...s.badge, ...getStatusColor(call.call_status) }}>
+                        {(call.call_status || '').toUpperCase()}
+                      </span>
                     </div>
 
-                    <div className="flex items-center gap-4 text-sm text-gray-600 mb-3">
-                      <span className="flex items-center gap-1">
-                        <Calendar className="w-4 h-4" />
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap', fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '12px' }}>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                        <Calendar size={14} color="var(--text-muted)" />
                         {formatDate(call.started_at)}
                       </span>
-                      {call.duration && (
-                        <span className="flex items-center gap-1">
-                          <Clock className="w-4 h-4" />
+                      {call.duration ? (
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                          <Clock size={14} color="var(--text-muted)" />
                           {formatDuration(call.duration)}
                         </span>
-                      )}
-                      <span className="capitalize">
+                      ) : null}
+                      <span style={{ textTransform: 'capitalize' }}>
                         {call.direction === 'inbound' ? 'Incoming' : 'Outgoing'}
                       </span>
                     </div>
 
                     {/* AI Summary (if available) */}
                     {call.ai_call_summary && (
-                      <div className="mb-3 p-3 bg-blue-50 rounded-lg">
-                        <div className="flex items-center gap-2 mb-1">
-                          <MessageSquare className="w-4 h-4 text-blue-600" />
-                          <span className="text-sm font-medium text-blue-900">AI Summary</span>
+                      <div style={{ marginBottom: '12px', padding: '12px', backgroundColor: 'var(--btn-blue-bg)', borderRadius: '8px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
+                          <MessageSquare size={14} color="var(--btn-blue-text)" />
+                          <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--btn-blue-text)' }}>AI Summary</span>
                         </div>
-                        <p className="text-sm text-blue-800">{call.ai_call_summary}</p>
+                        <div style={{ fontSize: '13px', color: 'var(--text-primary)' }}>{call.ai_call_summary}</div>
                       </div>
                     )}
 
                     {/* Audio Playback (if recording available) */}
                     {call.recording_url && (
-                      <div className="mb-3 p-3 bg-gray-50 rounded-lg">
-                        <div className="flex items-center gap-3">
+                      <div style={{ marginBottom: '12px', padding: '12px', backgroundColor: 'var(--bg-tertiary)', borderRadius: '8px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                           <button
+                            type="button"
                             onClick={() => handlePlayPause(call)}
-                            className="p-2 bg-blue-600 text-white rounded-full hover:bg-blue-700"
+                            style={s.iconBtn}
+                            title={playingCallId === call.id ? 'Pause' : 'Play recording'}
                           >
-                            {playingCallId === call.id ? (
-                              <Pause className="w-4 h-4" />
-                            ) : (
-                              <Play className="w-4 h-4" />
-                            )}
+                            {playingCallId === call.id ? <Pause size={16} color="#fff" /> : <Play size={16} color="#fff" />}
                           </button>
 
-                          {playingCallId === call.id && (
-                            <div className="flex-1">
+                          {playingCallId === call.id ? (
+                            <div style={{ flex: 1 }}>
                               <input
                                 aria-label="Audio scrubber"
                                 type="range"
-                                min="0"
-                                max={duration}
+                                min={0}
+                                max={duration || 0}
                                 value={currentTime}
                                 onChange={(e) => handleSeek(parseFloat(e.target.value))}
-                                className="w-full"
+                                style={{ width: '100%' }}
                               />
-                              <div className="flex justify-between text-xs text-gray-500 mt-1">
+                              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>
                                 <span>{formatDuration(currentTime)}</span>
                                 <span>{formatDuration(duration)}</span>
                               </div>
                             </div>
-                          )}
-
-                          {playingCallId !== call.id && (
-                            <span className="text-sm text-gray-600">Recording available</span>
+                          ) : (
+                            <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>Recording available</span>
                           )}
 
                           <button
+                            type="button"
                             onClick={() => handleDownloadRecording(call.recording_url!, call.id)}
-                            className="p-2 text-gray-600 hover:bg-gray-200 rounded"
+                            style={s.ghostBtn}
                             title="Download recording"
                           >
-                            <Download className="w-4 h-4" />
+                            <Download size={16} color="var(--text-secondary)" />
                           </button>
                         </div>
                       </div>
@@ -467,16 +510,17 @@ export default function CallLog() {
                     {call.transcript && (
                       <div>
                         <button
+                          type="button"
                           onClick={() => setExpandedCallId(expandedCallId === call.id ? null : call.id)}
-                          className="flex items-center gap-2 text-sm text-blue-600 hover:text-blue-700"
+                          style={s.linkBtn}
                         >
-                          <FileText className="w-4 h-4" />
+                          <FileText size={14} color="var(--text-link)" />
                           {expandedCallId === call.id ? 'Hide' : 'Show'} Transcript
                         </button>
 
                         {expandedCallId === call.id && (
-                          <div className="mt-3 p-3 bg-gray-50 rounded-lg">
-                            <p className="text-sm text-gray-700 whitespace-pre-wrap">{call.transcript}</p>
+                          <div style={{ marginTop: '12px', padding: '12px', backgroundColor: 'var(--bg-tertiary)', borderRadius: '8px' }}>
+                            <div style={{ fontSize: '13px', color: 'var(--text-primary)', whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>{call.transcript}</div>
                           </div>
                         )}
                       </div>
