@@ -84,21 +84,51 @@ export async function ensureDealForLead(args: EnsureDealArgs): Promise<EnsureDea
     // agents bring the same client multiple requirements. A second SALE on a SALE deal still dedups.
     const sourceRef = args.sourceRef ? String(args.sourceRef).trim() || null : null;
     const windowDays = Number(process.env.DUPLICATE_ENQUIRY_WINDOW_DAYS ?? 30);
-    const existing = sourceRef
-        ? (windowDays > 0
-            ? await prisma.transaction.findFirst({
-                where: {
-                    demand_contact_id: args.contactPhone,
-                    source: args.source,
-                    source_ref: sourceRef,
-                    status: { in: ACTIVE_STATUSES },
-                    created_at: { gte: new Date(Date.now() - windowDays * 86_400_000) },
-                },
-                orderBy: { created_at: 'desc' },
-                select: { id: true, status: true },
-            })
-            : null)
-        : await prisma.transaction.findFirst({
+    let existing: any = null;
+    if (sourceRef) {
+        if (windowDays > 0) {
+            try {
+                existing = await prisma.transaction.findFirst({
+                    where: {
+                        demand_contact_id: args.contactPhone,
+                        source: args.source,
+                        source_ref: sourceRef,
+                        status: { in: ACTIVE_STATUSES },
+                        created_at: { gte: new Date(Date.now() - windowDays * 86_400_000) },
+                    },
+                    orderBy: { created_at: 'desc' },
+                    select: { id: true, status: true },
+                });
+            } catch (findErr: any) {
+                if (String(findErr?.message || '').includes('source_ref')) {
+                    try {
+                        await (prisma as any).$executeRawUnsafe(`
+                            ALTER TABLE "transactions" ADD COLUMN IF NOT EXISTS "source_ref" TEXT;
+                            CREATE INDEX IF NOT EXISTS "idx_transactions_source_ref" ON "transactions"("source_ref");
+                        `);
+                        existing = await prisma.transaction.findFirst({
+                            where: {
+                                demand_contact_id: args.contactPhone,
+                                source: args.source,
+                                source_ref: sourceRef,
+                                status: { in: ACTIVE_STATUSES },
+                                created_at: { gte: new Date(Date.now() - windowDays * 86_400_000) },
+                            },
+                            orderBy: { created_at: 'desc' },
+                            select: { id: true, status: true },
+                        });
+                    } catch {
+                        existing = null;
+                    }
+                } else {
+                    throw findErr;
+                }
+            }
+        } else {
+            existing = null;
+        }
+    } else {
+        existing = await prisma.transaction.findFirst({
             where: {
                 demand_contact_id: args.contactPhone,
                 type: txType,
@@ -107,6 +137,7 @@ export async function ensureDealForLead(args: EnsureDealArgs): Promise<EnsureDea
             orderBy: { created_at: 'desc' },
             select: { id: true, status: true },
         });
+    }
     if (existing) {
         return {
             dealId: existing.id,
@@ -159,30 +190,48 @@ export async function ensureDealForLead(args: EnsureDealArgs): Promise<EnsureDea
     const canonicalSchema: Record<string, any> | null =
         (contact as any).demand_schema_values ?? null;
 
-    const deal = await prisma.transaction.create({
-        data: {
-            tenant_id: contact.tenant_id,
-            demand_contact_id: args.contactPhone,
-            type: txType,
-            status: status as TransactionStatus,
-            source: args.source,
-            source_ref: sourceRef,
-            coordinator_agent_id: assignedAgentId,
-            executive_agent_id: assignedAgentId,
-            deal_scenario: dealScenario,
-            demand_intent: intentLower,
-            demand_location: args.demand?.location ?? contact.preferred_location,
-            demand_budget_min: args.demand?.budgetMin ?? (contact.budget_min ? Number(contact.budget_min) : null),
-            demand_budget_max: args.demand?.budgetMax ?? (contact.budget_max ? Number(contact.budget_max) : null),
-            demand_budget_type: (contact as any).demand_budget_type ?? null,
-            demand_area_min: (contact as any).area_min ?? null,
-            demand_area_max: (contact as any).area_max ?? null,
-            demand_handler_type: 'DIRECT',
-            demand_taxonomy_node_id: canonicalNodeId ?? undefined,
-            demand_schema_values: (canonicalSchema ?? undefined) as any,
-            ai_paused: false,
-        },
-    });
+    const dealData: any = {
+        tenant_id: contact.tenant_id,
+        demand_contact_id: args.contactPhone,
+        type: txType,
+        status: status as TransactionStatus,
+        source: args.source,
+        source_ref: sourceRef,
+        coordinator_agent_id: assignedAgentId,
+        executive_agent_id: assignedAgentId,
+        deal_scenario: dealScenario,
+        demand_intent: intentLower,
+        demand_location: args.demand?.location ?? contact.preferred_location,
+        demand_budget_min: args.demand?.budgetMin ?? (contact.budget_min ? Number(contact.budget_min) : null),
+        demand_budget_max: args.demand?.budgetMax ?? (contact.budget_max ? Number(contact.budget_max) : null),
+        demand_budget_type: (contact as any).demand_budget_type ?? null,
+        demand_area_min: (contact as any).area_min ?? null,
+        demand_area_max: (contact as any).area_max ?? null,
+        demand_handler_type: 'DIRECT',
+        demand_taxonomy_node_id: canonicalNodeId ?? undefined,
+        demand_schema_values: (canonicalSchema ?? undefined) as any,
+        ai_paused: false,
+    };
+
+    let deal: any;
+    try {
+        deal = await prisma.transaction.create({ data: dealData });
+    } catch (createErr: any) {
+        if (String(createErr?.message || '').includes('source_ref')) {
+            try {
+                await (prisma as any).$executeRawUnsafe(`
+                    ALTER TABLE "transactions" ADD COLUMN IF NOT EXISTS "source_ref" TEXT;
+                    CREATE INDEX IF NOT EXISTS "idx_transactions_source_ref" ON "transactions"("source_ref");
+                `);
+                deal = await prisma.transaction.create({ data: dealData });
+            } catch {
+                delete dealData.source_ref;
+                deal = await prisma.transaction.create({ data: dealData });
+            }
+        } else {
+            throw createErr;
+        }
+    }
     // Deal CREATION is not a transition, so the sync hook in transitionTransaction never
     // fires here. Without this a deal born at a non-NEW status leaves its lead behind —
     // observed live 2026-08-10. Awaited, not best-effort: the contact row is guaranteed by
