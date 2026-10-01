@@ -19,6 +19,8 @@ interface Lead {
     assigned_agent?: { id: string; name: string | null; role: string | null } | null;
     // 2026-08-09: agent IDs this lead is shared with, for the "Shared" badge.
     shared_with_ids?: string[] | null;
+    /** The enquiry (deal) this card represents — set when a contact has several leads. */
+    _deal?: { source_ref: string | null } | null;
 }
 
 interface LeadCardProps {
@@ -160,6 +162,12 @@ export default function LeadCard({
                     {(lead.budget_min || lead.budget_max) && (
                         <span>{formatBudget(lead.budget_min)}–{formatBudget(lead.budget_max)}</span>
                     )}
+                </div>
+            )}
+
+            {lead._deal?.source_ref && (
+                <div title={lead._deal.source_ref} style={{ marginTop: 6, fontSize: 11, color: 'var(--text-muted, #94a3b8)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    🏠 {lead._deal.source_ref}
                 </div>
             )}
 

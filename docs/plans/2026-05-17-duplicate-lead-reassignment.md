@@ -1,5 +1,7 @@
 # 2026-05-17 — Duplicate lead reassigned to a different team member
 
+> **Superseded in part 2026-10-02:** existing leads are still never reassigned, but a repeat enquiry from a known contact now creates its OWN lead (deal) assigned to that enquiry's agent instead of being returned/shared. See `docs/PROJECT_STATUS.md` (2026-10-02).
+
 **Status:** ✅ SHIPPED & VERIFIED 2026-05-17. Parts A+B deployed
 (`realty-backend`), Part C data-heal executed.
 

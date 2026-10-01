@@ -27,6 +27,20 @@ export interface VisibilityFilter {
 }
 
 /**
+ * One Contact → many Leads: each enquiry is a Transaction with its own assignee. Whoever is assigned
+ * a lead on a contact can see that contact — no share needed. Contact-level only: deal endpoints keep
+ * their own coordinator/executive team scope, so this never exposes another member's lead.
+ * (Managers also see contacts where a direct report owns a lead.)
+ */
+const OWNS_LEAD = (agentId: string, manager: boolean) => ({
+  OR: [
+    { coordinator_agent_id: agentId },
+    { executive_agent_id: agentId },
+    ...(manager ? [{ coordinator: { reports_to_id: agentId } }, { executive_agent: { reports_to_id: agentId } }] : []),
+  ],
+});
+
+/**
  * Build a Prisma WHERE clause fragment that restricts contact visibility.
  * @param agentId - ID of the requesting agent
  * @param agentRole - Role: 'super_boss' | 'manager' | 'employee'
@@ -47,6 +61,7 @@ export function buildContactVisibilityFilter(
         { assigned_agent: { reports_to_id: agentId } },
         { created_by_agent: { reports_to_id: agentId } },
         { shares: { some: { agent_id: agentId } } }, // leads shared with this member (see note above)
+        { demand_transactions: { some: OWNS_LEAD(agentId, true) } }, // owns a lead (deal) on this contact
       ],
     };
   }
@@ -57,6 +72,7 @@ export function buildContactVisibilityFilter(
       { assigned_agent_id: agentId },
       { created_by: agentId },
       { shares: { some: { agent_id: agentId } } }, // leads shared with this member (see note above)
+      { demand_transactions: { some: OWNS_LEAD(agentId, false) } }, // owns a lead (deal) on this contact
     ],
   };
 }
@@ -126,6 +142,13 @@ export async function isContactVisibleTo(
     });
     if (creator?.reports_to_id === agentId) return true;
   }
+
+  // Owns a lead (deal) on this contact — one contact can carry leads for several members.
+  const ownsLead = await prisma.transaction.findFirst({
+    where: { demand_contact_id: phoneNumber, ...OWNS_LEAD(agentId, agentRole === 'manager') },
+    select: { id: true },
+  });
+  if (ownsLead) return true;
 
   // Partner agent contact: check if this agent manages the partner
   const partnerLink = await prisma.partnerAgent.findFirst({

@@ -16,6 +16,8 @@ import { geocodeAddress } from '../utils/geocode';
 
 const router = Router();
 
+const projectNameRaw = (project: unknown) => (project ? String(project).trim() : '');
+
 /**
  * MagicBricks PUSH webhook — MagicBricks calls this endpoint with lead data.
  * Auth: api_key query param (NOT X-API-Key header).
@@ -105,11 +107,16 @@ async function handleMagicBricksPush(req: any, res: any) {
             });
             logger.info(`[MagicBricks] Duplicate lead: ${phoneNumber}`);
             // Task 2+3 (2026-07-31): duplicate re-enquiry — timeline marker + share with the newly-attributed agent.
+            // One contact → many leads: a new enquiry is a NEW lead assigned to this enquiry's own agent.
+            // ensureDealForLead dedups only a repeat of the same listing (DUPLICATE_ENQUIRY_WINDOW_DAYS).
             try {
                 const reAttr = sub_user ? await resolveAgentByMagicBricksSubUser(String(sub_user)) : null;
+                const sourceRef = (listing_id ? String(listing_id) : projectNameRaw(project)) || null;
                 const { recordLeadReingest } = await import('../services/lead_reingest');
-                await recordLeadReingest({ phone: phoneNumber, source: 'magicbricks', attributedAgentId: reAttr, subUser: sub_user ? String(sub_user) : null });
-            } catch (e) { logger.warn('[MagicBricks] reingest failed: ' + (e as Error).message); }
+                await recordLeadReingest({ phone: phoneNumber, source: 'magicbricks', attributedAgentId: reAttr, subUser: sub_user ? String(sub_user) : null, sourceRef });
+                const deal = await ensureDealForLead({ contactPhone: phoneNumber, source: 'magicbricks', sourceRef, assignedAgentId: reAttr ?? undefined });
+                return res.send(deal.created ? 'Success: Lead punched in the CRM' : 'Failure: Lead already exist');
+            } catch (e) { logger.warn('[MagicBricks] re-enquiry lead failed: ' + (e as Error).message); }
             return res.send('Failure: Lead already exist');
         }
 
@@ -311,6 +318,7 @@ async function handleMagicBricksPush(req: any, res: any) {
         ensureDealForLead({
             contactPhone: phoneNumber,
             source: 'magicbricks',
+            sourceRef: (listing_id ? String(listing_id) : projectNameRaw(project)) || null,
             assignedAgentId: agentId ?? null,
         }).catch((err) => {
             logger.error(`[MagicBricks] ensureDealForLead failed for ${phoneNumber}: ${(err as Error).message}`);

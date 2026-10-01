@@ -315,14 +315,14 @@ export async function handleCtwaAdLead(params: {
         // $extends auto-assigned it), so its "existing → keep agent" branch would
         // always win and the listing owner would never be reached.
         let assignedAgentId: string | null = null;
-        if (isNewContact) {
-            const handlerId = inv.assigned_agent_id || inv.owning_manager_id || inv.uploaded_by_agent_id || null;
-            if (handlerId) {
-                const { assignContact } = await import('./assign_contact');
-                await assignContact(phone, handlerId, 'uploader');
-                assignedAgentId = handlerId;
-                logger.info(`[CTWA] Routed new ad lead ${phone} to inventory manager ${handlerId} for ${displayId}`);
-            }
+        const handlerId = inv.assigned_agent_id || inv.owning_manager_id || inv.uploaded_by_agent_id || null;
+        if (isNewContact && handlerId) {
+            const { assignContact } = await import('./assign_contact');
+            await assignContact(phone, handlerId, 'uploader');
+            assignedAgentId = handlerId;
+            logger.info(`[CTWA] Routed new ad lead ${phone} to inventory manager ${handlerId} for ${displayId}`);
+        } else if (!isNewContact && handlerId) {
+            assignedAgentId = handlerId;
         }
 
         // ── Make sure a deal exists, then send THAT property's card ────────────────
@@ -335,6 +335,7 @@ export async function handleCtwaAdLead(params: {
         const { dealId } = await ensureDealForLead({
             contactPhone: phone,
             source: 'whatsapp',
+            sourceRef: displayId || inv.id,
             ...(assignedAgentId ? { assignedAgentId } : {}),
         });
 
