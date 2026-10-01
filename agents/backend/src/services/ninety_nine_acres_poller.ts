@@ -616,12 +616,15 @@ export class NinetyNineAcresPoller {
             });
         }
 
-        // Task 2+3 (2026-07-31): a DUPLICATE re-enquiry (existing contact) — log a timeline marker and,
-        // if this source attributes the lead to a different team member, share it with them (no reassign).
+        // One contact → many leads: a re-enquiry from a known contact gets its OWN lead (deal), assigned
+        // to the agent this enquiry is attributed to. Existing leads are never reassigned or shared.
+        const sourceRef = lead.propertyCode || lead.productId || lead.projName || null;
         if (!isNew) {
             const reAttr = lead.subUserName ? await resolveAgentByEmail(lead.subUserName) : null;
             const { recordLeadReingest } = await import('./lead_reingest');
-            await recordLeadReingest({ phone: phoneNumber, source: '99acres', attributedAgentId: reAttr, subUser: lead.subUserName });
+            await recordLeadReingest({ phone: phoneNumber, source: '99acres', attributedAgentId: reAttr, subUser: lead.subUserName, sourceRef });
+            ensureDealForLead({ contactPhone: phoneNumber, source: '99acres', sourceRef, assignedAgentId: reAttr ?? undefined })
+                .catch((err) => logger.error(`[99acres] re-enquiry ensureDealForLead failed for ${phoneNumber}: ${(err as Error).message}`));
         }
 
         // ── New contact: routing, notifications, escalation ───────────────────
@@ -731,6 +734,7 @@ export class NinetyNineAcresPoller {
             ensureDealForLead({
                 contactPhone: phoneNumber,
                 source: '99acres',
+                sourceRef,
                 assignedAgentId: finalAgentId ?? undefined,
             }).catch((err) => {
                 logger.error(`[99acres] ensureDealForLead failed for ${phoneNumber}: ${(err as Error).message}`);

@@ -138,7 +138,7 @@ router.post('/webhook', async (req, res) => {
 
         // Auto-create NEW deal so AI qualification cadence kicks in.
         const { ensureDealForLead } = await import('../services/ensure_deal');
-        ensureDealForLead({ contactPhone: phoneNumber, source: '99acres', assignedAgentId: agentId })
+        ensureDealForLead({ contactPhone: phoneNumber, source: '99acres', sourceRef: project_name || null, assignedAgentId: agentId })
             .catch(err => logger.error(`[99acres] ensureDealForLead failed for ${phoneNumber}: ${(err as Error).message}`));
 
         logger.info(`[99acres] Lead captured: ${phoneNumber} (${name || 'unnamed'})`);

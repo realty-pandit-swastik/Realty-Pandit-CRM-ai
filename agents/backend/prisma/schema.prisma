@@ -1849,6 +1849,9 @@ model Transaction {
 
   // Metadata
   source          String             @default("whatsapp") // whatsapp, web, voice, admin
+  /// The property/listing this enquiry was about (portal listing_id, project, inventory id).
+  /// Null for chat/manual deals. With `source` it forms the duplicate-enquiry key in ensureDealForLead.
+  source_ref      String?
   previous_status TransactionStatus? // For ON_HOLD recovery
 
   // AI–Team coordination
@@ -1891,6 +1894,7 @@ model Transaction {
   @@index([supply_handler_type, supply_handler_id])
   @@index([partner_assignee_id])
   @@index([owning_manager_id])
+  @@index([demand_contact_id, source, source_ref])
   @@map("transactions")
 }
 
@@ -2142,6 +2146,8 @@ model Task {
   @@index([contact_phone, task_type, status]) // Lead's active workflow tasks
   @@map("tasks")
 }
+
+
 
 // ---------------------------------------------------------
 // 24b. LEAD PROPERTY SHORTLIST (Tracks properties through lead's consideration journey)

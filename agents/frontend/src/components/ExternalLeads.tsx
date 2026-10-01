@@ -66,7 +66,17 @@ interface Lead {
     referral_partner_id: string | null;
     referral_partner_name: string | null;
     referral_partner_phone: string | null;
+    // One contact → many leads: the enquiries (deals) on this contact that the viewer may see.
+    demand_transactions?: LeadDeal[];
 }
+
+interface LeadDeal {
+    id: string; source: string; source_ref: string | null; status: string; created_at: string;
+    coordinator: { id: string; name: string | null } | null;
+}
+
+/** A list row = one enquiry. `_deal` is set when the contact has visible deals. */
+type LeadRow = Lead & { _deal?: LeadDeal };
 
 interface AppointmentEntry {
     id: string;
@@ -79,6 +89,10 @@ interface AppointmentEntry {
 }
 
 interface LeadDetail extends Lead {
+    /** Every enquiry (lead) on this contact, newest first — summary only. */
+    lead_history?: Array<LeadDeal & { coordinator_agent_id: string | null }>;
+    /** Everyone who has handled this contact: owner, each lead's assignee, explicit shares. */
+    associated_users?: Array<{ id: string; name: string | null }>;
     recent_interactions: Array<{
         id: string;
         channel: string;
@@ -1240,6 +1254,16 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
 
     // ── Select-all (header checkbox only) ──
     // Operates on currently loaded + filtered rows (not the server-side recentTotal).
+    // One row per enquiry (deal): the same contact appears once per lead, each with its own source,
+    // property, assignee and stage. A contact with no visible deals stays a single contact-level row.
+    // Counts / select-all / filters remain contact-based (filteredLeads).
+    const leadRows: LeadRow[] = filteredLeads.flatMap((l): LeadRow[] =>
+        l.demand_transactions?.length
+            ? l.demand_transactions.map(d => ({
+                ...l, _deal: d, source: d.source, lifecycle_stage: d.status,
+                assigned_agent: d.coordinator ?? (l as any).assigned_agent,
+            } as LeadRow))
+            : [l]);
     const allVisibleSelected = filteredLeads.length > 0 && filteredLeads.every(l => selectedLeadPhones.has(l.phone_number));
     const someVisibleSelected = filteredLeads.some(l => selectedLeadPhones.has(l.phone_number));
     const toggleSelectAllVisible = () => {
@@ -1638,7 +1662,7 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
                     {/* Mobile Card View */}
                     {isMobile ? (
                         <div style={{ padding: '8px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                            {filteredLeads.length > 0 ? filteredLeads.map(lead => (
+                            {filteredLeads.length > 0 ? leadRows.map(lead => (
                                 <LeadCard
                                     key={lead.phone_number}
                                     lead={lead}
@@ -2278,21 +2302,21 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
                             <div>
                                 <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '12px' }}>Who is this lead? Start with the mobile number.</div>
                                 <div style={{ position: 'relative' }}>
-                                    <PhoneInput
+                                    <input type="search"
                                         autoFocus
                                         value={clientSearchQuery}
-                                        onChange={handleClientSearchChange}
-                                        placeholder="Enter phone number (any format)"
+                                        onChange={e => handleClientSearchChange(e.target.value)}
+                                        placeholder="Enter name or phone number"
                                         style={{ ...inputStyle, fontSize: '14px', padding: '10px 14px' }}
                                     />
-                                    <span style={{
+                                    {/^\d*$/.test(clientSearchQuery) && <span style={{
                                         position: 'absolute', right: '14px', top: '50%', transform: 'translateY(-50%)',
                                         fontSize: '12px', fontWeight: 600,
                                         color: clientSearchQuery.length === 10 ? '#22c55e' : 'var(--text-muted)',
                                         pointerEvents: 'none',
                                     }}>
                                         {clientSearchQuery.length}/10
-                                    </span>
+                                    </span>}
                                 </div>
                                 {clientSearchQuery.length > 0 && clientSearchQuery.length < 10 && (
                                     <p style={{ fontSize: '12px', color: 'var(--text-muted)', margin: '6px 0 0 4px' }}>
@@ -2324,7 +2348,7 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
                                 )}
 
                                 {/* Results */}
-                                {!preselectedContact && !(identityNewPhone && identityNewPhone === clientSearchQuery.trim()) && clientSearchQuery.trim().length === 10 && !clientSearching && clientSearchResults.length > 0 && (
+                                {!preselectedContact && !(identityNewPhone && identityNewPhone === clientSearchQuery.trim()) && clientSearchQuery.trim().length >= 2 && !clientSearching && clientSearchResults.length > 0 && (
                                     <div style={{ marginTop: '8px', border: '1px solid var(--border-secondary)', borderRadius: '8px', overflow: 'hidden' }}>
                                         {clientSearchResults.map(r => {
                                             const isTemp = isPlaceholderPhone(r.phone_number);
@@ -2414,23 +2438,23 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
                         {/* ── STEP 3 (DIRECT_OWNER): Contact Search (confirmation — Step 1 already searched) ── */}
                         {createStep === 3 && createLeadType === 'DIRECT_OWNER' && (
                             <div>
-                                <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '12px' }}>Search if this client already exists</div>
+                                <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '12px' }}>Search if this client already exists by name or phone</div>
                                 <div style={{ position: 'relative' }}>
-                                    <PhoneInput
+                                    <input type="search"
                                         autoFocus
                                         value={clientSearchQuery}
-                                        onChange={handleClientSearchChange}
-                                        placeholder="Enter phone number (any format)"
+                                        onChange={e => handleClientSearchChange(e.target.value)}
+                                        placeholder="Enter name or phone number"
                                         style={{ ...inputStyle, fontSize: '14px', padding: '10px 14px' }}
                                     />
-                                    <span style={{
+                                    {/^\d*$/.test(clientSearchQuery) && <span style={{
                                         position: 'absolute', right: '14px', top: '50%', transform: 'translateY(-50%)',
                                         fontSize: '12px', fontWeight: 600,
                                         color: clientSearchQuery.length === 10 ? '#22c55e' : 'var(--text-muted)',
                                         pointerEvents: 'none',
                                     }}>
                                         {clientSearchQuery.length}/10
-                                    </span>
+                                    </span>}
                                 </div>
                                 {clientSearchQuery.length > 0 && clientSearchQuery.length < 10 && (
                                     <p style={{ fontSize: '12px', color: 'var(--text-muted)', margin: '6px 0 0 4px' }}>
@@ -2440,7 +2464,7 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
                                 {clientSearching && <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '6px' }}>Searching...</div>}
 
                                 {/* Results */}
-                                {clientSearchQuery.trim().length === 10 && !clientSearching && clientSearchResults.length > 0 && (
+                                {clientSearchQuery.trim().length >= 2 && !clientSearching && clientSearchResults.length > 0 && (
                                     <div style={{ marginTop: '8px', border: '1px solid var(--border-secondary)', borderRadius: '8px', overflow: 'hidden' }}>
                                         {clientSearchResults.map(r => {
                                             const isTemp = isPlaceholderPhone(r.phone_number);

@@ -27,6 +27,15 @@ import { buildContactVisibilityFilter, buildFullContactVisibilityFilter } from '
 import { captureRouteError } from '../utils/capture';
 import logger from '../utils/logger';
 import { syncContactShares } from '../services/contact_shares';
+import { getTeamIds } from '../utils/team_scope';
+
+// One contact → many leads: each enquiry is a Transaction. Summary shape shown in the Leads list and
+// the contact's Lead history (no prices/notes — only what identifies the enquiry and who owns it).
+const LEAD_DEAL_SUMMARY = {
+    id: true, source: true, source_ref: true, status: true, type: true, created_at: true,
+    coordinator_agent_id: true, executive_agent_id: true,
+    coordinator: { select: { id: true, name: true } },
+} as const;
 import { applyLeadStageEdit } from '../services/lead_stage_sync';
 
 const PRIVILEGED_ROLES = ['super_boss', 'manager'];
@@ -392,6 +401,16 @@ router.get('/recent-external', async (req: any, res) => {
             where.AND = [...(where.AND || []), { phone_number: { in: phones } }];
         }
 
+        // Per-enquiry rows: the deals (leads) on each contact THIS viewer may see. super_boss sees all;
+        // staff see deals their team coordinates/executes (same rule as GET /api/deals); partners get none
+        // (they are not Agents — their rows stay contact-level).
+        const dealWhere: any = req.agent.role === 'super_boss' ? {}
+            : req.agent.role === 'partner' ? { id: '__none__' }
+            : await (async () => {
+                const teamIds = await getTeamIds(req.agent);
+                return { OR: [{ coordinator_agent_id: { in: teamIds } }, { executive_agent_id: { in: teamIds } }] };
+            })();
+
         const [leads, total] = await Promise.all([
             prisma.contact.findMany({
                 where,
@@ -435,6 +454,7 @@ router.get('/recent-external', async (req: any, res) => {
                     // 2026-05-13: include assigned agent name so frontend can show
                     // "Assigned to: <name>" on tile + column without an extra lookup
                     assigned_agent: { select: { id: true, name: true, role: true } },
+                    demand_transactions: { where: dealWhere, orderBy: { created_at: 'desc' }, select: LEAD_DEAL_SUMMARY },
                 },
             }),
             prisma.contact.count({ where }),
@@ -1097,8 +1117,7 @@ router.get('/search', async (req: any, res) => {
             prisma.contact.findMany({
                 where: {
                     contact_type: { notIn: ['MANAGEMENT'] },
-                    ...visibilityFilter,
-                    OR: searchCondition,
+                    AND: [visibilityFilter, { OR: searchCondition }],
                 },
                 select: {
                     phone_number: true, name: true, contact_type: true,
@@ -1109,6 +1128,7 @@ router.get('/search', async (req: any, res) => {
             }),
             prisma.partnerAgent.findMany({
                 where: {
+                    ...(req.agent.role === 'super_boss' ? {} : { managing_agent_id: req.agent.id }),
                     OR: [
                         { name: { contains: q, mode: 'insensitive' } },
                         ...(isPhone ? [{ phone_number: { contains: phoneDigits } }] : []),
@@ -1714,7 +1734,26 @@ router.get('/:phone', async (req, res) => {
             return res.status(404).json({ error: 'Lead not found' });
         }
 
-        res.json({ ...contact, recent_interactions: interactions });
+        // Lead history = every enquiry (deal) on this contact, summary only; associated users = everyone who
+        // has handled it (owner + each lead's coordinator + explicit shares). Derived — no extra table.
+        const [leadHistory, shareRows] = await Promise.all([
+            prisma.transaction.findMany({
+                where: { demand_contact_id: phone },
+                orderBy: { created_at: 'desc' },
+                select: LEAD_DEAL_SUMMARY,
+            }),
+            prisma.contactShare.findMany({ where: { phone_number: phone }, select: { agent_id: true } }),
+        ]);
+        const associatedIds = Array.from(new Set([
+            contact.assigned_agent_id,
+            ...leadHistory.flatMap(d => [d.coordinator_agent_id, d.executive_agent_id]),
+            ...shareRows.map(r => r.agent_id),
+        ].filter((x): x is string => !!x)));
+        const associatedUsers = associatedIds.length
+            ? await prisma.agent.findMany({ where: { id: { in: associatedIds } }, select: { id: true, name: true } })
+            : [];
+
+        res.json({ ...contact, recent_interactions: interactions, lead_history: leadHistory, associated_users: associatedUsers });
     } catch (error) {
         captureRouteError(error, req, { route: 'leads#8' });
         res.status(500).json({ error: (error as Error).message });
@@ -2055,13 +2094,19 @@ router.patch('/:phone/requirements', async (req, res) => {
         if (foldedC.demand_taxonomy_node_id) dealSync.demand_taxonomy_node_id = foldedC.demand_taxonomy_node_id;
 
         if (Object.keys(dealSync).length > 0) {
-            prisma.transaction.updateMany({
+            await prisma.transaction.updateMany({
                 where: {
                     demand_contact_id: phone,
                     status: { notIn: ['CLOSED_WON', 'CLOSED_LOST'] },
                 },
                 data: dealSync,
-            }).catch((err: Error) => console.warn('[leads] deal sync failed:', err.message));
+            });
+            const deals = await prisma.transaction.findMany({
+                where: { demand_contact_id: phone, status: { notIn: ['CLOSED_WON', 'CLOSED_LOST'] } },
+                select: { id: true },
+            });
+            const { refreshDealShortage } = await import('../services/shortage_book');
+            await Promise.all(deals.map(deal => refreshDealShortage(deal.id)));
         }
 
         res.json(contact);

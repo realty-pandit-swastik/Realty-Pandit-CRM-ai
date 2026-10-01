@@ -566,6 +566,7 @@ router.post('/lead', validate(leadSchema), async (req, res) => {
             ensureDealForLead({
                 contactPhone: storedPhone,
                 source: 'website',
+                sourceRef: page_url ? String(page_url).split('?')[0].slice(0, 200) : null, // the page = the property enquired about
             }).catch(err => logger.error(`[Public/lead] ensureDealForLead failed: ${(err as Error).message}`));
         }
 
