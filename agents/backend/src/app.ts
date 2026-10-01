@@ -209,6 +209,9 @@ h1{font-size:1.75rem;font-weight:700;margin-bottom:.5rem;background:linear-gradi
 });
 
 // Static file serving for uploaded property media
+// Call recordings contain private conversations; serve them only through the authenticated call route.
+app.use('/uploads/staff_calls', (_req, res) => res.sendStatus(404));
+app.use('/uploads/temp', (_req, res) => res.sendStatus(404));
 app.use('/uploads', express.static(path.join(process.cwd(), 'uploads'), {
     maxAge: process.env.NODE_ENV === 'production' ? '7d' : 0,
     immutable: process.env.NODE_ENV === 'production',

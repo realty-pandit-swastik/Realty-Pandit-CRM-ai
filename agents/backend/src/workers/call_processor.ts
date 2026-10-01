@@ -5,9 +5,9 @@
  */
 
 import prisma from '../db';
-import transcriptionService from '../services/transcription';
-import callExtractor from '../services/call_extractor';
+import { processStaffCall, failStaffCall } from '../services/staff_call_processing';
 import logger from '../utils/logger';
+import { cleanupOldRecordings } from '../services/audio_storage';
 
 interface ProcessingJob {
     callId: string;
@@ -18,19 +18,20 @@ interface ProcessingJob {
 // In-memory job queue (can be upgraded to BullMQ/Redis later)
 const jobQueue: ProcessingJob[] = [];
 const processingJobs = new Map<string, ProcessingJob>();
-const MAX_RETRIES = 3;
-const TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
 const POLL_INTERVAL = 5000; // Check for new jobs every 5 seconds
+let pollTimer: NodeJS.Timeout | undefined;
+let retentionTimer: NodeJS.Timeout | undefined;
 
 /**
  * Start the call processing worker
  * Polls for calls with status PROCESSING and processes them
  */
 export function startCallProcessor() {
+    if (pollTimer) return;
     logger.info('[CallProcessor] Worker started');
 
     // Poll for jobs periodically
-    setInterval(async () => {
+    pollTimer = setInterval(async () => {
         try {
             await checkForNewJobs();
             await processNextJob();
@@ -38,9 +39,17 @@ export function startCallProcessor() {
             logger.error('[CallProcessor] Worker error:', error);
         }
     }, POLL_INTERVAL);
+    retentionTimer = setInterval(() => cleanupOldRecordings().catch(error => logger.error('[CallProcessor] Retention failed:', error)), 24 * 60 * 60 * 1000);
+    cleanupOldRecordings().catch(error => logger.error('[CallProcessor] Initial retention failed:', error));
 
     // Also run immediately
     checkForNewJobs().then(processNextJob).catch(err => logger.error('[CallProcessor] Initial job check failed:', err));
+}
+
+export function stopCallProcessor() {
+    if (pollTimer) clearInterval(pollTimer);
+    if (retentionTimer) clearInterval(retentionTimer);
+    pollTimer = retentionTimer = undefined;
 }
 
 /**
@@ -48,6 +57,12 @@ export function startCallProcessor() {
  */
 async function checkForNewJobs() {
     try {
+        const staleCalls = await prisma.staffCall.findMany({
+            where: { status: 'TRANSCRIBED', updated_at: { lt: new Date(Date.now() - 60 * 60 * 1000) } },
+            select: { id: true }, take: 10,
+        });
+        for (const call of staleCalls) await failStaffCall(call.id, new Error('Call processing stopped before review'));
+
         const pendingCalls = await prisma.staffCall.findMany({
             where: {
                 status: 'PROCESSING',
@@ -109,101 +124,14 @@ async function processNextJob() {
  */
 async function processCall(job: ProcessingJob): Promise<void> {
     logger.info(`[CallProcessor] Processing call: ${job.callId} (attempt ${job.attempt})`);
-
-    // Set timeout
-    const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error('Processing timeout')), TIMEOUT_MS);
-    });
-
-    try {
-        // Get call record
-        const staffCall = await prisma.staffCall.findUnique({
-            where: { id: job.callId },
-        });
-
-        if (!staffCall) {
-            throw new Error('Call not found');
-        }
-
-        if (!staffCall.recording_url) {
-            throw new Error('No recording URL');
-        }
-
-        // Step 1: Transcription
-        logger.info(`[CallProcessor] Transcribing: ${job.callId}`);
-        const transcriptionResult = await Promise.race([
-            transcriptionService.transcribeAudio(staffCall.recording_url, { language: 'auto' }),
-            timeoutPromise,
-        ]) as any;
-
-        if (!transcriptionResult || !transcriptionResult.text) {
-            throw new Error('Transcription failed or returned empty');
-        }
-
-        // Update status to TRANSCRIBED
-        await prisma.staffCall.update({
-            where: { id: job.callId },
-            data: {
-                transcript: transcriptionResult.text,
-                status: 'TRANSCRIBED',
-            },
-        });
-
-        logger.info(`[CallProcessor] Transcription complete: ${job.callId}`);
-
-        // Step 2: AI Extraction
-        logger.info(`[CallProcessor] Extracting data: ${job.callId}`);
-        const extractedData = await Promise.race([
-            callExtractor.extractFromTranscript(transcriptionResult.text, staffCall.phone_number),
-            timeoutPromise,
-        ]) as any;
-
-        // Update status to READY_FOR_REVIEW
-        await prisma.staffCall.update({
-            where: { id: job.callId },
-            data: {
-                ai_extraction: extractedData as any,
-                confidence_score: extractedData.confidence,
-                status: 'READY_FOR_REVIEW',
-            },
-        });
-
-        logger.info(`[CallProcessor] Processing complete: ${job.callId} (confidence: ${extractedData.confidence})`);
-    } catch (error) {
-        logger.error(`[CallProcessor] Processing error: ${job.callId}`, error);
-        throw error;
-    }
+    await processStaffCall(job.callId);
 }
 
 /**
  * Handle job failure with retry logic
  */
 async function handleJobFailure(job: ProcessingJob, error: Error) {
-    const { callId, attempt } = job;
-
-    if (attempt < MAX_RETRIES) {
-        // Retry
-        logger.info(`[CallProcessor] Retrying: ${callId} (attempt ${attempt + 1}/${MAX_RETRIES})`);
-        jobQueue.push({
-            callId,
-            attempt: attempt + 1,
-            startedAt: new Date(),
-        });
-    } else {
-        // Max retries reached - mark as failed
-        logger.error(`[CallProcessor] Max retries reached: ${callId}`);
-        try {
-            await prisma.staffCall.update({
-                where: { id: callId },
-                data: {
-                    status: 'REJECTED',
-                    transcript: `Processing failed: ${error.message}`,
-                },
-            });
-        } catch (updateError) {
-            logger.error(`[CallProcessor] Failed to update status: ${callId}`, updateError);
-        }
-    }
+    await failStaffCall(job.callId, error);
 }
 
 /**

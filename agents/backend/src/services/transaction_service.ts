@@ -12,6 +12,7 @@ import { assignExecutive } from './executive_assigner';
 import { TransactionData } from '../agents/types';
 import { foldLegacyDemand } from '../utils/demand_canonical';
 import { syncLeadStageForContact } from './lead_stage_sync';
+import { refreshDealShortage } from './shortage_book';
 
 // Active statuses (not closed)
 const ACTIVE_STATUSES: TransactionStatus[] = [
@@ -194,6 +195,7 @@ export async function createTransaction(
     // observed live 2026-08-10. Awaited, not best-effort: the contact row is guaranteed by
     // the required FK, so the only way this fails is a real fault worth surfacing.
     await syncLeadStageForContact(transaction.demand_contact_id);
+    if (!transaction.inventory_id) await refreshDealShortage(transaction.id);
 
     // 3. Log creation
     await prisma.transactionLog.create({

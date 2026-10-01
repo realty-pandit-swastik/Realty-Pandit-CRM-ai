@@ -31,6 +31,7 @@ export function toInventoryIntent(intent?: string | null): 'sell' | 'rent' {
 }
 
 export interface MatchCriteria {
+    tenant_id?: string;
     intent?: string | null;         // buy, rent
     property_type?: string | null;  // flat, house, plot (legacy string)
     type_id?: string | null;        // [LEGACY] Classification ID (most specific)
@@ -344,7 +345,7 @@ export class MatchingEngine {
      * Capped at 500 candidates to protect memory at current scale.
      */
     private async searchPropertiesByRadius(criteria: MatchCriteria, radiusKm: number, limit: number): Promise<MatchedProperty[]> {
-        const where: any = { status: 'active', latitude: { not: null }, longitude: { not: null } };
+        const where: any = { status: 'active', ...(criteria.tenant_id ? { tenant_id: criteria.tenant_id } : {}), latitude: { not: null }, longitude: { not: null } };
 
         if (criteria.intent) {
             where.intent = toInventoryIntent(criteria.intent);
@@ -522,7 +523,7 @@ export class MatchingEngine {
      */
     private async searchProperties(criteria: MatchCriteria, limit: number, extraWhere: any = {}): Promise<MatchedProperty[]> {
         // Build Prisma where clause
-        const where: any = { status: 'active', ...extraWhere };
+        const where: any = { status: 'active', ...(criteria.tenant_id ? { tenant_id: criteria.tenant_id } : {}), ...extraWhere };
 
         // Intent filter (sell = buyer, rent = tenant)
         if (criteria.intent) {

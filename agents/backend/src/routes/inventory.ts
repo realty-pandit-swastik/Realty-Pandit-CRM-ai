@@ -836,6 +836,47 @@ router.get('/', authMiddleware, async (req, res) => {
     }
 });
 
+// GET /inventory/hermes-pilot - tenant-scoped, contact-free export for supervised staff review.
+router.get('/hermes-pilot', authMiddleware, checkPermission('act_on_deals'), async (req, res) => {
+  try {
+    const agent = req.agent!;
+    if (!agent.tenant_id || !['super_boss', 'manager', 'employee'].includes(agent.role)) {
+      return res.status(403).json({ error: 'Staff access required' });
+    }
+    const page = Number(req.query.page ?? 1);
+    if (!Number.isSafeInteger(page) || page < 1 || page > 10000) {
+      return res.status(400).json({ error: 'Invalid page' });
+    }
+    const where: any = { tenant_id: agent.tenant_id, status: 'active' };
+    if (agent.role !== 'super_boss') {
+      const teamIds = await getTeamIds(agent);
+      const partnerOwnerIds = await getManagedPartnerOwnerIds(teamIds);
+      where.OR = [
+        { uploaded_by_agent_id: { in: teamIds } },
+        { reference_agent_id: { in: teamIds } },
+        { assigned_agent_id: { in: teamIds } },
+        { shared_with_ids: { hasSome: teamIds } },
+        ...(partnerOwnerIds.length ? [{ owner_id: { in: partnerOwnerIds } }] : []),
+      ];
+    }
+    const [data, total] = await Promise.all([
+      prisma.inventory.findMany({
+        where, orderBy: [{ created_at: 'desc' }, { id: 'desc' }], skip: (page - 1) * 100, take: 100,
+        select: {
+          id: true, display_id: true, status: true, intent: true, category: true, type: true,
+          apartment_name: true, sub_locality: true, locality: true, city: true,
+          price: true, price_unit: true,
+        },
+      }),
+      prisma.inventory.count({ where }),
+    ]);
+    return res.json({ scope: 'tenant_staff', data, page, totalPages: Math.max(1, Math.ceil(total / 100)) });
+  } catch (error) {
+    captureRouteError(error, req, { route: 'inventory#hermes-pilot' });
+    return res.status(500).json({ error: 'Failed to export inventory' });
+  }
+});
+
 // GET /inventory/:id - Single inventory item
 router.get('/:id', authMiddleware, async (req, res, next) => {
     try {

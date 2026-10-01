@@ -46,6 +46,7 @@ export function DashboardLayout({ activeView, onViewChange, children }: Dashboar
             label: "Today's Tasks",
             items: [
                 { id: 'tasks', label: 'Tasks', icon: '\u{1F5D2}', permission: null },
+                { id: 'sourcing', label: 'Sourcing', icon: '🔎', permission: null },
                 { id: 'calendar', label: 'Calendar', icon: '\u{1F4C5}', permission: null },
             ],
         },

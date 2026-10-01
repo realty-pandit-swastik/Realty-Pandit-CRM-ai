@@ -19,7 +19,7 @@ vi.mock('../db', () => ({
         websiteLead: { create: vi.fn() },
         newsletterSubscriber: { upsert: vi.fn() },
         scheduledVisit: { create: vi.fn() },
-        partnerAgent: { findUnique: vi.fn() },
+        partnerAgent: { findUnique: vi.fn(), findMany: vi.fn() },
         staffCall: { findUnique: vi.fn(), create: vi.fn(), update: vi.fn(), findMany: vi.fn(), count: vi.fn() },
         propertyCategory: { findMany: vi.fn(), findUnique: vi.fn() },
         propertySubCategory: { findMany: vi.fn(), findUnique: vi.fn() },

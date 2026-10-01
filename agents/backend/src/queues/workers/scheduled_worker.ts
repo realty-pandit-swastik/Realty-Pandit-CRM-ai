@@ -99,6 +99,11 @@ export async function startScheduledWorker(): Promise<void> {
         { every: 10000 },
         { name: 'call-processor' },
     );
+    await scheduledJobsQueue.upsertJobScheduler(
+        'call-audio-retention',
+        { pattern: '0 2 * * *' },
+        { name: 'call-audio-retention' },
+    );
 
     // 9. Interaction Engine triggers (every hour)
     await scheduledJobsQueue.upsertJobScheduler(
@@ -259,6 +264,7 @@ export async function startScheduledWorker(): Promise<void> {
     await scheduledJobsQueue.upsertJobScheduler('pipeline-cold-lead-nudge', { pattern: '20 10 * * *' }, { name: 'pipeline-cold-lead-nudge' });
     await scheduledJobsQueue.upsertJobScheduler('pipeline-manager-schedule', { pattern: '0 8 * * *' }, { name: 'pipeline-manager-schedule' });
     await scheduledJobsQueue.upsertJobScheduler('pipeline-manager-briefing', { every: 1800000 }, { name: 'pipeline-manager-briefing' });
+    await scheduledJobsQueue.upsertJobScheduler('shortage-surveys', { pattern: '30 8 * * *' }, { name: 'shortage-surveys' });
 
     logger.info('[ScheduledWorker] All repeatable jobs registered');
 
@@ -442,11 +448,21 @@ async function dispatchJob(job: Job): Promise<void> {
             await runManager24hrBriefing();
             break;
         }
+        case 'shortage-surveys': {
+            const { createDailySurveyTasks } = await import('../../services/shortage_book');
+            await createDailySurveyTasks();
+            break;
+        }
 
         case 'call-processor': {
             const prisma = (await import('../../db')).default;
-            const transcriptionService = (await import('../../services/transcription')).default;
-            const callExtractor = (await import('../../services/call_extractor')).default;
+            const { processStaffCall, failStaffCall } = await import('../../services/staff_call_processing');
+
+            const staleCalls = await prisma.staffCall.findMany({
+                where: { status: 'TRANSCRIBED', updated_at: { lt: new Date(Date.now() - 60 * 60 * 1000) } },
+                select: { id: true }, take: 10,
+            });
+            for (const call of staleCalls) await failStaffCall(call.id, new Error('Call processing stopped before review'));
 
             const pendingCalls = await prisma.staffCall.findMany({
                 where: { status: 'PROCESSING', recording_url: { not: null } },
@@ -455,40 +471,18 @@ async function dispatchJob(job: Job): Promise<void> {
 
             for (const call of pendingCalls) {
                 try {
-                    // Transcribe
-                    const transcription = await transcriptionService.transcribeAudio(
-                        call.recording_url!,
-                        { language: 'auto' },
-                    );
-                    if (!transcription?.text) continue;
-
-                    await prisma.staffCall.update({
-                        where: { id: call.id },
-                        data: { transcript: transcription.text, status: 'TRANSCRIBED' },
-                    });
-
-                    // Extract
-                    const extracted = await callExtractor.extractFromTranscript(
-                        transcription.text,
-                        call.phone_number,
-                    );
-
-                    await prisma.staffCall.update({
-                        where: { id: call.id },
-                        data: {
-                            ai_extraction: extracted as any,
-                            confidence_score: extracted.confidence,
-                            status: 'READY_FOR_REVIEW',
-                        },
-                    });
+                    await processStaffCall(call.id);
                 } catch (err) {
                     logger.error(`[ScheduledWorker] Call processing failed: ${call.id}`, err);
-                    await prisma.staffCall.update({
-                        where: { id: call.id },
-                        data: { status: 'REJECTED', transcript: `Processing failed: ${(err as Error).message}` },
-                    }).catch(() => {});
+                    await failStaffCall(call.id, err as Error);
                 }
             }
+            break;
+        }
+
+        case 'call-audio-retention': {
+            const { cleanupOldRecordings } = await import('../../services/audio_storage');
+            await cleanupOldRecordings();
             break;
         }
 

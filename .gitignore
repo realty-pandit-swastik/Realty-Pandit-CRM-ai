@@ -72,6 +72,8 @@ temp2.json
 
 # Tooling
 .claude/
+.mcp.json
+next-steps/
 .codex/*
 !.codex/AGENTS.md
 

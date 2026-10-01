@@ -1,7 +1,6 @@
 import React, { useState, useCallback, useRef } from 'react';
-import PhoneInput from './PhoneInput';
 import { normalizePhoneInput } from '../lib/phone';
-import { identifyContactByPhone, ensureContact } from '../api/client';
+import client, { ensureContact } from '../api/client';
 
 export interface SelectedContact {
     phone: string;
@@ -15,7 +14,6 @@ export interface SelectedContact {
 interface ContactSearchFieldProps {
     onContactSelected: (contact: SelectedContact) => void;
     label?: string;
-    /** @deprecated Phone-only mode; placeholder is fixed and this prop is ignored */
     placeholder?: string;
 }
 
@@ -52,11 +50,13 @@ function getRoleBadge(contactType: string, identifiedType?: string): { label: st
 
 export const ContactSearchField: React.FC<ContactSearchFieldProps> = ({
     onContactSelected,
-    label = 'Search contact by phone number',
+    label = 'Search contact by name or phone',
+    placeholder = 'Enter name or phone number',
 }) => {
     const [query, setQuery] = useState('');
     const [searching, setSearching] = useState(false);
-    const [searchResult, setSearchResult] = useState<any>(null); // { contact, identified }
+    const [searchResults, setSearchResults] = useState<any[]>([]);
+    const [searchResult, setSearchResult] = useState<any>(null);
     const [notFound, setNotFound] = useState(false);
 
     // New contact form (when not found)
@@ -66,62 +66,53 @@ export const ContactSearchField: React.FC<ContactSearchFieldProps> = ({
     const [error, setError] = useState('');
 
     const searchTimeout = useRef<any>(null);
+    const searchSequence = useRef(0);
 
-    // Phone search
-    const doPhoneSearch = useCallback(async (phoneVal: string) => {
-        const clean = phoneVal.replace(/\D/g, '');
-        if (clean.length < 10) return;
-
+    const doSearch = useCallback(async (value: string, sequence: number) => {
         setSearching(true);
         setError('');
         setNotFound(false);
         setSearchResult(null);
 
         try {
-            const result = await identifyContactByPhone(clean);
-            if (result.contact || result.identified) {
-                setSearchResult(result);
-                setNotFound(false);
-            } else {
-                setNotFound(true);
-            }
+            const { data } = await client.get('/api/leads/search', { params: { q: value } });
+            if (sequence !== searchSequence.current) return;
+            setSearchResults(data || []);
+            setNotFound(!(data || []).length && /^\d{10}$/.test(value));
         } catch (err: any) {
+            if (sequence !== searchSequence.current) return;
             setError(err?.response?.data?.error || 'Search failed');
         } finally {
-            setSearching(false);
+            if (sequence === searchSequence.current) setSearching(false);
         }
     }, []);
 
     const handleInputChange = useCallback((val: string) => {
-        // Normalise ANY pasted format (+91 / spaces / 91-prefix) to the accepted 10-digit number
-        const digitsOnly = normalizePhoneInput(val);
-        setQuery(digitsOnly);
+        const value = /[a-z]/i.test(val) ? val : normalizePhoneInput(val);
+        setQuery(value);
+        setSearchResults([]);
         setSearchResult(null);
         setNotFound(false);
         setError('');
 
         if (searchTimeout.current) clearTimeout(searchTimeout.current);
-
-        if (digitsOnly.length === 10 && /^[6-9]/.test(digitsOnly)) {
-            searchTimeout.current = setTimeout(() => doPhoneSearch(digitsOnly), 300);
+        const sequence = ++searchSequence.current;
+        if (value.trim().length >= 2) {
+            searchTimeout.current = setTimeout(() => doSearch(value.trim(), sequence), 300);
         }
-    }, [doPhoneSearch]);
+    }, [doSearch]);
 
     // Select an existing contact (from phone search result)
     const handleSelectFound = useCallback(() => {
         if (!searchResult) return;
-        const { contact, identified } = searchResult;
-        const name = identified?.name || contact?.name || '';
-        const contactType = contact?.contact_type || 'UNKNOWN';
-        const identifiedType = identified?.contact_type;
-        const phoneNum = (contact?.phone_number || query).replace(/^\+91/, '').replace(/^91/, '');
+        const contactType = searchResult.contact_type || 'UNKNOWN';
+        const phoneNum = normalizePhoneInput(searchResult.phone_number);
         onContactSelected({
             phone: phoneNum,
-            name,
-            role: mapToWorkflowRole(contactType, identifiedType),
+            name: searchResult.name || '',
+            role: mapToWorkflowRole(contactType),
             isNew: false,
             contactType,
-            sourceId: identified?.source_id,
         });
     }, [searchResult, query, onContactSelected]);
 
@@ -158,18 +149,19 @@ export const ContactSearchField: React.FC<ContactSearchFieldProps> = ({
     }, [query, newName, newRole, onContactSelected]);
 
     const badge = searchResult
-        ? getRoleBadge(searchResult.contact?.contact_type, searchResult.identified?.contact_type)
+        ? getRoleBadge(searchResult.contact_type)
         : null;
 
     return (
         <div>
-            {/* Search Input — accepts phone digits only */}
+            {/* Search by name or phone; creating a new contact still requires a full phone. */}
             <label style={styles.label}>{label}</label>
             <div style={{ position: 'relative' }}>
-                <PhoneInput
+                <input
+                    type="search"
                     value={query}
-                    onChange={handleInputChange}
-                    placeholder="Enter phone number (any format)"
+                    onChange={e => handleInputChange(e.target.value)}
+                    placeholder={placeholder}
                     style={styles.input}
                     autoFocus
                 />
@@ -177,7 +169,7 @@ export const ContactSearchField: React.FC<ContactSearchFieldProps> = ({
                     <span style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', fontSize: '13px' }}>
                         Searching...
                     </span>
-                ) : (
+                ) : /^\d*$/.test(query) && query.length > 0 ? (
                     <span style={{
                         position: 'absolute', right: '14px', top: '50%', transform: 'translateY(-50%)',
                         fontSize: '12px', color: query.length === 10 ? 'var(--success-text)' : 'var(--text-muted)',
@@ -185,9 +177,9 @@ export const ContactSearchField: React.FC<ContactSearchFieldProps> = ({
                     }}>
                         {query.length}/10
                     </span>
-                )}
+                ) : null}
             </div>
-            {query.length > 0 && query.length < 10 && (
+            {/^\d+$/.test(query) && query.length < 10 && (
                 <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '6px', paddingLeft: '4px' }}>
                     {10 - query.length} more digits needed
                 </div>
@@ -195,19 +187,31 @@ export const ContactSearchField: React.FC<ContactSearchFieldProps> = ({
 
             {error && <div style={styles.error}>{error}</div>}
 
+            {searchResults.length > 0 && !searchResult && (
+                <div role="listbox" aria-label="Matching contacts" style={styles.notFoundCard}>
+                    {searchResults.map(contact => (
+                        <button key={contact.phone_number} type="button" role="option" aria-selected={false}
+                            onClick={() => { setSearchResult(contact); setSearchResults([]); setQuery(normalizePhoneInput(contact.phone_number)); }}
+                            style={{ ...styles.primaryBtn, textAlign: 'left', marginBottom: '6px' }}>
+                            {contact.name || 'Unknown'} · {contact.phone_number}
+                        </button>
+                    ))}
+                </div>
+            )}
+
             {/* Contact Found Card */}
             {searchResult && (
                 <div style={styles.foundCard}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
                         <div style={styles.avatar}>
-                            {(searchResult.identified?.name || searchResult.contact?.name || '?')[0].toUpperCase()}
+                            {(searchResult.name || '?')[0].toUpperCase()}
                         </div>
                         <div style={{ flex: 1 }}>
                             <div style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text-primary)' }}>
-                                {searchResult.identified?.name || searchResult.contact?.name || 'Unknown'}
+                                {searchResult.name || 'Unknown'}
                             </div>
                             <div style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
-                                {searchResult.contact?.phone_number || query}
+                                {searchResult.phone_number || query}
                             </div>
                         </div>
                         {badge && (
@@ -219,11 +223,6 @@ export const ContactSearchField: React.FC<ContactSearchFieldProps> = ({
                             </span>
                         )}
                     </div>
-                    {searchResult.identified?.department && (
-                        <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '8px' }}>
-                            Dept: {searchResult.identified.department} | Role: {searchResult.identified.role}
-                        </div>
-                    )}
                     <button style={styles.primaryBtn} onClick={handleSelectFound}>
                         Use This Contact &rarr;
                     </button>

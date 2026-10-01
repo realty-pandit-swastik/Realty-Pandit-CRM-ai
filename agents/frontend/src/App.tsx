@@ -36,6 +36,7 @@ import { DelayReasonModal } from './components/DelayReasonModal';
 import MarketingCampaign from './components/MarketingCampaign';
 import TaskBoard from './components/TaskBoard';
 import DealPipeline from './components/DealPipeline';
+import SourcingBoard from './components/SourcingBoard';
 import CallLog from './components/CallLog';
 import AdvancedAnalytics from './components/AdvancedAnalytics';
 import { ErrorBoundary } from './components/ErrorBoundary';
@@ -574,6 +575,8 @@ function App() {
           return <MobileScrollWrapper><AdvancedAnalytics /></MobileScrollWrapper>;
         case 'deals':
           return <DealPipeline initialDealId={deepLinkDealId} />;
+        case 'sourcing':
+          return <MobileScrollWrapper><SourcingBoard /></MobileScrollWrapper>;
         default:
           return (
             <MobileDashboard
@@ -694,6 +697,8 @@ function App() {
         return <TaskBoard />;
       case 'deals':
         return <DealPipeline initialDealId={deepLinkDealId} />;
+      case 'sourcing':
+        return <SourcingBoard />;
       case 'analytics':
         return <AdvancedAnalytics />;
       default:

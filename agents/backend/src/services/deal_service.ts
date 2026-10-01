@@ -21,6 +21,7 @@ import { MatchingEngine } from './matching_engine';
 import { notifyDealEvent } from './deal_notifications';
 import logger from '../utils/logger';
 import { syncLeadStageForContact } from './lead_stage_sync';
+import { refreshDealShortage } from './shortage_book';
 
 export type DealHandlerType = 'PARTNER' | 'TEAM_MEMBER' | 'DIRECT';
 export type DealScenario = 'PARTNER_INTERNAL' | 'PARTNER_PARTNER' | 'DIRECT_INTERNAL';
@@ -231,6 +232,7 @@ export async function createDeal(
         } catch (err) {
             logger.error('[DealService] Matching engine failed:', err);
         }
+        await refreshDealShortage(transaction.id).catch(err => logger.error('[DealService] Shortage refresh failed:', err));
     }
 
     // 7. Notify deal created (async - don't block response)

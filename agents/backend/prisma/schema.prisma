@@ -2147,9 +2147,22 @@ model Task {
   @@map("tasks")
 }
 
+model ShortageEntry {
+  id          String   @id @default(uuid())
+  tenant_id   String
+  deal_id     String   @unique
+  owner_id    String?
+  area        String?
+  demand      Json
+  match_count Int      @default(0)
+  status      String   @default("OPEN") // OPEN, RESOLVED
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
 
-
-// ---------------------------------------------------------
+  @@index([tenant_id, status])
+  @@index([owner_id, status])
+  @@map("shortage_entries")
+}// ---------------------------------------------------------
 // 24b. LEAD PROPERTY SHORTLIST (Tracks properties through lead's consideration journey)
 // ---------------------------------------------------------
 model LeadPropertyShortlist {

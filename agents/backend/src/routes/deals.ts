@@ -35,9 +35,39 @@ import { captureRouteError } from '../utils/capture';
 import { foldLegacyDemand, mergeDemandSchemaValues } from '../utils/demand_canonical';
 
 import { geocodeAddress } from '../utils/geocode';
+import { refreshDealShortage } from '../services/shortage_book';
 
 const router = Router();
 router.use(authMiddleware);
+
+router.get('/shortages', checkPermission('act_on_deals'), async (req: any, res) => {
+    if (req.agent.role === 'partner') return res.status(403).json({ error: 'Staff only' });
+    const teamIds = req.agent.role === 'super_boss' ? null : await getTeamIds(req.agent);
+    const rows = await prisma.shortageEntry.findMany({
+        where: { tenant_id: req.agent.tenant_id, status: 'OPEN', ...(teamIds ? { owner_id: { in: teamIds } } : {}) },
+        orderBy: [{ match_count: 'asc' }, { updated_at: 'desc' }],
+    });
+    res.json({ success: true, data: rows });
+});
+
+router.get('/calling-queue', checkPermission('act_on_deals'), async (req: any, res) => {
+    if (req.agent.role === 'partner') return res.status(403).json({ error: 'Staff only' });
+    const teamIds = req.agent.role === 'super_boss' ? null : await getTeamIds(req.agent);
+    const rows = await prisma.contact.findMany({
+        where: { tenant_id: req.agent.tenant_id, contact_type: { in: ['BUYER', 'TENANT'] },
+            ...(teamIds ? { assigned_agent_id: { in: teamIds } } : {}),
+        },
+        select: { phone_number: true, name: true, assigned_agent_id: true, created_at: true,
+            work_tasks: { where: { status: { in: ['TODO', 'IN_PROGRESS'] } }, select: { id: true, title: true, due_date: true }, orderBy: { due_date: 'asc' }, take: 1 },
+        },
+        orderBy: { created_at: 'desc' }, take: 200,
+    });
+    const cutoff = Date.now() - 48 * 60 * 60 * 1000;
+    res.json({ success: true, data: {
+        fresh: rows.filter(row => row.created_at.getTime() >= cutoff),
+        aged: rows.filter(row => row.created_at.getTime() < cutoff),
+    } });
+});
 
 // ─── POST /api/deals — Create a new deal ─────────────────────────────────────
 router.post('/', checkPermission('manage_deals'), validate(createDealSchema), async (req: any, res) => {
@@ -458,6 +488,7 @@ router.patch('/:id/requirements', checkPermission('act_on_deals'), async (req: a
                 },
             }),
         ]);
+        await refreshDealShortage(id);
 
         // Re-share with the NEW criteria: a matching-relevant edit (budget/location/type/BHK — not a
         // notes-only edit) should proactively surface a fresh card, not strand a broadened deal on
