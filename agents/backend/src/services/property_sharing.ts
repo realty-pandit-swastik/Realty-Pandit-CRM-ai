@@ -544,6 +544,7 @@ export function buildPropertyShareContent(inv: any): { text: string; params: Rec
     }
 
     const amenities = buildAmenityLine(s.amenities);
+    const propertyId = inv.display_id || inv.id;
     const text = [
         'Namaste 🙏',
         `🏡 *${title}*`,
@@ -554,7 +555,7 @@ export function buildPropertyShareContent(inv: any): { text: string; params: Rec
         `✅ ${detail1}`,
         `🧭 ${detail2}`,
         `✨ ${amenities}`,
-        `🆔 Property ID: ${inv.id}`,
+        `🆔 Property ID: ${propertyId}`,
         '',
         'Reply here to request more information or schedule a visit.',
     ].join('\n');
@@ -568,7 +569,7 @@ export function buildPropertyShareContent(inv: any): { text: string; params: Rec
             p4: price,
             p5: detail1,
             p6: detail2,
-            p7: `${area} · ${amenities} · Property ID: ${inv.id}`,
+            p7: `${area} · ${amenities} · Property ID: ${propertyId}`,
         },
     };
 }

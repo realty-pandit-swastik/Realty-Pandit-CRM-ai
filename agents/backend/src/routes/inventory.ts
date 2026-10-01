@@ -15,7 +15,7 @@ import { authMiddleware, checkPermission } from '../middleware/auth';
 import logger from '../utils/logger';
 import { absurdPriceError } from '../utils/price_sanity';
 import { ensureH264Playable } from '../utils/video_transcode';
-import { normalizePhone, isPlaceholderPhone } from '../utils/phone';
+import { normalizePhone, phoneVariants, isPlaceholderPhone } from '../utils/phone';
 import { findInventoryIdsByAddress } from '../utils/inventory_search';
 import { generateDisplayId } from '../utils/inventory_id';
 import { getTeamIds } from '../utils/team_scope';
@@ -432,6 +432,173 @@ async function partnerMayMutateInventory(req: any, res: any, inventoryId: string
     }
     return true;
 }
+
+/**
+ * POST /inventory/harvest
+ * Ingest scraped / harvested listings from external portals (99acres, Magicbricks, Housing, etc.)
+ * Extracts seller/owner details directly into the CRM Contact model and creates inventory with status PENDING_APPROVAL.
+ * Auto-creates verification task for sourcing agents.
+ */
+router.post('/harvest', authMiddleware, checkPermission('edit_inventory'), async (req: any, res) => {
+    try {
+        const {
+            source, // '99acres' | 'magicbricks' | 'housing' | 'classifieds' | 'portal_crawl'
+            source_ref, // external listing ID or URL
+            seller_name,
+            seller_phone,
+            seller_email,
+            property_title,
+            property_type,
+            intent,
+            price,
+            locality,
+            society_name,
+            city,
+            full_address,
+            specs,
+            features,
+            description,
+            media_urls,
+        } = req.body;
+
+        if (!seller_phone) {
+            return res.status(400).json({ error: 'seller_phone is required' });
+        }
+
+        const phone = normalizePhone(seller_phone);
+        if (!phone) {
+            return res.status(400).json({ error: 'Invalid seller phone number' });
+        }
+
+        const tenantId = req.agent.tenant_id;
+        const crawlSource = source || 'portal_crawl';
+
+        // Check if this external listing was already harvested
+        if (source_ref) {
+            const existing = await prisma.inventory.findFirst({
+                where: {
+                    tenant_id: tenantId,
+                    source_ref,
+                },
+                select: { id: true, display_id: true, status: true },
+            });
+            if (existing) {
+                return res.status(409).json({
+                    success: false,
+                    error: `Listing ${source_ref} already harvested into CRM`,
+                    inventory_id: existing.id,
+                    display_id: existing.display_id,
+                });
+            }
+        }
+
+        // 1. Upsert seller as Contact (PROPERTY_OWNER / LANDLORD)
+        const variants = phoneVariants(phone);
+        let contact = await prisma.contact.findFirst({
+            where: { phone_number: { in: variants }, tenant_id: tenantId },
+        });
+
+        if (contact) {
+            contact = await prisma.contact.update({
+                where: { id: contact.id },
+                data: {
+                    name: contact.name || seller_name || undefined,
+                    email: contact.email || seller_email || undefined,
+                    contact_type: contact.contact_type === 'UNKNOWN' ? 'LANDLORD' : contact.contact_type,
+                    last_channel: crawlSource,
+                    last_interaction: new Date(),
+                },
+            });
+        } else {
+            contact = await prisma.contact.create({
+                data: {
+                    tenant_id: tenantId,
+                    phone_number: phone,
+                    name: seller_name || 'Portal Seller',
+                    email: seller_email || null,
+                    contact_type: 'LANDLORD',
+                    source: crawlSource,
+                    last_channel: crawlSource,
+                    last_interaction: new Date(),
+                },
+            });
+        }
+
+        // 2. Mint display_id for the new inventory
+        const mainCategory = ['office', 'retail', 'commercial', 'shop', 'warehouse'].includes(String(property_type || '').toLowerCase()) ? 'commercial' : 'residential';
+        const displayId = await generateDisplayId(city || locality || 'Bengaluru', mainCategory);
+
+        // 3. Create Inventory in 'pending_approval' state
+        const inventory = await prisma.inventory.create({
+            data: {
+                tenant_id: tenantId,
+                display_id: displayId,
+                source_ref: source_ref || null,
+                upload_source: 'portal_crawl',
+                status: 'pending_approval',
+                lead_reference: `HARVESTED_${crawlSource.toUpperCase()}`,
+                intent: (intent || 'sell').toLowerCase(),
+                type: property_type || 'flat',
+                price: price ? Number(price) : null,
+                locality: locality || null,
+                society_name: society_name || null,
+                city: city || 'Bengaluru',
+                full_address: full_address || [society_name, locality, city].filter(Boolean).join(', ') || null,
+                specs: specs || {},
+                features: features || {},
+                description: description || null,
+                media_urls: Array.isArray(media_urls) ? media_urls : [],
+                owner_phone: phone,
+                owner_name: seller_name || contact.name || 'Portal Seller',
+                uploaded_by_agent_id: req.agent.id,
+            } as any,
+        });
+
+        // 4. Create verification task for team member
+        await prisma.task.create({
+            data: {
+                tenant_id: tenantId,
+                title: `Verify harvested listing: ${property_title || locality || displayId}`,
+                description: `Harvested from ${crawlSource}. Seller: ${seller_name || phone}. Verify availability, pricing, and owner contact.`,
+                assigned_to: req.agent.id,
+                contact_phone: phone,
+                due_date: new Date(Date.now() + 24 * 60 * 60 * 1000),
+                priority: 'HIGH',
+                status: 'TODO',
+                task_type: 'PORTAL_HARVEST_VERIFICATION',
+                stage_metadata: {
+                    inventory_id: inventory.id,
+                    display_id: displayId,
+                    source: crawlSource,
+                    source_ref,
+                },
+            } as any,
+        });
+
+        // 5. Check if this newly harvested inventory resolves any open shortages
+        try {
+            const { refreshTenantShortages } = await import('../services/shortage_book');
+            await refreshTenantShortages(tenantId);
+        } catch (shortageErr) {
+            logger.warn('[InventoryHarvest] Shortage refresh failed:', shortageErr);
+        }
+
+        logger.info(`[InventoryHarvest] Harvested ${displayId} (${inventory.id}) from ${crawlSource} with seller ${phone}`);
+
+        res.status(201).json({
+            success: true,
+            inventory_id: inventory.id,
+            display_id: displayId,
+            contact_id: contact.id,
+            seller_phone: phone,
+            message: `Listing harvested from ${crawlSource} and queued for verification`,
+        });
+    } catch (err: any) {
+        captureRouteError(err, req, { route: 'inventory#harvest' });
+        logger.error('[InventoryHarvest] Error:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
 
 /**
  * POST /inventory/:id/partner-assign  { partner_agent_id: string | null }

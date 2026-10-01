@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Deal Management Routes (Phase 7)
  *
  * Admin-facing API for the 3-role deal system.
@@ -48,6 +48,36 @@ router.get('/shortages', checkPermission('act_on_deals'), async (req: any, res) 
         orderBy: [{ match_count: 'asc' }, { updated_at: 'desc' }],
     });
     res.json({ success: true, data: rows });
+});
+
+router.post('/shortages/generate-tasks', checkPermission('act_on_deals'), async (req: any, res) => {
+    try {
+        if (req.agent.role === 'partner') return res.status(403).json({ error: 'Staff only' });
+        const { createDailySurveyTasks } = await import('../services/shortage_book');
+        await createDailySurveyTasks();
+        res.json({ success: true, message: 'Daily survey tasks generated from open shortages' });
+    } catch (err: any) {
+        captureRouteError(err, req, { route: 'deals#generate_shortage_tasks' });
+        res.status(500).json({ error: err.message });
+    }
+});
+
+router.post('/shortages/:id/refresh', checkPermission('act_on_deals'), async (req: any, res) => {
+    try {
+        if (req.agent.role === 'partner') return res.status(403).json({ error: 'Staff only' });
+        const shortage = await prisma.shortageEntry.findUnique({
+            where: { id: req.params.id },
+        });
+        if (!shortage || shortage.tenant_id !== req.agent.tenant_id) {
+            return res.status(404).json({ error: 'Shortage entry not found' });
+        }
+        await refreshDealShortage(shortage.deal_id);
+        const updated = await prisma.shortageEntry.findUnique({ where: { id: req.params.id } });
+        res.json({ success: true, data: updated });
+    } catch (err: any) {
+        captureRouteError(err, req, { route: 'deals#refresh_shortage' });
+        res.status(500).json({ error: err.message });
+    }
 });
 
 router.get('/calling-queue', checkPermission('act_on_deals'), async (req: any, res) => {

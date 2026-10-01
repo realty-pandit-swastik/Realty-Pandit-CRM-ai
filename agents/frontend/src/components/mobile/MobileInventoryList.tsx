@@ -518,7 +518,7 @@ export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryLis
                                                 {location}
                                             </div>
                                             {/* #1 (2026-07-01): click-to-copy inventory code (mobile). */}
-                                            {item.display_id && <div style={{ marginTop: 4 }}><CopyChip text={item.display_id} size="xs" /></div>}
+                                            <div style={{ marginTop: 4 }}><CopyChip text={item.display_id || (item.id ? `ID: ${item.id.slice(0, 8)}` : null)} size="xs" /></div>
                                         </div>
                                     </div>
 

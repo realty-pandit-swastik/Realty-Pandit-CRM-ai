@@ -1677,7 +1677,7 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
                                                     {item.taxonomy_node?.name || item.flat_property_type?.name || item.property_type_link?.name || item.type?.replace(/_/g, ' ') || 'Property'}
                                                 </span>
                                                 {/* #1 (2026-07-01): click-to-copy inventory code (RP-…) for fast paste into search. */}
-                                                <CopyChip text={item.display_id} size="xs" />
+                                                <CopyChip text={item.display_id || (item.id ? `ID: ${item.id.slice(0, 8)}` : null)} size="xs" />
                                                 <span style={{
                                                     fontSize: '11px', padding: '2px 8px', borderRadius: '10px', fontWeight: 600,
                                                     ...(item.intent === 'sell' ? { backgroundColor: '#312e81', color: '#818cf8' } :

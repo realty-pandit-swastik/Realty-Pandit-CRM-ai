@@ -140,6 +140,112 @@ router.post('/upload', authenticateAgent, upload.single('audio'), async (req, re
 });
 
 // ---------------------------------------------------------
+// GET /api/calls/caller-id - Real-time caller dossier lookup
+// ---------------------------------------------------------
+router.get('/caller-id', authenticateAgent, async (req, res) => {
+    try {
+        const rawPhone = String(req.query.phone || '');
+        const phone = normalizePhone(rawPhone);
+        if (!phone) {
+            return res.status(400).json({ error: 'Valid phone parameter required' });
+        }
+
+        const variants = phoneVariants(phone);
+        const contact = await prisma.contact.findFirst({
+            where: {
+                phone_number: { in: variants },
+                tenant_id: (req as any).agent.tenant_id,
+            },
+            include: {
+                assigned_agent: {
+                    select: { id: true, name: true, phone: true, role: true },
+                },
+            },
+        });
+
+        if (!contact) {
+            return res.json({
+                found: false,
+                phone_number: phone,
+                message: 'No existing CRM record found for this number',
+            });
+        }
+
+        const [deals, interactions] = await Promise.all([
+            prisma.transaction.findMany({
+                where: {
+                    demand_contact_id: { in: variants },
+                    tenant_id: (req as any).agent.tenant_id,
+                },
+                select: {
+                    id: true,
+                    status: true,
+                    source: true,
+                    source_ref: true,
+                    type: true,
+                    demand_intent: true,
+                    demand_location: true,
+                    demand_budget_min: true,
+                    demand_budget_max: true,
+                    coordinator_agent: { select: { id: true, name: true } },
+                    created_at: true,
+                },
+                orderBy: { created_at: 'desc' },
+                take: 10,
+            }),
+            prisma.interaction.findMany({
+                where: {
+                    phone_number: { in: variants },
+                    tenant_id: (req as any).agent.tenant_id,
+                },
+                select: {
+                    id: true,
+                    event_type: true,
+                    direction: true,
+                    channel: true,
+                    content: true,
+                    created_at: true,
+                },
+                orderBy: { created_at: 'desc' },
+                take: 5,
+            }),
+        ]);
+
+        const dealIds = deals.map(d => d.id);
+        const shortages = dealIds.length > 0 ? await prisma.shortageEntry.findMany({
+            where: { deal_id: { in: dealIds }, status: 'OPEN' },
+            select: { id: true, deal_id: true, area: true, match_count: true, status: true },
+        }) : [];
+
+        res.json({
+            found: true,
+            contact: {
+                id: contact.id,
+                phone_number: contact.phone_number,
+                name: contact.name,
+                contact_type: contact.contact_type,
+                intent: contact.intent,
+                property_type: contact.property_type,
+                budget_min: contact.budget_min,
+                budget_max: contact.budget_max,
+                preferred_location: contact.preferred_location,
+                ai_summary: contact.ai_summary,
+                assigned_agent: contact.assigned_agent,
+                last_channel: contact.last_channel,
+                last_interaction: contact.last_interaction,
+            },
+            deals,
+            interactions,
+            shortages,
+        });
+    } catch (error) {
+        captureRouteError(error, req, { route: 'staff_calls#caller_id' });
+        logger.error('[StaffCall] Caller ID lookup error:', error);
+        res.status(500).json({ error: (error as Error).message });
+    }
+});
+
+// ---------------------------------------------------------
 // GET /api/calls/:id - Get call status and AI results
 // ---------------------------------------------------------
 router.get('/:id', authenticateAgent, async (req, res) => {
