@@ -36,6 +36,29 @@ const LEAD_DEAL_SUMMARY = {
     coordinator_agent_id: true, executive_agent_id: true,
     coordinator: { select: { id: true, name: true } },
 } as const;
+
+// Resilient fallback when column source_ref does not exist in the database yet
+const LEAD_DEAL_SUMMARY_SAFE = {
+    id: true, source: true, status: true, type: true, created_at: true,
+    coordinator_agent_id: true, executive_agent_id: true,
+    coordinator: { select: { id: true, name: true } },
+} as const;
+
+let sourceRefMigrated = false;
+async function ensureSourceRefColumnInDb(): Promise<boolean> {
+    if (sourceRefMigrated) return true;
+    try {
+        await (prisma as any).$executeRawUnsafe(`
+            ALTER TABLE "transactions" ADD COLUMN IF NOT EXISTS "source_ref" TEXT;
+            CREATE INDEX IF NOT EXISTS "idx_transactions_source_ref" ON "transactions"("source_ref");
+        `);
+        sourceRefMigrated = true;
+        return true;
+    } catch (e: any) {
+        logger.warn('[leads] ensureSourceRefColumnInDb: ' + e.message);
+        return false;
+    }
+}
 import { applyLeadStageEdit } from '../services/lead_stage_sync';
 
 const PRIVILEGED_ROLES = ['super_boss', 'manager'];
@@ -411,54 +434,78 @@ router.get('/recent-external', async (req: any, res) => {
                 return { OR: [{ coordinator_agent_id: { in: teamIds } }, { executive_agent_id: { in: teamIds } }] };
             })();
 
-        const [leads, total] = await Promise.all([
-            prisma.contact.findMany({
-                where,
-                orderBy: leadOrderBy,
-                // shared_at re-orders below, so it must not receive a pre-paginated slice.
-                take: shareRank ? undefined : limit,
-                skip: shareRank ? undefined : (page - 1) * limit,
-                select: {
-                    phone_number: true,
-                    name: true,
-                    email: true,
-                    source: true,
-                    lead_status: true,
-                    contact_type: true,
-                    intent: true,
-                    property_type: true,
-                    preferred_location: true,
-                    preferred_lat: true,
-                    preferred_lng: true,
-                    lifecycle_stage: true,
-                    created_at: true,
-                    notes: true,
-                    assigned_agent_id: true,
-                    // Needed by the list UI to badge rows shared with the viewer and to power the
-                    // "Shared with me" filter. Agent IDs only, no PII, and the row is already
-                    // visible to this viewer or the visibility filter would have excluded it.
-                    // Do NOT add this to any public or partner-facing route. (2026-08-09)
-                    shared_with_ids: true,
-                    budget_min: true,
-                    budget_max: true,
-                    // demand_bhk dropped Phase 5 — derive from demand_schema_values.bhk
-                    demand_schema_values: true,
-                    category_id: true,
-                    sub_category_id: true,
-                    type_id: true,
-                    lead_score: { select: { total_score: true } },
-                    timeline: true,
-                    lead_type: true,
-                    referral_partner_name: true,
-                    referral_partner_phone: true,
-                    // 2026-05-13: include assigned agent name so frontend can show
-                    // "Assigned to: <name>" on tile + column without an extra lookup
-                    assigned_agent: { select: { id: true, name: true, role: true } },
-                    demand_transactions: { where: dealWhere, orderBy: { created_at: 'desc' }, select: LEAD_DEAL_SUMMARY },
-                },
-            }),
-            prisma.contact.count({ where }),
-        ]);
+        const queryLeads = async (summaryShape: any) => {
+            return Promise.all([
+                prisma.contact.findMany({
+                    where,
+                    orderBy: leadOrderBy,
+                    // shared_at re-orders below, so it must not receive a pre-paginated slice.
+                    take: shareRank ? undefined : limit,
+                    skip: shareRank ? undefined : (page - 1) * limit,
+                    select: {
+                        phone_number: true,
+                        name: true,
+                        email: true,
+                        source: true,
+                        lead_status: true,
+                        contact_type: true,
+                        intent: true,
+                        property_type: true,
+                        preferred_location: true,
+                        preferred_lat: true,
+                        preferred_lng: true,
+                        lifecycle_stage: true,
+                        created_at: true,
+                        notes: true,
+                        assigned_agent_id: true,
+                        // Needed by the list UI to badge rows shared with the viewer and to power the
+                        // "Shared with me" filter. Agent IDs only, no PII, and the row is already
+                        // visible to this viewer or the visibility filter would have excluded it.
+                        // Do NOT add this to any public or partner-facing route. (2026-08-09)
+                        shared_with_ids: true,
+                        budget_min: true,
+                        budget_max: true,
+                        // demand_bhk dropped Phase 5 — derive from demand_schema_values.bhk
+                        demand_schema_values: true,
+                        category_id: true,
+                        sub_category_id: true,
+                        type_id: true,
+                        lead_score: { select: { total_score: true } },
+                        timeline: true,
+                        lead_type: true,
+                        referral_partner_name: true,
+                        referral_partner_phone: true,
+                        // 2026-05-13: include assigned agent name so frontend can show
+                        // "Assigned to: <name>" on tile + column without an extra lookup
+                        assigned_agent: { select: { id: true, name: true, role: true } },
+                        demand_transactions: { where: dealWhere, orderBy: { created_at: 'desc' }, select: summaryShape },
+                    },
+                }),
+                prisma.contact.count({ where }),
+            ]);
+        };
+
+        let leads: any[];
+        let total: number;
+        try {
+            [leads, total] = await queryLeads(LEAD_DEAL_SUMMARY);
+        } catch (dbErr: any) {
+            if (String(dbErr?.message || '').includes('source_ref')) {
+                logger.warn('[leads] column transactions.source_ref missing; auto-migrating and retrying...');
+                const migrated = await ensureSourceRefColumnInDb();
+                if (migrated) {
+                    try {
+                        [leads, total] = await queryLeads(LEAD_DEAL_SUMMARY);
+                    } catch {
+                        [leads, total] = await queryLeads(LEAD_DEAL_SUMMARY_SAFE);
+                    }
+                } else {
+                    [leads, total] = await queryLeads(LEAD_DEAL_SUMMARY_SAFE);
+                }
+            } else {
+                throw dbErr;
+            }
+        }
 
         // Apply the share ordering and paginate here rather than in SQL (see above).
         let pageLeads = leads;
@@ -1736,14 +1783,43 @@ router.get('/:phone', async (req, res) => {
 
         // Lead history = every enquiry (deal) on this contact, summary only; associated users = everyone who
         // has handled it (owner + each lead's coordinator + explicit shares). Derived — no extra table.
-        const [leadHistory, shareRows] = await Promise.all([
-            prisma.transaction.findMany({
-                where: { demand_contact_id: phone },
-                orderBy: { created_at: 'desc' },
-                select: LEAD_DEAL_SUMMARY,
-            }),
-            prisma.contactShare.findMany({ where: { phone_number: phone }, select: { agent_id: true } }),
-        ]);
+        let leadHistory: any[];
+        let shareRows: any[];
+        try {
+            [leadHistory, shareRows] = await Promise.all([
+                prisma.transaction.findMany({
+                    where: { demand_contact_id: phone },
+                    orderBy: { created_at: 'desc' },
+                    select: LEAD_DEAL_SUMMARY,
+                }),
+                prisma.contactShare.findMany({ where: { phone_number: phone }, select: { agent_id: true } }),
+            ]);
+        } catch (dbErr: any) {
+            if (String(dbErr?.message || '').includes('source_ref')) {
+                const migrated = await ensureSourceRefColumnInDb();
+                try {
+                    [leadHistory, shareRows] = await Promise.all([
+                        prisma.transaction.findMany({
+                            where: { demand_contact_id: phone },
+                            orderBy: { created_at: 'desc' },
+                            select: migrated ? LEAD_DEAL_SUMMARY : LEAD_DEAL_SUMMARY_SAFE,
+                        }),
+                        prisma.contactShare.findMany({ where: { phone_number: phone }, select: { agent_id: true } }),
+                    ]);
+                } catch {
+                    [leadHistory, shareRows] = await Promise.all([
+                        prisma.transaction.findMany({
+                            where: { demand_contact_id: phone },
+                            orderBy: { created_at: 'desc' },
+                            select: LEAD_DEAL_SUMMARY_SAFE,
+                        }),
+                        prisma.contactShare.findMany({ where: { phone_number: phone }, select: { agent_id: true } }),
+                    ]);
+                }
+            } else {
+                throw dbErr;
+            }
+        }
         const associatedIds = Array.from(new Set([
             contact.assigned_agent_id,
             ...leadHistory.flatMap(d => [d.coordinator_agent_id, d.executive_agent_id]),
