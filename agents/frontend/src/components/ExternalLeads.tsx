@@ -771,27 +771,33 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
     };
 
     const handleClientSearchChange = (val: string) => {
-        // Normalise ANY pasted format (+91 / spaces / 91-prefix) to the accepted 10-digit number
-        const digitsOnly = normalizePhoneInput(val);
-        setClientSearchQuery(digitsOnly);
+        // Allow alphanumeric: if text contains letters or spaces, preserve as string; else normalize phone
+        const value = /[a-z]/i.test(val) ? val : normalizePhoneInput(val);
+        setClientSearchQuery(value);
         if (clientSearchTimer.current) clearTimeout(clientSearchTimer.current);
-        if (digitsOnly.length < 10 || !/^[6-9]/.test(digitsOnly)) {
+        const trimmed = value.trim();
+        if (trimmed.length < 2) {
             setClientSearchResults([]);
             setClientSearching(false);
             return;
         }
         setClientSearching(true);
-        suggestLeadType(digitsOnly);
+        const digitsOnly = normalizePhoneInput(trimmed);
+        if (digitsOnly.length === 10 && /^[6-9]/.test(digitsOnly)) {
+            suggestLeadType(digitsOnly);
+        } else {
+            setSuggestedLeadType(null);
+        }
         clientSearchTimer.current = setTimeout(async () => {
             try {
-                const res = await client.get('/api/leads/search', { params: { q: digitsOnly } });
+                const res = await client.get('/api/leads/search', { params: { q: trimmed } });
                 setClientSearchResults(res.data || []);
             } catch {
                 setClientSearchResults([]);
             } finally {
                 setClientSearching(false);
             }
-        }, 300);
+        }, 250);
     };
 
     const handleSelectExistingClient = (contact: { phone_number: string; name: string | null }) => {
@@ -802,8 +808,12 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
 
     const handleCreateNewClient = () => {
         const q = clientSearchQuery.trim();
-        // clientSearchQuery is always digits-only, so always treat as phone
-        setCreateForm(p => ({ ...p, phone: q }));
+        const digits = normalizePhoneInput(q);
+        if (digits.length === 10) {
+            setCreateForm(p => ({ ...p, phone: digits }));
+        } else {
+            setCreateForm(p => ({ ...p, name: q }));
+        }
         setPreselectedContact(null);
         setCreateStep(4);
     };
@@ -837,16 +847,17 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
         setCreateForm(p => ({ ...p, name: contact.name || '', phone: isPlaceholderPhone(contact.phone_number) ? '' : contact.phone_number }));
         setIdentityNewPhone(null);
         setCreateError('');
-        suggestLeadType(clientSearchQuery.trim());
+        suggestLeadType(normalizePhoneInput(contact.phone_number));
     };
 
     const handleIdentityUseNew = () => {
         const q = clientSearchQuery.trim();
-        setCreateForm(p => ({ ...p, phone: q }));
+        const digits = normalizePhoneInput(q);
+        setCreateForm(p => ({ ...p, phone: digits || q }));
         setPreselectedContact(null);
-        setIdentityNewPhone(q);
+        setIdentityNewPhone(digits || q);
         setCreateError('');
-        suggestLeadType(q);
+        suggestLeadType(digits);
     };
 
     const handleIdentityClear = () => {
@@ -857,14 +868,29 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
     };
 
     const handleIdentityContinue = () => {
-        const q = clientSearchQuery.trim();
-        if (!isValidPhoneInput(q)) { setCreateError('Enter a valid 10-digit mobile number to continue.'); return; }
-        if (!preselectedContact && !createForm.phone) {
-            // Typed a valid number but never picked a row — treat as new, don't block.
-            setCreateForm(p => ({ ...p, phone: q }));
-            setIdentityNewPhone(q);
+        if (preselectedContact) {
+            setCreateError('');
+            setCreateStep(2);
+            return;
         }
-        setCreateStep(2);
+        const q = clientSearchQuery.trim();
+        const digits = normalizePhoneInput(q);
+        if (digits.length === 10 && isValidPhoneInput(digits)) {
+            if (!createForm.phone) {
+                setCreateForm(p => ({ ...p, phone: digits }));
+                setIdentityNewPhone(digits);
+            }
+            setCreateError('');
+            setCreateStep(2);
+            return;
+        }
+        if (/[a-z]/i.test(q) && q.length >= 2) {
+            setCreateForm(p => ({ ...p, name: q }));
+            setCreateError('');
+            setCreateStep(2);
+            return;
+        }
+        setCreateError('Please select a contact or enter a valid 10-digit mobile number to continue.');
     };
 
     // ─── Handlers ─────────────────────────────────────────────────────────────
@@ -2318,7 +2344,7 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
                                         {clientSearchQuery.length}/10
                                     </span>}
                                 </div>
-                                {clientSearchQuery.length > 0 && clientSearchQuery.length < 10 && (
+                                {clientSearchQuery.length > 0 && /^\d+$/.test(clientSearchQuery) && clientSearchQuery.length < 10 && (
                                     <p style={{ fontSize: '12px', color: 'var(--text-muted)', margin: '6px 0 0 4px' }}>
                                         {10 - clientSearchQuery.length} more digits needed
                                     </p>
@@ -2375,13 +2401,19 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
                                     </div>
                                 )}
 
-                                {/* Not found — confirm the number (still not written — added at submit) */}
-                                {!preselectedContact && !(identityNewPhone && identityNewPhone === clientSearchQuery.trim()) && clientSearchQuery.trim().length === 10 && !clientSearching && clientSearchResults.length === 0 && (
+                                {/* Not found — confirm number or name */}
+                                {!preselectedContact && !(identityNewPhone && identityNewPhone === clientSearchQuery.trim()) && clientSearchQuery.trim().length >= 2 && !clientSearching && clientSearchResults.length === 0 && (
                                     <div style={{ marginTop: '10px', padding: '14px', backgroundColor: 'var(--bg-secondary)', borderRadius: '8px', border: '1px solid var(--border-secondary)', textAlign: 'center' }}>
-                                        <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '10px' }}>No contact found for "{clientSearchQuery}"</div>
-                                        <button type="button" onClick={handleIdentityUseNew} style={{ ...primaryBtn, padding: '7px 18px', fontSize: '13px' }}>
-                                            + Use this number
-                                        </button>
+                                        <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '10px' }}>No existing contact found for "{clientSearchQuery}"</div>
+                                        {/^\d{10}$/.test(normalizePhoneInput(clientSearchQuery.trim())) ? (
+                                            <button type="button" onClick={handleIdentityUseNew} style={{ ...primaryBtn, padding: '7px 18px', fontSize: '13px' }}>
+                                                + Use this number
+                                            </button>
+                                        ) : (
+                                            <button type="button" onClick={() => { setCreateForm(p => ({ ...p, name: clientSearchQuery.trim() })); setCreateStep(2); }} style={{ ...primaryBtn, padding: '7px 18px', fontSize: '13px' }}>
+                                                + Create lead for "{clientSearchQuery.trim()}"
+                                            </button>
+                                        )}
                                     </div>
                                 )}
 
@@ -2456,7 +2488,7 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
                                         {clientSearchQuery.length}/10
                                     </span>}
                                 </div>
-                                {clientSearchQuery.length > 0 && clientSearchQuery.length < 10 && (
+                                {clientSearchQuery.length > 0 && /^\d+$/.test(clientSearchQuery) && clientSearchQuery.length < 10 && (
                                     <p style={{ fontSize: '12px', color: 'var(--text-muted)', margin: '6px 0 0 4px' }}>
                                         {10 - clientSearchQuery.length} more digits needed
                                     </p>
@@ -2492,7 +2524,7 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
                                 )}
 
                                 {/* Not found — offer to create */}
-                                {clientSearchQuery.trim().length === 10 && !clientSearching && clientSearchResults.length === 0 && (
+                                {clientSearchQuery.trim().length >= 2 && !clientSearching && clientSearchResults.length === 0 && (
                                     <div style={{ marginTop: '10px', padding: '14px', backgroundColor: 'var(--bg-secondary)', borderRadius: '8px', border: '1px solid var(--border-secondary)', textAlign: 'center' }}>
                                         <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '10px' }}>No contact found for "{clientSearchQuery}"</div>
                                         <button type="button" onClick={handleCreateNewClient} style={{ ...primaryBtn, padding: '7px 18px', fontSize: '13px' }}>
