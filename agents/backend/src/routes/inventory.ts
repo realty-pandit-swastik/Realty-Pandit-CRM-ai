@@ -27,6 +27,7 @@ import { sanitizationService } from '../services/sanitization_service';
 import { broadcastInventoryToQualifiedDeals } from '../services/inventory_broadcast';
 import { broadcastNewInventoryToTeam } from '../services/team_inventory_broadcast';
 import { resolveTypeFilter } from '../utils/demand_taxonomy';
+import { bhkListFromDemand, typeNodeListFromDemand } from '../utils/demand_canonical';
 import { cacheDel } from '../utils/redis';
 
 const router = Router();
@@ -1675,10 +1676,10 @@ function _roomsFromSpecs(specs: any, typeName?: string | null): number | null {
     if (typeName && /studio/i.test(typeName)) return 0;
     return null;
 }
-function _roomsFromSchema(sv: any): number | null {
-    const v = (sv && typeof sv === 'object') ? (sv.bhk ?? sv.rooms ?? sv.bedrooms) : null;
-    return _parseRooms(v);
-}
+// NOTE: a demand-side scalar reader (_roomsFromSchema) used to live here and was removed on
+// 2026-09-28 — it read a single value out of demand_schema_values, which silently dropped every
+// option but the first once a customer accepted a set. Multi-value demand now goes through
+// bhkListFromDemand() (utils/demand_canonical), which understands bhk_list + the bhk→rooms chain.
 
 // GET /inventory/:id/matching-clients — find OPEN deals whose demand GENUINELY matches this listing.
 // Strict (2026-06-18): hard filters on intent + property TYPE (residential/commercial + sub-category via
@@ -1755,29 +1756,39 @@ router.get('/:id/matching-clients', authMiddleware, async (req: any, res) => {
             if (invIsRent && dWantsBuy) continue;
             if (!invIsRent && dWantsRent) continue;
 
-            // 2) Type — resolve the demand's canonical type. HARD gate ONLY on a KNOWN residential↔
-            //    commercial conflict; an unresolved demand type (≈53% of leads carry a node that doesn't
-            //    map to a legacy category) is NEUTRAL, not a drop — else genuine leads like a budget-fit
-            //    rent seeker get thrown away. Sub-category is a bonus; the rooms check (step 4) does the
-            //    fine separation (studio vs 2 BHK).
-            const dType = await resolveTypeFilter({ demand_taxonomy_node_id: d.demand_taxonomy_node_id });
-            const hasType = !!(dType.category_id || dType.sub_category_id);
-            if (invType.category_id && dType.category_id && invType.category_id !== dType.category_id) continue; // residential vs commercial → drop
+            // 2) Type — resolve ALL of the demand's canonical types. Multi-value demand (2026-09-28)
+            //    means the customer accepts several types ("Flat or Villa"), stored as
+            //    demand_schema_values.type_node_list. The HARD gate is only a genuine
+            //    residential↔commercial conflict, and now only when EVERY resolved type
+            //    conflicts. An unresolved demand type (≈53% of leads carry a node that doesn't
+            //    map to a legacy category) stays NEUTRAL, not a drop — else genuine leads like a
+            //    budget-fit rent seeker get thrown away. Sub-category is a bonus; the rooms
+            //    check (step 4) does the fine separation (studio vs 2 BHK).
+            const dNodeIds = typeNodeListFromDemand(d.demand_schema_values, d.demand_taxonomy_node_id);
+            const dTypes = (await Promise.all(
+                dNodeIds.map(nid => resolveTypeFilter({ demand_taxonomy_node_id: nid }).catch(() => null)),
+            )).filter(Boolean) as Array<{ category_id?: string | null; sub_category_id?: string | null }>;
+            const hasType = dTypes.some(t => t.category_id || t.sub_category_id);
+            const knownCatTypes = dTypes.filter(t => t.category_id);
+            // residential vs commercial → drop, but only when no acceptable type is left
+            if (invType.category_id && knownCatTypes.length && !knownCatTypes.some(t => t.category_id === invType.category_id)) continue;
             let typeScore = 0.6;
-            if (invType.category_id && dType.category_id) typeScore = 0.85;                                       // same category (res/com) known
-            if (invType.sub_category_id && dType.sub_category_id && invType.sub_category_id === dType.sub_category_id) typeScore = 1; // exact sub-category bonus
+            if (invType.category_id && dTypes.some(t => t.category_id === invType.category_id)) typeScore = 0.85;             // same category (res/com) known
+            if (invType.sub_category_id && dTypes.some(t => t.sub_category_id === invType.sub_category_id)) typeScore = 1; // exact sub-category bonus
 
             // 3) Budget — listing price within the deal's window (±30%) when both are known.
             const bmax = d.demand_budget_max ? Number(d.demand_budget_max) : null;
             const bmin = d.demand_budget_min ? Number(d.demand_budget_min) : null;
 
-            // 4) Rooms/BHK — exclude a clear conflict (e.g. 2 BHK demand vs studio); else score closeness.
-            const dRooms = _roomsFromSchema(d.demand_schema_values);
+            // 4) Rooms/BHK — the accepted set (bhk_list when multi, else the scalar bhk/rooms).
+            //    An exact member of the set scores 1; otherwise the nearest member decides whether
+            //    this is a clear conflict (≥2 away → drop), matching the old single-value rule.
+            const dRoomsList = bhkListFromDemand(d.demand_schema_values);
 
             // Qualification gate — drop leads with NO substantive relevance signal (type, budget, location
             // OR rooms). Bare intent alone (every rent seeker "wants rent") does NOT qualify. This is what
             // removes the empty/unqualified leads (no budget, no type, no location) the user flagged.
-            if (!hasType && !bmax && !bmin && !d.demand_location && dRooms == null) continue;
+            if (!hasType && !bmax && !bmin && !d.demand_location && dRoomsList.length === 0) continue;
 
             let budgetScore = 0.5;
             if (invPrice && invPrice > 0) {
@@ -1787,10 +1798,14 @@ router.get('/:id/matching-clients', authMiddleware, async (req: any, res) => {
             }
 
             let roomScore = 0.5;
-            if (invRooms != null && dRooms != null) {
-                const diff = Math.abs(invRooms - dRooms);
-                if (diff >= 2) continue;
-                roomScore = diff === 0 ? 1 : 0.7;
+            if (invRooms != null && dRoomsList.length > 0) {
+                if (dRoomsList.includes(invRooms)) {
+                    roomScore = 1; // exact hit on an accepted option
+                } else {
+                    const nearest = Math.min(...dRoomsList.map(r => Math.abs(invRooms - r)));
+                    if (nearest >= 2) continue;
+                    roomScore = 0.7;
+                }
             }
 
             // 5) Location — soft; skip only on a clear two-sided mismatch.
@@ -1804,7 +1819,9 @@ router.get('/:id/matching-clients', authMiddleware, async (req: any, res) => {
             const score = Math.round((typeScore * 0.35 + budgetScore * 0.3 + roomScore * 0.2 + locScore * 0.15) * 100);
 
             const reasons: string[] = [invIsRent ? 'Rent' : 'Buy'];
-            if (invRooms != null && dRooms != null && invRooms === dRooms) reasons.push(dRooms === 0 ? 'Studio' : `${dRooms} BHK`);
+            // Multi-value demand (2026-09-28): name the option the listing actually hit, so an agent
+            // reading the match sees "2 BHK" rather than the primary value of a 2-and-3 set.
+            if (invRooms != null && dRoomsList.includes(invRooms)) reasons.push(invRooms === 0 ? 'Studio' : `${invRooms} BHK`);
             if (invPrice && bmax) reasons.push('budget fit');
             if (locScore === 1) reasons.push('location match');
 

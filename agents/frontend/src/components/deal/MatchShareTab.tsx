@@ -103,32 +103,7 @@ function featureList(features?: Record<string, any> | string[] | null): string {
 
 // ── Taxonomy helpers ──────────────────────────────────────────────────────────
 // Path root→node (used to resolve the deal's category / sub-category / type).
-function findPath(nodes: TaxonomyTreeNode[], targetId: string, anc: TaxonomyTreeNode[] = []): TaxonomyTreeNode[] | null {
-    for (const n of nodes) {
-        if (n.id === targetId) return [...anc, n];
-        if (n.children?.length) {
-            const r = findPath(n.children, targetId, [...anc, n]);
-            if (r) return r;
-        }
-    }
-    return null;
-}
-// All TYPE-level nodes under a category, grouped by their immediate sub-category for display.
-// TYPE nodes are what inventory is actually classified by (legacy_sub_category_id), so these
-// are the chips the "Type" multi-select offers. Default = the deal's own TYPE node.
-function collectTypeGroups(category: TaxonomyTreeNode): { sub: string; types: TaxonomyTreeNode[] }[] {
-    const groups: { sub: string; types: TaxonomyTreeNode[] }[] = [];
-    for (const sub of category.children || []) {
-        const types: TaxonomyTreeNode[] = [];
-        const walk = (n: TaxonomyTreeNode) => {
-            if (n.node_kind === 'TYPE') types.push(n);
-            (n.children || []).forEach(walk);
-        };
-        (sub.children || []).forEach(walk);
-        if (types.length) groups.push({ sub: sub.name, types });
-    }
-    return groups;
-}
+import { findPath, collectTypeGroups } from '../../lib/taxonomyGroups';
 
 export function InventoryPreviewModal({ inventoryId, onClose }: { inventoryId: string; onClose: () => void }) {
     const [inv, setInv] = useState<any>(null);
@@ -251,6 +226,20 @@ export function MatchShareTab({ deal, onShared }: Props) {
         if (typeof v === 'string') { const n = parseInt(v.replace(/\D/g, ''), 10); return Number.isNaN(n) ? null : n; }
         return null;
     })();
+    // Multi-value demand (2026-09-28): seed the filter sets from the stored OR lists so the
+    // manual match starts with the customer's full accepted set (scalar as single-member fallback).
+    const dealBhkList: number[] = (() => {
+        const list = Array.isArray(dealSV.bhk_list) ? dealSV.bhk_list : [];
+        const nums = list.map((v: any) => parseInt(String(v).replace(/\D/g, ''), 10)).filter(n => !Number.isNaN(n));
+        if (nums.length) return nums;
+        return dealBhk != null ? [dealBhk] : [];
+    })();
+    const storedTypeIds: string[] = (() => {
+        const list = Array.isArray(dealSV.type_node_list) ? dealSV.type_node_list : [];
+        const ids = list.filter((x: any) => typeof x === 'string' && x);
+        if (ids.length) return ids;
+        return demandNodeId ? [demandNodeId] : [];
+    })();
     const hasGeo = (deal.demand_contact as any)?.preferred_lat != null && (deal.demand_contact as any)?.preferred_lng != null;
     // Canonical, country-coded recipient for any WhatsApp send. null for placeholder/junk phones
     // (e.g. a partner-referral deal whose contact PK is a PENDING- key) → both send buttons disable.
@@ -267,8 +256,8 @@ export function MatchShareTab({ deal, onShared }: Props) {
 
     // ── Filter state ───────────────────────────────────────────────────────────
     const [intent] = useState<string>(deal.demand_intent || 'buy');
-    const [bhkSet, setBhkSet] = useState<Set<number>>(new Set(dealBhk != null ? [dealBhk] : []));
-    const [typeNodeSet, setTypeNodeSet] = useState<Set<string>>(new Set());
+    const [bhkSet, setBhkSet] = useState<Set<number>>(new Set(dealBhkList));
+    const [typeNodeSet, setTypeNodeSet] = useState<Set<string>>(new Set(storedTypeIds));
     const [budgetMin, setBudgetMin] = useState<string>(deal.demand_budget_min?.toString() || '');
     const [budgetMax, setBudgetMax] = useState<string>(deal.demand_budget_max?.toString() || '');
     const [radiusKm, setRadiusKm] = useState<number | null>(null); // null = auto-escalate 2→20

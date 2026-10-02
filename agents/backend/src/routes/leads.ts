@@ -7,7 +7,7 @@ import prisma from '../db';
 import { normalizePhone, resolveStoredContactPhone, isPlaceholderPhone } from '../utils/phone';
 import { resolveDemandSlugs } from '../utils/classification';
 import { resolveTypeFilter } from '../utils/demand_taxonomy';
-import { foldLegacyDemand, mergeDemandSchemaValues, bhkFromString } from '../utils/demand_canonical';
+import { foldLegacyDemand, mergeDemandSchemaValues, bhkFromString, validateMultiValueDemand, DEMAND_BHK_LIST_KEY, DEMAND_TYPE_NODE_LIST_KEY } from '../utils/demand_canonical';
 import { expandTaxonomyNodeIds } from '../utils/taxonomy_filter';
 import { authMiddleware, checkPermission } from '../middleware/auth';
 import { geocodeAddress } from '../utils/geocode';
@@ -2129,13 +2129,32 @@ router.patch('/:phone/requirements', async (req, res) => {
             where: { phone_number: phone },
             select: { demand_schema_values: true, demand_taxonomy_node_id: true },
         });
+
+        // Multi-value demand (2026-09-28): a client can accept several options at once
+        // ("2 BHK and 3 BHK", "Flat or Villa"). Validate/normalise bhk_list +
+        // type_node_list BEFORE folding, so a bad node id is a 400 rather than a
+        // silently-ignored key that widens or narrows matching unpredictably.
+        const incomingSV = (req.body as any).demand_schema_values;
+        const _multi = await validateMultiValueDemand(incomingSV, prisma);
+        if (!_multi.ok) return res.status(400).json({ error: _multi.error });
+        const _multiKeys = _multi.schema;
+        // An explicit null clears the set (e.g. user dropped back to one option).
+        const _clearingMulti = incomingSV && typeof incomingSV === 'object' && !Array.isArray(incomingSV)
+            && (DEMAND_BHK_LIST_KEY in incomingSV || DEMAND_TYPE_NODE_LIST_KEY in incomingSV);
+        const _existingSV = (_existingContact?.demand_schema_values && typeof _existingContact.demand_schema_values === 'object' && !Array.isArray(_existingContact.demand_schema_values))
+            ? { ...(_existingContact.demand_schema_values as Record<string, any>) } : {};
+        const _svBase = { ..._existingSV };
+        for (const k of [DEMAND_BHK_LIST_KEY, DEMAND_TYPE_NODE_LIST_KEY]) {
+            if (!(_clearingMulti && k in (incomingSV as any))) delete _svBase[k];
+        }
+
         const foldedC = foldLegacyDemand({
             demand_bhk: demand_bhk !== undefined ? (demand_bhk ? Number(demand_bhk) : null) : null,
             demand_amenities: demand_amenities,
             demand_taxonomy_node_id: (req.body as any).demand_taxonomy_node_id ?? undefined,
-            demand_schema_values: (req.body as any).demand_schema_values ?? undefined,
+            demand_schema_values: incomingSV ? { ...(incomingSV as Record<string, any>), ..._multiKeys } : undefined,
         });
-        const mergedSV_C = mergeDemandSchemaValues(_existingContact?.demand_schema_values, foldedC.demand_schema_values);
+        const mergedSV_C = mergeDemandSchemaValues(_svBase, foldedC.demand_schema_values);
         if (mergedSV_C) updateData.demand_schema_values = mergedSV_C;
         if (foldedC.demand_taxonomy_node_id !== undefined && foldedC.demand_taxonomy_node_id !== null) {
             updateData.demand_taxonomy_node_id = foldedC.demand_taxonomy_node_id;
