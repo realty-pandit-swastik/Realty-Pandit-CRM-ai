@@ -219,12 +219,14 @@ const DemandRequirementsForm = forwardRef<DemandRequirementsFormHandle, DemandRe
     const fieldNodeKey = useMemo(() => Array.from(new Set([...typeNodeSet, nodeId].filter(Boolean))).join('|'), [typeNodeSet, nodeId]);
     useEffect(() => {
         const ids = fieldNodeKey ? fieldNodeKey.split('|') : [];
-        if (!ids.length) { setNodeFields([]); return; }
         let cancelled = false;
-        Promise.all(ids.map(id => getNodeFields(id)
-            .then((data: any) => ((data?.fields || []) as NodeField[]).filter((f: any) => f && f.key))
-            .catch(() => [] as NodeField[])
-        )).then(all => {
+        const work: Promise<NodeField[][]> = ids.length
+            ? Promise.all(ids.map(id => getNodeFields(id)
+                .then((data: any) => ((data?.fields || []) as NodeField[]).filter((f: any) => f && f.key))
+                .catch(() => [] as NodeField[])
+            ))
+            : Promise.resolve([]);
+        work.then(all => {
             if (cancelled) return;
             const byKey = new Map<string, NodeField>();
             for (const fields of all) {
