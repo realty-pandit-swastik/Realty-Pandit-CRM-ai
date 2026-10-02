@@ -51,17 +51,6 @@ const server = app.listen(Number(port), '127.0.0.1', async () => {
     logger.info(`Agent Server running on port ${port} (instance: ${instanceId})`);
     logger.info('Webhooks active at /webhooks/whatsapp and /webhooks/voice');
 
-    // Ensure additive schema columns exist (idempotent, safe across unmigrated databases)
-    try {
-        await (prisma as any).$executeRawUnsafe(`
-            ALTER TABLE "transactions" ADD COLUMN IF NOT EXISTS "source_ref" TEXT;
-            CREATE INDEX IF NOT EXISTS "idx_transactions_source_ref" ON "transactions"("source_ref");
-        `);
-        logger.info('[Server] Verified transactions.source_ref column exists');
-    } catch (dbErr: any) {
-        logger.warn('[Server] Could not ensure transactions.source_ref column: ' + dbErr.message);
-    }
-
     // Start BullMQ workers on primary instance only
     if (isPrimaryInstance) {
         logger.info('[Server] Primary instance — starting BullMQ workers');
