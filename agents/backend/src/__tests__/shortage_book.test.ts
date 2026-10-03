@@ -1,6 +1,6 @@
-vi.mock('../utils/taxonomy_filter', () => ({ expandTaxonomyNodeIds: vi.fn(async (ids: string[]) => ids) }));
 import { beforeEach, expect, it, vi } from 'vitest';
 
+vi.mock('../utils/taxonomy_filter', () => ({ expandTaxonomyNodeIds: vi.fn(async (ids: string[]) => ids) }));
 vi.mock('../db', () => ({ default: {
     tenant: { findUnique: vi.fn() },
     transaction: { findUnique: vi.fn(), findMany: vi.fn() },

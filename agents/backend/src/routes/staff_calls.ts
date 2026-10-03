@@ -17,7 +17,7 @@ import { callSubmitSchema } from '../validators/calls.validator';
 import logger from '../utils/logger';
 import { captureRouteError } from '../utils/capture';
 import { normalizePhone, phoneVariants } from '../utils/phone';
-import { closeCallReviewTask, lakhsToRupees, reviewedContactFields } from '../services/staff_call_processing';
+import { closeCallReviewTask } from '../services/staff_call_processing';
 import { completeStaffCallUpload } from '../services/staff_call_upload';
 import { runCallFollowup } from '../services/call_followup';
 import { approvedCallFields, callMatchCriteria } from '../services/call_demand';
