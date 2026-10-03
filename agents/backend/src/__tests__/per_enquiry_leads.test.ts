@@ -46,6 +46,14 @@ describe('one contact → many leads', () => {
         expect(prisma.contact.update).not.toHaveBeenCalled(); // contact owner (A) untouched
     });
 
+    it('unattributed re-enquiry on an owned contact is round-robined, contact owner untouched', async () => {
+        (prisma.transaction.findFirst as any).mockResolvedValue(null);
+        (prisma.transaction.create as any).mockResolvedValue({ id: 'deal-rr', demand_contact_id: PHONE });
+        await ensureDealForLead({ contactPhone: PHONE, source: '99acres', sourceRef: 'prop-B' });
+        expect((prisma.transaction.create as any).mock.calls[0][0].data.coordinator_agent_id).toBe('rr-agent');
+        expect(prisma.contact.update).not.toHaveBeenCalled();
+    });
+
     it('Test 2: same source + same property inside the window is a duplicate enquiry', async () => {
         (prisma.transaction.findFirst as any).mockResolvedValue({ id: 'deal-1', status: 'NEW' });
         const res = await ensureDealForLead({ contactPhone: PHONE, source: 'magicbricks', sourceRef: 'prop-A', assignedAgentId: 'A' });

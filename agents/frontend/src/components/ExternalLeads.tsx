@@ -2189,6 +2189,25 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
                                         );
                                     })()}
 
+                                    {/* One contact → many leads: associated users + every enquiry on this contact */}
+                                    {!!leadDetail.associated_users?.length && (
+                                        <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                                            <span style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Associated users </span>
+                                            {leadDetail.associated_users.map(u => u.name || u.id).join(', ')}
+                                        </div>
+                                    )}
+                                    {!!leadDetail.lead_history?.length && (
+                                        <div>
+                                            <div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '6px' }}>Lead history ({leadDetail.lead_history.length})</div>
+                                            {leadDetail.lead_history.map(d => (
+                                                <div key={d.id} style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', padding: '6px 8px', marginBottom: '4px', fontSize: '12px', borderRadius: '6px', border: '1px solid var(--border-secondary)' }}>
+                                                    <span>{d.source_ref || '—'} · {d.source}</span>
+                                                    <span>{d.coordinator?.name || 'Unassigned'} · {d.status}</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+
                                     {/* Timeline Tabs */}
                                     <div>
                                         <div style={{ display: 'flex', gap: '0', borderRadius: '8px', overflow: 'hidden', border: '1px solid var(--border-secondary)', marginBottom: '10px' }}>

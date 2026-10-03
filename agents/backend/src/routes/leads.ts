@@ -1785,10 +1785,17 @@ router.get('/:phone', async (req, res) => {
         // has handled it (owner + each lead's coordinator + explicit shares). Derived — no extra table.
         let leadHistory: any[];
         let shareRows: any[];
+        // Staff only see enquiries their team owns (same rule as the list / GET /api/deals), so B never
+        // sees Lead A's property/assignee just because the Contact is shared. Partners keep their own view.
+        const viewer = (req as any).agent;
+        const historyScope: any = !viewer || viewer.role === 'super_boss' || viewer.role === 'partner' ? {} : await (async () => {
+            const teamIds = await getTeamIds(viewer);
+            return { OR: [{ coordinator_agent_id: { in: teamIds } }, { executive_agent_id: { in: teamIds } }] };
+        })();
         try {
             [leadHistory, shareRows] = await Promise.all([
                 prisma.transaction.findMany({
-                    where: { demand_contact_id: phone },
+                    where: { demand_contact_id: phone, ...historyScope },
                     orderBy: { created_at: 'desc' },
                     select: LEAD_DEAL_SUMMARY,
                 }),
@@ -1800,7 +1807,7 @@ router.get('/:phone', async (req, res) => {
                 try {
                     [leadHistory, shareRows] = await Promise.all([
                         prisma.transaction.findMany({
-                            where: { demand_contact_id: phone },
+                            where: { demand_contact_id: phone, ...historyScope },
                             orderBy: { created_at: 'desc' },
                             select: migrated ? LEAD_DEAL_SUMMARY : LEAD_DEAL_SUMMARY_SAFE,
                         }),
@@ -1809,7 +1816,7 @@ router.get('/:phone', async (req, res) => {
                 } catch {
                     [leadHistory, shareRows] = await Promise.all([
                         prisma.transaction.findMany({
-                            where: { demand_contact_id: phone },
+                            where: { demand_contact_id: phone, ...historyScope },
                             orderBy: { created_at: 'desc' },
                             select: LEAD_DEAL_SUMMARY_SAFE,
                         }),
@@ -1820,9 +1827,14 @@ router.get('/:phone', async (req, res) => {
                 throw dbErr;
             }
         }
+        // Names only (no property/source), so this uses ALL enquiries, not the viewer-scoped history.
+        const allAssignees = await prisma.transaction.findMany({
+            where: { demand_contact_id: phone },
+            select: { coordinator_agent_id: true, executive_agent_id: true },
+        });
         const associatedIds = Array.from(new Set([
             contact.assigned_agent_id,
-            ...leadHistory.flatMap(d => [d.coordinator_agent_id, d.executive_agent_id]),
+            ...allAssignees.flatMap(d => [d.coordinator_agent_id, d.executive_agent_id]),
             ...shareRows.map(r => r.agent_id),
         ].filter((x): x is string => !!x)));
         const associatedUsers = associatedIds.length

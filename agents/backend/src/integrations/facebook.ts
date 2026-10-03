@@ -385,7 +385,7 @@ async function handleLeadgenEvent(leadData: any): Promise<void> {
 
         // Auto-create NEW deal so AI qualification cadence kicks in.
         const { ensureDealForLead } = await import('../services/ensure_deal');
-        ensureDealForLead({ contactPhone: phoneNumber, source: 'facebook', assignedAgentId: agentId })
+        ensureDealForLead({ contactPhone: phoneNumber, source: 'facebook', sourceRef: adId || formId || null, assignedAgentId: agentId })
             .catch(err => logger.error(`[Facebook] ensureDealForLead failed for ${phoneNumber}: ${(err as Error).message}`));
 
         // Send conversion event (Lead)

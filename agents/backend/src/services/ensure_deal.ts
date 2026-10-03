@@ -168,6 +168,13 @@ export async function ensureDealForLead(args: EnsureDealArgs): Promise<EnsureDea
     const PORTAL_SOURCES = ['99acres', 'housing', 'magicbricks', 'facebook'];
     const isPortalLead = PORTAL_SOURCES.includes(args.source);
 
+    // A per-enquiry lead (sourceRef) on an already-owned contact with no attributed agent is routed
+    // like a fresh lead — round-robin — instead of silently inheriting the contact owner. The contact
+    // owner is NOT changed (no assignContact), only this lead's assignee.
+    if (sourceRef && !args.assignedAgentId && contact.assigned_agent_id) {
+        assignedAgentId = (isPortalLead ? await assignViaRoundRobin() : await assignViaManagerRoundRobin()) ?? contact.assigned_agent_id;
+    }
+
     if (!assignedAgentId) {
         assignedAgentId = isPortalLead
             ? await assignViaRoundRobin()
