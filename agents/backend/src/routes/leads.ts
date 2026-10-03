@@ -1101,7 +1101,13 @@ router.get('/search', async (req: any, res) => {
     if (q.length < 2) return res.json([]);
 
     try {
-        const visibilityFilter = buildContactVisibilityFilter(req.agent.id, req.agent.role);
+        const visibilityFilter: any = buildContactVisibilityFilter(req.agent.id, req.agent.role);
+        if (req.agent.role === 'partner') {
+            const { partnerIdsWithSubAgents, partnerLeadOr } = await import('../utils/partner_scope');
+            const { ids } = await partnerIdsWithSubAgents(req.agent.id);
+            Object.assign(visibilityFilter, { OR: partnerLeadOr(ids) });
+        }
+        const teamIds = req.agent.role === 'super_boss' ? [] : await getTeamIds(req.agent);
 
         const isPhone = /\d{3,}/.test(q.replace(/\D/g, ''));
         const phoneDigits = q.replace(/\D/g, '');
@@ -1121,6 +1127,7 @@ router.get('/search', async (req: any, res) => {
         const [contacts, partners] = await Promise.all([
             prisma.contact.findMany({
                 where: {
+                    tenant_id: req.agent.tenant_id,
                     contact_type: { notIn: ['MANAGEMENT'] },
                     AND: [visibilityFilter, { OR: searchCondition }],
                 },
@@ -1133,7 +1140,8 @@ router.get('/search', async (req: any, res) => {
             }),
             prisma.partnerAgent.findMany({
                 where: {
-                    ...(req.agent.role === 'super_boss' ? {} : { managing_agent_id: req.agent.id }),
+                    contact: { tenant_id: req.agent.tenant_id },
+                    ...(req.agent.role === 'super_boss' ? {} : req.agent.role === 'partner' ? { id: req.agent.id } : { managing_agent_id: { in: teamIds } }),
                     OR: [
                         { name: { contains: q, mode: 'insensitive' } },
                         ...(isPhone ? [{ phone_number: { contains: phoneDigits } }] : []),

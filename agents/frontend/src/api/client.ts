@@ -183,6 +183,7 @@ export const shareInventory = async (id: string, agent_ids: string[], action: 'a
 export const shareToClient = async (inventoryId: string, data: {
     client_phone?: string;   // omit when sharing to a redacted (other-agent) lead…
     client_name?: string;
+    retry_media?: boolean;
     deal_id?: string;        // …and pass deal_id instead — backend resolves the phone server-side
     content?: { photos: boolean; videos: boolean; pdf: boolean }; // omitted → photos + videos, no PDF
 }) => {

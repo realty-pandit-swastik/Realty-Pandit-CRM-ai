@@ -5,7 +5,7 @@
  */
 
 import prisma from '../db';
-import { processStaffCall, failStaffCall } from '../services/staff_call_processing';
+import { processStaffCall, recoverExhaustedStaffCalls } from '../services/staff_call_processing';
 import logger from '../utils/logger';
 import { cleanupOldRecordings } from '../services/audio_storage';
 
@@ -57,17 +57,15 @@ export function stopCallProcessor() {
  */
 async function checkForNewJobs() {
     try {
-        const staleCalls = await prisma.staffCall.findMany({
-            where: { status: 'TRANSCRIBED', updated_at: { lt: new Date(Date.now() - 60 * 60 * 1000) } },
-            select: { id: true }, take: 10,
-        });
-        for (const call of staleCalls) await failStaffCall(call.id, new Error('Call processing stopped before review'));
-
+        const { recoverCallFollowups } = await import('../services/call_followup');
+        await recoverCallFollowups();
+        await recoverExhaustedStaffCalls();
         const pendingCalls = await prisma.staffCall.findMany({
-            where: {
-                status: 'PROCESSING',
-                recording_url: { not: null },
-            },
+            where: { processing_attempts: { lt: 3 }, recording_url: { not: null }, OR: [
+                { status: 'PROCESSING', processing_claim_token: null },
+                { status: 'TRANSCRIBED', processing_claimed_at: { lt: new Date(Date.now() - 60 * 60 * 1000) } },
+                { status: 'TRANSCRIBED', processing_claimed_at: null },
+            ] },
             select: { id: true },
             take: 10,
         });
@@ -131,7 +129,7 @@ async function processCall(job: ProcessingJob): Promise<void> {
  * Handle job failure with retry logic
  */
 async function handleJobFailure(job: ProcessingJob, error: Error) {
-    await failStaffCall(job.callId, error);
+    // The shared processor persists bounded, token-scoped retries.
 }
 
 /**

@@ -11,6 +11,18 @@ const whatsappService = new WhatsAppService();
 
 export const initScheduler = () => {
     logger.info('[Scheduler] Initializing cron jobs...');
+    cron.schedule('30 8 * * *', async () => {
+        try {
+            const { createDailySurveyTasks } = await import('./shortage_book');
+            await createDailySurveyTasks();
+        } catch (error) { logger.error('[ShortageBook] fallback survey failed', error); }
+    }, { timezone: 'Asia/Kolkata' });
+    cron.schedule('* * * * *', async () => {
+        try {
+            const { processPendingShortageRefreshes } = await import('./shortage_book');
+            await processPendingShortageRefreshes();
+        } catch (error) { logger.error('[ShortageBook] fallback recovery failed', error); }
+    }, { timezone: 'Asia/Kolkata' });
 
     // Run every minute
     cron.schedule('* * * * *', async () => {

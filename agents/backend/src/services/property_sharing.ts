@@ -23,6 +23,7 @@ import { resolveShareMode, type ShareMode, type ShareModeResult } from './share_
 import { resolveMediaPath } from './pdf_generator';
 import { signPdfToken } from '../utils/pdf_token';
 import * as fs from 'fs';
+import { queuePropertyMedia } from './property_media_queue';
 
 const whatsapp = new WhatsAppService();
 const EVT_PROPERTY_SHARED = 'property_shared';
@@ -584,6 +585,7 @@ export function buildPropertyShareContent(inv: any): { text: string; params: Rec
 export async function sendPropertyMediaAndDetails(
     phone: string, inv: any, throwOnError = false, content: ShareContent = DEFAULT_SHARE_CONTENT,
 ): Promise<boolean> {
+    let propertyDetailsSent = false;
     try {
         if (!(await SessionTracker.isSessionActive(phone))) return false;
 
@@ -599,20 +601,25 @@ export async function sendPropertyMediaAndDetails(
             return true;
         }
         // The first attachment carries the details; if it fails the caller falls back to the card
-        // template. Later failures are logged only — the recipient already has the details.
+        // template. Later failures are persisted for retry — the recipient already has the details.
         await whatsapp.sendMediaStrict(phone, items[0].type, items[0].url, text);
+        propertyDetailsSent = true;
         let sentCount = 1;
+        const failedItems: typeof items = [];
         for (const item of items.slice(1)) {
             try {
                 await whatsapp.sendMediaStrict(phone, item.type, item.url);
                 sentCount++;
             } catch (itemError) {
+                failedItems.push(item);
                 logger.warn(`[PropShare] ${item.type} failed for ${inv.id} (${item.url}): ${(itemError as Error).message}`);
             }
         }
+        await queuePropertyMedia(phone, inv.id, failedItems);
         logger.info(`[PropShare] Inventory ${inv.id} → ${phone} as ${sentCount}/${items.length} direct media attachment(s)`);
         return true;
     } catch (mediaError) {
+        if (propertyDetailsSent && mediaError instanceof Error) Object.assign(mediaError, { propertyDetailsSent: true });
         if (throwOnError) throw mediaError;
         logger.warn(`[PropShare] Media/details send failed for ${inv?.id}: ${(mediaError as Error).message}`);
         return false;
@@ -623,6 +630,10 @@ export async function shareInventoryCard(phone: string, inv: any, content: Share
     try {
         if (await sendPropertyMediaAndDetails(phone, inv, true, content)) return true;
     } catch (mediaError) {
+        if ((mediaError as any).propertyDetailsSent) {
+            logger.error(`[PropShare] Details delivered for ${inv.id}, but failed to persist remaining media for retry`, mediaError);
+            return false;
+        }
         logger.warn(`[PropShare] Direct media failed for ${inv.id}; using approved property card: ${(mediaError as Error).message}`);
     }
 
@@ -630,6 +641,12 @@ export async function shareInventoryCard(phone: string, inv: any, content: Share
         const { params } = buildPropertyShareContent(inv);
         const imageUrl = await pickSendableImage(collectPropertyShareMedia(inv).images); // JPEG copies — Meta rejects WebP headers
         await sendPropertyCard(phone, inv.intent, params, imageUrl);
+        const media = collectPropertyShareMedia(inv);
+        // The template already includes its header photo; defer the rest until an inbound opens the window.
+        await queuePropertyMedia(phone, inv.id, [
+            ...(content.photos ? media.images.filter(url => url !== imageUrl) : []).map(url => ({ type: 'image' as const, url })),
+            ...(content.videos ? media.videos : []).map(url => ({ type: 'video' as const, url })),
+        ]);
         logger.info(`[PropShare] Inventory ${inv.id} → ${phone} via no-link property card`);
         return true;
     } catch (cardError) {
@@ -699,7 +716,7 @@ export function whatsappImageUrl(inventoryId: string, src: string): string {
  * Photos + videos in the form WhatsApp accepts: local photos (any stored format) via the
  * JPEG route, external photos only if already JPEG/PNG; videos only MP4/3GPP (uploads are
  * remuxed to .mp4) and, for local files, only within Meta's 16MB limit — an oversized
- * video would make Meta drop the whole carousel.
+ * video is not supported by Meta media messages.
  */
 export function collectPropertyShareMedia(inv: any): { images: string[]; videos: string[] } {
     const clean = (list: unknown) => [...new Set(((list as unknown[]) || [])
@@ -719,8 +736,8 @@ export function collectPropertyShareMedia(inv: any): { images: string[]; videos:
         return !abs || fs.statSync(abs).size <= WA_MAX_VIDEO_BYTES;
     }).map((u) => (u.startsWith('http') ? u : `${API_BASE}${u}`));
 
-    // 8 + 2 = a carousel's 10-card maximum.
-    return { images: images.slice(0, 8), videos: videos.slice(0, 2) };
+    // Each supported attachment is sent separately; no carousel cap applies.
+    return { images, videos };
 }
 
 // HEAD-check (with GET fallback) that an image URL is actually fetchable as an image.

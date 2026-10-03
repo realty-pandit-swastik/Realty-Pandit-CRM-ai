@@ -1,7 +1,9 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { API_BASE_URL, authedFetch } from '../lib/api';
-import { Phone, Play, Pause, FileText, Check, AlertCircle, Clock } from 'lucide-react';
+import { Phone, Play, Pause, FileText, Check, AlertCircle } from 'lucide-react';
+import DemandRequirementsForm, { type DemandPayload, type DemandRequirementsFormHandle } from './leads/DemandRequirementsForm';
 import { normalizePhoneInput } from '../lib/phone';
+import CallerDossier from './CallerDossier';
 
 type Call = {
   id: string;
@@ -13,58 +15,11 @@ type Call = {
   transcript?: string | null;
   ai_extraction?: Record<string, unknown> | null;
   confidence_score?: number | null;
-  staff_edited_data?: { source?: string; review_status?: string; prior_values?: Record<string, unknown>; auto_saved_fields?: Record<string, unknown> } | null;
+  processing_attempts?: number; processing_error?: string | null; followup_status?: string | null; followup_error?: string | null;
+  staff_edited_data?: { historical_auto_save_review_required?: boolean; source?: string; review_status?: string; prior_values?: Record<string, unknown>; auto_saved_fields?: Record<string, unknown> } | null;
 };
 
-type CallerDossier = {
-  found: boolean;
-  phone_number?: string;
-  contact?: {
-    id: string;
-    phone_number: string;
-    name: string | null;
-    contact_type: string;
-    intent: string | null;
-    property_type: string | null;
-    budget_min: number | null;
-    budget_max: number | null;
-    preferred_location: string | null;
-    ai_summary: string | null;
-    assigned_agent: { id: string; name: string; phone: string | null; role: string } | null;
-    last_channel: string | null;
-    last_interaction: string | null;
-  };
-  deals?: Array<{
-    id: string;
-    status: string;
-    source: string;
-    source_ref: string | null;
-    type: string;
-    demand_intent: string | null;
-    demand_location: string | null;
-    demand_budget_min: number | null;
-    demand_budget_max: number | null;
-    coordinator_agent: { id: string; name: string } | null;
-    created_at: string;
-  }>;
-  interactions?: Array<{
-    id: string;
-    event_type: string;
-    direction: string;
-    channel: string;
-    content: string;
-    created_at: string;
-  }>;
-  shortages?: Array<{
-    id: string;
-    deal_id: string;
-    area: string | null;
-    match_count: number;
-    status: string;
-  }>;
-};
-
-const editable = ['intent', 'role', 'propertyType', 'location', 'budgetMin', 'budgetMax', 'summary'] as const;
+const editable = ['intent', 'role', 'propertyType', 'bhk', 'location', 'budgetMin', 'budgetMax', 'summary'] as const;
 const crmField: Record<string, string> = {
   intent: 'intent',
   role: 'contact_type',
@@ -90,14 +45,18 @@ export default function StaffCallReview() {
   const [phone, setPhone] = useState('');
   const [classification, setClassification] = useState<'INBOUND' | 'OUTBOUND'>('INBOUND');
   const [matches, setMatches] = useState<Array<{ phone_number: string; name?: string; contact_type: string }>>([]);
-  const [dossier, setDossier] = useState<CallerDossier | null>(null);
-  const [dossierLoading, setDossierLoading] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [bulk, setBulk] = useState<BulkRow[]>([]);
-  const [autoShare, setAutoShare] = useState(true);
+  const [autoShare, setAutoShare] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
+
+  const demandRef = useRef<DemandRequirementsFormHandle>(null);
+  const callRequest = useRef(0);
+  const reviewAction = useRef<'preview' | 'approve'>('approve');
+  const [demandInitial, setDemandInitial] = useState<Partial<DemandPayload>>({});
+  const [preview, setPreview] = useState<Array<{ id: string; display_id?: string; location?: string; score: number }> | null>(null);
 
   // Audio player state
   const [isPlaying, setIsPlaying] = useState(false);
@@ -124,46 +83,22 @@ export default function StaffCallReview() {
   useEffect(() => {
     if (phone.trim().length < 2) {
       setMatches([]);
-      setDossier(null);
       return;
     }
+    let active = true;
+    setMatches([]);
     const timer = setTimeout(async () => {
       try {
         const response = await authedFetch(`${API_BASE_URL}/api/leads/search?q=${encodeURIComponent(phone.trim())}`);
         if (response.ok) {
           const list = await response.json();
-          setMatches(list || []);
+          if (active) setMatches(list || []);
         }
       } catch {
-        setMatches([]);
+        if (active) setMatches([]);
       }
     }, 250);
-    return () => clearTimeout(timer);
-  }, [phone]);
-
-  // Caller identification lookup when a complete 10-digit number is reached
-  useEffect(() => {
-    const digits = phone.replace(/\D/g, '');
-    if (digits.length >= 10) {
-      setDossierLoading(true);
-      const timer = setTimeout(async () => {
-        try {
-          const response = await authedFetch(`${API_BASE_URL}/api/calls/caller-id?phone=${encodeURIComponent(phone)}`);
-          if (response.ok) {
-            setDossier(await response.json());
-          } else {
-            setDossier(null);
-          }
-        } catch {
-          setDossier(null);
-        } finally {
-          setDossierLoading(false);
-        }
-      }, 300);
-      return () => clearTimeout(timer);
-    } else {
-      setDossier(null);
-    }
+    return () => { active = false; clearTimeout(timer); };
   }, [phone]);
 
   const upload = async (event: React.FormEvent) => {
@@ -231,6 +166,7 @@ export default function StaffCallReview() {
   };
 
   const openCall = async (id: string) => {
+    const requestId = ++callRequest.current;
     setError('');
     setSuccessMsg('');
     if (audioRef.current) {
@@ -241,25 +177,40 @@ export default function StaffCallReview() {
       const response = await authedFetch(`${API_BASE_URL}/api/calls/${id}`);
       if (!response.ok) throw new Error('Could not load call');
       const call: Call = await response.json();
+      if (callRequest.current !== requestId) return;
       setSelected(call);
       setEdits(Object.fromEntries(editable.map(key => [key, String(call.ai_extraction?.[key] ?? '')])));
+      setPreview(null);
+      const extracted = call.ai_extraction || {};
+      setDemandInitial({ intent: String(extracted.intent || 'BUY').toLowerCase(), budget_min: extracted.budgetMin == null ? null : Number(extracted.budgetMin) * 100000, budget_max: extracted.budgetMax == null ? null : Number(extracted.budgetMax) * 100000, preferred_location: String(extracted.location || ''), demand_schema_values: { bhk: extracted.bhk } });
+      if (call.status === 'READY_FOR_REVIEW' && ['BUY', 'RENT'].includes(String(extracted.intent))) {
+        const response = await authedFetch(`${API_BASE_URL}/api/calls/${id}/match-preview`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) });
+        if (response.ok) { const result = await response.json(); if (callRequest.current === requestId) setDemandInitial({ ...result.draft }); }
+      }
+
     } catch (e) {
-      setError((e as Error).message);
+      if (callRequest.current === requestId) setError((e as Error).message);
     }
   };
 
-  const submitCorrections = async () => {
+  const submitCorrections = async (demand?: DemandPayload) => {
     if (!selected) return;
     setBusy(true);
     setError('');
     setSuccessMsg('');
     try {
-      const edited_data = Object.fromEntries(
+      const edited_data = { ...Object.fromEntries(
         Object.entries(edits).map(([key, value]) => [
           key,
           key.startsWith('budget') ? (value ? Number(value) : null) : value || null,
         ])
-      );
+      ), ...(demand ? { ...demand, intent: demand.intent.toUpperCase(), location: demand.preferred_location || null, budgetMin: demand.budget_min == null ? null : demand.budget_min / 100000, budgetMax: demand.budget_max == null ? null : demand.budget_max / 100000 } : {}) };
+      if (demand && reviewAction.current === 'preview') {
+        const response = await authedFetch(`${API_BASE_URL}/api/calls/${selected.id}/match-preview`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ edited_data }) });
+        if (!response.ok) throw new Error('Could not preview matches');
+        setPreview((await response.json()).matches || []);
+        return;
+      }
       const response = await authedFetch(`${API_BASE_URL}/api/calls/${selected.id}/submit`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -509,68 +460,7 @@ export default function StaffCallReview() {
           </div>
         )}
 
-        {/* ── Caller Identification Dossier Overlay ── */}
-        {dossierLoading && (
-          <div style={{ fontSize: '12px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <Clock size={12} /> Looking up caller details in CRM...
-          </div>
-        )}
-
-        {dossier && dossier.found && dossier.contact && (
-          <div style={{
-            backgroundColor: 'var(--bg-secondary)',
-            border: '1px solid var(--border-secondary)',
-            borderRadius: '10px',
-            padding: '14px',
-            marginTop: '4px',
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', flexWrap: 'wrap', gap: '8px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <div style={{ width: '32px', height: '32px', borderRadius: '50%', backgroundColor: '#3b82f6', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '14px' }}>
-                  {(dossier.contact.name || dossier.contact.phone_number || '?')[0].toUpperCase()}
-                </div>
-                <div>
-                  <div style={{ fontWeight: 700, fontSize: '14px', color: 'var(--text-primary)' }}>
-                    {dossier.contact.name || 'Known Client'} · {dossier.contact.phone_number}
-                  </div>
-                  <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-                    {dossier.contact.contact_type} · Assigned to: {dossier.contact.assigned_agent?.name || 'Unassigned'}
-                  </div>
-                </div>
-              </div>
-              <div style={{ display: 'flex', gap: '6px' }}>
-                <span style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '10px', fontWeight: 600, backgroundColor: '#312e81', color: '#818cf8' }}>
-                  {(dossier.contact.intent || 'CLIENT').toUpperCase()}
-                </span>
-                {dossier.shortages && dossier.shortages.length > 0 && (
-                  <span style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '10px', fontWeight: 600, backgroundColor: '#450a0a', color: '#f87171' }}>
-                    🚨 Unmet Demand Shortage
-                  </span>
-                )}
-              </div>
-            </div>
-
-            {/* Requirements Details */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '8px', fontSize: '12px', color: 'var(--text-secondary)', backgroundColor: 'var(--bg-tertiary)', padding: '10px', borderRadius: '6px', marginBottom: '8px' }}>
-              <div><strong>Property Type:</strong> {dossier.contact.property_type || 'Any'}</div>
-              <div><strong>Location:</strong> {dossier.contact.preferred_location || 'Any'}</div>
-              <div><strong>Budget:</strong> {dossier.contact.budget_max ? `₹${toLakh(dossier.contact.budget_max)} Lakh` : 'Not specified'}</div>
-              <div><strong>Active Deals:</strong> {dossier.deals?.length || 0}</div>
-            </div>
-
-            {/* Active Deals Summary */}
-            {dossier.deals && dossier.deals.length > 0 && (
-              <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-                <strong>Active Enquiries:</strong>{' '}
-                {dossier.deals.map((d, i) => (
-                  <span key={d.id} style={{ marginRight: '8px', color: 'var(--text-primary)' }}>
-                    {d.source_ref ? `🏠 ${d.source_ref}` : 'General'} ({d.status}){i < dossier.deals!.length - 1 ? ' · ' : ''}
-                  </span>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
+        <CallerDossier phone={phone} />
       </form>
 
       {/* Bulk upload: several recordings at once, one row per file */}
@@ -723,7 +613,7 @@ export default function StaffCallReview() {
               )}
               <button
                 type="button"
-                onClick={() => setSelected(null)}
+                onClick={() => { callRequest.current++; setSelected(null); }}
                 style={{
                   padding: '6px 10px',
                   borderRadius: '6px',
@@ -759,6 +649,12 @@ export default function StaffCallReview() {
             </div>
           </div>
 
+          {(selected.processing_error || selected.followup_error) && <div role="alert">
+            <p>{selected.processing_error || selected.followup_error}</p>
+            {(selected.followup_status === 'FAILED' || (selected.status === 'PROCESSING' && (selected.processing_attempts || 0) >= 3)) && <button disabled={busy} onClick={async () => {
+              setBusy(true); try { const response = await authedFetch(`${API_BASE_URL}/api/calls/${selected.id}/retry`, { method: 'POST' }); if (!response.ok) throw new Error('Retry could not be scheduled'); await openCall(selected.id); await refresh(); } catch (e) { setError((e as Error).message); } finally { setBusy(false); }
+            }}>Retry failed work</button>}
+          </div>}
           {/* AI Extracted Fields & Staff Correction */}
           {selected.status === 'READY_FOR_REVIEW' && (
             <div>
@@ -767,7 +663,7 @@ export default function StaffCallReview() {
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '10px', marginBottom: '16px' }}>
-                {editable.map(key => {
+                {editable.filter(key => !['BUY', 'RENT'].includes((edits.intent || '').toUpperCase()) || ['intent', 'role', 'summary'].includes(key)).map(key => {
                   const rawPrior = selected.staff_edited_data?.prior_values?.[crmField[key]];
                   const prior = key.startsWith('budget') ? toLakh(rawPrior) : rawPrior;
                   return (
@@ -805,6 +701,14 @@ export default function StaffCallReview() {
                 })}
               </div>
 
+              {selected.staff_edited_data?.historical_auto_save_review_required && <p role="alert">This older call may have saved AI values before review. Compare the current CRM requirements with its prior values before approval; rejection will not overwrite later staff edits.</p>}
+              {['BUY', 'RENT'].includes((edits.intent || '').toUpperCase()) && (
+                <div>
+                  <DemandRequirementsForm key={`${selected.id}-${demandInitial.demand_taxonomy_node_id || 'draft'}`} ref={demandRef} initial={demandInitial} onSubmit={submitCorrections} hideSubmitButton submitting={busy} />
+                  <button type="button" disabled={busy} onClick={() => { reviewAction.current = 'preview'; demandRef.current?.submit(); }}>Preview suitable active matches</button>
+                  {preview && <div>{preview.length ? preview.map(m => <p key={m.id}>{m.display_id || m.id} · {m.location || 'Location to confirm'} · {m.score}% match</p>) : <p>No suitable active matches for this draft.</p>}</div>}
+                </div>
+              )}
               {['BUY', 'RENT'].includes((edits.intent || '').toUpperCase()) && (
                 <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '10px' }}>
                   <input type="checkbox" checked={autoShare} onChange={e => setAutoShare(e.target.checked)} />
@@ -833,7 +737,7 @@ export default function StaffCallReview() {
                 <button
                   type="button"
                   disabled={busy}
-                  onClick={submitCorrections}
+                  onClick={() => { reviewAction.current = 'approve'; if (['BUY', 'RENT'].includes((edits.intent || '').toUpperCase())) demandRef.current?.submit(); else submitCorrections(); }}
                   style={{
                     padding: '8px 18px',
                     borderRadius: '6px',

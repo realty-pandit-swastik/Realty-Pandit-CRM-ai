@@ -264,7 +264,8 @@ export async function startScheduledWorker(): Promise<void> {
     await scheduledJobsQueue.upsertJobScheduler('pipeline-cold-lead-nudge', { pattern: '20 10 * * *' }, { name: 'pipeline-cold-lead-nudge' });
     await scheduledJobsQueue.upsertJobScheduler('pipeline-manager-schedule', { pattern: '0 8 * * *' }, { name: 'pipeline-manager-schedule' });
     await scheduledJobsQueue.upsertJobScheduler('pipeline-manager-briefing', { every: 1800000 }, { name: 'pipeline-manager-briefing' });
-    await scheduledJobsQueue.upsertJobScheduler('shortage-surveys', { pattern: '30 8 * * *' }, { name: 'shortage-surveys' });
+    await scheduledJobsQueue.upsertJobScheduler('shortage-surveys', { pattern: '30 8 * * *', tz: 'Asia/Kolkata' }, { name: 'shortage-surveys' });
+    await scheduledJobsQueue.upsertJobScheduler('shortage-refresh-recovery', { every: 60000 }, { name: 'shortage-refresh-recovery' });
 
     logger.info('[ScheduledWorker] All repeatable jobs registered');
 
@@ -453,20 +454,26 @@ async function dispatchJob(job: Job): Promise<void> {
             await createDailySurveyTasks();
             break;
         }
+        case 'shortage-refresh':
+        case 'shortage-refresh-recovery': {
+            const { processPendingShortageRefreshes } = await import('../../services/shortage_book');
+            await processPendingShortageRefreshes(job.data?.tenantId);
+            break;
+        }
 
         case 'call-processor': {
             const prisma = (await import('../../db')).default;
-            const { processStaffCall, failStaffCall } = await import('../../services/staff_call_processing');
+            const { processStaffCall, recoverExhaustedStaffCalls } = await import('../../services/staff_call_processing');
 
-            const staleCalls = await prisma.staffCall.findMany({
-                where: { status: 'TRANSCRIBED', updated_at: { lt: new Date(Date.now() - 60 * 60 * 1000) } },
-                select: { id: true }, take: 10,
-            });
-            for (const call of staleCalls) await failStaffCall(call.id, new Error('Call processing stopped before review'));
-
+            const { recoverCallFollowups } = await import('../../services/call_followup');
+            await recoverCallFollowups();
+            await recoverExhaustedStaffCalls();
             const pendingCalls = await prisma.staffCall.findMany({
-                where: { status: 'PROCESSING', recording_url: { not: null } },
-                take: 2,
+                where: { processing_attempts: { lt: 3 }, recording_url: { not: null }, OR: [
+                    { status: 'PROCESSING', processing_claim_token: null },
+                    { status: 'TRANSCRIBED', processing_claimed_at: { lt: new Date(Date.now() - 60 * 60 * 1000) } },
+                    { status: 'TRANSCRIBED', processing_claimed_at: null },
+                ] }, take: 2,
             });
 
             for (const call of pendingCalls) {
@@ -474,7 +481,7 @@ async function dispatchJob(job: Job): Promise<void> {
                     await processStaffCall(call.id);
                 } catch (err) {
                     logger.error(`[ScheduledWorker] Call processing failed: ${call.id}`, err);
-                    await failStaffCall(call.id, err as Error);
+                    // processStaffCall persists token-scoped retry state itself.
                 }
             }
             break;

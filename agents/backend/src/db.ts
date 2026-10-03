@@ -20,9 +20,29 @@ const basePrisma = new PrismaClient({
 // to Sunny and the assigned agent. Both via fire-and-forget so the write stays fast.
 const prisma = basePrisma.$extends({
     query: {
+        transaction: {
+            async create({ args, query }) {
+                const created: any = await query(args);
+                if (created?.tenant_id) import('./services/shortage_book')
+                    .then(({ requestTenantShortageRefresh }) => requestTenantShortageRefresh(created.tenant_id))
+                    .catch(error => console.error('[ShortageBook] refresh request failed', error));
+                return created;
+            },
+            async update({ args, query }) {
+                const updated: any = await query(args);
+                if (updated?.tenant_id) import('./services/shortage_book')
+                    .then(({ requestTenantShortageRefresh }) => requestTenantShortageRefresh(updated.tenant_id))
+                    .catch(error => console.error('[ShortageBook] refresh request failed', error));
+                return updated;
+            },
+        },
         inventory: {
             async create({ args, query }) {
                 const data: any = args.data;
+                if (data && !data.display_id) {
+                    const { generateDisplayId } = await import('./utils/inventory_id');
+                    data.display_id = await generateDisplayId(data.city || data.locality || data.district || '', data.category || 'residential');
+                }
                 if (data && data.assigned_agent_id === undefined && data.uploaded_by_agent_id) {
                     data.assigned_agent_id = data.uploaded_by_agent_id;
                 }
@@ -43,17 +63,42 @@ const prisma = basePrisma.$extends({
                     } catch { /* ignore — never block the create */ }
                 }
                 if (created?.tenant_id) {
-                    import('./services/shortage_book').then(({ refreshTenantShortages }) =>
-                        refreshTenantShortages(created.tenant_id)).catch(() => {});
+                    import('./services/shortage_book').then(({ requestTenantShortageRefresh }) =>
+                        requestTenantShortageRefresh(created.tenant_id)).catch(error => console.error('[ShortageBook] refresh request failed', error));
                 }
                 return created;
+            },
+            async createMany({ args, query }) {
+                const { generateDisplayId } = await import('./utils/inventory_id');
+                for (const data of (Array.isArray(args.data) ? args.data : [args.data]) as any[]) {
+                    if (!data.display_id) data.display_id = await generateDisplayId(data.city || data.locality || data.district || '', data.category || 'residential');
+                    if (data.assigned_agent_id === undefined && data.uploaded_by_agent_id) data.assigned_agent_id = data.uploaded_by_agent_id;
+                }
+                const result = await query(args);
+                if (result?.count) for (const tenantId of new Set((Array.isArray(args.data) ? args.data : [args.data]).map((row: any) => row.tenant_id).filter(Boolean))) {
+                    import('./services/shortage_book').then(({ requestTenantShortageRefresh }) => requestTenantShortageRefresh(tenantId as string))
+                        .catch(error => console.error('[ShortageBook] refresh request failed', error));
+                }
+                return result;
+            },
+            async upsert({ args, query }) {
+                const data: any = args.create;
+                if (!data.display_id) {
+                    const { generateDisplayId } = await import('./utils/inventory_id');
+                    data.display_id = await generateDisplayId(data.city || data.locality || data.district || '', data.category || 'residential');
+                }
+                if (data.assigned_agent_id === undefined && data.uploaded_by_agent_id) data.assigned_agent_id = data.uploaded_by_agent_id;
+                const updated: any = await query(args);
+                if (updated?.tenant_id) import('./services/shortage_book').then(({ requestTenantShortageRefresh }) => requestTenantShortageRefresh(updated.tenant_id))
+                    .catch(error => console.error('[ShortageBook] refresh request failed', error));
+                return updated;
             },
             async update({ args, query }) {
                 const updated: any = await query(args);
                 const changed = args.data as Record<string, unknown>;
                 if (updated?.tenant_id && ['status', 'price', 'customer_price', 'intent', 'location', 'locality', 'sub_locality', 'city', 'specs', 'taxonomy_node_id'].some(key => key in changed)) {
-                    import('./services/shortage_book').then(({ refreshTenantShortages }) =>
-                        refreshTenantShortages(updated.tenant_id)).catch(() => {});
+                    import('./services/shortage_book').then(({ requestTenantShortageRefresh }) =>
+                        requestTenantShortageRefresh(updated.tenant_id)).catch(error => console.error('[ShortageBook] refresh request failed', error));
                 }
                 return updated;
             },
@@ -63,21 +108,32 @@ const prisma = basePrisma.$extends({
                 const tenants = relevant ? await basePrisma.inventory.findMany({ where: args.where, distinct: ['tenant_id'], select: { tenant_id: true } }) : [];
                 const result = await query(args);
                 if (result.count) for (const { tenant_id } of tenants) {
-                    import('./services/shortage_book').then(({ refreshTenantShortages }) =>
-                        refreshTenantShortages(tenant_id)).catch(() => {});
+                    import('./services/shortage_book').then(({ requestTenantShortageRefresh }) =>
+                        requestTenantShortageRefresh(tenant_id)).catch(error => console.error('[ShortageBook] refresh request failed', error));
                 }
                 return result;
             },
             async delete({ args, query }) {
                 const deleted: any = await query(args);
                 if (deleted?.status === 'active' && deleted.tenant_id) {
-                    import('./services/shortage_book').then(({ refreshTenantShortages }) =>
-                        refreshTenantShortages(deleted.tenant_id)).catch(() => {});
+                    import('./services/shortage_book').then(({ requestTenantShortageRefresh }) =>
+                        requestTenantShortageRefresh(deleted.tenant_id)).catch(error => console.error('[ShortageBook] refresh request failed', error));
                 }
                 return deleted;
             },
         },
         contact: {
+            async update({ args, query }) {
+                const updated: any = await query(args);
+                const changed = args.data as Record<string, unknown>;
+                if (updated?.tenant_id && Object.keys(changed).some(key =>
+                    key.startsWith('demand_') || ['intent', 'preferred_location', 'preferred_lat', 'preferred_lng', 'budget_min', 'budget_max', 'assigned_agent_id'].includes(key))) {
+                    import('./services/shortage_book')
+                        .then(({ requestTenantShortageRefresh }) => requestTenantShortageRefresh(updated.tenant_id))
+                        .catch(error => console.error('[ShortageBook] refresh request failed', error));
+                }
+                return updated;
+            },
             async create({ args, query }) {
                 const data: any = args.data;
                 // 1. Auto-assign WhatsApp/voice-source contacts to Sunny when caller didn't pick someone

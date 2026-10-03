@@ -106,6 +106,7 @@ export async function ensureDealForLead(args: EnsureDealArgs): Promise<EnsureDea
             where: {
                 demand_contact_id: args.contactPhone,
                 type: txType,
+                ...(args.source === 'staff_call' ? { source: 'staff_call' } : {}),
                 status: { in: ACTIVE_STATUSES },
             },
             orderBy: { created_at: 'desc' },

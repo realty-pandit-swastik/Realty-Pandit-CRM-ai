@@ -11,6 +11,7 @@ import { ReassignModal } from './ReassignModal';
 import { ConvertToPartnerModal } from '../ConvertToPartnerModal';
 import { ReminderModal } from './ReminderModal';
 import { useToast } from '../../contexts/ToastContext';
+import CallerDossier from '../CallerDossier';
 
 // These constants are exported from DealPipeline and re-imported here.
 // They are defined inline to avoid circular deps during initial render.
@@ -311,6 +312,8 @@ export function DealWorkspace({
                 {/* ── Tab content ── */}
                 <div style={{ flex: 1, overflowY: 'auto' }}>
                     {activeTab === 'detail' && (
+                        <>
+                        <CallerDossier phone={rawPhone} />
                         <RequirementsTab
                             deal={deal}
                             stageLabels={stageLabels}
@@ -319,6 +322,7 @@ export function DealWorkspace({
                             onVisitOutcome={onVisitOutcome}
                             onRevive={onRevive}
                         />
+                        </>
                     )}
                     {activeTab === 'match' && (
                         <MatchShareTab
