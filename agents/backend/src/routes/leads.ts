@@ -2201,7 +2201,7 @@ router.patch('/:phone/requirements', async (req, res) => {
                 select: { id: true },
             });
             const { refreshDealShortage } = await import('../services/shortage_book');
-            await Promise.all(deals.map(deal => refreshDealShortage(deal.id)));
+            await Promise.all(deals.map(deal => refreshDealShortage(deal.id).catch(err => logger.warn(`[Leads] Shortage refresh skipped for ${deal.id}: ${err.message}`))));
         }
 
         res.json(contact);

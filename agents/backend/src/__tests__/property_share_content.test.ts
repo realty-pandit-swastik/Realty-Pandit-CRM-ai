@@ -33,6 +33,8 @@ describe('property WhatsApp share content', () => {
         expect(content.text).toContain('3 BHK Builder Floor');
         expect(content.text).toContain('₹65 Lakh');
         expect(content.text).toContain('1450 sqft');
+        expect(content.text).toContain('east Facing');
+        expect(content.text).toContain('Property ID: inv-1');
         expect(content.text).not.toContain('58');
         expect(content.text).not.toMatch(/https?:\/\//);
         expect(content.params.p7).not.toMatch(/https?:\/\//);

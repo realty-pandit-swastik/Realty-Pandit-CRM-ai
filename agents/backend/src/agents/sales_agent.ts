@@ -16,6 +16,7 @@ import { createTransaction, findExistingTransaction, CreateTransactionInput, lin
 import { transitionTransaction } from '../services/transaction_state_machine';
 import { TransactionStatus, TransactionType } from '@prisma/client';
 import prisma from '../db';
+import { generateDisplayId } from '../utils/inventory_id';
 import logger from '../utils/logger';
 import { extractReqSlots, parseIndianSaleAmount } from '../utils/requirement_slots';
 import { applyDemandCategoryFromType } from '../utils/demand_capture';
@@ -529,6 +530,7 @@ export class SalesAgent implements BaseAgent {
 
                 const inventory = await prisma.inventory.create({
                     data: {
+                        display_id: await generateDisplayId(location || '', 'residential'),
                         tenant_id: contact.tenant_id,
                         owner_id: owner.id,
                         type: propertyType,

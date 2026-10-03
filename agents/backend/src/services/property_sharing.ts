@@ -540,7 +540,8 @@ export function buildPropertyShareContent(inv: any): { text: string; params: Rec
         area = s.area ? `${s.area} ${s.area_unit || 'sqft'}` : 'Area on request';
         detail1 = s.furnishing ? capitalize(s.furnishing) : (isRent ? 'Available Now' : 'Ready to Move');
         const floor = inv.display_floor || inv.floor_label || (inv.floor_number != null ? String(inv.floor_number) : s.floors);
-        detail2 = floor ? `Floor ${floor}` : (s.facing ? `${s.facing} Facing` : 'Prime Location');
+        const facing = s.facing ? `${s.facing} Facing` : '';
+        detail2 = [floor ? `Floor ${floor}` : '', facing].filter(Boolean).join(' · ') || 'Prime Location';
     }
 
     const amenities = buildAmenityLine(s.amenities);
