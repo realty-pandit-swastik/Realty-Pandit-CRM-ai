@@ -319,8 +319,26 @@ export class BuyerWhatsAppAdapter {
         if (property.furnishing) details.push(property.furnishing);
         if (property.floor) details.push(`Floor ${property.floor}`);
 
+        // Same share format as every other channel: primary photo + full details + Property ID,
+        // then the remaining media. The hand-built caption below is only the fallback.
+        let shared = false;
+        try {
+            const inv = await prisma.inventory.findUnique({
+                where: { id: property.property_id },
+                include: { flat_property_type: { select: { name: true, main_category: true } } },
+            });
+            if (inv) {
+                const { shareInventoryCard } = await import('../services/property_sharing');
+                shared = await shareInventoryCard(phone, inv);
+            }
+        } catch (err) {
+            logger.warn('[BuyerWhatsApp] Shared property card failed, using inline caption:', err);
+        }
+
         // Send image with rich caption (if available)
-        if (property.images.length > 0) {
+        if (shared) {
+            // details + media already sent
+        } else if (property.images.length > 0) {
             const captionLines: string[] = [];
             captionLines.push(`🏠 *${title}*`);
             captionLines.push(`📍 ${property.location}`);

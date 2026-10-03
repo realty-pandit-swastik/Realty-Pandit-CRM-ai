@@ -5,6 +5,7 @@ import multer from 'multer';
 import { parse } from 'csv-parse/sync';
 import bcrypt from 'bcryptjs';
 import prisma from '../db';
+import { generateDisplayId } from '../utils/inventory_id';
 import logger from '../utils/logger';
 import { authMiddleware, checkPermission } from '../middleware/auth';
 import { requireSuperBoss } from '../middleware/require_super_boss';
@@ -1200,6 +1201,7 @@ router.post('/inventory/bulk-upload', checkPermission('bulk_upload'), upload.sin
                 // Create inventory record
                 await prisma.inventory.create({
                     data: {
+                        display_id: await generateDisplayId(row.city || csvDistrict || csvLocality || '', row.category || 'residential'),
                         tenant_id: tenant.id,
                         owner_id: ownerId,
                         owner_phone: ownerPhone,

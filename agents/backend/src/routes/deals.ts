@@ -533,7 +533,7 @@ router.patch('/:id/requirements', checkPermission('act_on_deals'), async (req: a
                 },
             }),
         ]);
-        await refreshDealShortage(id);
+        await refreshDealShortage(id).catch(err => logger.warn(`[DealAPI] Shortage refresh skipped for ${id}: ${err.message}`));
 
         // Re-share with the NEW criteria: a matching-relevant edit (budget/location/type/BHK — not a
         // notes-only edit) should proactively surface a fresh card, not strand a broadened deal on
