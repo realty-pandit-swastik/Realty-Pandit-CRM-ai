@@ -679,7 +679,7 @@ async function dispatchJob(job: Job): Promise<void> {
             // Find manager or super_boss to escalate to
             const manager = await prismaDb.agent.findFirst({
                 where: { role: { in: ['manager', 'super_boss'] }, status: 'active' },
-                select: { id: true, name: true, phone: true, email: true },
+                select: { id: true, name: true, phone: true, email: true, role: true },
                 orderBy: { role: 'asc' }, // manager first, then super_boss
             });
 
@@ -712,9 +712,9 @@ async function dispatchJob(job: Job): Promise<void> {
                 const { WhatsAppService } = await import('../../services/whatsapp');
                 const wa = new WhatsAppService();
                 const { buildTemplatePayload } = await import('../../config/whatsapp_templates');
-                const payload = buildTemplatePayload(template_name, { name: contact.name || 'there' });
-                if (payload) {
-                    await wa.sendTemplate(contact_phone, template_name, payload.params || []);
+                const params = { name: contact.name || 'there' };
+                if (buildTemplatePayload(template_name, params)) {
+                    await wa.sendTemplate(contact_phone, template_name, params);
                     logger.info(`[WorkflowWorker] AI follow-up sent: ${template_name} → ${contact_phone}`);
                 }
             } catch (err) {

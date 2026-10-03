@@ -27,7 +27,7 @@ describe('lead search visibility', () => {
             ] }),
         }));
         expect(db.partnerAgent.findMany).toHaveBeenCalledWith(expect.objectContaining({
-            where: expect.objectContaining({ managing_agent_id: 'staff-1' }),
+            where: expect.objectContaining({ managing_agent_id: { in: expect.arrayContaining(['staff-1']) } }),
         }));
     });
 });

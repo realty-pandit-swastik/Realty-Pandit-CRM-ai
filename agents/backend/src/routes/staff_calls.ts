@@ -197,7 +197,7 @@ router.get('/caller-id', authenticateAgent, async (req, res) => {
                     demand_location: true,
                     demand_budget_min: true,
                     demand_budget_max: true,
-                    coordinator_agent: { select: { id: true, name: true } },
+                    coordinator: { select: { id: true, name: true } },
                     created_at: true,
                 },
                 orderBy: { created_at: 'desc' },
@@ -230,7 +230,7 @@ router.get('/caller-id', authenticateAgent, async (req, res) => {
         res.json({
             found: true,
             contact: {
-                id: contact.id,
+                id: contact.phone_number,
                 phone_number: contact.phone_number,
                 name: contact.name,
                 contact_type: contact.contact_type,
@@ -457,8 +457,8 @@ router.post('/:id/submit', authenticateAgent, validate(callSubmitSchema), async 
                     await tx.leadScore.update({
                         where: { phone_number: staffCall.phone_number },
                         data: {
-                            engagement: { increment: 10 },
-                            score: { increment: 10 },
+                            engagement_score: { increment: 10 },
+                            total_score: { increment: 10 },
                         },
                     });
                 } else {
@@ -466,9 +466,8 @@ router.post('/:id/submit', authenticateAgent, validate(callSubmitSchema), async 
                         data: {
                             tenant_id: tenantId,
                             phone_number: staffCall.phone_number,
-                            engagement: 10,
-                            score: 10,
-                            last_calculated: new Date(),
+                            engagement_score: 10,
+                            total_score: 10,
                         },
                     });
                 }

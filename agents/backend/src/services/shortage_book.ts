@@ -65,7 +65,7 @@ export async function refreshDealShortage(dealId: string): Promise<void> {
         budget_hard: true,
         strict_stock: true,
         bhk_list: bhks.length ? bhks : undefined,
-        area_min: deal.demand_area_min, area_max: deal.demand_area_max, area_unit: deal.demand_area_unit,
+        area_min: deal.demand_area_min, area_max: deal.demand_area_max, area_unit: 'sqft', // Transaction.demand_area_* are stored in sqft
     }, threshold);
     const data = {
         tenant_id: deal.tenant_id, owner_id: deal.coordinator_agent_id || deal.executive_agent_id || c?.assigned_agent_id,

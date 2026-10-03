@@ -93,7 +93,7 @@ export async function ingestPortalListing(input: unknown, actor: { tenant_id: st
             task_type: 'PORTAL_HARVEST_VERIFICATION', stage_metadata: { tenant_id: actor.tenant_id, candidate_id: candidate.id, source: data.source, source_ref: data.source_ref },
         } });
         await tx.portalListing.update({ where: { id: candidate.id }, data: { inventory_id: inventory.id, verification_task_id: task.id, status: 'PENDING_VERIFICATION', payload: storedPayload, last_seen_at: new Date() } });
-        return { success: true, duplicate: false, inventory_id: inventory.id, display_id: inventory.display_id, contact_id: contact.id, candidate_id: candidate.id, status: 'PENDING_VERIFICATION' };
+        return { success: true, duplicate: false, inventory_id: inventory.id, display_id: inventory.display_id, contact_id: contact.phone_number, candidate_id: candidate.id, status: 'PENDING_VERIFICATION' };
     }, { timeout: 30000 });
 }
 
