@@ -16,8 +16,9 @@ import { callSubmitSchema } from '../validators/calls.validator';
 import logger from '../utils/logger';
 import { captureRouteError } from '../utils/capture';
 import { normalizePhone, phoneVariants } from '../utils/phone';
-import { reviewedContactFields } from '../services/staff_call_processing';
+import { closeCallReviewTask, lakhsToRupees, reviewedContactFields } from '../services/staff_call_processing';
 import { completeStaffCallUpload } from '../services/staff_call_upload';
+import { applyApprovedCall } from '../services/call_followup';
 
 const authenticateAgent = authMiddleware;
 
@@ -349,8 +350,8 @@ router.post('/:id/submit', authenticateAgent, validate(callSubmitSchema), async 
                     contact_type: finalData.role || 'UNKNOWN',
                     intent: finalData.intent?.toLowerCase() || undefined,
                     property_type: finalData.propertyType || undefined,
-                    budget_min: finalData.budgetMin || undefined,
-                    budget_max: finalData.budgetMax || undefined,
+                    budget_min: lakhsToRupees(finalData.budgetMin) || undefined,
+                    budget_max: lakhsToRupees(finalData.budgetMax) || undefined,
                     preferred_location: finalData.location || undefined,
                     ai_summary: finalData.summary || undefined,
                     last_channel: 'staff_call',
@@ -438,9 +439,15 @@ router.post('/:id/submit', authenticateAgent, validate(callSubmitSchema), async 
 
         logger.info(`[StaffCall] SSOT integration complete: ${id}`);
 
+        await closeCallReviewTask(String(id)).catch((err) => logger.warn(`[StaffCall] Could not close review task for ${id}: ${err.message}`));
+        const followup = await applyApprovedCall(
+            { id: String(id), phone_number: staffCall.phone_number }, finalData, agentId, req.body.auto_share === true,
+        );
+
         res.json({
             success: true,
             message: 'Call submitted to CRM successfully. Contact, VoiceCall, Interaction, and LeadScore updated.',
+            followup,
         });
     } catch (error) {
         captureRouteError(error, req, { route: 'staff_calls#4' });
@@ -492,6 +499,8 @@ router.post('/:id/reject', authenticateAgent, async (req, res) => {
                 recording_url: null, // Clear URL after deletion
             },
         });
+
+        await closeCallReviewTask(String(id)).catch((err) => logger.warn(`[StaffCall] Could not close review task for ${id}: ${err.message}`));
 
         res.json({
             success: true,

@@ -75,6 +75,14 @@ const crmField: Record<string, string> = {
   summary: 'ai_summary'
 };
 
+// The extractor and the review fields speak lakhs; the CRM stores budgets in rupees.
+const toLakh = (rupees: unknown) => (rupees == null || rupees === '' ? null : +(Number(rupees) / 100000).toFixed(2));
+
+type BulkRow = { file: File; phone: string; classification: 'INBOUND' | 'OUTBOUND'; status: 'pending' | 'uploading' | 'done' | 'error'; error?: string };
+// Dialers usually put the number and direction in the file name (e.g. "Call_9876543210_out.m4a").
+const guessPhone = (name: string) => name.match(/(?:\+?91[\s_-]?)?([6-9]\d{9})/)?.[1] ?? '';
+const guessDirection = (name: string): 'INBOUND' | 'OUTBOUND' => (/outgoing|outbound|[\s_.-]out[\s_.-]/i.test(name) ? 'OUTBOUND' : 'INBOUND');
+
 export default function StaffCallReview() {
   const [calls, setCalls] = useState<Call[]>([]);
   const [selected, setSelected] = useState<Call | null>(null);
@@ -85,6 +93,8 @@ export default function StaffCallReview() {
   const [dossier, setDossier] = useState<CallerDossier | null>(null);
   const [dossierLoading, setDossierLoading] = useState(false);
   const [file, setFile] = useState<File | null>(null);
+  const [bulk, setBulk] = useState<BulkRow[]>([]);
+  const [autoShare, setAutoShare] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
@@ -182,6 +192,44 @@ export default function StaffCallReview() {
     }
   };
 
+  const patchBulk = (i: number, patch: Partial<BulkRow>) =>
+    setBulk(rows => rows.map((r, j) => (j === i ? { ...r, ...patch } : r)));
+
+  const pickBulk = (files: FileList | null) =>
+    setBulk(Array.from(files || []).map(f => ({
+      file: f, phone: normalizePhoneInput(guessPhone(f.name)), classification: guessDirection(f.name), status: 'pending' as const,
+    })));
+
+  // One request per file through the same endpoint as the single upload; a failed row doesn't stop the rest.
+  const uploadAll = async () => {
+    setBusy(true);
+    setError('');
+    setSuccessMsg('');
+    let ok = 0;
+    for (let i = 0; i < bulk.length; i++) {
+      const row = bulk[i];
+      if (row.status === 'done' || !row.phone.trim()) continue;
+      patchBulk(i, { status: 'uploading', error: undefined });
+      try {
+        const form = new FormData();
+        form.append('phone_number', row.phone);
+        form.append('classification', row.classification);
+        form.append('audio', row.file);
+        const response = await authedFetch(`${API_BASE_URL}/api/calls/upload`, { method: 'POST', body: form });
+        if (!response.ok) throw new Error((await response.json().catch(() => ({}))).error || 'Upload failed');
+        patchBulk(i, { status: 'done' });
+        ok++;
+      } catch (e) {
+        patchBulk(i, { status: 'error', error: (e as Error).message });
+      }
+    }
+    setBusy(false);
+    if (ok) {
+      setSuccessMsg(`${ok} recording${ok > 1 ? 's' : ''} uploaded. Transcription and AI extraction are in progress.`);
+      await refresh();
+    }
+  };
+
   const openCall = async (id: string) => {
     setError('');
     setSuccessMsg('');
@@ -215,13 +263,17 @@ export default function StaffCallReview() {
       const response = await authedFetch(`${API_BASE_URL}/api/calls/${selected.id}/submit`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ edited_data }),
+        body: JSON.stringify({ edited_data, auto_share: autoShare }),
       });
       if (!response.ok) {
         const err = await response.json();
         throw new Error(err.error || 'Review submission failed');
       }
-      setSuccessMsg('Call verified and approved! Updated CRM contact, lead score, and interaction history.');
+      const { followup } = await response.json();
+      const extra = followup?.failed ? ' The lead could not be created automatically; a task was added for you.'
+        : followup?.dealId ? ` Lead created${followup.shared ? `, ${followup.shared} matching propert${followup.shared > 1 ? 'ies' : 'y'} sent on WhatsApp` : ''}.`
+        : followup?.listingTask ? ' A task was added to capture the listing.' : '';
+      setSuccessMsg(`Call verified and approved! Updated CRM contact, lead score, and interaction history.${extra}`);
       setSelected(null);
       await refresh();
     } catch (e) {
@@ -502,7 +554,7 @@ export default function StaffCallReview() {
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '8px', fontSize: '12px', color: 'var(--text-secondary)', backgroundColor: 'var(--bg-tertiary)', padding: '10px', borderRadius: '6px', marginBottom: '8px' }}>
               <div><strong>Property Type:</strong> {dossier.contact.property_type || 'Any'}</div>
               <div><strong>Location:</strong> {dossier.contact.preferred_location || 'Any'}</div>
-              <div><strong>Budget:</strong> {dossier.contact.budget_max ? `₹${dossier.contact.budget_max} Lakh` : 'Not specified'}</div>
+              <div><strong>Budget:</strong> {dossier.contact.budget_max ? `₹${toLakh(dossier.contact.budget_max)} Lakh` : 'Not specified'}</div>
               <div><strong>Active Deals:</strong> {dossier.deals?.length || 0}</div>
             </div>
 
@@ -520,6 +572,50 @@ export default function StaffCallReview() {
           </div>
         )}
       </form>
+
+      {/* Bulk upload: several recordings at once, one row per file */}
+      <details style={{ marginBottom: '20px' }}>
+        <summary style={{ cursor: 'pointer', fontSize: '13px', fontWeight: 600, color: 'var(--text-secondary)' }}>Bulk upload recordings</summary>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '10px' }}>
+          <input type="file" multiple accept="audio/*,.mp3,.wav,.m4a,.3gp,.ogg" onChange={e => pickBulk(e.target.files)} style={{ fontSize: '12px' }} />
+          {bulk.map((row, i) => (
+            <div key={i} style={{ display: 'grid', gridTemplateColumns: 'minmax(140px, 2fr) minmax(120px, 1fr) 110px minmax(80px, 1fr)', gap: '8px', alignItems: 'center', fontSize: '12px' }}>
+              <span title={row.file.name} style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--text-primary)' }}>{row.file.name}</span>
+              <input
+                type="text"
+                placeholder="Phone number"
+                value={row.phone}
+                disabled={row.status === 'done' || row.status === 'uploading'}
+                onChange={e => patchBulk(i, { phone: e.target.value })}
+                style={{ padding: '6px 8px', borderRadius: '6px', border: '1px solid var(--border-secondary)', backgroundColor: 'var(--bg-secondary)', color: 'var(--text-primary)', fontSize: '12px' }}
+              />
+              <select
+                value={row.classification}
+                disabled={row.status === 'done' || row.status === 'uploading'}
+                onChange={e => patchBulk(i, { classification: e.target.value as BulkRow['classification'] })}
+                style={{ padding: '6px 8px', borderRadius: '6px', border: '1px solid var(--border-secondary)', backgroundColor: 'var(--bg-secondary)', color: 'var(--text-primary)', fontSize: '12px' }}
+              >
+                <option value="INBOUND">Inbound</option>
+                <option value="OUTBOUND">Outbound</option>
+              </select>
+              <span style={{ color: row.status === 'done' ? '#34d399' : row.status === 'error' ? '#ef4444' : 'var(--text-muted)' }}>
+                {row.status === 'error' ? row.error : row.status === 'pending' && !row.phone.trim() ? 'Needs a phone number' : row.status}
+              </span>
+            </div>
+          ))}
+          {bulk.length > 0 && (
+            <button
+              type="button"
+              disabled={busy || bulk.every(r => r.status === 'done' || !r.phone.trim())}
+              onClick={uploadAll}
+              style={{ alignSelf: 'flex-start', padding: '8px 16px', borderRadius: '8px', border: 'none', backgroundColor: '#2563eb', color: '#fff', fontWeight: 600, fontSize: '13px', cursor: busy ? 'not-allowed' : 'pointer' }}
+            >
+              {busy ? 'Uploading...' : `Upload ${bulk.filter(r => r.status !== 'done' && r.phone.trim()).length} recording(s)`}
+            </button>
+          )}
+        </div>
+      </details>
+
 
       {/* Section 2: Recent Staff Calls Queue */}
       <div style={{ borderTop: '1px solid var(--border-secondary)', paddingTop: '16px' }}>
@@ -672,11 +768,12 @@ export default function StaffCallReview() {
 
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '10px', marginBottom: '16px' }}>
                 {editable.map(key => {
-                  const prior = selected.staff_edited_data?.prior_values?.[crmField[key]];
+                  const rawPrior = selected.staff_edited_data?.prior_values?.[crmField[key]];
+                  const prior = key.startsWith('budget') ? toLakh(rawPrior) : rawPrior;
                   return (
                     <div key={key} style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                       <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'capitalize' }}>
-                        {key.replace(/([A-Z])/g, ' $1')}
+                        {key.replace(/([A-Z])/g, ' $1')}{key.startsWith('budget') ? ' (lakh)' : ''}
                       </label>
                       <input
                         type={key.startsWith('budget') ? 'number' : 'text'}
@@ -707,6 +804,13 @@ export default function StaffCallReview() {
                   );
                 })}
               </div>
+
+              {['BUY', 'RENT'].includes((edits.intent || '').toUpperCase()) && (
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '10px' }}>
+                  <input type="checkbox" checked={autoShare} onChange={e => setAutoShare(e.target.checked)} />
+                  On approval, create the lead and send the caller their best matching properties on WhatsApp
+                </label>
+              )}
 
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
                 <button

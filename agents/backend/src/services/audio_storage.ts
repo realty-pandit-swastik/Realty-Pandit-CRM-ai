@@ -142,18 +142,27 @@ export async function deleteAudioFile(publicId: string): Promise<void> {
     }
 }
 
+/** Whole days from an env var, falling back to the default for missing or invalid values. */
+function retentionDays(name: string, fallback: number): number {
+    const days = Number(process.env[name]);
+    return Number.isFinite(days) && days >= 0 ? days : fallback;
+}
+
 /**
- * Delete reviewed audio after seven days and unreviewed audio after 30 days.
+ * Delete reviewed audio after CALL_AUDIO_RETENTION_REVIEWED_DAYS (default 7) and unreviewed audio
+ * after CALL_AUDIO_RETENTION_UNREVIEWED_DAYS (default 30).
  * Drive this from database timestamps, not directory mtime, and keep summaries.
  */
 export async function cleanupOldRecordings(): Promise<void> {
     const now = Date.now();
+    const reviewedMs = retentionDays('CALL_AUDIO_RETENTION_REVIEWED_DAYS', 7) * 86400000;
+    const unreviewedMs = retentionDays('CALL_AUDIO_RETENTION_UNREVIEWED_DAYS', 30) * 86400000;
     const calls = await prisma.staffCall.findMany({
         where: {
             recording_url: { not: null },
             OR: [
-                { status: 'APPROVED', submitted_at: { lte: new Date(now - 7 * 86400000) } },
-                { status: { not: 'APPROVED' }, created_at: { lte: new Date(now - 30 * 86400000) } },
+                { status: 'APPROVED', submitted_at: { lte: new Date(now - reviewedMs) } },
+                { status: { not: 'APPROVED' }, created_at: { lte: new Date(now - unreviewedMs) } },
             ],
         },
         select: { id: true, recording_url: true },

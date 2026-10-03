@@ -1,8 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const db = vi.hoisted(() => ({
-    staffCall: { findUnique: vi.fn(), findMany: vi.fn(), updateMany: vi.fn() },
-    task: { create: vi.fn() },
+    staffCall: { findUnique: vi.fn(), findMany: vi.fn(), updateMany: vi.fn(), update: vi.fn() },
+    task: { create: vi.fn(), findFirst: vi.fn(), updateMany: vi.fn() },
+    contact: { findUnique: vi.fn(), update: vi.fn() },
+    interaction: { create: vi.fn() },
     $transaction: vi.fn(),
 }));
 vi.mock('../db', () => ({ default: db }));
@@ -10,7 +12,9 @@ vi.mock('../services/transcription', () => ({ default: { transcribeAudio: vi.fn(
 vi.mock('../services/call_extractor', () => ({ default: { extractFromTranscript: vi.fn() } }));
 vi.unmock('../services/audio_storage');
 
-import { autoSavedFields, failStaffCall, processStaffCall, reviewedContactFields } from '../services/staff_call_processing';
+import transcriptionService from '../services/transcription';
+import callExtractor from '../services/call_extractor';
+import { autoSavedFields, closeCallReviewTask, failStaffCall, lakhsToRupees, processStaffCall, reviewedContactFields } from '../services/staff_call_processing';
 import { cleanupOldRecordings } from '../services/audio_storage';
 
 describe('staff call processing', () => {
@@ -60,5 +64,63 @@ describe('staff call processing', () => {
         expect(reviewed).toBeLessThanOrEqual(after - 7 * 86400000);
         expect(unreviewed).toBeGreaterThanOrEqual(before - 30 * 86400000);
         expect(unreviewed).toBeLessThanOrEqual(after - 30 * 86400000);
+    });
+    it('retention windows are configurable and fall back to 7 / 30 days on bad values', async () => {
+        db.staffCall.findMany.mockResolvedValue([]);
+        process.env.CALL_AUDIO_RETENTION_REVIEWED_DAYS = '1';
+        process.env.CALL_AUDIO_RETENTION_UNREVIEWED_DAYS = 'abc';
+        try {
+            const before = Date.now();
+            await cleanupOldRecordings();
+            const where = db.staffCall.findMany.mock.calls[0][0].where;
+            expect(where.OR[0].submitted_at.lte.getTime()).toBeGreaterThanOrEqual(before - 86400000);
+            expect(where.OR[0].submitted_at.lte.getTime()).toBeLessThanOrEqual(Date.now() - 86400000);
+            expect(where.OR[1].created_at.lte.getTime()).toBeLessThanOrEqual(Date.now() - 30 * 86400000);
+        } finally {
+            delete process.env.CALL_AUDIO_RETENTION_REVIEWED_DAYS;
+            delete process.env.CALL_AUDIO_RETENTION_UNREVIEWED_DAYS;
+        }
+    });
+
+    it('converts extracted lakhs to rupees where call data enters the contact', () => {
+        expect(lakhsToRupees(50)).toBe(5000000);
+        expect(lakhsToRupees(1.5)).toBe(150000);
+        expect(lakhsToRupees(null)).toBeNull();
+        expect(lakhsToRupees(undefined)).toBeUndefined();
+        const saved = autoSavedFields({ intent: 'BUY', role: 'BUYER', budgetMin: 40, budgetMax: 60, summary: 's', confidence: 0.9 });
+        expect(saved).toMatchObject({ budget_min: 4000000, budget_max: 6000000 });
+        expect(reviewedContactFields({ budgetMax: 120 })).toMatchObject({ budget_max: 12000000 });
+        expect(reviewedContactFields({ budgetMax: null })).toMatchObject({ budget_max: null });
+    });
+
+    it('creates exactly one verification task when a call reaches review, HIGH when intent is unclear', async () => {
+        db.staffCall.findUnique.mockResolvedValue({
+            id: 'call-9', recording_url: 'uploads/staff_calls/call-9/recording.mp3', phone_number: '+911234567890',
+            tenant_id: 't1', staff_agent_id: 'agent-1', classification: 'INBOUND', transcript: null,
+        });
+        db.staffCall.updateMany.mockResolvedValue({ count: 1 });
+        db.contact.findUnique.mockResolvedValue({ phone_number: '+911234567890' });
+        db.$transaction.mockImplementation(async (fn) => fn(db));
+        (transcriptionService.transcribeAudio as any).mockResolvedValue({ text: 'hello' });
+        (callExtractor.extractFromTranscript as any).mockResolvedValue({ intent: 'OTHER', role: 'UNKNOWN', summary: 'unclear', confidence: 0.4 });
+
+        db.task.findFirst.mockResolvedValue(null);
+        await processStaffCall('call-9');
+        expect(db.task.create).toHaveBeenCalledWith({ data: expect.objectContaining({
+            task_type: 'CALL_REVIEW', assigned_to: 'agent-1', priority: 'HIGH', stage_metadata: { call_id: 'call-9', source: 'call_processor' },
+        }) });
+
+        db.task.create.mockClear();
+        db.task.findFirst.mockResolvedValue({ id: 'existing' });
+        await processStaffCall('call-9');
+        expect(db.task.create).not.toHaveBeenCalled();
+    });
+
+    it('closes the verification task for a call', async () => {
+        await closeCallReviewTask('call-9');
+        expect(db.task.updateMany).toHaveBeenCalledWith({
+            where: { task_type: 'CALL_REVIEW', status: { not: 'DONE' }, stage_metadata: { path: ['call_id'], equals: 'call-9' } },
+            data: { status: 'DONE' },
+        });
     });
 });

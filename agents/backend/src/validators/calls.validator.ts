@@ -19,6 +19,8 @@ export const callSubmitSchema = z.object({
         followUpDate: z.string().max(20).optional(),
         summary: z.string().max(5000).nullable().optional(),
     }).optional(),
+    // Send the caller their best matches on WhatsApp after approval. Off unless the reviewer ticks it.
+    auto_share: z.boolean().optional(),
 });
 
 export const agentLoginOtpSchema = z.object({
