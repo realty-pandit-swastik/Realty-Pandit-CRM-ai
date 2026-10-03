@@ -15,9 +15,11 @@ vi.mock('../services/lead_assignment', () => ({
 }));
 vi.mock('../services/lead_qualification_caller', () => ({ scheduleQualificationCall: vi.fn().mockResolvedValue(undefined) }));
 vi.mock('../services/google_sync', () => ({ pushReminderToGoogle: vi.fn().mockResolvedValue(undefined) }));
+vi.mock('../services/shortage_book', () => ({ refreshDealShortage: vi.fn().mockResolvedValue(undefined) }));
 
 import prisma from '../db';
 import { ensureDealForLead } from '../services/ensure_deal';
+import { refreshDealShortage } from '../services/shortage_book';
 
 beforeEach(() => vi.clearAllMocks());
 
@@ -42,6 +44,7 @@ describe('ensureDealForLead — per-(contact, type) idempotency', () => {
         expect(res.created).toBe(true);
         expect(res.dealId).toBe('rent-deal');
         expect(prisma.transaction.create).toHaveBeenCalled();
+        expect(refreshDealShortage).toHaveBeenCalledWith('rent-deal');
         // The idempotency lookup must be scoped to the RENT type, not the contact alone.
         expect((prisma.transaction.findFirst as any).mock.calls[0][0].where.type).toBe('RENT');
     });

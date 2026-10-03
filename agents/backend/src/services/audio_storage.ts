@@ -8,6 +8,7 @@
 import fs from 'fs';
 import path from 'path';
 import logger from '../utils/logger';
+import prisma from '../db';
 
 const UPLOADS_DIR = path.join(process.cwd(), 'uploads', 'staff_calls');
 
@@ -33,6 +34,7 @@ export interface SignedUrlOptions {
  */
 export async function handleMultipartUpload(file: Express.Multer.File, callId: string): Promise<UploadResult> {
     const tempPath = file.path;
+    let destPath: string | undefined;
 
     try {
         // Create call-specific directory
@@ -44,7 +46,7 @@ export async function handleMultipartUpload(file: Express.Multer.File, callId: s
         // Determine file extension from original name or mimetype
         const ext = path.extname(file.originalname) || getExtFromMime(file.mimetype);
         const filename = `recording${ext}`;
-        const destPath = path.join(callDir, filename);
+        destPath = path.join(callDir, filename);
 
         // Move file from temp to permanent location
         fs.copyFileSync(tempPath, destPath);
@@ -65,6 +67,7 @@ export async function handleMultipartUpload(file: Express.Multer.File, callId: s
         if (fs.existsSync(tempPath)) {
             fs.unlinkSync(tempPath);
         }
+        if (destPath && fs.existsSync(destPath)) fs.unlinkSync(destPath);
         logger.error('[AudioStorage] Upload failed:', error);
         throw new Error(`Failed to store audio: ${(error as Error).message}`);
     }
@@ -140,33 +143,33 @@ export async function deleteAudioFile(publicId: string): Promise<void> {
 }
 
 /**
- * Delete audio files older than retention period (180 days)
+ * Delete reviewed audio after seven days and unreviewed audio after 30 days.
+ * Drive this from database timestamps, not directory mtime, and keep summaries.
  */
 export async function cleanupOldRecordings(): Promise<void> {
-    try {
-        const retentionDays = parseInt(process.env.AUDIO_RETENTION_DAYS || '180');
-        const cutoffMs = retentionDays * 24 * 60 * 60 * 1000;
-        const now = Date.now();
-
-        if (!fs.existsSync(UPLOADS_DIR)) return;
-
-        const dirs = fs.readdirSync(UPLOADS_DIR);
-        let cleaned = 0;
-
-        for (const dir of dirs) {
-            const dirPath = path.join(UPLOADS_DIR, dir);
-            const stat = fs.statSync(dirPath);
-            if (stat.isDirectory() && (now - stat.mtimeMs) > cutoffMs) {
-                fs.rmSync(dirPath, { recursive: true, force: true });
-                cleaned++;
-            }
+    const now = Date.now();
+    const calls = await prisma.staffCall.findMany({
+        where: {
+            recording_url: { not: null },
+            OR: [
+                { status: 'APPROVED', submitted_at: { lte: new Date(now - 7 * 86400000) } },
+                { status: { not: 'APPROVED' }, created_at: { lte: new Date(now - 30 * 86400000) } },
+            ],
+        },
+        select: { id: true, recording_url: true },
+    });
+    for (const call of calls) {
+        if (!call.recording_url?.startsWith(`uploads/staff_calls/${call.id}/`)) continue;
+        const publicId = call.recording_url.slice('uploads/staff_calls/'.length);
+        try {
+            await deleteAudioFile(publicId);
+            await prisma.$transaction([
+                prisma.staffCall.update({ where: { id: call.id }, data: { recording_url: null } }),
+                prisma.voiceCall.updateMany({ where: { recording_url: call.recording_url }, data: { recording_url: null } }),
+            ]);
+        } catch (error) {
+            logger.error(`[AudioStorage] Retention failed for call ${call.id}:`, error);
         }
-
-        if (cleaned > 0) {
-            logger.info(`[AudioStorage] Cleaned up ${cleaned} old recording directories`);
-        }
-    } catch (error) {
-        logger.error('[AudioStorage] Cleanup failed:', error);
     }
 }
 

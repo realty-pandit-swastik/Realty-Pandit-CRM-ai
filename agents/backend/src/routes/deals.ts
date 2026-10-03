@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Deal Management Routes (Phase 7)
  *
  * Admin-facing API for the 3-role deal system.
@@ -32,12 +32,72 @@ import { getTeamIds } from '../utils/team_scope';
 import prisma from '../db';
 import logger from '../utils/logger';
 import { captureRouteError } from '../utils/capture';
-import { foldLegacyDemand, mergeDemandSchemaValues } from '../utils/demand_canonical';
+import { foldLegacyDemand, mergeDemandSchemaValues, validateMultiValueDemand, typeNodeListFromDemand, DEMAND_BHK_LIST_KEY, DEMAND_TYPE_NODE_LIST_KEY } from '../utils/demand_canonical';
 
 import { geocodeAddress } from '../utils/geocode';
+import { refreshDealShortage } from '../services/shortage_book';
 
 const router = Router();
 router.use(authMiddleware);
+
+router.get('/shortages', checkPermission('act_on_deals'), async (req: any, res) => {
+    if (req.agent.role === 'partner') return res.status(403).json({ error: 'Staff only' });
+    const teamIds = req.agent.role === 'super_boss' ? null : await getTeamIds(req.agent);
+    const rows = await prisma.shortageEntry.findMany({
+        where: { tenant_id: req.agent.tenant_id, status: 'OPEN', ...(teamIds ? { owner_id: { in: teamIds } } : {}) },
+        orderBy: [{ match_count: 'asc' }, { updated_at: 'desc' }],
+    });
+    res.json({ success: true, data: rows });
+});
+
+router.post('/shortages/generate-tasks', checkPermission('act_on_deals'), async (req: any, res) => {
+    try {
+        if (req.agent.role === 'partner') return res.status(403).json({ error: 'Staff only' });
+        const { createDailySurveyTasks } = await import('../services/shortage_book');
+        await createDailySurveyTasks();
+        res.json({ success: true, message: 'Daily survey tasks generated from open shortages' });
+    } catch (err: any) {
+        captureRouteError(err, req, { route: 'deals#generate_shortage_tasks' });
+        res.status(500).json({ error: err.message });
+    }
+});
+
+router.post('/shortages/:id/refresh', checkPermission('act_on_deals'), async (req: any, res) => {
+    try {
+        if (req.agent.role === 'partner') return res.status(403).json({ error: 'Staff only' });
+        const shortage = await prisma.shortageEntry.findUnique({
+            where: { id: req.params.id },
+        });
+        if (!shortage || shortage.tenant_id !== req.agent.tenant_id) {
+            return res.status(404).json({ error: 'Shortage entry not found' });
+        }
+        await refreshDealShortage(shortage.deal_id);
+        const updated = await prisma.shortageEntry.findUnique({ where: { id: req.params.id } });
+        res.json({ success: true, data: updated });
+    } catch (err: any) {
+        captureRouteError(err, req, { route: 'deals#refresh_shortage' });
+        res.status(500).json({ error: err.message });
+    }
+});
+
+router.get('/calling-queue', checkPermission('act_on_deals'), async (req: any, res) => {
+    if (req.agent.role === 'partner') return res.status(403).json({ error: 'Staff only' });
+    const teamIds = req.agent.role === 'super_boss' ? null : await getTeamIds(req.agent);
+    const rows = await prisma.contact.findMany({
+        where: { tenant_id: req.agent.tenant_id, contact_type: { in: ['BUYER', 'TENANT'] },
+            ...(teamIds ? { assigned_agent_id: { in: teamIds } } : {}),
+        },
+        select: { phone_number: true, name: true, assigned_agent_id: true, created_at: true,
+            work_tasks: { where: { status: { in: ['TODO', 'IN_PROGRESS'] } }, select: { id: true, title: true, due_date: true }, orderBy: { due_date: 'asc' }, take: 1 },
+        },
+        orderBy: { created_at: 'desc' }, take: 200,
+    });
+    const cutoff = Date.now() - 48 * 60 * 60 * 1000;
+    res.json({ success: true, data: {
+        fresh: rows.filter(row => row.created_at.getTime() >= cutoff),
+        aged: rows.filter(row => row.created_at.getTime() < cutoff),
+    } });
+});
 
 // ─── POST /api/deals — Create a new deal ─────────────────────────────────────
 router.post('/', checkPermission('manage_deals'), validate(createDealSchema), async (req: any, res) => {
@@ -401,6 +461,21 @@ router.patch('/:id/requirements', checkPermission('act_on_deals'), async (req: a
             if (key in req.body) changes[key] = req.body[key];
         }
 
+        // Multi-value demand (2026-09-28): validate/normalise bhk_list +
+        // type_node_list before folding, so a bad node id is a 400 instead of a
+        // silently-ignored key. Mirrors the leads requirements route.
+        const incomingSV_D = (req.body as any).demand_schema_values;
+        const _multiD = await validateMultiValueDemand(incomingSV_D, prisma);
+        if (!_multiD.ok) return res.status(400).json({ success: false, error: _multiD.error });
+        const _multiKeysD = _multiD.schema;
+        const _clearingMultiD = incomingSV_D && typeof incomingSV_D === 'object' && !Array.isArray(incomingSV_D)
+            && (DEMAND_BHK_LIST_KEY in incomingSV_D || DEMAND_TYPE_NODE_LIST_KEY in incomingSV_D);
+        const _svBaseD = (deal.demand_schema_values && typeof deal.demand_schema_values === 'object' && !Array.isArray(deal.demand_schema_values))
+            ? { ...(deal.demand_schema_values as Record<string, any>) } : {};
+        for (const k of [DEMAND_BHK_LIST_KEY, DEMAND_TYPE_NODE_LIST_KEY]) {
+            if (!(_clearingMultiD && k in (incomingSV_D as any))) delete _svBaseD[k];
+        }
+
         // Phase 5 (2026-05-29): fold any legacy-shape fields the client still
         // sends into canonical demand_schema_values. foldLegacyDemand maps
         // demand_bedrooms → schema_values.bhk, demand_amenities → schema_values.amenities.
@@ -409,9 +484,9 @@ router.patch('/:id/requirements', checkPermission('act_on_deals'), async (req: a
             demand_bedrooms: req.body.demand_bedrooms ?? null,
             demand_amenities: req.body.demand_amenities,
             demand_taxonomy_node_id: (req.body as any).demand_taxonomy_node_id ?? undefined,
-            demand_schema_values: (req.body as any).demand_schema_values ?? undefined,
+            demand_schema_values: incomingSV_D ? { ...(incomingSV_D as Record<string, any>), ..._multiKeysD } : undefined,
         });
-        const mergedSV_D = mergeDemandSchemaValues(deal.demand_schema_values, foldedD.demand_schema_values);
+        const mergedSV_D = mergeDemandSchemaValues(_svBaseD, foldedD.demand_schema_values);
         if (mergedSV_D) updates.demand_schema_values = mergedSV_D;
         if (foldedD.demand_taxonomy_node_id) updates.demand_taxonomy_node_id = foldedD.demand_taxonomy_node_id;
 
@@ -458,6 +533,7 @@ router.patch('/:id/requirements', checkPermission('act_on_deals'), async (req: a
                 },
             }),
         ]);
+        await refreshDealShortage(id);
 
         // Re-share with the NEW criteria: a matching-relevant edit (budget/location/type/BHK — not a
         // notes-only edit) should proactively surface a fresh card, not strand a broadened deal on
@@ -830,11 +906,20 @@ router.get('/:id/matched-inventory', checkPermission('act_on_deals'), async (req
         // Resolve the picked TYPE-level node ids → legacy sub_category_ids (inventory's
         // 100%-populated tier; legacy_sub_category_id lives on TYPE nodes and equals
         // inventory.sub_category_id). resolveTypeFilter maps one node → its legacy ids; loop + dedupe.
+        // Multi-value demand (2026-09-28): when the caller sends no type_node_list we fall back to
+        // the demand's own stored set (demand_schema_values.type_node_list, or the single
+        // demand_taxonomy_node_id). An explicit query param still wins — this only fills the gap
+        // so a "Flat or Villa" customer matches both without the agent re-picking them.
+        const demandNodesForMatch = typeNodeListFromDemand(
+            dc.demand_schema_values ?? (deal as any).demand_schema_values ?? null,
+            dc.demand_taxonomy_node_id ?? (deal as any).demand_taxonomy_node_id ?? null,
+        );
         const typeNodeIds = (type_node_list || '').split(',').map(s => s.trim()).filter(Boolean);
-        if (typeNodeIds.length) {
+        const typeIdsToResolve = typeNodeIds.length ? typeNodeIds : demandNodesForMatch;
+        if (typeIdsToResolve.length) {
             const { resolveTypeFilter } = await import('../utils/demand_taxonomy');
             const resolved = await Promise.all(
-                typeNodeIds.map(nid => resolveTypeFilter({ demand_taxonomy_node_id: nid }).catch(() => null)),
+                typeIdsToResolve.map(nid => resolveTypeFilter({ demand_taxonomy_node_id: nid }).catch(() => null)),
             );
             const subCatIds = [...new Set(resolved.map(r => r?.sub_category_id).filter((x): x is string => !!x))];
             if (subCatIds.length) criteria.sub_category_id_list = subCatIds;

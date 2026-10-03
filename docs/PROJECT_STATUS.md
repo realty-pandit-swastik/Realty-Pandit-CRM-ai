@@ -1,9 +1,28 @@
 # Realty Pandit — Live Project Status
 
-**Last updated:** 2026-08-02
+**Last updated:** 2026-09-29
 **Update trigger:** Significant deployments, phase completions, blockers cleared/added.
 
 > This file is the **live state**. When you see contradictions with anything else in /docs/, this wins. Update the timestamp on each meaningful change.
+
+## 2026-10-02 — One contact → many leads (LOCAL CODE, NOT DEPLOYED)
+
+- **Rule:** the Contact is the customer (unique by normalized phone); each property enquiry is its own lead. A "lead" is the existing `Transaction` (deal) — no new entity. A known contact enquiring again NO LONGER suppresses a new lead and is NO LONGER auto-shared with the new agent.
+- **Where:** `ensureDealForLead` (`services/ensure_deal.ts`) now takes `sourceRef` (portal listing/project/page) + optional per-enquiry `demand`. With a `sourceRef` it dedups only the same (contact, source, sourceRef) within `DUPLICATE_ENQUIRY_WINDOW_DAYS` (default 30, `0` = always create). Without one (chat/manual) the old per-(contact,type) dedup is unchanged. New migration `20261002000000_transaction_source_ref` (additive, nullable column + index; not applied to production).
+- **Intake:** MagicBricks push, 99acres + Housing pollers/webhooks and the website lead popup pass `sourceRef` and assign the new lead to that enquiry's attributed agent (falls back to the contact owner). `lead_reingest.ts` now only writes the `lead_regenerated` timeline entry. Facebook / external-leads / lead-requirements paths still carry no property ref, so they keep the old one-active-deal-per-type behaviour.
+- **Visibility:** `buildContactVisibilityFilter` / `isContactVisibleTo` also admit a contact when the viewer is coordinator/executive of one of its deals (managers: their reports too). Deal endpoints keep their own team scope, so B still cannot open A's lead.
+- **UI:** Leads list renders one row per visible enquiry (source, property, assignee, stage per lead); contact detail shows Associated users + Lead history. Counts, select-all and filters remain contact-based.
+- **Not done:** no backfill of historic repeat enquiries; existing `ContactShare` rows from the old re-ingest are left in place.
+- **Checks:** `per_enquiry_leads.test.ts`; backend 430/432 (2 pre-existing Redis health failures); CRM build passes. Not exercised against a real database or live portal webhooks.
+
+## 2026-09-29 — CRM automation rollout (LOCAL CODE, NOT DEPLOYED)
+
+- The rollout is scoped to the CRM web app. Android handset work and external listing sourcing are excluded from this pilot.
+- **Sharing and contact entry:** local code sends the primary WhatsApp photo with full details and Property ID, then remaining media within the service window; PDF remains opt-in. CRM contact entry now searches names and phones through the existing visibility-scoped lead search.
+- **Call review and retention:** CRM web upload, caller lookup, extraction review/correction, and failure tasks are local code only; no live audio path has been verified. The cleanup job targets local staff-call recordings at seven days after approval or 30 days without approval. Remote `VoiceCall` recordings outside that local staff-call path are not deleted by this job.
+- **Shortages and calling:** local code adds a shortage book, daily survey tasks, and a fresh/aged calling board. The additive `shortage_entries` migration has not been applied to production.
+- The Hermes morning pilot is manual and staff reviewed. It reads open shortages and active, team-visible listings from the same tenant through a contact-free inventory export. It prepares candidate and area-survey suggestions only; it cannot write listings or contact details to the CRM. See `docs/hermes-crm-pilot/README.md`.
+- Hermes is not installed or scheduled here. No live Hermes run, production deployment, or real call-audio verification has been performed in this update.
 
 ## 2026-09-24 — WhatsApp property share: photos/videos by default, PDF opt-in (CODE, NOT DEPLOYED)
 

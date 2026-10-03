@@ -71,8 +71,7 @@ export class CallExtractor {
             return validatedData;
         } catch (error) {
             logger.error('[CallExtractor] Extraction failed:', error);
-            // Return fallback data
-            return this.getFallbackData(transcript);
+            throw error;
         }
     }
 
@@ -246,19 +245,6 @@ RESPOND WITH ONLY THE JSON OBJECT.`;
         return cleaned;
     }
 
-    /**
-     * Get fallback data when extraction fails
-     */
-    private getFallbackData(transcript: string): ExtractedCallData {
-        return {
-            intent: 'OTHER',
-            role: 'UNKNOWN',
-            summary: `Call transcript: ${transcript.substring(0, 200)}...`,
-            confidence: 0.2,
-            sentiment: 'NEUTRAL',
-            appointmentMentioned: false,
-        };
-    }
 }
 
 // Singleton instance

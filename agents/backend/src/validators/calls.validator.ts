@@ -8,16 +8,16 @@ export const callUploadSchema = z.object({
 
 export const callSubmitSchema = z.object({
     edited_data: z.object({
-        intent: z.string().optional(),
-        role: z.string().optional(),
-        propertyType: z.string().optional(),
-        bhk: z.string().optional(),
-        location: z.string().optional(),
-        budgetMin: z.number({ coerce: true }).optional(),
-        budgetMax: z.number({ coerce: true }).optional(),
-        urgency: z.string().optional(),
-        followUpDate: z.string().optional(),
-        summary: z.string().optional(),
+        intent: z.enum(['BUY', 'RENT', 'SELL', 'LEASE', 'OTHER']).nullable().optional(),
+        role: z.enum(['BUYER', 'TENANT', 'LANDLORD', 'UNKNOWN']).nullable().optional(),
+        propertyType: z.string().max(100).nullable().optional(),
+        bhk: z.string().max(20).nullable().optional(),
+        location: z.string().max(200).nullable().optional(),
+        budgetMin: z.coerce.number().nonnegative().finite().nullable().optional(),
+        budgetMax: z.coerce.number().nonnegative().finite().nullable().optional(),
+        urgency: z.string().max(50).optional(),
+        followUpDate: z.string().max(20).optional(),
+        summary: z.string().max(5000).nullable().optional(),
     }).optional(),
 });
 

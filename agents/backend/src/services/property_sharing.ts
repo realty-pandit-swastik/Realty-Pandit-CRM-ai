@@ -544,6 +544,7 @@ export function buildPropertyShareContent(inv: any): { text: string; params: Rec
     }
 
     const amenities = buildAmenityLine(s.amenities);
+    const propertyId = inv.display_id || inv.id;
     const text = [
         'Namaste 🙏',
         `🏡 *${title}*`,
@@ -554,6 +555,7 @@ export function buildPropertyShareContent(inv: any): { text: string; params: Rec
         `✅ ${detail1}`,
         `🧭 ${detail2}`,
         `✨ ${amenities}`,
+        `🆔 Property ID: ${propertyId}`,
         '',
         'Reply here to request more information or schedule a visit.',
     ].join('\n');
@@ -567,18 +569,16 @@ export function buildPropertyShareContent(inv: any): { text: string; params: Rec
             p4: price,
             p5: detail1,
             p6: detail2,
-            p7: `${area} · ${amenities}`,
+            p7: `${area} · ${amenities} · Property ID: ${propertyId}`,
         },
     };
 }
 
 /**
  * Send one property without a website link. Inside an open customer-service window:
- * 2+ photos/videos → one interactive carousel with the details as its body (each card has a
- * "Schedule Visit" quick reply, routed by property_card_reply_handler); if Meta rejects the
- * carousel, or there's a single item, each attachment is sent individually with the details
- * as the first caption. Outside that window Meta only permits approved templates, so this
- * returns false and shareInventoryCard sends the image-card template.
+ * the primary photo carries the full details, followed by other photos and videos.
+ * Outside that window Meta only permits approved templates, so this returns false and
+ * shareInventoryCard sends the single-image card template.
  */
 export async function sendPropertyMediaAndDetails(
     phone: string, inv: any, throwOnError = false, content: ShareContent = DEFAULT_SHARE_CONTENT,
@@ -596,15 +596,6 @@ export async function sendPropertyMediaAndDetails(
         if (!items.length) {
             await whatsapp.sendTextStrict(phone, text);
             return true;
-        }
-        if (items.length >= 2) {
-            try {
-                await whatsapp.sendCarouselStrict(phone, text, items, 'Schedule Visit', `prop_visit:${inv.id}`);
-                logger.info(`[PropShare] Inventory ${inv.id} → ${phone} as a ${items.length}-card carousel`);
-                return true;
-            } catch (carouselError) {
-                logger.warn(`[PropShare] Carousel rejected for ${inv.id}; sending attachments individually: ${(carouselError as Error).message}`);
-            }
         }
         // The first attachment carries the details; if it fails the caller falls back to the card
         // template. Later failures are logged only — the recipient already has the details.

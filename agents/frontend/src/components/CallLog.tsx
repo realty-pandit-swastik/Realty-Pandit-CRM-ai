@@ -20,6 +20,7 @@ import { Phone, PhoneIncoming, PhoneOutgoing, PhoneMissed, Play, Pause, Download
 import client from '../api/client';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
+import StaffCallReview from './StaffCallReview';
 
 interface VoiceCall {
   id: string;
@@ -186,25 +187,36 @@ export default function CallLog() {
     setFilteredCalls(filtered);
   };
 
-  const handlePlayPause = (call: VoiceCall) => {
+  const handlePlayPause = async (call: VoiceCall) => {
     if (!call.recording_url) {
       showToast('No recording available for this call', 'info');
       return;
     }
 
     if (playingCallId === call.id) {
-      // Pause current audio
       if (audioRef.current) {
         audioRef.current.pause();
       }
       setPlayingCallId(null);
     } else {
-      // Play new audio
       if (audioRef.current) {
         audioRef.current.pause();
       }
 
-      const audio = new Audio(call.recording_url);
+      let playUrl = call.recording_url;
+      let blobUrlToRevoke: string | null = null;
+      if (call.recording_url.startsWith('/api/calls/')) {
+        try {
+          const res = await client.get(call.recording_url, { responseType: 'blob' });
+          playUrl = URL.createObjectURL(res.data);
+          blobUrlToRevoke = playUrl;
+        } catch {
+          showToast('Recording unavailable', 'error');
+          return;
+        }
+      }
+
+      const audio = new Audio(playUrl);
       audioRef.current = audio;
 
       audio.addEventListener('loadedmetadata', () => {
@@ -218,6 +230,7 @@ export default function CallLog() {
       audio.addEventListener('ended', () => {
         setPlayingCallId(null);
         setCurrentTime(0);
+        if (blobUrlToRevoke) URL.revokeObjectURL(blobUrlToRevoke);
       });
 
       audio.play();
@@ -267,11 +280,25 @@ export default function CallLog() {
     }
   };
 
-  const handleDownloadRecording = (url: string, callId: string) => {
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `call_${callId}_${new Date().getTime()}.mp3`;
-    link.click();
+  const handleDownloadRecording = async (url: string, callId: string) => {
+    try {
+      let downloadUrl = url;
+      let blobUrlToRevoke: string | null = null;
+      if (url.startsWith('/api/calls/')) {
+        const res = await client.get(url, { responseType: 'blob' });
+        downloadUrl = URL.createObjectURL(res.data);
+        blobUrlToRevoke = downloadUrl;
+      }
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      link.download = `call_${callId}_${new Date().getTime()}.mp3`;
+      link.click();
+      if (blobUrlToRevoke) {
+        setTimeout(() => URL.revokeObjectURL(blobUrlToRevoke), 1000);
+      }
+    } catch {
+      showToast('Recording unavailable', 'error');
+    }
   };
 
   // Stats
@@ -295,6 +322,9 @@ export default function CallLog() {
         <h1 style={s.h1}>📞 Call Log</h1>
         <p style={s.subtitle}>View call history with audio playback and AI summaries</p>
       </div>
+
+      {/* Staff call review banner */}
+      <StaffCallReview />
 
       {/* Error Alert */}
       {error && (

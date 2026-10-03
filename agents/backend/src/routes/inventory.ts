@@ -15,7 +15,7 @@ import { authMiddleware, checkPermission } from '../middleware/auth';
 import logger from '../utils/logger';
 import { absurdPriceError } from '../utils/price_sanity';
 import { ensureH264Playable } from '../utils/video_transcode';
-import { normalizePhone, isPlaceholderPhone } from '../utils/phone';
+import { normalizePhone, phoneVariants, isPlaceholderPhone } from '../utils/phone';
 import { findInventoryIdsByAddress } from '../utils/inventory_search';
 import { generateDisplayId } from '../utils/inventory_id';
 import { getTeamIds } from '../utils/team_scope';
@@ -27,6 +27,7 @@ import { sanitizationService } from '../services/sanitization_service';
 import { broadcastInventoryToQualifiedDeals } from '../services/inventory_broadcast';
 import { broadcastNewInventoryToTeam } from '../services/team_inventory_broadcast';
 import { resolveTypeFilter } from '../utils/demand_taxonomy';
+import { bhkListFromDemand, typeNodeListFromDemand } from '../utils/demand_canonical';
 import { cacheDel } from '../utils/redis';
 
 const router = Router();
@@ -434,6 +435,173 @@ async function partnerMayMutateInventory(req: any, res: any, inventoryId: string
 }
 
 /**
+ * POST /inventory/harvest
+ * Ingest scraped / harvested listings from external portals (99acres, Magicbricks, Housing, etc.)
+ * Extracts seller/owner details directly into the CRM Contact model and creates inventory with status PENDING_APPROVAL.
+ * Auto-creates verification task for sourcing agents.
+ */
+router.post('/harvest', authMiddleware, checkPermission('edit_inventory'), async (req: any, res) => {
+    try {
+        const {
+            source, // '99acres' | 'magicbricks' | 'housing' | 'classifieds' | 'portal_crawl'
+            source_ref, // external listing ID or URL
+            seller_name,
+            seller_phone,
+            seller_email,
+            property_title,
+            property_type,
+            intent,
+            price,
+            locality,
+            society_name,
+            city,
+            full_address,
+            specs,
+            features,
+            description,
+            media_urls,
+        } = req.body;
+
+        if (!seller_phone) {
+            return res.status(400).json({ error: 'seller_phone is required' });
+        }
+
+        const phone = normalizePhone(seller_phone);
+        if (!phone) {
+            return res.status(400).json({ error: 'Invalid seller phone number' });
+        }
+
+        const tenantId = req.agent.tenant_id;
+        const crawlSource = source || 'portal_crawl';
+
+        // Check if this external listing was already harvested
+        if (source_ref) {
+            const existing = await prisma.inventory.findFirst({
+                where: {
+                    tenant_id: tenantId,
+                    source_ref,
+                },
+                select: { id: true, display_id: true, status: true },
+            });
+            if (existing) {
+                return res.status(409).json({
+                    success: false,
+                    error: `Listing ${source_ref} already harvested into CRM`,
+                    inventory_id: existing.id,
+                    display_id: existing.display_id,
+                });
+            }
+        }
+
+        // 1. Upsert seller as Contact (PROPERTY_OWNER / LANDLORD)
+        const variants = phoneVariants(phone);
+        let contact = await prisma.contact.findFirst({
+            where: { phone_number: { in: variants }, tenant_id: tenantId },
+        });
+
+        if (contact) {
+            contact = await prisma.contact.update({
+                where: { id: contact.id },
+                data: {
+                    name: contact.name || seller_name || undefined,
+                    email: contact.email || seller_email || undefined,
+                    contact_type: contact.contact_type === 'UNKNOWN' ? 'LANDLORD' : contact.contact_type,
+                    last_channel: crawlSource,
+                    last_interaction: new Date(),
+                },
+            });
+        } else {
+            contact = await prisma.contact.create({
+                data: {
+                    tenant_id: tenantId,
+                    phone_number: phone,
+                    name: seller_name || 'Portal Seller',
+                    email: seller_email || null,
+                    contact_type: 'LANDLORD',
+                    source: crawlSource,
+                    last_channel: crawlSource,
+                    last_interaction: new Date(),
+                },
+            });
+        }
+
+        // 2. Mint display_id for the new inventory
+        const mainCategory = ['office', 'retail', 'commercial', 'shop', 'warehouse'].includes(String(property_type || '').toLowerCase()) ? 'commercial' : 'residential';
+        const displayId = await generateDisplayId(city || locality || 'Bengaluru', mainCategory);
+
+        // 3. Create Inventory in 'pending_approval' state
+        const inventory = await prisma.inventory.create({
+            data: {
+                tenant_id: tenantId,
+                display_id: displayId,
+                source_ref: source_ref || null,
+                upload_source: 'portal_crawl',
+                status: 'pending_approval',
+                lead_reference: `HARVESTED_${crawlSource.toUpperCase()}`,
+                intent: (intent || 'sell').toLowerCase(),
+                type: property_type || 'flat',
+                price: price ? Number(price) : null,
+                locality: locality || null,
+                society_name: society_name || null,
+                city: city || 'Bengaluru',
+                full_address: full_address || [society_name, locality, city].filter(Boolean).join(', ') || null,
+                specs: specs || {},
+                features: features || {},
+                description: description || null,
+                media_urls: Array.isArray(media_urls) ? media_urls : [],
+                owner_phone: phone,
+                owner_name: seller_name || contact.name || 'Portal Seller',
+                uploaded_by_agent_id: req.agent.id,
+            } as any,
+        });
+
+        // 4. Create verification task for team member
+        await prisma.task.create({
+            data: {
+                tenant_id: tenantId,
+                title: `Verify harvested listing: ${property_title || locality || displayId}`,
+                description: `Harvested from ${crawlSource}. Seller: ${seller_name || phone}. Verify availability, pricing, and owner contact.`,
+                assigned_to: req.agent.id,
+                contact_phone: phone,
+                due_date: new Date(Date.now() + 24 * 60 * 60 * 1000),
+                priority: 'HIGH',
+                status: 'TODO',
+                task_type: 'PORTAL_HARVEST_VERIFICATION',
+                stage_metadata: {
+                    inventory_id: inventory.id,
+                    display_id: displayId,
+                    source: crawlSource,
+                    source_ref,
+                },
+            } as any,
+        });
+
+        // 5. Check if this newly harvested inventory resolves any open shortages
+        try {
+            const { refreshTenantShortages } = await import('../services/shortage_book');
+            await refreshTenantShortages(tenantId);
+        } catch (shortageErr) {
+            logger.warn('[InventoryHarvest] Shortage refresh failed:', shortageErr);
+        }
+
+        logger.info(`[InventoryHarvest] Harvested ${displayId} (${inventory.id}) from ${crawlSource} with seller ${phone}`);
+
+        res.status(201).json({
+            success: true,
+            inventory_id: inventory.id,
+            display_id: displayId,
+            contact_id: contact.id,
+            seller_phone: phone,
+            message: `Listing harvested from ${crawlSource} and queued for verification`,
+        });
+    } catch (err: any) {
+        captureRouteError(err, req, { route: 'inventory#harvest' });
+        logger.error('[InventoryHarvest] Error:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+/**
  * POST /inventory/:id/partner-assign  { partner_agent_id: string | null }
  * PARTNER TEAMS (2026-07-13): a partner COMPANY OWNER assigns one of THEIR OWN listings to one of THEIR
  * OWN sub-agents. The assignee gains FULL work rights on it (isPartnerOwnInventory now matches
@@ -834,6 +1002,47 @@ router.get('/', authMiddleware, async (req, res) => {
         logger.error(error);
         res.status(500).json({ error: 'Failed to fetch inventory' });
     }
+});
+
+// GET /inventory/hermes-pilot - tenant-scoped, contact-free export for supervised staff review.
+router.get('/hermes-pilot', authMiddleware, checkPermission('act_on_deals'), async (req, res) => {
+  try {
+    const agent = req.agent!;
+    if (!agent.tenant_id || !['super_boss', 'manager', 'employee'].includes(agent.role)) {
+      return res.status(403).json({ error: 'Staff access required' });
+    }
+    const page = Number(req.query.page ?? 1);
+    if (!Number.isSafeInteger(page) || page < 1 || page > 10000) {
+      return res.status(400).json({ error: 'Invalid page' });
+    }
+    const where: any = { tenant_id: agent.tenant_id, status: 'active' };
+    if (agent.role !== 'super_boss') {
+      const teamIds = await getTeamIds(agent);
+      const partnerOwnerIds = await getManagedPartnerOwnerIds(teamIds);
+      where.OR = [
+        { uploaded_by_agent_id: { in: teamIds } },
+        { reference_agent_id: { in: teamIds } },
+        { assigned_agent_id: { in: teamIds } },
+        { shared_with_ids: { hasSome: teamIds } },
+        ...(partnerOwnerIds.length ? [{ owner_id: { in: partnerOwnerIds } }] : []),
+      ];
+    }
+    const [data, total] = await Promise.all([
+      prisma.inventory.findMany({
+        where, orderBy: [{ created_at: 'desc' }, { id: 'desc' }], skip: (page - 1) * 100, take: 100,
+        select: {
+          id: true, display_id: true, status: true, intent: true, category: true, type: true,
+          apartment_name: true, sub_locality: true, locality: true, city: true,
+          price: true, price_unit: true,
+        },
+      }),
+      prisma.inventory.count({ where }),
+    ]);
+    return res.json({ scope: 'tenant_staff', data, page, totalPages: Math.max(1, Math.ceil(total / 100)) });
+  } catch (error) {
+    captureRouteError(error, req, { route: 'inventory#hermes-pilot' });
+    return res.status(500).json({ error: 'Failed to export inventory' });
+  }
 });
 
 // GET /inventory/:id - Single inventory item
@@ -1467,10 +1676,10 @@ function _roomsFromSpecs(specs: any, typeName?: string | null): number | null {
     if (typeName && /studio/i.test(typeName)) return 0;
     return null;
 }
-function _roomsFromSchema(sv: any): number | null {
-    const v = (sv && typeof sv === 'object') ? (sv.bhk ?? sv.rooms ?? sv.bedrooms) : null;
-    return _parseRooms(v);
-}
+// NOTE: a demand-side scalar reader (_roomsFromSchema) used to live here and was removed on
+// 2026-09-28 — it read a single value out of demand_schema_values, which silently dropped every
+// option but the first once a customer accepted a set. Multi-value demand now goes through
+// bhkListFromDemand() (utils/demand_canonical), which understands bhk_list + the bhk→rooms chain.
 
 // GET /inventory/:id/matching-clients — find OPEN deals whose demand GENUINELY matches this listing.
 // Strict (2026-06-18): hard filters on intent + property TYPE (residential/commercial + sub-category via
@@ -1547,29 +1756,39 @@ router.get('/:id/matching-clients', authMiddleware, async (req: any, res) => {
             if (invIsRent && dWantsBuy) continue;
             if (!invIsRent && dWantsRent) continue;
 
-            // 2) Type — resolve the demand's canonical type. HARD gate ONLY on a KNOWN residential↔
-            //    commercial conflict; an unresolved demand type (≈53% of leads carry a node that doesn't
-            //    map to a legacy category) is NEUTRAL, not a drop — else genuine leads like a budget-fit
-            //    rent seeker get thrown away. Sub-category is a bonus; the rooms check (step 4) does the
-            //    fine separation (studio vs 2 BHK).
-            const dType = await resolveTypeFilter({ demand_taxonomy_node_id: d.demand_taxonomy_node_id });
-            const hasType = !!(dType.category_id || dType.sub_category_id);
-            if (invType.category_id && dType.category_id && invType.category_id !== dType.category_id) continue; // residential vs commercial → drop
+            // 2) Type — resolve ALL of the demand's canonical types. Multi-value demand (2026-09-28)
+            //    means the customer accepts several types ("Flat or Villa"), stored as
+            //    demand_schema_values.type_node_list. The HARD gate is only a genuine
+            //    residential↔commercial conflict, and now only when EVERY resolved type
+            //    conflicts. An unresolved demand type (≈53% of leads carry a node that doesn't
+            //    map to a legacy category) stays NEUTRAL, not a drop — else genuine leads like a
+            //    budget-fit rent seeker get thrown away. Sub-category is a bonus; the rooms
+            //    check (step 4) does the fine separation (studio vs 2 BHK).
+            const dNodeIds = typeNodeListFromDemand(d.demand_schema_values, d.demand_taxonomy_node_id);
+            const dTypes = (await Promise.all(
+                dNodeIds.map(nid => resolveTypeFilter({ demand_taxonomy_node_id: nid }).catch(() => null)),
+            )).filter(Boolean) as Array<{ category_id?: string | null; sub_category_id?: string | null }>;
+            const hasType = dTypes.some(t => t.category_id || t.sub_category_id);
+            const knownCatTypes = dTypes.filter(t => t.category_id);
+            // residential vs commercial → drop, but only when no acceptable type is left
+            if (invType.category_id && knownCatTypes.length && !knownCatTypes.some(t => t.category_id === invType.category_id)) continue;
             let typeScore = 0.6;
-            if (invType.category_id && dType.category_id) typeScore = 0.85;                                       // same category (res/com) known
-            if (invType.sub_category_id && dType.sub_category_id && invType.sub_category_id === dType.sub_category_id) typeScore = 1; // exact sub-category bonus
+            if (invType.category_id && dTypes.some(t => t.category_id === invType.category_id)) typeScore = 0.85;             // same category (res/com) known
+            if (invType.sub_category_id && dTypes.some(t => t.sub_category_id === invType.sub_category_id)) typeScore = 1; // exact sub-category bonus
 
             // 3) Budget — listing price within the deal's window (±30%) when both are known.
             const bmax = d.demand_budget_max ? Number(d.demand_budget_max) : null;
             const bmin = d.demand_budget_min ? Number(d.demand_budget_min) : null;
 
-            // 4) Rooms/BHK — exclude a clear conflict (e.g. 2 BHK demand vs studio); else score closeness.
-            const dRooms = _roomsFromSchema(d.demand_schema_values);
+            // 4) Rooms/BHK — the accepted set (bhk_list when multi, else the scalar bhk/rooms).
+            //    An exact member of the set scores 1; otherwise the nearest member decides whether
+            //    this is a clear conflict (≥2 away → drop), matching the old single-value rule.
+            const dRoomsList = bhkListFromDemand(d.demand_schema_values);
 
             // Qualification gate — drop leads with NO substantive relevance signal (type, budget, location
             // OR rooms). Bare intent alone (every rent seeker "wants rent") does NOT qualify. This is what
             // removes the empty/unqualified leads (no budget, no type, no location) the user flagged.
-            if (!hasType && !bmax && !bmin && !d.demand_location && dRooms == null) continue;
+            if (!hasType && !bmax && !bmin && !d.demand_location && dRoomsList.length === 0) continue;
 
             let budgetScore = 0.5;
             if (invPrice && invPrice > 0) {
@@ -1579,10 +1798,14 @@ router.get('/:id/matching-clients', authMiddleware, async (req: any, res) => {
             }
 
             let roomScore = 0.5;
-            if (invRooms != null && dRooms != null) {
-                const diff = Math.abs(invRooms - dRooms);
-                if (diff >= 2) continue;
-                roomScore = diff === 0 ? 1 : 0.7;
+            if (invRooms != null && dRoomsList.length > 0) {
+                if (dRoomsList.includes(invRooms)) {
+                    roomScore = 1; // exact hit on an accepted option
+                } else {
+                    const nearest = Math.min(...dRoomsList.map(r => Math.abs(invRooms - r)));
+                    if (nearest >= 2) continue;
+                    roomScore = 0.7;
+                }
             }
 
             // 5) Location — soft; skip only on a clear two-sided mismatch.
@@ -1596,7 +1819,9 @@ router.get('/:id/matching-clients', authMiddleware, async (req: any, res) => {
             const score = Math.round((typeScore * 0.35 + budgetScore * 0.3 + roomScore * 0.2 + locScore * 0.15) * 100);
 
             const reasons: string[] = [invIsRent ? 'Rent' : 'Buy'];
-            if (invRooms != null && dRooms != null && invRooms === dRooms) reasons.push(dRooms === 0 ? 'Studio' : `${dRooms} BHK`);
+            // Multi-value demand (2026-09-28): name the option the listing actually hit, so an agent
+            // reading the match sees "2 BHK" rather than the primary value of a 2-and-3 set.
+            if (invRooms != null && dRoomsList.includes(invRooms)) reasons.push(invRooms === 0 ? 'Studio' : `${invRooms} BHK`);
             if (invPrice && bmax) reasons.push('budget fit');
             if (locScore === 1) reasons.push('location match');
 

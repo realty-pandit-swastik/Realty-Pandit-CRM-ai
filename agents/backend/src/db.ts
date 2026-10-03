@@ -42,7 +42,39 @@ const prisma = basePrisma.$extends({
                         broadcastNewInventoryToTeam(created.id).catch(() => {});
                     } catch { /* ignore — never block the create */ }
                 }
+                if (created?.tenant_id) {
+                    import('./services/shortage_book').then(({ refreshTenantShortages }) =>
+                        refreshTenantShortages(created.tenant_id)).catch(() => {});
+                }
                 return created;
+            },
+            async update({ args, query }) {
+                const updated: any = await query(args);
+                const changed = args.data as Record<string, unknown>;
+                if (updated?.tenant_id && ['status', 'price', 'customer_price', 'intent', 'location', 'locality', 'sub_locality', 'city', 'specs', 'taxonomy_node_id'].some(key => key in changed)) {
+                    import('./services/shortage_book').then(({ refreshTenantShortages }) =>
+                        refreshTenantShortages(updated.tenant_id)).catch(() => {});
+                }
+                return updated;
+            },
+            async updateMany({ args, query }) {
+                const changed = args.data as Record<string, unknown>;
+                const relevant = ['status', 'price', 'customer_price', 'intent', 'location', 'locality', 'sub_locality', 'city', 'specs', 'taxonomy_node_id'].some(key => key in changed);
+                const tenants = relevant ? await basePrisma.inventory.findMany({ where: args.where, distinct: ['tenant_id'], select: { tenant_id: true } }) : [];
+                const result = await query(args);
+                if (result.count) for (const { tenant_id } of tenants) {
+                    import('./services/shortage_book').then(({ refreshTenantShortages }) =>
+                        refreshTenantShortages(tenant_id)).catch(() => {});
+                }
+                return result;
+            },
+            async delete({ args, query }) {
+                const deleted: any = await query(args);
+                if (deleted?.status === 'active' && deleted.tenant_id) {
+                    import('./services/shortage_book').then(({ refreshTenantShortages }) =>
+                        refreshTenantShortages(deleted.tenant_id)).catch(() => {});
+                }
+                return deleted;
             },
         },
         contact: {

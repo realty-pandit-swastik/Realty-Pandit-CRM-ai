@@ -17,6 +17,7 @@ const NAV_SECTIONS: { label: string; items: { id: string; label: string; icon: s
         label: "Today's Tasks",
         items: [
             { id: 'tasks', label: 'Tasks', icon: '🗒', permission: null },
+            { id: 'sourcing', label: 'Sourcing', icon: '🔎', permission: null },
             { id: 'calendar', label: 'Calendar', icon: '📅', permission: null },
         ],
     },

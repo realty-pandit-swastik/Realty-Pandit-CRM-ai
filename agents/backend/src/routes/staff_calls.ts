@@ -14,27 +14,37 @@ import audioStorage from '../services/audio_storage';
 import { validate } from '../validators';
 import { callSubmitSchema } from '../validators/calls.validator';
 import logger from '../utils/logger';
-import jwt from 'jsonwebtoken';
 import { captureRouteError } from '../utils/capture';
+import { normalizePhone, phoneVariants } from '../utils/phone';
+import { reviewedContactFields } from '../services/staff_call_processing';
+import { completeStaffCallUpload } from '../services/staff_call_upload';
 
-const JWT_SECRET = process.env.AGENT_JWT_SECRET || 'agent-secret';
-
-// Agent authentication middleware for staff calls
-const authenticateAgent = async (req: any, res: any, next: any) => {
-    const token = req.headers.authorization?.split(' ')[1];
-    if (!token) return res.status(401).json({ error: 'Unauthorized' });
-
-    try {
-        const decoded = jwt.verify(token, JWT_SECRET) as any;
-        req.agent = { id: decoded.id, phone: decoded.phone };
-        next();
-    } catch (err) {
-        captureRouteError(err, req, { route: 'staff_calls#1' });
-        return res.status(403).json({ error: 'Invalid token' });
-    }
-};
+const authenticateAgent = authMiddleware;
 
 const router = Router();
+
+function localRecordingPath(url: string | null): string | null {
+    if (!url || !/^uploads\/staff_calls\/[0-9a-f-]{36}\/recording\.(mp3|wav|m4a|3gp|ogg)$/i.test(url)) return null;
+    return path.join(process.cwd(), url);
+}
+
+router.get('/voice-log/:id/audio', authMiddleware, checkPermission('view_reports'), async (req, res) => {
+    const call = await prisma.voiceCall.findUnique({ where: { id: String(req.params.id) } });
+    if (!call || call.tenant_id !== req.agent!.tenant_id) return res.sendStatus(404);
+    const file = localRecordingPath(call.recording_url);
+    if (!file || !fs.existsSync(file)) return res.sendStatus(404);
+    res.setHeader('Cache-Control', 'private, no-store');
+    return res.sendFile(file);
+});
+
+router.get('/:id/audio', authenticateAgent, async (req, res) => {
+    const call = await prisma.staffCall.findUnique({ where: { id: String(req.params.id) } });
+    if (!call || call.staff_agent_id !== req.agent!.id || call.tenant_id !== req.agent!.tenant_id) return res.sendStatus(404);
+    const file = localRecordingPath(call.recording_url);
+    if (!file || !fs.existsSync(file)) return res.sendStatus(404);
+    res.setHeader('Cache-Control', 'private, no-store');
+    return res.sendFile(file);
+});
 
 // Configure multer for file uploads
 const upload = multer({
@@ -57,16 +67,21 @@ const upload = multer({
 // POST /api/calls/upload - Upload call recording
 // ---------------------------------------------------------
 router.post('/upload', authenticateAgent, upload.single('audio'), async (req, res) => {
+    const rejectUpload = (status: number, error: string) => {
+        if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
+        return res.status(status).json({ error });
+    };
     try {
         const agentId = (req as any).agent.id; // From JWT middleware
-        const { phone_number, classification, duration } = req.body;
+        const { classification, duration } = req.body;
+        const phone_number = normalizePhone(String(req.body.phone_number || ''));
 
         if (!req.file) {
-            return res.status(400).json({ error: 'Audio file is required' });
+            return rejectUpload(400, 'Audio file is required');
         }
 
-        if (!phone_number) {
-            return res.status(400).json({ error: 'Phone number is required' });
+        if (!phone_number || !['INBOUND', 'OUTBOUND', undefined].includes(classification)) {
+            return rejectUpload(400, 'Valid phone number and call classification required');
         }
 
         // Get tenant
@@ -76,17 +91,16 @@ router.post('/upload', authenticateAgent, upload.single('audio'), async (req, re
         });
 
         if (!agent) {
-            return res.status(404).json({ error: 'Agent not found' });
+            return rejectUpload(404, 'Agent not found');
         }
 
         // Find or create contact
-        const contact = await prisma.contact.upsert({
-            where: { phone_number },
-            update: {
-                last_interaction: new Date(),
-                last_channel: 'staff_call',
-            },
-            create: {
+        const existing = await prisma.contact.findFirst({ where: { phone_number: { in: phoneVariants(phone_number) } } });
+        if (existing && existing.tenant_id !== agent.tenant_id) {
+            return rejectUpload(403, 'Contact unavailable');
+        }
+        const contact = existing || await prisma.contact.create({
+            data: {
                 phone_number,
                 tenant_id: agent.tenant_id,
                 source: 'staff_call',
@@ -101,7 +115,7 @@ router.post('/upload', authenticateAgent, upload.single('audio'), async (req, re
             data: {
                 tenant_id: agent.tenant_id,
                 staff_agent_id: agentId,
-                phone_number,
+                phone_number: contact.phone_number,
                 classification: classification || 'OUTBOUND',
                 call_type: 'BUSINESS',
                 duration: duration ? parseInt(duration) : null,
@@ -109,29 +123,8 @@ router.post('/upload', authenticateAgent, upload.single('audio'), async (req, re
             },
         });
 
-        // Upload audio to cloud storage (async)
-        audioStorage
-            .handleMultipartUpload(req.file, staffCall.id)
-            .then(async (uploadResult) => {
-                // Update staff call with recording URL
-                await prisma.staffCall.update({
-                    where: { id: staffCall.id },
-                    data: {
-                        recording_url: uploadResult.url,
-                        duration: uploadResult.duration || null,
-                        status: 'PROCESSING',
-                    },
-                });
-
-                logger.info(`[StaffCall] Upload complete: ${staffCall.id}`);
-            })
-            .catch(async (error) => {
-                logger.error('[StaffCall] Upload failed:', error);
-                await prisma.staffCall.update({
-                    where: { id: staffCall.id },
-                    data: { status: 'REJECTED' },
-                });
-            });
+        await completeStaffCallUpload(staffCall.id, req.file);
+        logger.info(`[StaffCall] Upload complete: ${staffCall.id}`);
 
         res.status(201).json({
             success: true,
@@ -139,8 +132,115 @@ router.post('/upload', authenticateAgent, upload.single('audio'), async (req, re
             message: 'Call recording uploaded successfully. Processing will begin shortly.',
         });
     } catch (error) {
+        if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
         captureRouteError(error, req, { route: 'staff_calls#2' });
         logger.error('[StaffCall] Upload error:', error);
+        res.status(500).json({ error: (error as Error).message });
+    }
+});
+
+// ---------------------------------------------------------
+// GET /api/calls/caller-id - Real-time caller dossier lookup
+// ---------------------------------------------------------
+router.get('/caller-id', authenticateAgent, async (req, res) => {
+    try {
+        const rawPhone = String(req.query.phone || '');
+        const phone = normalizePhone(rawPhone);
+        if (!phone) {
+            return res.status(400).json({ error: 'Valid phone parameter required' });
+        }
+
+        const variants = phoneVariants(phone);
+        const contact = await prisma.contact.findFirst({
+            where: {
+                phone_number: { in: variants },
+                tenant_id: (req as any).agent.tenant_id,
+            },
+            include: {
+                assigned_agent: {
+                    select: { id: true, name: true, phone: true, role: true },
+                },
+            },
+        });
+
+        if (!contact) {
+            return res.json({
+                found: false,
+                phone_number: phone,
+                message: 'No existing CRM record found for this number',
+            });
+        }
+
+        const [deals, interactions] = await Promise.all([
+            prisma.transaction.findMany({
+                where: {
+                    demand_contact_id: { in: variants },
+                    tenant_id: (req as any).agent.tenant_id,
+                },
+                select: {
+                    id: true,
+                    status: true,
+                    source: true,
+                    source_ref: true,
+                    type: true,
+                    demand_intent: true,
+                    demand_location: true,
+                    demand_budget_min: true,
+                    demand_budget_max: true,
+                    coordinator_agent: { select: { id: true, name: true } },
+                    created_at: true,
+                },
+                orderBy: { created_at: 'desc' },
+                take: 10,
+            }),
+            prisma.interaction.findMany({
+                where: {
+                    phone_number: { in: variants },
+                    tenant_id: (req as any).agent.tenant_id,
+                },
+                select: {
+                    id: true,
+                    event_type: true,
+                    direction: true,
+                    channel: true,
+                    content: true,
+                    created_at: true,
+                },
+                orderBy: { created_at: 'desc' },
+                take: 5,
+            }),
+        ]);
+
+        const dealIds = deals.map(d => d.id);
+        const shortages = dealIds.length > 0 ? await prisma.shortageEntry.findMany({
+            where: { deal_id: { in: dealIds }, status: 'OPEN' },
+            select: { id: true, deal_id: true, area: true, match_count: true, status: true },
+        }) : [];
+
+        res.json({
+            found: true,
+            contact: {
+                id: contact.id,
+                phone_number: contact.phone_number,
+                name: contact.name,
+                contact_type: contact.contact_type,
+                intent: contact.intent,
+                property_type: contact.property_type,
+                budget_min: contact.budget_min,
+                budget_max: contact.budget_max,
+                preferred_location: contact.preferred_location,
+                ai_summary: contact.ai_summary,
+                assigned_agent: contact.assigned_agent,
+                last_channel: contact.last_channel,
+                last_interaction: contact.last_interaction,
+            },
+            deals,
+            interactions,
+            shortages,
+        });
+    } catch (error) {
+        captureRouteError(error, req, { route: 'staff_calls#caller_id' });
+        logger.error('[StaffCall] Caller ID lookup error:', error);
         res.status(500).json({ error: (error as Error).message });
     }
 });
@@ -176,18 +276,7 @@ router.get('/:id', authenticateAgent, async (req, res) => {
             return res.status(403).json({ error: 'Unauthorized' });
         }
 
-        // Generate signed URL if recording exists
-        let playbackUrl = null;
-        if (staffCall.recording_url) {
-            try {
-                // Extract public ID from URL
-                const publicId = staffCall.recording_url.split('/').slice(-2).join('/').split('.')[0];
-                playbackUrl = audioStorage.generateSignedUrl(publicId, { expiresIn: 3600 });
-            } catch (err) {
-                logger.warn('Failed to generate signed URL:', err);
-                playbackUrl = staffCall.recording_url; // Fallback to direct URL
-            }
-        }
+        const playbackUrl = staffCall.recording_url ? `/api/calls/${id}/audio` : null;
 
         res.json({
             id: staffCall.id,
@@ -232,14 +321,13 @@ router.post('/:id/submit', authenticateAgent, validate(callSubmitSchema), async 
         if (staffCall.staff_agent_id !== agentId) {
             return res.status(403).json({ error: 'Unauthorized' });
         }
-
         // Verify status
         if (staffCall.status !== 'READY_FOR_REVIEW') {
             return res.status(400).json({ error: 'Call is not ready for submission' });
         }
 
         // Merge edited data with AI extraction
-        const finalData = edited_data || staffCall.ai_extraction as any;
+        const finalData = { ...(staffCall.ai_extraction as any), ...edited_data };
         const tenantId = staffCall.staff_agent.tenant_id;
 
         // SSOT INTEGRATION - Start transaction
@@ -249,15 +337,7 @@ router.post('/:id/submit', authenticateAgent, validate(callSubmitSchema), async 
                 where: { phone_number: staffCall.phone_number },
                 update: {
                     // Update contact_type if detected from call
-                    contact_type: finalData.role || undefined,
-                    // Update qualification data from AI extraction
-                    intent: finalData.intent?.toLowerCase() || undefined,
-                    property_type: finalData.propertyType || undefined,
-                    budget_min: finalData.budgetMin || undefined,
-                    budget_max: finalData.budgetMax || undefined,
-                    preferred_location: finalData.location || undefined,
-                    // Update AI summary
-                    ai_summary: finalData.summary || undefined,
+                    ...reviewedContactFields(finalData),
                     // Update tracking
                     last_channel: 'staff_call',
                     last_interaction: new Date(),
@@ -305,6 +385,11 @@ router.post('/:id/submit', authenticateAgent, validate(callSubmitSchema), async 
                     content: `Staff call: ${finalData.summary || 'Call recorded'}`,
                     metadata: {
                         call_id: staffCall.id,
+                        source: 'staff_review',
+                        review_status: 'VERIFIED',
+                        reviewed_by: agentId,
+                        prior_values: (staffCall.staff_edited_data as any)?.prior_values || {},
+                        auto_saved_fields: (staffCall.staff_edited_data as any)?.auto_saved_fields || {},
                         duration: staffCall.duration,
                         confidence: staffCall.confidence_score,
                         extracted_data: finalData,
@@ -344,7 +429,7 @@ router.post('/:id/submit', authenticateAgent, validate(callSubmitSchema), async 
             await tx.staffCall.update({
                 where: { id },
                 data: {
-                    staff_edited_data: finalData,
+                    staff_edited_data: { ...(staffCall.staff_edited_data as any), final_data: finalData, review_status: 'VERIFIED', reviewed_by: agentId },
                     status: 'APPROVED',
                     submitted_at: new Date(),
                 },
@@ -384,14 +469,18 @@ router.post('/:id/reject', authenticateAgent, async (req, res) => {
         if (staffCall.staff_agent_id !== agentId) {
             return res.status(403).json({ error: 'Unauthorized' });
         }
+        if (staffCall.status === 'APPROVED') {
+            return res.status(409).json({ error: 'Approved call cannot be rejected' });
+        }
 
-        // Delete recording from cloud storage
+        // Delete the local recording before clearing its database reference.
         if (staffCall.recording_url) {
             try {
-                const publicId = staffCall.recording_url.split('/').slice(-2).join('/').split('.')[0];
+                const publicId = staffCall.recording_url.slice('uploads/staff_calls/'.length);
                 await audioStorage.deleteAudioFile(publicId);
             } catch (err) {
-                logger.warn('Failed to delete audio file:', err);
+                logger.error('Failed to delete audio file:', err);
+                return res.status(500).json({ error: 'Recording deletion failed' });
             }
         }
 
@@ -540,7 +629,7 @@ router.get('/voice-log/all', authMiddleware, checkPermission('view_reports'), as
         const { status, direction, phone_number, from_date, to_date, limit = '100' } = req.query;
 
         // Build filters
-        const where: any = {};
+        const where: any = { tenant_id: req.agent!.tenant_id };
         if (status) where.call_status = status;
         if (direction) where.direction = direction;
         if (phone_number) where.phone_number = phone_number;
@@ -565,7 +654,12 @@ router.get('/voice-log/all', authMiddleware, checkPermission('view_reports'), as
             },
         });
 
-        res.json({ calls, total: calls.length });
+        res.json({ calls: calls.map(call => ({
+            ...call,
+            recording_url: call.recording_url?.includes('uploads/staff_calls/')
+                ? (localRecordingPath(call.recording_url) ? `/api/calls/voice-log/${call.id}/audio` : null)
+                : call.recording_url,
+        })), total: calls.length });
     } catch (error) {
         captureRouteError(error, req, { route: 'staff_calls#8' });
         logger.error('[VoiceCall] Log error:', error);

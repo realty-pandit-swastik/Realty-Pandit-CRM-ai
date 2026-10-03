@@ -16,6 +16,7 @@ import logger from '../utils/logger';
 import { sanitizationService, Viewer } from './sanitization_service';
 import { resolveTypeFilter } from '../utils/demand_taxonomy';
 import { expandTaxonomyNodeIds } from '../utils/taxonomy_filter';
+import { bhkListFromDemand } from '../utils/demand_canonical';
 
 /**
  * Map a lead/deal intent to the inventory `intent` column ('sell' | 'rent') — robustly.
@@ -31,6 +32,7 @@ export function toInventoryIntent(intent?: string | null): 'sell' | 'rent' {
 }
 
 export interface MatchCriteria {
+    tenant_id?: string;
     intent?: string | null;         // buy, rent
     property_type?: string | null;  // flat, house, plot (legacy string)
     type_id?: string | null;        // [LEGACY] Classification ID (most specific)
@@ -344,7 +346,7 @@ export class MatchingEngine {
      * Capped at 500 candidates to protect memory at current scale.
      */
     private async searchPropertiesByRadius(criteria: MatchCriteria, radiusKm: number, limit: number): Promise<MatchedProperty[]> {
-        const where: any = { status: 'active', latitude: { not: null }, longitude: { not: null } };
+        const where: any = { status: 'active', ...(criteria.tenant_id ? { tenant_id: criteria.tenant_id } : {}), latitude: { not: null }, longitude: { not: null } };
 
         if (criteria.intent) {
             where.intent = toInventoryIntent(criteria.intent);
@@ -522,7 +524,7 @@ export class MatchingEngine {
      */
     private async searchProperties(criteria: MatchCriteria, limit: number, extraWhere: any = {}): Promise<MatchedProperty[]> {
         // Build Prisma where clause
-        const where: any = { status: 'active', ...extraWhere };
+        const where: any = { status: 'active', ...(criteria.tenant_id ? { tenant_id: criteria.tenant_id } : {}), ...extraWhere };
 
         // Intent filter (sell = buyer, rent = tenant)
         if (criteria.intent) {
@@ -1085,7 +1087,16 @@ export function buildMatchCriteriaFromLead(lead: {
     demand_taxonomy_node_id?: string | null;
     demand_schema_values?: Record<string, any> | null;
 }): MatchCriteria {
-    return {
+    // Multi-value demand (2026-09-28): when the customer accepted several options
+    // ("2 BHK and 3 BHK"), the set is in demand_schema_values.bhk_list. Promote it
+    // to criteria.bhk_list here — the single chokepoint every lead-driven matcher
+    // goes through (deals matched-inventory, inventory broadcast, property sharing,
+    // webhook processor, lead match). MatchingEngine.findMatches already treats
+    // bhk_list as a hard OR set that takes precedence over the scalar bhk.
+    const demandSchema = lead.demand_schema_values ?? null;
+    const bhkList = bhkListFromDemand(demandSchema);
+
+    const criteria: MatchCriteria = {
         intent: lead.intent || undefined,
         property_type: lead.demand_type_slug || undefined,
         type_id: lead.type_id || undefined,
@@ -1101,6 +1112,12 @@ export function buildMatchCriteriaFromLead(lead: {
         // scorer prefers them over the legacy bhk/category cascade for type matching
         // and amenity matching.
         demand_taxonomy_node_id: lead.demand_taxonomy_node_id ?? null,
-        demand_schema_values: lead.demand_schema_values ?? null,
+        demand_schema_values: demandSchema,
     };
+
+    // Only set the hard OR-set when the lead genuinely carries more than one value —
+    // a single-value lead keeps the old scalar path untouched.
+    if (bhkList.length > 1) criteria.bhk_list = bhkList;
+
+    return criteria;
 }

@@ -24,6 +24,7 @@ import React, { useEffect, useMemo, useRef, useState, forwardRef, useImperativeH
 import { getTaxonomyTree, getNodeFields } from '../../api/client';
 import ParkingListField from '../ParkingListField';
 import { loadGoogleMaps } from '../../lib/loadGoogleMaps';
+import { collectTypeGroups } from '../../lib/taxonomyGroups';
 
 // ── Taxonomy tree shape (from GET /public/taxonomy/tree) ──────────────────────
 interface TaxonomyTreeNode {
@@ -170,6 +171,19 @@ const DemandRequirementsForm = forwardRef<DemandRequirementsFormHandle, DemandRe
             ? { ...initial.demand_schema_values } : {}
     );
 
+    // Multi-value demand (2026-09-28): accept several options at once.
+    // ALL selected TYPE node ids; the cascade/leaf picker drives the primary.
+    const DEMAND_BHK_LIST_KEY = 'bhk_list';
+    const DEMAND_TYPE_NODE_LIST_KEY = 'type_node_list';
+    const [typeNodeSet, setTypeNodeSet] = useState<string[]>(() => {
+        const sv: any = initial.demand_schema_values;
+        const stored = sv && typeof sv === 'object' && !Array.isArray(sv) && Array.isArray(sv[DEMAND_TYPE_NODE_LIST_KEY])
+            ? sv[DEMAND_TYPE_NODE_LIST_KEY].filter((x: any) => typeof x === 'string')
+            : [];
+        if (stored.length) return stored;
+        return initial.demand_taxonomy_node_id ? [initial.demand_taxonomy_node_id] : [];
+    });
+
     // Load the taxonomy tree once.
     useEffect(() => {
         let cancelled = false;
@@ -199,17 +213,32 @@ const DemandRequirementsForm = forwardRef<DemandRequirementsFormHandle, DemandRe
         return () => { cancelled = true; };
     }, []);
 
-    // Whenever the picked node changes, fetch its NodeField schema.
+    // Multi-value demand (2026-09-28): the by-type panel merges the schemas of every
+    // selected TYPE node — a "Flat or Villa" demand shows the union of both (required
+    // only when ALL selected types require it), not one type's field set alone.
+    const fieldNodeKey = useMemo(() => Array.from(new Set([...typeNodeSet, nodeId].filter(Boolean))).join('|'), [typeNodeSet, nodeId]);
     useEffect(() => {
-        if (!nodeId) return;
+        const ids = fieldNodeKey ? fieldNodeKey.split('|') : [];
         let cancelled = false;
-        getNodeFields(nodeId).then((data: any) => {
+        const work: Promise<NodeField[][]> = ids.length
+            ? Promise.all(ids.map(id => getNodeFields(id)
+                .then((data: any) => ((data?.fields || []) as NodeField[]).filter((f: any) => f && f.key))
+                .catch(() => [] as NodeField[])
+            ))
+            : Promise.resolve([]);
+        work.then(all => {
             if (cancelled) return;
-            const fields: NodeField[] = (data?.fields || []).filter((f: any) => f && f.key);
-            setNodeFields(fields);
+            const byKey = new Map<string, NodeField>();
+            for (const fields of all) {
+                for (const f of fields) {
+                    const prev = byKey.get(f.key);
+                    byKey.set(f.key, prev ? { ...f, required: prev.required && !!f.required } : f);
+                }
+            }
+            setNodeFields([...byKey.values()]);
         }).catch(() => { if (!cancelled) setNodeFields([]); });
         return () => { cancelled = true; };
-    }, [nodeId]);
+    }, [fieldNodeKey]);
 
     // ── Cascade dropdown options (derived from tree + selections) ─────────────
     const cats = useMemo(() => tree, [tree]);
@@ -218,25 +247,74 @@ const DemandRequirementsForm = forwardRef<DemandRequirementsFormHandle, DemandRe
     const leaves = useMemo(() => types.find(t => t.id === typeId)?.children || [], [types, typeId]);
 
     // When cascade selection changes, derive the effective nodeId (most-specific picked).
+    const clearTypeNodeList = () => setSchemaValues(sv => {
+        if (!(DEMAND_TYPE_NODE_LIST_KEY in sv)) return sv;
+        const updated = { ...sv };
+        delete updated[DEMAND_TYPE_NODE_LIST_KEY];
+        return updated;
+    });
     const onPickCat = (id: string) => {
         setNodeFields([]);
         setCatId(id); setSubCatId(''); setTypeId('');
-        setNodeId(id || null);
+        setNodeId(id || null); setTypeNodeSet([]); clearTypeNodeList();
     };
     const onPickSubCat = (id: string) => {
         setNodeFields([]);
         setSubCatId(id); setTypeId('');
-        setNodeId(id || catId || null);
+        setNodeId(id || catId || null); setTypeNodeSet([]); clearTypeNodeList();
     };
     const onPickType = (id: string) => {
         setNodeFields([]);
         setTypeId(id);
         setNodeId(id || subCatId || catId || null);
+        setTypeNodeSet(id ? [id] : []); clearTypeNodeList();
     };
     const onPickLeaf = (id: string) => {
         setNodeFields([]);
         setNodeId(id || typeId || subCatId || catId || null);
+        setTypeNodeSet(id ? [id] : (typeId ? [typeId] : [])); clearTypeNodeList();
     };
+
+    // Multi-value demand: toggle a TYPE node on/off in the accepted set.
+    const toggleTypeNode = (id: string) => {
+        const next = typeNodeSet.includes(id) ? typeNodeSet.filter(x => x !== id) : [...typeNodeSet, id];
+        setTypeNodeSet(next);
+        // Primary stays the previous one while it is still acceptable.
+        setNodeId(cur => (cur && next.includes(cur)) ? cur : (next[0] ?? null));
+        setSchemaValues(sv => {
+            const updated = { ...sv };
+            if (next.length > 1) updated[DEMAND_TYPE_NODE_LIST_KEY] = next;
+            else delete updated[DEMAND_TYPE_NODE_LIST_KEY];
+            return updated;
+        });
+    };
+
+    const ROOM_FIELD_KEYS = new Set(['bhk', 'rooms', 'bedrooms', 'bedroom_count']);
+    const currentRoomLabels = (sv: Record<string, any>, f: NodeField): string[] => {
+        const list = Array.isArray(sv[DEMAND_BHK_LIST_KEY]) ? sv[DEMAND_BHK_LIST_KEY].map(String) : [];
+        if (list.length) return list;
+        const v = sv[f.key] ?? sv.bhk ?? sv.rooms ?? sv.bedrooms;
+        return (v === '' || v == null) ? [] : [String(v)];
+    };
+    const toggleRoomOption = (f: NodeField, opt: string) => {
+        const cur = currentRoomLabels(schemaValues, f);
+        const next = cur.includes(opt) ? cur.filter(x => x !== opt) : [...cur, opt];
+        setSchemaValues(prev => {
+            const updated = { ...prev };
+            const prevPrimary = String(prev[f.key] ?? prev.bhk ?? '');
+            const primary = prevPrimary && next.includes(prevPrimary) ? prevPrimary : next[0];
+            if (next.length > 1) updated[DEMAND_BHK_LIST_KEY] = next;
+            else delete updated[DEMAND_BHK_LIST_KEY];
+            if (primary) updated[f.key] = primary; else delete updated[f.key];
+            return updated;
+        });
+    };
+    const chipStyle = (on: boolean): React.CSSProperties => ({
+        padding: '6px 12px', borderRadius: '999px', fontSize: '12px', cursor: 'pointer',
+        border: on ? '1px solid var(--text-link)' : '1px solid var(--border-secondary)',
+        background: on ? 'var(--text-link)' : 'var(--bg-tertiary)',
+        color: on ? '#fff' : 'var(--text-primary)',
+    });
 
     // ── Schema field setter helpers (mirror of InventoryList.tsx:1977-1999) ───
     const setKey = (key: string, v: any) => setSchemaValues({ ...schemaValues, [key]: v });
@@ -396,6 +474,31 @@ const DemandRequirementsForm = forwardRef<DemandRequirementsFormHandle, DemandRe
                 </div>
             </div>
 
+            {/* Multi-value demand (2026-09-28): additional accepted types beyond the
+                primary, grouped by sub-category — "Flat or Villa" chips. Toggle any chip
+                to widen/narrow the accepted set; schema below merges all chosen types. */}
+            {catId && (() => {
+                const cat = cats.find(c => c.id === catId);
+                const groups = cat ? collectTypeGroups(cat) : [];
+                if (!groups.length) return null;
+                return (
+                    <div style={{ borderTop: '1px solid var(--border-secondary)', paddingTop: '12px' }}>
+                        <label style={labelStyle}>Also acceptable types</label>
+                        {groups.map(g => (
+                            <div key={g.sub} style={{ marginBottom: '8px' }}>
+                                <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '4px', textTransform: 'uppercase' }}>{g.sub}</div>
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                                    {g.types.map(t => {
+                                        const on = typeNodeSet.includes(t.id);
+                                        return <button key={t.id} type="button" onClick={() => toggleTypeNode(t.id)} style={chipStyle(on)}>{t.name}</button>;
+                                    })}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                );
+            })()}
+
             {/* ── Dynamic per-type fields (BHK / Furnishing / Amenities / …) ─ */}
             {nodeFields.length > 0 && (
                 <div style={{ borderTop: '1px solid var(--border-secondary)', paddingTop: '12px' }}>
@@ -408,6 +511,21 @@ const DemandRequirementsForm = forwardRef<DemandRequirementsFormHandle, DemandRe
                                 <label style={labelStyle}>{f.label}{f.unit ? ` (${f.unit})` : ''}</label>
                                 {f.input_type === 'parking_list' ? (
                                     <ParkingListField value={schemaValues[f.key]} onChange={(v) => setKey(f.key, v)} />
+                                ) : ROOM_FIELD_KEYS.has(f.key) && Array.isArray(f.options) && f.options.length > 0 ? (
+                                    /* Multi-value demand (2026-09-28): BHK/Rooms options are chips —
+                                       the customer can accept "2 BHK and 3 BHK" — persisted as
+                                       canonical bhk_list with the previous primary kept when
+                                       still selected. */
+                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                                        {f.options.map(o => {
+                                            const on = currentRoomLabels(schemaValues, f).includes(o);
+                                            return (
+                                                <button key={o} type="button" onClick={() => toggleRoomOption(f, o)} style={chipStyle(on)}>
+                                                    {o}
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
                                 ) : f.input_type === 'multiselect' && Array.isArray(f.options) && f.options.length > 0 ? (
                                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
                                         {f.options.map(o => {
