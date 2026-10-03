@@ -29,6 +29,8 @@ import { broadcastNewInventoryToTeam } from '../services/team_inventory_broadcas
 import { resolveTypeFilter } from '../utils/demand_taxonomy';
 import { bhkListFromDemand, typeNodeListFromDemand } from '../utils/demand_canonical';
 import { cacheDel } from '../utils/redis';
+import { HarvestError, ingestPortalListing } from '../services/portal_harvest';
+import { portalIngestionAuth } from '../middleware/portal_ingestion_auth';
 
 const router = Router();
 
@@ -440,164 +442,54 @@ async function partnerMayMutateInventory(req: any, res: any, inventoryId: string
  * Extracts seller/owner details directly into the CRM Contact model and creates inventory with status PENDING_APPROVAL.
  * Auto-creates verification task for sourcing agents.
  */
-router.post('/harvest', authMiddleware, checkPermission('edit_inventory'), async (req: any, res) => {
+router.post('/harvest', authMiddleware, checkPermission('edit_inventory'), harvestHandler);
+router.post('/harvest/service', portalIngestionAuth, checkPermission('edit_inventory'), harvestHandler);
+router.get('/harvest/candidates', authMiddleware, checkPermission('edit_inventory'), async (req: any, res) => {
     try {
-        const {
-            source, // '99acres' | 'magicbricks' | 'housing' | 'classifieds' | 'portal_crawl'
-            source_ref, // external listing ID or URL
-            seller_name,
-            seller_phone,
-            seller_email,
-            property_title,
-            property_type,
-            intent,
-            price,
-            locality,
-            society_name,
-            city,
-            full_address,
-            specs,
-            features,
-            description,
-            media_urls,
-        } = req.body;
+        if (!['super_boss', 'manager', 'employee'].includes(req.agent?.role)) return res.status(403).json({ error: 'Internal staff required' });
+        const teamIds = await getTeamIds(req.agent);
+        const page = Math.max(1, Math.floor(Number(req.query.page) || 1));
+        const limit = Math.min(100, Math.max(1, Math.floor(Number(req.query.limit) || 25)));
+        const where: any = { tenant_id: req.agent.tenant_id };
+        if (req.agent.role !== 'super_boss') where.OR = teamIds.map(id => ({ payload: { path: ['_ingested_by'], equals: id } }));
+        if (typeof req.query.status === 'string' && ['CANDIDATE', 'PENDING_VERIFICATION', 'OWNER_VERIFIED'].includes(req.query.status)) where.status = req.query.status;
+        const [rows, total] = await Promise.all([prisma.portalListing.findMany({ where, orderBy: { last_seen_at: 'desc' }, skip: (page - 1) * limit, take: limit }), prisma.portalListing.count({ where })]);
+        res.json({ rows, total, page, limit });
+    } catch (error) { captureRouteError(error, req, { route: 'inventory#harvest-candidates' }); res.status(500).json({ error: 'Failed to load sourcing candidates' }); }
+});
 
-        if (!seller_phone) {
-            return res.status(400).json({ error: 'seller_phone is required' });
-        }
 
-        const phone = normalizePhone(seller_phone);
-        if (!phone) {
-            return res.status(400).json({ error: 'Invalid seller phone number' });
-        }
+async function harvestHandler(req: any, res: any) {
+    try {
+        if (!['super_boss', 'manager', 'employee'].includes(req.agent?.role)) return res.status(403).json({ error: 'Internal staff required' });
+        const result = await ingestPortalListing(req.body, req.agent);
+        return res.status(result.duplicate ? 200 : 201).json(result);
+    } catch (error) {
+        if (error instanceof HarvestError) return res.status(error.status).json({ error: error.message });
+        captureRouteError(error, req, { route: 'inventory#harvest' });
+        return res.status(500).json({ error: 'Harvest ingestion failed; retry this listing' });
+    }
+}
 
-        const tenantId = req.agent.tenant_id;
-        const crawlSource = source || 'portal_crawl';
-
-        // Check if this external listing was already harvested
-        if (source_ref) {
-            const existing = await prisma.inventory.findFirst({
-                where: {
-                    tenant_id: tenantId,
-                    source_ref,
-                },
-                select: { id: true, display_id: true, status: true },
-            });
-            if (existing) {
-                return res.status(409).json({
-                    success: false,
-                    error: `Listing ${source_ref} already harvested into CRM`,
-                    inventory_id: existing.id,
-                    display_id: existing.display_id,
-                });
-            }
-        }
-
-        // 1. Upsert seller as Contact (PROPERTY_OWNER / LANDLORD)
-        const variants = phoneVariants(phone);
-        let contact = await prisma.contact.findFirst({
-            where: { phone_number: { in: variants }, tenant_id: tenantId },
+// Human-call evidence is separate from OTP verification and is recorded by scoped staff only.
+router.post('/harvest/:candidateId/owner-call', authMiddleware, checkPermission('edit_inventory'), async (req: any, res) => {
+    try {
+        if (!['super_boss', 'manager', 'employee'].includes(req.agent?.role)) return res.status(403).json({ error: 'Internal staff required' });
+        const notes = typeof req.body.notes === 'string' ? req.body.notes.trim() : '';
+        if (req.body.owner_called !== true || notes.length < 10 || notes.length > 4000) return res.status(400).json({ error: 'Confirm human owner call and provide verification notes (10–4000 characters)' });
+        const candidate = await prisma.portalListing.findFirst({ where: { id: req.params.candidateId, tenant_id: req.agent.tenant_id } });
+        if (!candidate?.inventory_id) return res.status(404).json({ error: 'Harvested inventory not found' });
+        const inv = await prisma.inventory.findFirst({ where: { id: candidate.inventory_id, tenant_id: req.agent.tenant_id } });
+        const teamIds = await getTeamIds(req.agent);
+        if (!inv || (req.agent.role !== 'super_boss' && !teamIds.includes(inv.assigned_agent_id || inv.uploaded_by_agent_id || ''))) return res.status(404).json({ error: 'Harvested inventory not found' });
+        await prisma.$transaction(async tx => {
+            const result = await tx.portalListing.updateMany({ where: { id: candidate.id, tenant_id: req.agent.tenant_id, owner_call_verified_at: null }, data: { owner_call_verified_at: new Date(), owner_call_verified_by: req.agent.id, owner_call_notes: notes, status: 'OWNER_VERIFIED' } });
+            if (result.count && candidate.verification_task_id) await tx.task.update({ where: { id: candidate.verification_task_id }, data: { status: 'DONE', completed_at: new Date(), completed_by: req.agent.id } });
         });
-
-        if (contact) {
-            contact = await prisma.contact.update({
-                where: { id: contact.id },
-                data: {
-                    name: contact.name || seller_name || undefined,
-                    email: contact.email || seller_email || undefined,
-                    contact_type: contact.contact_type === 'UNKNOWN' ? 'LANDLORD' : contact.contact_type,
-                    last_channel: crawlSource,
-                    last_interaction: new Date(),
-                },
-            });
-        } else {
-            contact = await prisma.contact.create({
-                data: {
-                    tenant_id: tenantId,
-                    phone_number: phone,
-                    name: seller_name || 'Portal Seller',
-                    email: seller_email || null,
-                    contact_type: 'LANDLORD',
-                    source: crawlSource,
-                    last_channel: crawlSource,
-                    last_interaction: new Date(),
-                },
-            });
-        }
-
-        // 2. Mint display_id for the new inventory
-        const mainCategory = ['office', 'retail', 'commercial', 'shop', 'warehouse'].includes(String(property_type || '').toLowerCase()) ? 'commercial' : 'residential';
-        const displayId = await generateDisplayId(city || locality || 'Bengaluru', mainCategory);
-
-        // 3. Create Inventory in 'pending_approval' state
-        const inventory = await prisma.inventory.create({
-            data: {
-                tenant_id: tenantId,
-                display_id: displayId,
-                source_ref: source_ref || null,
-                upload_source: 'portal_crawl',
-                status: 'pending_approval',
-                lead_reference: `HARVESTED_${crawlSource.toUpperCase()}`,
-                intent: (intent || 'sell').toLowerCase(),
-                type: property_type || 'flat',
-                price: price ? Number(price) : null,
-                locality: locality || null,
-                society_name: society_name || null,
-                city: city || 'Bengaluru',
-                full_address: full_address || [society_name, locality, city].filter(Boolean).join(', ') || null,
-                specs: specs || {},
-                features: features || {},
-                description: description || null,
-                media_urls: Array.isArray(media_urls) ? media_urls : [],
-                owner_phone: phone,
-                owner_name: seller_name || contact.name || 'Portal Seller',
-                uploaded_by_agent_id: req.agent.id,
-            } as any,
-        });
-
-        // 4. Create verification task for team member
-        await prisma.task.create({
-            data: {
-                tenant_id: tenantId,
-                title: `Verify harvested listing: ${property_title || locality || displayId}`,
-                description: `Harvested from ${crawlSource}. Seller: ${seller_name || phone}. Verify availability, pricing, and owner contact.`,
-                assigned_to: req.agent.id,
-                contact_phone: phone,
-                due_date: new Date(Date.now() + 24 * 60 * 60 * 1000),
-                priority: 'HIGH',
-                status: 'TODO',
-                task_type: 'PORTAL_HARVEST_VERIFICATION',
-                stage_metadata: {
-                    inventory_id: inventory.id,
-                    display_id: displayId,
-                    source: crawlSource,
-                    source_ref,
-                },
-            } as any,
-        });
-
-        // 5. Check if this newly harvested inventory resolves any open shortages
-        try {
-            const { refreshTenantShortages } = await import('../services/shortage_book');
-            await refreshTenantShortages(tenantId);
-        } catch (shortageErr) {
-            logger.warn('[InventoryHarvest] Shortage refresh failed:', shortageErr);
-        }
-
-        logger.info(`[InventoryHarvest] Harvested ${displayId} (${inventory.id}) from ${crawlSource} with seller ${phone}`);
-
-        res.status(201).json({
-            success: true,
-            inventory_id: inventory.id,
-            display_id: displayId,
-            contact_id: contact.id,
-            seller_phone: phone,
-            message: `Listing harvested from ${crawlSource} and queued for verification`,
-        });
-    } catch (err: any) {
-        captureRouteError(err, req, { route: 'inventory#harvest' });
-        logger.error('[InventoryHarvest] Error:', err);
-        res.status(500).json({ error: err.message });
+        return res.json({ success: true, candidate_id: candidate.id, message: 'Owner call recorded. Complete inventory review before approval.' });
+    } catch (error) {
+        captureRouteError(error, req, { route: 'inventory#harvest-owner-call' });
+        return res.status(500).json({ error: 'Failed to record owner verification' });
     }
 });
 
@@ -1149,6 +1041,7 @@ router.post('/:id/clone', authMiddleware, checkPermission('edit_inventory'), asy
 
         const src = await prisma.inventory.findFirst({ where: { id, tenant_id: agent.tenant_id } });
         if (!src) return res.status(404).json({ error: 'Inventory not found' });
+if (src.upload_source === 'portal_crawl') return res.status(409).json({ error: 'Use verified inventory capture to add another harvested property; harvested listings cannot be cloned' });
 
         // Only these (all nullable) unit-level fields may be cleared by the clone request.
         const CLEARABLE = new Set(['flat_no', 'plot_no', 'floor_number', 'floor_label', 'display_floor',
@@ -1434,6 +1327,10 @@ router.patch('/:id', authMiddleware, checkPermission('edit_inventory'), async (r
             return res.status(400).json({ error: 'No valid fields to update' });
         }
 
+        if (existing.upload_source === 'portal_crawl' && updateData.status === 'active') {
+            const candidate = await prisma.portalListing.findFirst({ where: { inventory_id: String(id), tenant_id: req.agent!.tenant_id } });
+            if (!candidate?.owner_call_verified_at) return res.status(409).json({ error: 'A recorded human owner call is required before activating harvested inventory' });
+        }
         const updated = await prisma.inventory.update({
             where: { id },
             data: updateData,
@@ -1920,7 +1817,7 @@ router.post('/:id/share-to-client', authMiddleware, async (req, res) => {
                 flat_property_type: { select: { name: true, main_category: true } },
             }
         });
-        if (!inventory) return res.status(404).json({ error: 'Property not found' });
+        if (!inventory || inventory.tenant_id !== agent.tenant_id) return res.status(404).json({ error: 'Property not found' });
 
         // Authorization: same as internal share — agent must have access to property
         let canShare = agent.role === 'super_boss'
@@ -1949,8 +1846,20 @@ router.post('/:id/share-to-client', authMiddleware, async (req, res) => {
         if (!canShare && inventory.status === 'active') canShare = true;
         if (!canShare) return res.status(403).json({ error: 'Not authorized to share this property' });
 
+        const { deliverPendingPropertyMedia, pendingPropertyMediaCount } = await import('../services/property_media_queue');
+        if (req.body.retry_media) {
+            const prior = await prisma.propertyShare.findFirst({ where: {
+                tenant_id: agent.tenant_id, inventory_id: id, client_phone: normalized, agent_id: actingAgentId!,
+            } });
+            if (!prior) return res.status(403).json({ error: 'No share available to retry' });
+            await deliverPendingPropertyMedia(new WhatsAppService(), normalized, id);
+            return res.json({ success: true, share_link: prior.property_link, whatsapp_sent: prior.whatsapp_sent,
+                media_pending: await pendingPropertyMediaCount(normalized, id) });
+        }
+
         // Upsert contact as BUYER
         const existingContact = await prisma.contact.findUnique({ where: { phone_number: normalized } });
+        if (existingContact && existingContact.tenant_id !== agent.tenant_id) return res.status(403).json({ error: 'Client belongs to another tenant' });
         await prisma.contact.upsert({
             where: { phone_number: normalized },
             update: {
@@ -2058,6 +1967,7 @@ router.post('/:id/share-to-client', authMiddleware, async (req, res) => {
             whatsapp_sent: whatsappSent,
             pdf_requested: content.pdf,
             pdf_sent: pdfSent,
+            media_pending: await pendingPropertyMediaCount(normalized, id),
             // Non-blocking re-share notice: true if this property was shared to this client before.
             already_shared: !!existingShare,
             previously_shared_at: previouslySharedAt,
@@ -2648,6 +2558,13 @@ router.post('/:id/approve', authMiddleware, checkPermission('edit_inventory'), a
             select: { id: true, status: true, display_id: true, uploader_phone: true, upload_source: true, full_address: true, location: true },
         });
         if (!existing) return res.status(404).json({ error: 'Inventory not found' });
+        if (existing.upload_source === 'portal_crawl') {
+            const harvested = await prisma.inventory.findFirst({ where: { id: String(id), tenant_id: req.agent!.tenant_id } });
+            const teamIds = await getTeamIds(req.agent!);
+            if (!harvested || (req.agent!.role !== 'super_boss' && !teamIds.includes(harvested.assigned_agent_id || harvested.uploaded_by_agent_id || ''))) return res.status(404).json({ error: 'Inventory not found' });
+            const candidate = await prisma.portalListing.findFirst({ where: { inventory_id: String(id), tenant_id: req.agent!.tenant_id } });
+            if (!candidate?.owner_call_verified_at) return res.status(409).json({ error: 'A recorded human owner call is required before approving harvested inventory' });
+        }
         if (existing.status !== 'pending_approval') {
             return res.status(400).json({ error: `Cannot approve — current status is '${existing.status}'` });
         }

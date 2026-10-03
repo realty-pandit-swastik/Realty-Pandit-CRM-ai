@@ -16,7 +16,7 @@ const wa = vi.hoisted(() => ({
 }));
 const session = vi.hoisted(() => ({ active: true }));
 
-vi.mock('../db', () => ({ default: { partnerAgent: { findFirst: vi.fn() } } }));
+vi.mock('../db', () => ({ default: { partnerAgent: { findFirst: vi.fn() }, pendingMessage: { create: vi.fn() } } }));
 vi.mock('../services/whatsapp', () => ({ WhatsAppService: vi.fn(function () { return wa; }) }));
 vi.mock('../services/session_tracker', () => ({
     SessionTracker: { isSessionActive: vi.fn(async () => session.active) },
@@ -75,6 +75,14 @@ describe('sharePropertyToRecipient — share dialog content', () => {
         });
     }
 
+    it('does not cap individual media at the former carousel maximum', async () => {
+        await sharePropertyToRecipient('+919999999999', { ...inv,
+            media_urls: Array.from({ length: 12 }, (_, i) => `https://cdn.example.com/${i}.jpg`),
+            video_urls: Array.from({ length: 3 }, (_, i) => `https://cdn.example.com/${i}.mp4`),
+        });
+        expect(wa.sendMediaStrict).toHaveBeenCalledTimes(15);
+    });
+
     it('sends every attachment individually, details on the first photo only', async () => {
         const r = await sharePropertyToRecipient('+919999999999', inv);
         expect(r.sent).toBe(true);
@@ -90,6 +98,9 @@ describe('sharePropertyToRecipient — share dialog content', () => {
         expect(r.sent).toBe(true);
         expect(wa.sendMediaStrict).toHaveBeenCalledTimes(3);
         expect(wa.sendTemplate).not.toHaveBeenCalled();
+        expect(prisma.pendingMessage.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({
+            context: 'property_media:inv-1', message: expect.stringContaining('b.jpg'), status: 'pending',
+        }) }));
     });
 
     it('a single attachment is sent directly with the details caption (carousels need 2+ cards)', async () => {
@@ -117,5 +128,8 @@ describe('sharePropertyToRecipient — share dialog content', () => {
         expect(wa.sendDocumentTemplate).toHaveBeenCalledTimes(1);
         expect(r.sent).toBe(true);
         expect(r.pdfSent).toBe(true);
+        expect(prisma.pendingMessage.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({
+            context: 'property_media:inv-1', message: expect.stringContaining('tour.mp4'), status: 'pending',
+        }) }));
     });
 });

@@ -13,7 +13,7 @@ export default function ShareToClientModal({ item, onClose, onShared }: ShareToC
     const [clientName, setClientName] = useState('');
     const [content, setContent] = useState(DEFAULT_SHARE_CONTENT);
     const [sending, setSending] = useState(false);
-    const [result, setResult] = useState<{ share_link: string; whatsapp_sent: boolean; pdf_requested?: boolean; pdf_sent?: boolean; already_shared?: boolean; previously_shared_at?: string | null } | null>(null);
+    const [result, setResult] = useState<{ share_link: string; whatsapp_sent: boolean; media_pending?: number; pdf_requested?: boolean; pdf_sent?: boolean; already_shared?: boolean; previously_shared_at?: string | null } | null>(null);
     const [error, setError] = useState('');
     const [copied, setCopied] = useState(false);
 
@@ -176,6 +176,18 @@ export default function ShareToClientModal({ item, onClose, onShared }: ShareToC
                             </span>
                         </div>
 
+                        {!!result.media_pending && (
+                            <div style={{ color: '#f59e0b', marginBottom: '12px' }}>
+                                {result.media_pending} attachment(s) pending. They will retry when the client messages us.
+                                <button disabled={sending} onClick={async () => {
+                                    setSending(true); setError('');
+                                    try { setResult(await shareToClient(item.id, { client_phone: phone, retry_media: true })); }
+                                    catch { setError('Could not retry attachments'); }
+                                    finally { setSending(false); }
+                                }}>{sending ? 'Retrying…' : 'Retry pending attachments'}</button>
+                            </div>
+                        )}
+                        {error && <div role="alert">{error}</div>}
                         {result.pdf_requested && !result.pdf_sent && (
                             <div style={{ fontSize: '12px', color: '#f59e0b', marginBottom: '12px' }}>
                                 ⚠ PDF could not be delivered — try sharing again with PDF ticked.

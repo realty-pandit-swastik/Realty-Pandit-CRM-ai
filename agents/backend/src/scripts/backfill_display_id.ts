@@ -13,7 +13,8 @@ const live = process.argv[2] === 'live';
     if (live) {
         for (const row of rows) {
             const id = await generateDisplayId(row.city || row.locality || '', row.category || 'residential');
-            await prisma.inventory.update({ where: { id: row.id }, data: { display_id: id } });
+            const result = await prisma.inventory.updateMany({ where: { id: row.id, display_id: null }, data: { display_id: id } });
+            if (!result.count) continue; // A concurrent writer supplied an ID; preserve it.
             console.log(`SET ${row.id} -> ${id}`);
         }
     }

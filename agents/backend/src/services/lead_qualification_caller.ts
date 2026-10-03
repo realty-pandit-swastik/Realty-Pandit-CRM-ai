@@ -234,7 +234,8 @@ export async function processCallAttempt(job: Job): Promise<void> {
  * instead of pretending to call.
  */
 function isOmnidimConfigured(): boolean {
-    return Boolean(process.env.OMNIDIM_API_KEY && process.env.OMNIDIM_API_KEY.length > 0);
+    // A key cannot turn a logging stub into a verified provider adapter.
+    return false;
 }
 
 /**
@@ -248,7 +249,7 @@ function isOmnidimConfigured(): boolean {
 async function triggerOmnidimCall(args: {
     dealId: string; phone: string; attempt: number; customerName: string;
 }): Promise<void> {
-    logger.info(`[QualCall] [STUB] Omnidim call deal=${args.dealId} phone=${args.phone} attempt=${args.attempt} name=${args.customerName}`);
+    throw new Error('Omnidim outbound adapter is disabled pending verified provider contract');
 }
 
 let workerInstance: Worker | null = null;

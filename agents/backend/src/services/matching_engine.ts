@@ -33,6 +33,7 @@ export function toInventoryIntent(intent?: string | null): 'sell' | 'rent' {
 
 export interface MatchCriteria {
     tenant_id?: string;
+    strict_stock?: boolean; // Shortage Book counts confirmed suitable inventory only.
     intent?: string | null;         // buy, rent
     property_type?: string | null;  // flat, house, plot (legacy string)
     type_id?: string | null;        // [LEGACY] Classification ID (most specific)
@@ -246,6 +247,34 @@ const TIER_PRIORITY: Record<string, number> = {
     'FREE': 30,
 };
 
+export function meetsStrictStockRequirements(criteria: MatchCriteria, property: any): boolean {
+    if (property.status !== 'active') return false;
+    if (criteria.tenant_id && property.tenant_id !== criteria.tenant_id) return false;
+    const specs = typeof property.specs === 'string' ? JSON.parse(property.specs) : (property.specs || {});
+    const demand = criteria.demand_schema_values || {};
+    const bhks = criteria.bhk_list?.length ? criteria.bhk_list : bhkListFromDemand(demand);
+    const requiredBhks = bhks.length ? bhks : (criteria.bhk ? [criteria.bhk] : []);
+    if (requiredBhks.length && !requiredBhks.includes(extractBhkInt(specs) ?? -1)) return false;
+    if (criteria.area_min != null || criteria.area_max != null) {
+        const raw = Number(specs.area);
+        if (!Number.isFinite(raw) || raw <= 0) return false;
+        const area = normalizeArea(raw, specs.unit || specs.area_unit, criteria.area_unit);
+        if (criteria.area_min != null && area < criteria.area_min) return false;
+        if (criteria.area_max != null && area > criteria.area_max) return false;
+    }
+    for (const [key, wanted] of Object.entries(demand)) {
+        if (wanted == null || wanted === '' || ['bhk', 'bhk_list', 'type_node_ids', 'type_node_list'].includes(key)) continue;
+        const actual = specs[key];
+        if (actual == null) return false;
+        const normalize = (value: any) => String(value).trim().toLowerCase();
+        if (Array.isArray(wanted)) {
+            const values = (Array.isArray(actual) ? actual : [actual]).map(normalize);
+            if (!wanted.every(value => values.includes(normalize(value)))) return false;
+        } else if (normalize(wanted) !== normalize(actual)) return false;
+    }
+    return true;
+}
+
 export class MatchingEngine {
 
     /**
@@ -326,7 +355,7 @@ export class MatchingEngine {
         // No geo — use original text-based fallback chain
         let results = await this.searchProperties(criteria, limit);
 
-        if (results.length === 0 && criteria.preferred_location) {
+        if (results.length === 0 && criteria.preferred_location && !criteria.strict_stock) {
             logger.info(`[MatchingEngine] No exact match — broadening location search`);
             const broadLocation = this.broadenLocation(criteria.preferred_location);
             if (broadLocation !== criteria.preferred_location) {
@@ -387,7 +416,7 @@ export class MatchingEngine {
         const properties = await prisma.inventory.findMany({
             where,
             include: { owner: { include: { subscription: true } }, contact: { select: { name: true } } },
-            take: 500, // Memory cap — migrate to PostGIS if dataset grows beyond this
+            ...(criteria.strict_stock ? {} : { take: 500 }), // Memory cap — migrate to PostGIS if dataset grows beyond this
             orderBy: { created_at: 'desc' },
         });
 
@@ -445,6 +474,7 @@ export class MatchingEngine {
             });
         }
 
+        if (criteria.strict_stock) filtered = filtered.filter(({ prop }) => meetsStrictStockRequirements(criteria, prop));
         if (filtered.length === 0) return [];
 
         const scored = filtered.map(({ prop, distance }) => {
@@ -568,13 +598,15 @@ export class MatchingEngine {
         // Location filter — check all location columns (city, district, locality, location text)
         if (criteria.preferred_location) {
             const loc = criteria.preferred_location;
-            where.OR = [
-                ...(where.OR || []),
+            const locationOr = [
+                ...(!criteria.strict_stock ? (where.OR || []) : []),
                 { location: { contains: loc, mode: 'insensitive' } },
                 { city: { contains: loc, mode: 'insensitive' } },
                 { district: { contains: loc, mode: 'insensitive' } },
                 { locality: { contains: loc, mode: 'insensitive' } },
             ];
+            if (criteria.strict_stock) where.AND = [...(where.AND || []), { OR: locationOr }];
+            else where.OR = locationOr;
         }
 
         // Budget filter — ±30% tolerance by default; exact bounds when budget_hard (Match & Share).
@@ -599,7 +631,7 @@ export class MatchingEngine {
                     select: { name: true },
                 },
             },
-            take: limit * 4, // Fetch more, then rank and trim
+            ...(criteria.strict_stock ? {} : { take: limit * 4 }), // Fetch more, then rank and trim
             orderBy: { created_at: 'desc' },
         });
 
@@ -608,7 +640,7 @@ export class MatchingEngine {
         if (properties.length === 0) return [];
 
         // Post-fetch area filter
-        let candidates = properties;
+        let candidates = criteria.strict_stock ? properties.filter(prop => meetsStrictStockRequirements(criteria, prop)) : properties;
         if (criteria.area_min || criteria.area_max) {
             candidates = candidates.filter(prop => {
                 const specs = typeof prop.specs === 'string' ? JSON.parse(prop.specs) : prop.specs;

@@ -37,28 +37,6 @@ const LEAD_DEAL_SUMMARY = {
     coordinator: { select: { id: true, name: true } },
 } as const;
 
-// Resilient fallback when column source_ref does not exist in the database yet
-const LEAD_DEAL_SUMMARY_SAFE = {
-    id: true, source: true, status: true, type: true, created_at: true,
-    coordinator_agent_id: true, executive_agent_id: true,
-    coordinator: { select: { id: true, name: true } },
-} as const;
-
-let sourceRefMigrated = false;
-async function ensureSourceRefColumnInDb(): Promise<boolean> {
-    if (sourceRefMigrated) return true;
-    try {
-        await (prisma as any).$executeRawUnsafe(`
-            ALTER TABLE "transactions" ADD COLUMN IF NOT EXISTS "source_ref" TEXT;
-            CREATE INDEX IF NOT EXISTS "idx_transactions_source_ref" ON "transactions"("source_ref");
-        `);
-        sourceRefMigrated = true;
-        return true;
-    } catch (e: any) {
-        logger.warn('[leads] ensureSourceRefColumnInDb: ' + e.message);
-        return false;
-    }
-}
 import { applyLeadStageEdit } from '../services/lead_stage_sync';
 
 const PRIVILEGED_ROLES = ['super_boss', 'manager'];
@@ -485,27 +463,7 @@ router.get('/recent-external', async (req: any, res) => {
             ]);
         };
 
-        let leads: any[];
-        let total: number;
-        try {
-            [leads, total] = await queryLeads(LEAD_DEAL_SUMMARY);
-        } catch (dbErr: any) {
-            if (String(dbErr?.message || '').includes('source_ref')) {
-                logger.warn('[leads] column transactions.source_ref missing; auto-migrating and retrying...');
-                const migrated = await ensureSourceRefColumnInDb();
-                if (migrated) {
-                    try {
-                        [leads, total] = await queryLeads(LEAD_DEAL_SUMMARY);
-                    } catch {
-                        [leads, total] = await queryLeads(LEAD_DEAL_SUMMARY_SAFE);
-                    }
-                } else {
-                    [leads, total] = await queryLeads(LEAD_DEAL_SUMMARY_SAFE);
-                }
-            } else {
-                throw dbErr;
-            }
-        }
+        const [leads, total] = await queryLeads(LEAD_DEAL_SUMMARY);
 
         // Apply the share ordering and paginate here rather than in SQL (see above).
         let pageLeads = leads;
@@ -1143,7 +1101,13 @@ router.get('/search', async (req: any, res) => {
     if (q.length < 2) return res.json([]);
 
     try {
-        const visibilityFilter = buildContactVisibilityFilter(req.agent.id, req.agent.role);
+        const visibilityFilter: any = buildContactVisibilityFilter(req.agent.id, req.agent.role);
+        if (req.agent.role === 'partner') {
+            const { partnerIdsWithSubAgents, partnerLeadOr } = await import('../utils/partner_scope');
+            const { ids } = await partnerIdsWithSubAgents(req.agent.id);
+            Object.assign(visibilityFilter, { OR: partnerLeadOr(ids) });
+        }
+        const teamIds = req.agent.role === 'super_boss' ? [] : await getTeamIds(req.agent);
 
         const isPhone = /\d{3,}/.test(q.replace(/\D/g, ''));
         const phoneDigits = q.replace(/\D/g, '');
@@ -1163,6 +1127,7 @@ router.get('/search', async (req: any, res) => {
         const [contacts, partners] = await Promise.all([
             prisma.contact.findMany({
                 where: {
+                    tenant_id: req.agent.tenant_id,
                     contact_type: { notIn: ['MANAGEMENT'] },
                     AND: [visibilityFilter, { OR: searchCondition }],
                 },
@@ -1175,7 +1140,8 @@ router.get('/search', async (req: any, res) => {
             }),
             prisma.partnerAgent.findMany({
                 where: {
-                    ...(req.agent.role === 'super_boss' ? {} : { managing_agent_id: req.agent.id }),
+                    contact: { tenant_id: req.agent.tenant_id },
+                    ...(req.agent.role === 'super_boss' ? {} : req.agent.role === 'partner' ? { id: req.agent.id } : { managing_agent_id: { in: teamIds } }),
                     OR: [
                         { name: { contains: q, mode: 'insensitive' } },
                         ...(isPhone ? [{ phone_number: { contains: phoneDigits } }] : []),
@@ -1783,46 +1749,29 @@ router.get('/:phone', async (req, res) => {
 
         // Lead history = every enquiry (deal) on this contact, summary only; associated users = everyone who
         // has handled it (owner + each lead's coordinator + explicit shares). Derived — no extra table.
-        let leadHistory: any[];
-        let shareRows: any[];
-        try {
-            [leadHistory, shareRows] = await Promise.all([
-                prisma.transaction.findMany({
-                    where: { demand_contact_id: phone },
-                    orderBy: { created_at: 'desc' },
-                    select: LEAD_DEAL_SUMMARY,
-                }),
-                prisma.contactShare.findMany({ where: { phone_number: phone }, select: { agent_id: true } }),
-            ]);
-        } catch (dbErr: any) {
-            if (String(dbErr?.message || '').includes('source_ref')) {
-                const migrated = await ensureSourceRefColumnInDb();
-                try {
-                    [leadHistory, shareRows] = await Promise.all([
-                        prisma.transaction.findMany({
-                            where: { demand_contact_id: phone },
-                            orderBy: { created_at: 'desc' },
-                            select: migrated ? LEAD_DEAL_SUMMARY : LEAD_DEAL_SUMMARY_SAFE,
-                        }),
-                        prisma.contactShare.findMany({ where: { phone_number: phone }, select: { agent_id: true } }),
-                    ]);
-                } catch {
-                    [leadHistory, shareRows] = await Promise.all([
-                        prisma.transaction.findMany({
-                            where: { demand_contact_id: phone },
-                            orderBy: { created_at: 'desc' },
-                            select: LEAD_DEAL_SUMMARY_SAFE,
-                        }),
-                        prisma.contactShare.findMany({ where: { phone_number: phone }, select: { agent_id: true } }),
-                    ]);
-                }
-            } else {
-                throw dbErr;
-            }
-        }
+        // Staff only see enquiries their team owns (same rule as the list / GET /api/deals), so B never
+        // sees Lead A's property/assignee just because the Contact is shared. Partners keep their own view.
+        const viewer = (req as any).agent;
+        const historyScope: any = !viewer || viewer.role === 'super_boss' || viewer.role === 'partner' ? {} : await (async () => {
+            const teamIds = await getTeamIds(viewer);
+            return { OR: [{ coordinator_agent_id: { in: teamIds } }, { executive_agent_id: { in: teamIds } }] };
+        })();
+        const [leadHistory, shareRows] = await Promise.all([
+            prisma.transaction.findMany({
+                where: { demand_contact_id: phone, ...historyScope },
+                orderBy: { created_at: 'desc' },
+                select: LEAD_DEAL_SUMMARY,
+            }),
+            prisma.contactShare.findMany({ where: { phone_number: phone }, select: { agent_id: true } }),
+        ]);
+        // Names only (no property/source), so this uses ALL enquiries, not the viewer-scoped history.
+        const allAssignees = await prisma.transaction.findMany({
+            where: { demand_contact_id: phone },
+            select: { coordinator_agent_id: true, executive_agent_id: true },
+        });
         const associatedIds = Array.from(new Set([
             contact.assigned_agent_id,
-            ...leadHistory.flatMap(d => [d.coordinator_agent_id, d.executive_agent_id]),
+            ...allAssignees.flatMap(d => [d.coordinator_agent_id, d.executive_agent_id]),
             ...shareRows.map(r => r.agent_id),
         ].filter((x): x is string => !!x)));
         const associatedUsers = associatedIds.length

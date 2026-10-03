@@ -1,6 +1,7 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react';
 import PhoneInput from './PhoneInput';
+import CallerDossier from './CallerDossier';
 import client, { getPartnerAssignable, assignLeadToTeammate, shareLead, rosterForPickers, updateContactProfile } from '../api/client';
 import { isPlaceholderPhone, isDialablePhone, isValidPhoneInput, toDialablePhone, normalizePhoneInput } from '../lib/phone';
 import { useAuth } from '../contexts/AuthContext';
@@ -364,6 +365,11 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
     const [clientSearchResults, setClientSearchResults] = useState<Array<{ phone_number: string; name: string | null; contact_type: string; lead_status: string | null }>>([]);
     const [clientSearching, setClientSearching] = useState(false);
     const clientSearchTimer = useRef<any>(null);
+    const clientSearchSequence = useRef(0);
+    useEffect(() => () => { clearTimeout(clientSearchTimer.current); ++clientSearchSequence.current; }, []);
+    useEffect(() => {
+        if (!showCreateModal) { ++clientSearchSequence.current; clearTimeout(clientSearchTimer.current); setClientSearchResults([]); setClientSearching(false); }
+    }, [showCreateModal]);
     const [preselectedContact, setPreselectedContact] = useState<{ phone_number: string; name: string | null } | null>(null);
     // Pause the 30s auto-refresh while the user is working (a modal/detail open) or the tab is unfocused. (2026-07-09)
     const busyRef = useRef(false);
@@ -773,6 +779,9 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
     const handleClientSearchChange = (val: string) => {
         // Allow alphanumeric: if text contains letters or spaces, preserve as string; else normalize phone
         const value = /[a-z]/i.test(val) ? val : normalizePhoneInput(val);
+        const sequence = ++clientSearchSequence.current;
+        setClientSearchResults([]);
+        setPreselectedContact(null);
         setClientSearchQuery(value);
         if (clientSearchTimer.current) clearTimeout(clientSearchTimer.current);
         const trimmed = value.trim();
@@ -791,16 +800,20 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
         clientSearchTimer.current = setTimeout(async () => {
             try {
                 const res = await client.get('/api/leads/search', { params: { q: trimmed } });
-                setClientSearchResults(res.data || []);
+                if (sequence === clientSearchSequence.current) setClientSearchResults(res.data || []);
             } catch {
-                setClientSearchResults([]);
+                if (sequence === clientSearchSequence.current) setClientSearchResults([]);
             } finally {
-                setClientSearching(false);
+                if (sequence === clientSearchSequence.current) setClientSearching(false);
             }
         }, 250);
     };
 
     const handleSelectExistingClient = (contact: { phone_number: string; name: string | null }) => {
+        ++clientSearchSequence.current;
+        clearTimeout(clientSearchTimer.current);
+        setClientSearching(false);
+        setClientSearchResults([]);
         setPreselectedContact(contact);
         setCreateForm(p => ({ ...p, name: contact.name || '', phone: isPlaceholderPhone(contact.phone_number) ? '' : contact.phone_number }));
         setCreateStep(4);
@@ -1976,6 +1989,8 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
                                         )}
                                     </div>
 
+                                    {!isPartner && selectedPhone && <CallerDossier phone={selectedPhone} />}
+
                                     {/* WhatsApp Conversation Answers */}
                                     {sessionAnswers && (
                                         <div style={{ padding: '10px 12px', backgroundColor: 'rgba(37,211,102,0.06)', borderRadius: '8px', border: '1px solid rgba(37,211,102,0.2)', marginBottom: '12px' }}>
@@ -2188,6 +2203,25 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
                                             </div>
                                         );
                                     })()}
+
+                                    {/* One contact → many leads: associated users + every enquiry on this contact */}
+                                    {!!leadDetail.associated_users?.length && (
+                                        <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                                            <span style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Associated users </span>
+                                            {leadDetail.associated_users.map(u => u.name || u.id).join(', ')}
+                                        </div>
+                                    )}
+                                    {!!leadDetail.lead_history?.length && (
+                                        <div>
+                                            <div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '6px' }}>Lead history ({leadDetail.lead_history.length})</div>
+                                            {leadDetail.lead_history.map(d => (
+                                                <div key={d.id} style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', padding: '6px 8px', marginBottom: '4px', fontSize: '12px', borderRadius: '6px', border: '1px solid var(--border-secondary)' }}>
+                                                    <span>{d.source_ref || '—'} · {d.source}</span>
+                                                    <span>{d.coordinator?.name || 'Unassigned'} · {d.status}</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
 
                                     {/* Timeline Tabs */}
                                     <div>

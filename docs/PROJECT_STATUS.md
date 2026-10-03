@@ -1,9 +1,162 @@
 # Realty Pandit — Live Project Status
 
-**Last updated:** 2026-09-29
+**Last updated:** 2026-10-04
 **Update trigger:** Significant deployments, phase completions, blockers cleared/added.
 
 > This file is the **live state**. When you see contradictions with anything else in /docs/, this wins. Update the timestamp on each meaningful change.
+
+## 2026-10-04 — Sharing, shortage operations and persistent calling queue (development only, undeployed)
+
+- Property sharing sends the first image with details and Property ID, queues remaining supported media without the obsolete eight-item cap, and keeps PDF opt-in. Outside the WhatsApp window it uses an approved template and defers extra media until an inbound message; persisted sends expose retry state. Inventory creation paths mint `display_id`; the production backfill has not run. Contact lookup supports normalized name/phone identity, stale-response guards, and tenant/team/partner visibility.
+- Shortage matching uses a configurable per-tenant threshold (default three), canonical requirements, and suitable active inventory only. Refresh work is durable/debounced with retry records; survey tasks are grouped per agent, area and IST date at 08:30. Team-scoped refresh and task generation are enforced. The active inventory scan remains uncapped and may need query/index optimization as data grows.
+- Persistent calling work pages contact-backed records and checks current assignment visibility on every action. Atomic fifteen-minute claims support renewal/release and dispositions. AI dispatch remains blocked pending verified provider onboarding. Transfer reports unavailable and creates one deterministic callback task; no transfer success is claimed. The UI exposes claims, pagination, persisted status and available transcript information.
+- **Combined verification:** 18 focused backend suites, **123 tests passed**; Prisma validation/generation passed; CRM production build passed; `git diff --check` clean. Backend TypeScript check exhausted the default heap and, with 8 GB, reports repository-wide errors (640 lines) with no matches in calling-work/CallingQueue/SourcingBoard files. No live WhatsApp, PostgreSQL concurrency, runtime scheduler, provider or production behavior verified. Additive migrations `20261003190000_operational_shortages` and `20261003213000_persistent_calling` remain local and require production drift review before rollout.
+
+## 2026-10-04 — Portal sourcing continuation (development only, undeployed)
+
+Phase 4 now has transactional tenant/source/external-identity ingestion, proper Owner relations, normalized rupee prices/canonical specs, pending inventory and one human owner-call verification task. No public phone means a retained sourcing candidate without fabricated Contact/Owner/Inventory. Repeat observations update freshness without replacing staff inventory edits; candidate-only observations refresh public data while retaining visibility assignment. Cross-tenant global phone identities fail closed. Scoped candidate listing and owner-call evidence endpoints support staff review; harvested stock cannot be approved/activated before the explicit human call or cloned into active inventory.
+
+A separate `crawler:portals` process schedules **07:00 IST**, selects configured public URLs for open shortage areas and has public JSON-LD adapters for 99acres, Magicbricks and Housing. Global/source switches and per-target supervised pilot flags are disabled by default. Robots rules/delays, exact HTTPS portal host allowlists, bounded/rate-limited requests, no redirects/login/CAPTCHA bypass, and durable acknowledged ingestion/failure/duplicate counts are implemented. Unsupported current site markup fails visibly rather than pretending to harvest. Existing portal enquiry feeds are separate.
+
+**Verification:** three focused harvest/crawler suites passed **27 tests** (route auth/CSRF, source scope, normalization, candidate retention/refresh, duplicate lock ordering, cross-tenant identity rejection, task-failure acknowledgement, human-call/team/clone guards, robots, SSRF and crawler failure/progress gates). Changed portal/crawler/inventory files produce no TypeScript diagnostics in the full backend check; unrelated baseline diagnostics remain. `git diff --check` passes. Prisma client generated locally. No production migrations, real portal pilot, live owner call, overnight run or PostgreSQL concurrent-connection test performed. Additive migration `20261003203000_portal_sourcing` must be reviewed against production drift before rollout. Setup and the remaining development/production checks: [portal sourcing runbook](runbooks/portal-sourcing-setup.md).
+
+## 2026-10-04 — Verified call drafts and recoverable approval (LOCAL CODE, NOT DEPLOYED)
+
+- Extraction now remains an editable draft for every confidence level. Processing writes review/audit tasks, not authoritative Contact requirements. Approval resolves canonical taxonomy/BHK/specifications and converts lakh budgets to rupees. The shared demand form provides a suitable-active-match preview before approval; matching, enquiry creation and optional property sending remain behind staff approval.
+- Approval uses a transactional status claim: repeated/simultaneous submissions have one history, VoiceCall and score outcome. Only active `staff_call` enquiries of the approved transaction type are updated; unrelated portal enquiries and SELL/LEASE approvals do not alter buyer enquiries. SELL/LEASE follow-up creates a verified listing-capture task through the inventory workflow.
+- Durable processing/follow-up claims have renewal and stale-worker fencing. Approval persists the follow-up outbox before dispatch. Recovery resumes the stored deal/share count; exhausted or interrupted final attempts become visible manual-retry work. Successful retries close failure tasks. Rejection clears the draft and leaves Contact/deal requirements untouched. The additive `20261003183000_staff_call_review_recovery` migration flags historical pre-review auto-saves for comparison without restoring over subsequent staff edits.
+- Shared caller dossiers now appear on staff lead details, deal details and upload/review screens, with loading/error/retry states and stale-response protection. The lookup applies Contact visibility, tenant filtering and team-scoped enquiries; no inbound provider notification is claimed.
+- **Provider remains disabled:** unauthenticated/unverified Omnidim callbacks fail closed with 503 and do not ingest events. API credentials alone do not enable dispatch. Account, callback, recording, monitoring and phone-transfer onboarding/pilot instructions are in [the requested setup guide](runbooks/omnidim-crm-setup.md). No live provider call, callback, phone transfer or provider cleanup was verified.
+- **Local checks:** six focused call suites, 38 tests passed (draft processing, canonical budgets/BHK, approval/rejection races with mocked Prisma, team/tenant lookup, durable follow-up recovery and provider gating). CRM production build passed with the existing large-bundle warning. Real PostgreSQL concurrency/migration and production behavior remain unverified; mocked races prove control flow only. External WhatsApp sends still have an acceptance-to-checkpoint crash gap and therefore are not claimed exactly once. The call migration has not been applied to production.
+
+## 2026-10-03 (later) — Call approval automation + 99acres push (LOCAL CODE, NOT DEPLOYED)
+
+- **Bug fixed — budget units:** the call extractor and review screen use **lakhs**, but they were saved straight into `contact.budget_min/max`, which the CRM and matching treat as **rupees**. A "50 lakh" caller was stored as 50, matched nothing (so every call-sourced requirement would land in the Shortage Book), and the auto-share budget sanity check would have asked the buyer "buy or rent?". `lakhsToRupees` (`services/staff_call_processing.ts`) now converts where call data enters a Contact or deal. The review screen still edits lakhs and now shows the CRM's current value in lakhs; the caller dossier formats rupees as lakhs. **Existing data not migrated:** any contact already auto-saved from a call before this change holds a lakh value. Check `select count(*) from staff_calls` on production; if rows exist, review those contacts' budgets.
+- **Review task:** when a call reaches READY_FOR_REVIEW, one `CALL_REVIEW` task (deduped by call id) is created for the staff member (HIGH when confidence is under 70% or intent unclear) and closed on approve or reject.
+- **Approval drives the CRM (`services/call_followup.ts`, called from `POST /api/calls/:id/submit`):** BUY/RENT creates a QUALIFIED lead through `ensureDealForLead` (the contact's existing owner keeps it; an unassigned caller goes to the reviewer), which also refreshes the Shortage Book. If the reviewer ticks "send matching properties", up to 3 are sent through `shareNextPropertyDetailed` (relevance floor, de-dup, ai_paused and budget checks still apply). SELL/LEASE creates a `CALL_LISTING_CAPTURE` task and never writes inventory. Any failure creates a `CALL_FOLLOWUP_FAILED` task. Auto-share is off unless the request sends `auto_share: true`; the CRM checkbox is off by default for BUY/RENT calls. Known side effect: `ensureDealForLead` also creates its "Call new lead within 30 minutes" reminder for the assignee.
+- **Bulk upload:** "Bulk upload recordings" panel on the call review screen; phone number and direction are prefilled from the file name, one request per file to the existing upload endpoint, per-row status.
+- **Retention:** `CALL_AUDIO_RETENTION_REVIEWED_DAYS` (default 7) and `CALL_AUDIO_RETENTION_UNREVIEWED_DAYS` (default 30). Provider-hosted or Pipecat recordings outside the local staff-call path are still not deleted.
+- **Historical batch scope:** caller details on lead/deal pages and match preview were added in the 2026-10-04 continuation above. Both processor entry points now claim through the same database ownership contract. Live Omnidim capabilities remain gated on verified onboarding.
+- **Checks:** backend 472/474 (the 2 failures are the known Redis health tests in `app.test.ts`; a different test failed intermittently in two full runs and passed alone every time, so full-run flakiness exists); `tsc` adds no new errors; CRM `npm run build` passes; ESLint on the changed screen is unchanged (0 errors, the same 2 warnings). New tests: `call_followup.test.ts`, `ninety_nine_acres_push.test.ts`, additions to `staff_call_processing.test.ts`.
+
+## 2026-10-03 — Shortage Book table live; CRM automation fixes shipped (PR #20); 99acres push integration pending
+
+**Scope decision (2026-10-03):** the CRM automation work is web-app only (no Android app). AI calling uses Omnidim to real phone numbers. A call creates a deal only after a staff member verifies the AI's notes. Bulk upload of recordings is in scope. Automated portal sourcing is approved, with these guardrails: public data only, no CAPTCHA/login bypass, rate-limited, a per-source kill switch, and harvested owners are called by a human before any automated WhatsApp or AI call. Accepted risk: scraping breaches the portals' terms of use, so IP blocks or notices are possible.
+
+### Production (done manually, 2026-10-03)
+
+- **Cause:** `shortage_entries` did not exist in production (migration `20260929183000_shortage_entries` was never applied). Logs showed `The table public.shortage_entries does not exist`. Creating a deal via the sales agent, editing a deal's requirements and editing a contact's requirements saved the change but returned 500.
+- **Backup first:** `pg_dump -Fc` to `/root/backups/pre-shortage-20261003-2101.dump` (16 MB; `pg_restore -l` read it correctly).
+- **Fix:** applied the migration SQL in one transaction (`psql -1`, table + 3 indexes, additive), then `prisma migrate resolve --applied 20260929183000_shortage_entries`. Verified: table exists with 0 rows, the migration is listed as applied, both `realty-backend` processes online with an unchanged restart count (4), no restart needed. Do not use `prisma migrate deploy` on this server: production has 2 migrations that are not in git.
+- **Live revision:** PR #20 merged to `main` as `9d663db`, and `current/REVISION` on the server read `9d663db` when checked.
+- **Not verified by me:** deploy health checks, the Shortage Book page loading, and a requirement edit saving without a 500 were handed to the user; the results were not reported back. Confirm before treating this as verified.
+
+### Code shipped in PR #20 (commits `705475f`, `03f2e0f`)
+
+- The three unguarded `refreshDealShortage` calls (`transaction_service.ts`, the requirements edit in `routes/deals.ts`, and the contact requirements edit in `routes/leads.ts`) now log a warning instead of failing the request. Test: `shortage_refresh_non_fatal.test.ts` (covers deal creation only).
+- The WhatsApp buyer bot's property matches use `shareInventoryCard` (primary photo + full details + Property ID, then remaining media); the old inline caption is the fallback.
+- Residential share text shows floor and facing together (`Floor 3 · East Facing`).
+- `display_id` is minted on sales-agent and CSV-import inventory creates. Script `src/scripts/backfill_display_id.ts` (count only by default, `live` to write) has **not been run**, so existing listings without a Property ID are unchanged.
+- Revert of the startup self-heal for `transactions.source_ref` is now live. This is safe because the column was added in production on 2026-10-02.
+- **Checks:** backend 454/456 (the 2 failures are the known Redis health tests in `app.test.ts`); `tsc` shows 2 more errors than before, both `row is of type unknown` in the CSV import, the same error as the neighbouring lines.
+
+### Remaining from the 2026-10-03 phase plan
+
+- Provider-routed inbound/outbound calls, authenticated callbacks, recording access, live monitoring and staff-phone transfer remain gated on Omnidim account configuration, callback contract and representative payloads. The user has not received those yet; see the [Omnidim setup guide](runbooks/omnidim-crm-setup.md). Manual recording upload and review remain available.
+- Portal crawlers and AI calling remain disabled pending supervised pilots. No real portal format, provider call/transfer, runtime task recovery or production migration has been validated. Review additive migrations against current production drift and backup procedures before rollout.
+
+### 99acres push integration: waiting on 99acres (OPEN)
+
+Context: Sandeep Upadhyay (99acres) asked for the **API URL and a sample payload with parameters** for the push integration, in reply to our 12 Aug email about sub-user routing and missing fields.
+
+**Endpoint extended (code in `fix-dev`, NOT DEPLOYED):** `POST /external/99acres/webhook` previously read only generic fields and ignored `SubUserName`, `PROPERTY_CODE`, `QueryId` and `RcvdOn`. It now maps the pushed JSON (99acres field names; case-insensitive, `_` ignored; old generic keys still accepted) through `parsePushedLead` onto the pull API's lead shape and calls the same `ingestLead` as the poller, so routing by `SubUserName` (manager review when unmatched), de-duplication by `QueryId`, per-enquiry deals keyed on `PROPERTY_CODE`, buyer confirmation and the escalation check are identical. `400` without a mobile number, `500` on ingest failure so 99acres retries. Tests: `ninety_nine_acres_push.test.ts` (7). Not exercised against a real 99acres payload.
+
+**Before sending the email:**
+1. ~~Extend the endpoint~~ done in code; it reaches production only after the PR is merged and deployed. Do not send the email until it is deployed and the key exists.
+2. Send the API key separately, never by email. It goes in `EXTERNAL_API_KEYS` on the server; use a new key just for 99acres.
+3. The URL is confirmed reachable (an unauthenticated POST returns 401 `Missing X-API-Key header`). The field names and the `RcvdOn` format in the sample are assumptions taken from the pull API, and 99acres may change them.
+
+**Email draft (not yet sent):**
+
+> **To:** Sandeep Upadhyay <sandeep.upadhyay@99acres.com>
+> **Cc:** Pramod Verma <pramod.verma@99acres.com>; Manish Sharma <manish.s5@99acres.com>; realtypandit99@gmail.com; bzonkcrazy@gmail.com; admin@realtypandit.in
+> **Subject:** Re: 99acres API - field requirements for correct lead routing (follow-up to 10 Aug) - Push integration details
+>
+> Hi Sandeep,
+>
+> Please find below the details for the push integration.
+>
+> **1. API URL**
+>
+> ```
+> POST https://api.realtypandit.in/external/99acres/webhook
+> ```
+>
+> | Item | Value |
+> |---|---|
+> | Method | POST |
+> | Content-Type | `application/json` |
+> | Authentication | Header `X-API-Key: <key>`. We will share the key separately, not over email. |
+> | Success response | `201` with `{"success": true, "contact_id": "..."}` |
+> | Errors | `400` (no mobile number), `401` (key missing), `403` (key invalid), `500` (our side; please retry) |
+> | Retries | Please retry on `5xx` or timeout. Sending the same `QueryId` again is safe. |
+>
+> **2. Sample payload**
+>
+> ```json
+> {
+>   "QueryId": "Q-1234567890",
+>   "RcvdOn": "2026-09-24 10:42:15",
+>   "SubUserName": "subuser.registered@example.com",
+>   "PROPERTY_CODE": "A12345678",
+>   "ProdId": "98765432",
+>   "ResCom": "R",
+>   "CityName": "Gurgaon",
+>   "ProjName": "Sample Heights",
+>   "Price": "9500000",
+>   "Name": "Buyer Name",
+>   "Mobile": "+919800000000",
+>   "Email": "buyer@example.com",
+>   "PhoneVerificationStatus": "Verified",
+>   "EmailVerificationStatus": "Not Verified",
+>   "IDENTITY": "Individual"
+> }
+> ```
+>
+> **3. Parameters**
+>
+> | Parameter | Required | Description |
+> |---|---|---|
+> | `Mobile` | Yes | Buyer's mobile number, used to identify the lead. |
+> | `SubUserName` | Yes, on every lead | The sub-user's **99acres username or registered email address**, not a display name. We map this to the right team member. |
+> | `PROPERTY_CODE` | Yes | The code of the listing that was enquired on. |
+> | `QueryId` | Yes | Unique enquiry ID, so we never create duplicates. |
+> | `RcvdOn` | Yes | Date and time the enquiry was received. |
+> | `CityName` | Yes | City of the enquired listing. |
+> | `Price` | Yes | Price of the enquired listing. |
+> | `ResCom` | Yes | Residential or commercial. |
+> | `ProdId` | Yes | Product ID of the listing. |
+> | `Name` | Yes | Buyer's name. |
+> | `ProjName` | If available | Project name. |
+> | `Email` | If available | Buyer's email address. |
+> | `PhoneVerificationStatus`, `EmailVerificationStatus` | Requested | Lets our team call verified buyers first. These are currently empty on all 2,832 leads. |
+> | `IDENTITY` | Requested | Buyer identity, also currently empty. |
+>
+> Please use the same field names as the pull API wherever possible, so both feeds look identical to us.
+>
+> **4. What we need from you**
+>
+> - Please confirm the final field names and the format of `RcvdOn` if they differ from the sample above.
+> - Please confirm that `SubUserName` will carry the sub-user's username or registered email on every lead. As described in our last mail, 29 leads since 10 August arrived with a display name instead, and all of them fell back to a manager.
+> - Please confirm the date from which the push goes live, and whether the pull API stays active in parallel until then.
+> - Please send a test lead to the URL above once we share the key, so we can confirm it end to end.
+>
+> Happy to get on a call if that is quicker.
+>
+> Best regards,
+> Sunny Sharma
+> Realty Pandit
+> www.realtypandit.in
 
 ## 2026-10-02 — One contact → many leads (LOCAL CODE, NOT DEPLOYED)
 

@@ -82,8 +82,11 @@ async function processInboundMessageInner(data: InboundMessageData): Promise<voi
     // handlers at ~:89/:103/:115 return early for EXISTING contacts (card replies, template
     // buttons, disambiguation taps), so moving this down would lose the stamp for exactly the
     // most engaged users. Brand-new contacts are covered by the create() below instead.
-    SessionTracker.markInbound(from).catch(err =>
-        logger.warn(`[WebhookProcessor] markInbound failed for ${from}: ${(err as Error).message}`));
+    SessionTracker.markInbound(from).then(async () => {
+        const { deliverPendingPropertyMedia } = await import('./property_media_queue');
+        await deliverPendingPropertyMedia(whatsappService, from);
+    }).catch(err =>
+        logger.warn(`[WebhookProcessor] Session/media flush failed for ${from}: ${(err as Error).message}`));
 
     // Deliver any queued messages (from LLM hybrid approach)
     PendingMessageQueue.deliverPending(whatsappService, from).catch(() => {});

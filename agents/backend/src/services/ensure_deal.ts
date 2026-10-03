@@ -87,43 +87,17 @@ export async function ensureDealForLead(args: EnsureDealArgs): Promise<EnsureDea
     let existing: any = null;
     if (sourceRef) {
         if (windowDays > 0) {
-            try {
-                existing = await prisma.transaction.findFirst({
-                    where: {
-                        demand_contact_id: args.contactPhone,
-                        source: args.source,
-                        source_ref: sourceRef,
-                        status: { in: ACTIVE_STATUSES },
-                        created_at: { gte: new Date(Date.now() - windowDays * 86_400_000) },
-                    },
-                    orderBy: { created_at: 'desc' },
-                    select: { id: true, status: true },
-                });
-            } catch (findErr: any) {
-                if (String(findErr?.message || '').includes('source_ref')) {
-                    try {
-                        await (prisma as any).$executeRawUnsafe(`
-                            ALTER TABLE "transactions" ADD COLUMN IF NOT EXISTS "source_ref" TEXT;
-                            CREATE INDEX IF NOT EXISTS "idx_transactions_source_ref" ON "transactions"("source_ref");
-                        `);
-                        existing = await prisma.transaction.findFirst({
-                            where: {
-                                demand_contact_id: args.contactPhone,
-                                source: args.source,
-                                source_ref: sourceRef,
-                                status: { in: ACTIVE_STATUSES },
-                                created_at: { gte: new Date(Date.now() - windowDays * 86_400_000) },
-                            },
-                            orderBy: { created_at: 'desc' },
-                            select: { id: true, status: true },
-                        });
-                    } catch {
-                        existing = null;
-                    }
-                } else {
-                    throw findErr;
-                }
-            }
+            existing = await prisma.transaction.findFirst({
+                where: {
+                    demand_contact_id: args.contactPhone,
+                    source: args.source,
+                    source_ref: sourceRef,
+                    status: { in: ACTIVE_STATUSES },
+                    created_at: { gte: new Date(Date.now() - windowDays * 86_400_000) },
+                },
+                orderBy: { created_at: 'desc' },
+                select: { id: true, status: true },
+            });
         } else {
             existing = null;
         }
@@ -132,6 +106,7 @@ export async function ensureDealForLead(args: EnsureDealArgs): Promise<EnsureDea
             where: {
                 demand_contact_id: args.contactPhone,
                 type: txType,
+                ...(args.source === 'staff_call' ? { source: 'staff_call' } : {}),
                 status: { in: ACTIVE_STATUSES },
             },
             orderBy: { created_at: 'desc' },
@@ -167,6 +142,13 @@ export async function ensureDealForLead(args: EnsureDealArgs): Promise<EnsureDea
     // See docs/plans/2026-05-17-duplicate-lead-reassignment.md
     const PORTAL_SOURCES = ['99acres', 'housing', 'magicbricks', 'facebook'];
     const isPortalLead = PORTAL_SOURCES.includes(args.source);
+
+    // A per-enquiry lead (sourceRef) on an already-owned contact with no attributed agent is routed
+    // like a fresh lead — round-robin — instead of silently inheriting the contact owner. The contact
+    // owner is NOT changed (no assignContact), only this lead's assignee.
+    if (sourceRef && !args.assignedAgentId && contact.assigned_agent_id) {
+        assignedAgentId = (isPortalLead ? await assignViaRoundRobin() : await assignViaManagerRoundRobin()) ?? contact.assigned_agent_id;
+    }
 
     if (!assignedAgentId) {
         assignedAgentId = isPortalLead
@@ -213,25 +195,7 @@ export async function ensureDealForLead(args: EnsureDealArgs): Promise<EnsureDea
         ai_paused: false,
     };
 
-    let deal: any;
-    try {
-        deal = await prisma.transaction.create({ data: dealData });
-    } catch (createErr: any) {
-        if (String(createErr?.message || '').includes('source_ref')) {
-            try {
-                await (prisma as any).$executeRawUnsafe(`
-                    ALTER TABLE "transactions" ADD COLUMN IF NOT EXISTS "source_ref" TEXT;
-                    CREATE INDEX IF NOT EXISTS "idx_transactions_source_ref" ON "transactions"("source_ref");
-                `);
-                deal = await prisma.transaction.create({ data: dealData });
-            } catch {
-                delete dealData.source_ref;
-                deal = await prisma.transaction.create({ data: dealData });
-            }
-        } else {
-            throw createErr;
-        }
-    }
+    const deal = await prisma.transaction.create({ data: dealData });
     // Deal CREATION is not a transition, so the sync hook in transitionTransaction never
     // fires here. Without this a deal born at a non-NEW status leaves its lead behind —
     // observed live 2026-08-10. Awaited, not best-effort: the contact row is guaranteed by

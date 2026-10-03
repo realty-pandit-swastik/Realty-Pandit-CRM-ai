@@ -8,6 +8,7 @@ import { Router } from 'express';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
+import { Prisma } from '@prisma/client';
 import prisma from '../db';
 import { authMiddleware, checkPermission } from '../middleware/auth';
 import audioStorage from '../services/audio_storage';
@@ -16,8 +17,13 @@ import { callSubmitSchema } from '../validators/calls.validator';
 import logger from '../utils/logger';
 import { captureRouteError } from '../utils/capture';
 import { normalizePhone, phoneVariants } from '../utils/phone';
-import { reviewedContactFields } from '../services/staff_call_processing';
+import { closeCallReviewTask } from '../services/staff_call_processing';
 import { completeStaffCallUpload } from '../services/staff_call_upload';
+import { runCallFollowup } from '../services/call_followup';
+import { approvedCallFields, callMatchCriteria } from '../services/call_demand';
+import { buildContactVisibilityFilter } from '../middleware/contact_visibility';
+import { getTeamIds } from '../utils/team_scope';
+import { MatchingEngine } from '../services/matching_engine';
 
 const authenticateAgent = authMiddleware;
 
@@ -154,7 +160,8 @@ router.get('/caller-id', authenticateAgent, async (req, res) => {
         const contact = await prisma.contact.findFirst({
             where: {
                 phone_number: { in: variants },
-                tenant_id: (req as any).agent.tenant_id,
+                tenant_id: req.agent!.tenant_id,
+                AND: [buildContactVisibilityFilter(req.agent!.id, req.agent!.role)],
             },
             include: {
                 assigned_agent: {
@@ -171,10 +178,13 @@ router.get('/caller-id', authenticateAgent, async (req, res) => {
             });
         }
 
+        const teamIds = await getTeamIds(req.agent!);
+        const dealScope = req.agent!.role === 'super_boss' ? {} : { OR: [{ coordinator_agent_id: { in: teamIds } }, { executive_agent_id: { in: teamIds } }] };
         const [deals, interactions] = await Promise.all([
             prisma.transaction.findMany({
                 where: {
                     demand_contact_id: { in: variants },
+                    ...dealScope,
                     tenant_id: (req as any).agent.tenant_id,
                 },
                 select: {
@@ -187,7 +197,7 @@ router.get('/caller-id', authenticateAgent, async (req, res) => {
                     demand_location: true,
                     demand_budget_min: true,
                     demand_budget_max: true,
-                    coordinator_agent: { select: { id: true, name: true } },
+                    coordinator: { select: { id: true, name: true } },
                     created_at: true,
                 },
                 orderBy: { created_at: 'desc' },
@@ -220,7 +230,7 @@ router.get('/caller-id', authenticateAgent, async (req, res) => {
         res.json({
             found: true,
             contact: {
-                id: contact.id,
+                id: contact.phone_number,
                 phone_number: contact.phone_number,
                 name: contact.name,
                 contact_type: contact.contact_type,
@@ -272,7 +282,7 @@ router.get('/:id', authenticateAgent, async (req, res) => {
         }
 
         // Verify ownership (agent can only view their own calls)
-        if (staffCall.staff_agent_id !== agentId) {
+        if (staffCall.staff_agent_id !== agentId || staffCall.tenant_id !== req.agent!.tenant_id) {
             return res.status(403).json({ error: 'Unauthorized' });
         }
 
@@ -289,6 +299,8 @@ router.get('/:id', authenticateAgent, async (req, res) => {
             ai_extraction: staffCall.ai_extraction,
             confidence_score: staffCall.confidence_score,
             staff_edited_data: staffCall.staff_edited_data,
+            processing_attempts: staffCall.processing_attempts, processing_error: staffCall.processing_error,
+            followup_status: staffCall.followup_status, followup_error: staffCall.followup_error,
             created_at: staffCall.created_at,
             submitted_at: staffCall.submitted_at,
         });
@@ -297,6 +309,28 @@ router.get('/:id', authenticateAgent, async (req, res) => {
         logger.error('[StaffCall] Get error:', error);
         res.status(500).json({ error: (error as Error).message });
     }
+});
+
+router.post('/:id/match-preview', authenticateAgent, validate(callSubmitSchema), async (req, res) => {
+    try {
+        const call = await prisma.staffCall.findUnique({ where: { id: String(req.params.id) } });
+        if (!call || call.staff_agent_id !== req.agent!.id || call.tenant_id !== req.agent!.tenant_id) return res.sendStatus(404);
+        if (call.status !== 'READY_FOR_REVIEW') return res.status(409).json({ error: 'Call is not awaiting review' });
+        const data = { ...(call.ai_extraction as any), ...req.body.edited_data };
+        const matches = ['BUY', 'RENT'].includes(data.intent) ? await new MatchingEngine().findMatches(await callMatchCriteria(data, call.tenant_id), 10) : [];
+        return res.json({ matches: matches.map(m => ({ id: m.id, display_id: m.display_id, location: m.location, score: m.match_score })), draft: await approvedCallFields(data) });
+    } catch (error) { captureRouteError(error, req, { route: 'staff_calls#preview' }); return res.status(500).json({ error: 'Could not preview matches' }); }
+});
+
+router.post('/:id/retry', authenticateAgent, async (req, res) => {
+    const call = await prisma.staffCall.findUnique({ where: { id: String(req.params.id) } });
+    if (!call || call.staff_agent_id !== req.agent!.id || call.tenant_id !== req.agent!.tenant_id) return res.sendStatus(404);
+    if (call.status === 'APPROVED' && call.followup_status === 'FAILED') {
+        await prisma.staffCall.updateMany({ where: { id: call.id, followup_status: 'FAILED' }, data: { followup_status: 'PENDING', followup_attempts: 0 } });
+    } else if (call.status === 'PROCESSING' && call.processing_attempts >= 3) {
+        await prisma.staffCall.updateMany({ where: { id: call.id, status: 'PROCESSING', processing_claim_token: null }, data: { processing_attempts: 0, processing_error: null } });
+    } else return res.status(409).json({ error: 'Call has no exhausted retryable work' });
+    return res.json({ success: true });
 });
 
 // ---------------------------------------------------------
@@ -318,26 +352,32 @@ router.post('/:id/submit', authenticateAgent, validate(callSubmitSchema), async 
         }
 
         // Verify ownership
-        if (staffCall.staff_agent_id !== agentId) {
+        if (staffCall.staff_agent_id !== agentId || staffCall.tenant_id !== req.agent!.tenant_id) {
             return res.status(403).json({ error: 'Unauthorized' });
         }
         // Verify status
+        if (staffCall.status === 'APPROVED') return res.json({ success: true, already_approved: true, followup: staffCall.followup_result, followup_status: staffCall.followup_status });
         if (staffCall.status !== 'READY_FOR_REVIEW') {
             return res.status(400).json({ error: 'Call is not ready for submission' });
         }
 
         // Merge edited data with AI extraction
         const finalData = { ...(staffCall.ai_extraction as any), ...edited_data };
-        const tenantId = staffCall.staff_agent.tenant_id;
+        const tenantId = staffCall.tenant_id;
+        const contactFields = await approvedCallFields(finalData);
 
         // SSOT INTEGRATION - Start transaction
-        await prisma.$transaction(async (tx) => {
+        const approved = await prisma.$transaction(async (tx) => {
+            const claimed = await tx.staffCall.updateMany({ where: { id, tenant_id: tenantId, staff_agent_id: agentId, status: 'READY_FOR_REVIEW' }, data: { status: 'APPROVED', submitted_at: new Date(), auto_share: req.body.auto_share === true, followup_status: 'PENDING', staff_edited_data: { ...(staffCall.staff_edited_data as any), final_data: finalData, review_status: 'VERIFIED', reviewed_by: agentId } } });
+            if (!claimed.count) return false;
+            const existingContact = await tx.contact.findUnique({ where: { phone_number: staffCall.phone_number } });
+            if (existingContact && existingContact.tenant_id !== tenantId) throw new Error('Contact unavailable');
             // 1. Update/Create Contact
             const contact = await tx.contact.upsert({
                 where: { phone_number: staffCall.phone_number },
                 update: {
                     // Update contact_type if detected from call
-                    ...reviewedContactFields(finalData),
+                    ...contactFields,
                     // Update tracking
                     last_channel: 'staff_call',
                     last_interaction: new Date(),
@@ -346,17 +386,26 @@ router.post('/:id/submit', authenticateAgent, validate(callSubmitSchema), async 
                     phone_number: staffCall.phone_number,
                     tenant_id: tenantId,
                     source: 'staff_call',
-                    contact_type: finalData.role || 'UNKNOWN',
-                    intent: finalData.intent?.toLowerCase() || undefined,
-                    property_type: finalData.propertyType || undefined,
-                    budget_min: finalData.budgetMin || undefined,
-                    budget_max: finalData.budgetMax || undefined,
-                    preferred_location: finalData.location || undefined,
-                    ai_summary: finalData.summary || undefined,
+                    ...contactFields,
+                    contact_type: (contactFields.contact_type || 'UNKNOWN') as any,
                     last_channel: 'staff_call',
                     last_interaction: new Date(),
                 },
             });
+
+            // Update only this contact's active call-sourced enquiry; portal enquiries stay separate.
+            if (['BUY', 'RENT'].includes(finalData.intent)) await tx.transaction.updateMany({ where: {
+                tenant_id: tenantId, demand_contact_id: staffCall.phone_number, source: 'staff_call',
+                status: { in: ['NEW', 'QUALIFIED', 'VISIT_SCHEDULED', 'VISITED', 'NEGOTIATION'] },
+                type: finalData.intent === 'RENT' ? 'RENT' : 'SALE',
+            }, data: {
+                demand_intent: contactFields.intent, demand_location: contactFields.preferred_location,
+                demand_budget_min: contactFields.budget_min, demand_budget_max: contactFields.budget_max,
+                demand_taxonomy_node_id: contactFields.demand_taxonomy_node_id,
+                demand_schema_values: contactFields.demand_schema_values,
+                demand_area_min: contactFields.area_min, demand_area_max: contactFields.area_max,
+                demand_budget_type: contactFields.demand_budget_type,
+            } });
 
             // 2. Create VoiceCall record
             await tx.voiceCall.create({
@@ -408,8 +457,8 @@ router.post('/:id/submit', authenticateAgent, validate(callSubmitSchema), async 
                     await tx.leadScore.update({
                         where: { phone_number: staffCall.phone_number },
                         data: {
-                            engagement: { increment: 10 },
-                            score: { increment: 10 },
+                            engagement_score: { increment: 10 },
+                            total_score: { increment: 10 },
                         },
                     });
                 } else {
@@ -417,30 +466,34 @@ router.post('/:id/submit', authenticateAgent, validate(callSubmitSchema), async 
                         data: {
                             tenant_id: tenantId,
                             phone_number: staffCall.phone_number,
-                            engagement: 10,
-                            score: 10,
-                            last_calculated: new Date(),
+                            engagement_score: 10,
+                            total_score: 10,
                         },
                     });
                 }
             }
 
-            // 5. Update StaffCall record with approval
-            await tx.staffCall.update({
-                where: { id },
-                data: {
-                    staff_edited_data: { ...(staffCall.staff_edited_data as any), final_data: finalData, review_status: 'VERIFIED', reviewed_by: agentId },
-                    status: 'APPROVED',
-                    submitted_at: new Date(),
-                },
-            });
+            await tx.task.updateMany({ where: { task_type: 'CALL_REVIEW', stage_metadata: { path: ['call_id'], equals: id } }, data: { status: 'DONE' } });
+            return true;
         });
+        if (!approved) {
+            const current = await prisma.staffCall.findUnique({ where: { id } });
+            if (current?.status === 'APPROVED') return res.json({ success: true, already_approved: true, followup: current.followup_result, followup_status: current.followup_status });
+            return res.status(409).json({ error: 'Call review changed; reload the call' });
+        }
 
         logger.info(`[StaffCall] SSOT integration complete: ${id}`);
+
+        await closeCallReviewTask(String(id)).catch((err) => logger.warn(`[StaffCall] Could not close review task for ${id}: ${err.message}`));
+        const followup = await runCallFollowup(String(id)).catch(error => {
+            logger.warn(`[StaffCall] Follow-up remains queued for ${id}: ${(error as Error).message}`);
+            return null;
+        });
 
         res.json({
             success: true,
             message: 'Call submitted to CRM successfully. Contact, VoiceCall, Interaction, and LeadScore updated.',
+            followup,
         });
     } catch (error) {
         captureRouteError(error, req, { route: 'staff_calls#4' });
@@ -466,32 +519,23 @@ router.post('/:id/reject', authenticateAgent, async (req, res) => {
         }
 
         // Verify ownership
-        if (staffCall.staff_agent_id !== agentId) {
+        if (staffCall.staff_agent_id !== agentId || staffCall.tenant_id !== req.agent!.tenant_id) {
             return res.status(403).json({ error: 'Unauthorized' });
         }
         if (staffCall.status === 'APPROVED') {
             return res.status(409).json({ error: 'Approved call cannot be rejected' });
         }
 
-        // Delete the local recording before clearing its database reference.
+        // Claim rejection before deleting audio, so a concurrent approval cannot succeed.
+        const rejected = await prisma.staffCall.updateMany({ where: { id, staff_agent_id: agentId, tenant_id: req.agent!.tenant_id, status: { in: ['PROCESSING', 'TRANSCRIBED', 'READY_FOR_REVIEW', 'REJECTED'] } }, data: { status: 'REJECTED', ai_extraction: Prisma.DbNull, processing_claim_token: null, processing_claimed_at: null, staff_edited_data: { ...(staffCall.staff_edited_data as any), review_status: 'REJECTED' } } });
+        if (!rejected.count) return res.status(409).json({ error: 'Call was approved; reload the call' });
         if (staffCall.recording_url) {
-            try {
-                const publicId = staffCall.recording_url.slice('uploads/staff_calls/'.length);
-                await audioStorage.deleteAudioFile(publicId);
-            } catch (err) {
-                logger.error('Failed to delete audio file:', err);
-                return res.status(500).json({ error: 'Recording deletion failed' });
-            }
+            const publicId = staffCall.recording_url.slice('uploads/staff_calls/'.length);
+            await audioStorage.deleteAudioFile(publicId);
         }
+        await prisma.staffCall.update({ where: { id }, data: { recording_url: null } });
 
-        // Mark as rejected
-        await prisma.staffCall.update({
-            where: { id },
-            data: {
-                status: 'REJECTED',
-                recording_url: null, // Clear URL after deletion
-            },
-        });
+        await closeCallReviewTask(String(id)).catch((err) => logger.warn(`[StaffCall] Could not close review task for ${id}: ${err.message}`));
 
         res.json({
             success: true,
@@ -517,7 +561,7 @@ router.get('/', authenticateAgent, async (req, res) => {
         const skip = (pageNum - 1) * limitNum;
 
         // Build filters
-        const where: any = { staff_agent_id: agentId };
+        const where: any = { staff_agent_id: agentId, tenant_id: req.agent!.tenant_id };
         if (status) where.status = status;
         if (phone_number) where.phone_number = phone_number;
 
@@ -549,6 +593,8 @@ router.get('/', authenticateAgent, async (req, res) => {
                 status: call.status,
                 duration: call.duration,
                 confidence_score: call.confidence_score,
+                processing_attempts: call.processing_attempts, processing_error: call.processing_error,
+                followup_status: call.followup_status, followup_error: call.followup_error,
                 created_at: call.created_at,
                 submitted_at: call.submitted_at,
             })),
@@ -576,7 +622,7 @@ router.get('/stats/overview', authenticateAgent, async (req, res) => {
         // Get counts by status
         const stats = await prisma.staffCall.groupBy({
             by: ['status'],
-            where: { staff_agent_id: agentId },
+            where: { staff_agent_id: agentId, tenant_id: req.agent!.tenant_id },
             _count: true,
         });
 
@@ -584,6 +630,7 @@ router.get('/stats/overview', authenticateAgent, async (req, res) => {
         const totalDuration = await prisma.staffCall.aggregate({
             where: {
                 staff_agent_id: agentId,
+                tenant_id: req.agent!.tenant_id,
                 status: 'APPROVED',
             },
             _sum: { duration: true },
@@ -595,6 +642,7 @@ router.get('/stats/overview', authenticateAgent, async (req, res) => {
         const todayCalls = await prisma.staffCall.count({
             where: {
                 staff_agent_id: agentId,
+                tenant_id: req.agent!.tenant_id,
                 created_at: { gte: today },
             },
         });

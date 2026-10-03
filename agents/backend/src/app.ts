@@ -439,7 +439,11 @@ app.get('/health', async (req, res) => {
     };
 
     // BullMQ queue stats
-    checks.queues = await getQueueStats();
+    // Bounded: with Redis down BullMQ count calls queue/hang, and /health must still answer.
+    checks.queues = await Promise.race([
+        getQueueStats(),
+        new Promise<{ status: string }>((resolve) => setTimeout(() => resolve({ status: 'unavailable' }), 2000).unref()),
+    ]);
 
     if (!isHealthy) {
         checks.status = 'degraded';

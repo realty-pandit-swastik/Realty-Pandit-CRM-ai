@@ -18,6 +18,7 @@ model Tenant {
   email         String?
   website       String?
   timezone      String   @default("Asia/Kolkata")
+  shortage_match_threshold Int @default(3)
   status        String   @default("active") // active, suspended
   created_at    DateTime @default(now())
   updated_at    DateTime @updatedAt
@@ -1457,6 +1458,18 @@ model StaffCall {
 
   // Processing Status
   status CallStatus @default(UPLOADING)
+  processing_attempts Int @default(0)
+  processing_claim_token String?
+  processing_claimed_at DateTime?
+  processing_error String? @db.Text
+  followup_status String?
+  followup_claim_token String?
+  followup_claimed_at DateTime?
+  followup_attempts Int @default(0)
+  followup_error String? @db.Text
+  followup_result Json?
+  auto_share Boolean @default(false)
+
 
   // Human-in-the-Loop
   staff_edited_data Json? // Staff edits/corrections
@@ -2147,6 +2160,18 @@ model Task {
   @@map("tasks")
 }
 
+model ShortageRefresh {
+  tenant_id       String   @id
+  requested_at    DateTime @default(now())
+  next_attempt_at DateTime @default(now())
+  lease_until     DateTime?
+  attempts        Int      @default(0)
+  last_error      String?  @db.Text
+
+  @@index([next_attempt_at])
+  @@map("shortage_refreshes")
+}
+
 model ShortageEntry {
   id          String   @id @default(uuid())
   tenant_id   String
@@ -2675,4 +2700,69 @@ model ContactShare {
   @@index([agent_id, shared_at])
   @@index([tenant_id])
   @@map("contact_shares")
+}
+
+
+// Portal sourcing candidates are NOT available inventory. Tenant/source identity dedupes ingestion.
+model PortalListing {
+  id String @id @default(uuid())
+  tenant_id String
+  source String
+  external_id String
+  source_url String?
+  payload Json
+  status String @default("CANDIDATE")
+  inventory_id String? @unique
+  verification_task_id String?
+  owner_call_verified_at DateTime?
+  owner_call_verified_by String?
+  owner_call_notes String? @db.Text
+  last_seen_at DateTime @default(now())
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+  @@unique([tenant_id, source, external_id])
+  @@index([tenant_id, status, last_seen_at])
+  @@map("portal_listings")
+}
+
+model PortalCrawlRun {
+  id String @id @default(uuid())
+  tenant_id String
+  source String
+  area String
+  target_url String
+  status String @default("RUNNING")
+  ingested_count Int @default(0)
+  duplicate_count Int @default(0)
+  candidate_count Int @default(0)
+  failure String? @db.Text
+  started_at DateTime @default(now())
+  finished_at DateTime?
+  @@index([tenant_id, source, started_at])
+  @@map("portal_crawl_runs")
+}
+
+// Durable calling control; contact assignment remains authoritative (no copied owner scope).
+model CallingWork {
+  id String @id @default(uuid())
+  tenant_id String
+  contact_phone String
+  deal_id String?
+  task_id String?
+  state String @default("READY")
+  claimed_by String?
+  lease_until DateTime?
+  dispatch_key String? @unique
+  provider_call_id String?
+  transcript String? @db.Text
+  disposition String?
+  transfer_state String?
+  transfer_target String?
+  callback_task_id String?
+  last_error String?
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+  @@unique([tenant_id, contact_phone])
+  @@index([tenant_id, state, lease_until])
+  @@map("calling_work")
 }

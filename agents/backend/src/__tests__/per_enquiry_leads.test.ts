@@ -2,7 +2,6 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 vi.mock('../db', () => ({
     default: {
-        $executeRawUnsafe: vi.fn().mockResolvedValue(1),
         contact: { findUnique: vi.fn(), update: vi.fn(), findMany: vi.fn().mockResolvedValue([]), count: vi.fn().mockResolvedValue(0) },
         transaction: { findFirst: vi.fn(), findMany: vi.fn().mockResolvedValue([]), create: vi.fn() },
         task: { create: vi.fn() },
@@ -44,6 +43,14 @@ describe('one contact → many leads', () => {
         expect(data.source_ref).toBe('prop-B');
         expect((prisma.transaction.findFirst as any).mock.calls[0][0].where).toMatchObject({ source: '99acres', source_ref: 'prop-B' });
         expect(prisma.contact.update).not.toHaveBeenCalled(); // contact owner (A) untouched
+    });
+
+    it('unattributed re-enquiry on an owned contact is round-robined, contact owner untouched', async () => {
+        (prisma.transaction.findFirst as any).mockResolvedValue(null);
+        (prisma.transaction.create as any).mockResolvedValue({ id: 'deal-rr', demand_contact_id: PHONE });
+        await ensureDealForLead({ contactPhone: PHONE, source: '99acres', sourceRef: 'prop-B' });
+        expect((prisma.transaction.create as any).mock.calls[0][0].data.coordinator_agent_id).toBe('rr-agent');
+        expect(prisma.contact.update).not.toHaveBeenCalled();
     });
 
     it('Test 2: same source + same property inside the window is a duplicate enquiry', async () => {
@@ -97,17 +104,6 @@ describe('visibility & contact history', () => {
         expect(leadHistory).toHaveLength(2);
         expect(leadHistory[0].coordinator_agent_id).toBe('B');
         expect(leadHistory[1].coordinator_agent_id).toBe('A');
-    });
-
-    it('resilient fallback when transactions.source_ref column does not exist in db', async () => {
-        (prisma.transaction.findFirst as any)
-            .mockRejectedValueOnce(new Error('The column transactions.source_ref does not exist in the current database.'))
-            .mockResolvedValueOnce(null);
-        (prisma.transaction.create as any).mockResolvedValue({ id: 'deal-resilient', demand_contact_id: PHONE });
-
-        const res = await ensureDealForLead({ contactPhone: PHONE, source: '99acres', sourceRef: 'prop-C', assignedAgentId: 'C' });
-        expect(res.created).toBe(true);
-        expect(prisma.$executeRawUnsafe).toHaveBeenCalledWith(expect.stringContaining('ALTER TABLE "transactions" ADD COLUMN IF NOT EXISTS "source_ref" TEXT'));
     });
 });
 

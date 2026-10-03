@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { normalizePhoneInput } from '../lib/phone';
 import client, { ensureContact } from '../api/client';
 
@@ -67,6 +67,10 @@ export const ContactSearchField: React.FC<ContactSearchFieldProps> = ({
 
     const searchTimeout = useRef<any>(null);
     const searchSequence = useRef(0);
+    useEffect(() => () => {
+        clearTimeout(searchTimeout.current);
+        searchSequence.current++;
+    }, []);
 
     const doSearch = useCallback(async (value: string, sequence: number) => {
         setSearching(true);
@@ -89,6 +93,7 @@ export const ContactSearchField: React.FC<ContactSearchFieldProps> = ({
 
     const handleInputChange = useCallback((val: string) => {
         const value = /[a-z]/i.test(val) ? val : normalizePhoneInput(val);
+        setSearching(false);
         setQuery(value);
         setSearchResults([]);
         setSearchResult(null);
@@ -113,6 +118,7 @@ export const ContactSearchField: React.FC<ContactSearchFieldProps> = ({
             role: mapToWorkflowRole(contactType),
             isNew: false,
             contactType,
+            sourceId: searchResult.phone_number,
         });
     }, [searchResult, query, onContactSelected]);
 
@@ -133,7 +139,7 @@ export const ContactSearchField: React.FC<ContactSearchFieldProps> = ({
         };
 
         try {
-            const phoneNum = query.replace(/\D/g, '').replace(/^91(\d{10})$/, '$1');
+            const phoneNum = normalizePhoneInput(query);
             await ensureContact(phoneNum, newName.trim(), contactTypeMap[newRole] || 'UNKNOWN');
             onContactSelected({
                 phone: phoneNum,
@@ -191,7 +197,7 @@ export const ContactSearchField: React.FC<ContactSearchFieldProps> = ({
                 <div role="listbox" aria-label="Matching contacts" style={styles.notFoundCard}>
                     {searchResults.map(contact => (
                         <button key={contact.phone_number} type="button" role="option" aria-selected={false}
-                            onClick={() => { setSearchResult(contact); setSearchResults([]); setQuery(normalizePhoneInput(contact.phone_number)); }}
+                            onClick={() => { ++searchSequence.current; clearTimeout(searchTimeout.current); setSearching(false); setSearchResult(contact); setSearchResults([]); setQuery(normalizePhoneInput(contact.phone_number)); }}
                             style={{ ...styles.primaryBtn, textAlign: 'left', marginBottom: '6px' }}>
                             {contact.name || 'Unknown'} · {contact.phone_number}
                         </button>
