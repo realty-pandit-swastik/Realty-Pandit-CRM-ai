@@ -31,7 +31,7 @@ import { resolveDemandTaxonomy } from '../utils/demand_taxonomy';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
-interface ParsedLead {
+export interface ParsedLead {
     // Contact details
     name: string | null;
     email: string | null;
@@ -67,6 +67,58 @@ interface PollResult {
 }
 
 // ── Service ──────────────────────────────────────────────────────────────────
+
+/**
+ * Maps a 99acres PUSH payload (JSON) onto the same ParsedLead the pull API produces, so both
+ * feeds share ingestLead: de-dupe by QueryId, SubUserName routing, per-enquiry deals.
+ * Keys match case-insensitively and ignore "_" (QueryId / query_id / QUERYID all work). The old
+ * generic keys (mobile, project_name, city, requirement_type, bedrooms...) are still accepted.
+ * Returns null when there is no phone number.
+ */
+export function parsePushedLead(body: Record<string, any>): ParsedLead | null {
+    const norm = (k: string) => k.toLowerCase().replace(/_/g, '');
+    const flat: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(body || {})) flat[norm(k)] = v;
+    const pick = (...keys: string[]): string | null => {
+        for (const k of keys) {
+            const v = flat[norm(k)];
+            const text = v == null || typeof v === 'object' ? '' : String(v).trim();
+            if (text) return text;
+        }
+        return null;
+    };
+
+    const phone = pick('Mobile', 'Phone');
+    if (!phone) return null;
+    const bedrooms = pick('Bedrooms');
+    // Without 99acres' CmpctLabl, rebuild a label so intent / BHK / type extraction still has input.
+    const label = pick('CmpctLabl', 'PropertyLabel')
+        || [pick('requirement_type'), bedrooms ? `${bedrooms} BHK` : null, pick('property_type')].filter(Boolean).join(' ');
+
+    return {
+        name: pick('Name'),
+        email: pick('Email'),
+        phone,
+        phoneVerificationStatus: pick('PhoneVerificationStatus'),
+        emailVerificationStatus: pick('EmailVerificationStatus'),
+        identity: pick('IDENTITY'),
+        productId: pick('ProdId', 'ProductId') || '',
+        productStatus: '',
+        productType: '',
+        propertyLabel: label,
+        queryInfo: pick('QryInfo', 'QueryInfo', 'Message') || '',
+        responseType: '',
+        receivedOn: pick('RcvdOn', 'ReceivedOn') || '',
+        queryId: pick('QueryId', 'QryId'),
+        projId: pick('ProjId'),
+        projName: pick('ProjName', 'ProjectName'),
+        cityName: pick('CityName', 'City'),
+        resCom: pick('ResCom'),
+        price: pick('Price', 'Budget'),
+        propertyCode: pick('PROPERTY_CODE', 'PropertyCode'),
+        subUserName: pick('SubUserName'),
+    };
+}
 
 export class NinetyNineAcresPoller {
     private apiUrl: string;
@@ -403,6 +455,11 @@ export class NinetyNineAcresPoller {
      *   7. If NEW contact: resolve listing agent → round-robin fallback → notify → escalation job
      *   8. Fire-and-forget buyer confirmations
      */
+    /** Push entry point (POST /external/99acres/webhook): identical ingest to the pull poller. */
+    async ingestPushedLead(lead: ParsedLead, tenantId: string): Promise<'new' | 'updated'> {
+        return this.ingestLead(lead, tenantId);
+    }
+
     private async ingestLead(lead: ParsedLead, tenantId: string): Promise<'new' | 'updated'> {
         const phoneNumber = normalizePhone(lead.phone);
         if (!phoneNumber) {
