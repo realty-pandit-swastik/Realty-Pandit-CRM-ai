@@ -36,7 +36,6 @@ export class PendingMessageQueue {
                     message,
                     context,
                     status: 'pending',
-                    OR: [{ context: null }, { context: { not: { startsWith: 'property_media:' } } }],
                     expires_at: new Date(Date.now() + PENDING_EXPIRY_MS),
                 },
             });
