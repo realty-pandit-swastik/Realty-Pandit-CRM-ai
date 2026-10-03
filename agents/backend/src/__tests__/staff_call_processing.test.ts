@@ -14,15 +14,15 @@ vi.unmock('../services/audio_storage');
 
 import transcriptionService from '../services/transcription';
 import callExtractor from '../services/call_extractor';
-import { autoSavedFields, closeCallReviewTask, failStaffCall, lakhsToRupees, processStaffCall, reviewedContactFields } from '../services/staff_call_processing';
+import { autoSavedFields, closeCallReviewTask, failStaffCall, lakhsToRupees, processStaffCall, recoverExhaustedStaffCalls, reviewedContactFields } from '../services/staff_call_processing';
 import { cleanupOldRecordings } from '../services/audio_storage';
 
 describe('staff call processing', () => {
     beforeEach(() => vi.clearAllMocks());
 
-    it('auto-saves only clear extracted fields and keeps vague calls for review', () => {
+    it('never auto-saves authoritative requirements before review', () => {
         const clear = { intent: 'BUY' as const, role: 'BUYER' as const, location: 'Noida', summary: 'Buyer seeks a flat.', confidence: 0.85 };
-        expect(autoSavedFields(clear)).toEqual({ intent: 'buy', preferred_location: 'Noida', ai_summary: clear.summary });
+        expect(autoSavedFields(clear)).toEqual({});
         expect(autoSavedFields({ ...clear, confidence: 0.4 })).toEqual({});
     });
 
@@ -32,9 +32,10 @@ describe('staff call processing', () => {
     });
 
     it('creates one assigned manual task on processing failure', async () => {
-        db.staffCall.findUnique.mockResolvedValue({ id: 'call-1', staff_agent_id: 'agent-1', phone_number: '+911234567890', status: 'TRANSCRIBED' });
+        db.staffCall.findUnique.mockResolvedValue({ id: 'call-1', staff_agent_id: 'agent-1', phone_number: '+911234567890', status: 'TRANSCRIBED', processing_attempts: 3 });
         db.staffCall.updateMany.mockResolvedValue({ count: 1 });
         db.$transaction.mockImplementation(async (fn) => fn(db));
+        db.task.findFirst.mockResolvedValue(null);
         await failStaffCall('call-1', new Error('extractor offline'));
         expect(db.task.create).toHaveBeenCalledWith({ data: expect.objectContaining({ assigned_to: 'agent-1', task_type: 'CALL_PROCESSING_FAILURE' }) });
         db.staffCall.updateMany.mockResolvedValue({ count: 0 });
@@ -48,7 +49,7 @@ describe('staff call processing', () => {
         await processStaffCall('call-1');
         expect(db.$transaction).not.toHaveBeenCalled();
         expect(db.staffCall.updateMany).toHaveBeenCalledWith({
-            where: { id: 'call-1', status: 'PROCESSING' }, data: { status: 'TRANSCRIBED' },
+            where: expect.objectContaining({ id: 'call-1', processing_attempts: { lt: 3 }, OR: expect.any(Array) }), data: expect.objectContaining({ status: 'TRANSCRIBED', processing_claim_token: expect.any(String) }),
         });
     });
 
@@ -88,7 +89,8 @@ describe('staff call processing', () => {
         expect(lakhsToRupees(null)).toBeNull();
         expect(lakhsToRupees(undefined)).toBeUndefined();
         const saved = autoSavedFields({ intent: 'BUY', role: 'BUYER', budgetMin: 40, budgetMax: 60, summary: 's', confidence: 0.9 });
-        expect(saved).toMatchObject({ budget_min: 4000000, budget_max: 6000000 });
+        expect(saved).toEqual({});
+        expect(reviewedContactFields({ budgetMin: 40, budgetMax: 60 })).toMatchObject({ budget_min: 4000000, budget_max: 6000000 });
         expect(reviewedContactFields({ budgetMax: 120 })).toMatchObject({ budget_max: 12000000 });
         expect(reviewedContactFields({ budgetMax: null })).toMatchObject({ budget_max: null });
     });
@@ -106,6 +108,8 @@ describe('staff call processing', () => {
 
         db.task.findFirst.mockResolvedValue(null);
         await processStaffCall('call-9');
+        expect(db.contact.update).not.toHaveBeenCalled();
+        expect(db.staffCall.update).toHaveBeenCalledWith(expect.objectContaining({ data: { staff_edited_data: { source: 'ai_call', review_status: 'PENDING', draft_only: true } } }));
         expect(db.task.create).toHaveBeenCalledWith({ data: expect.objectContaining({
             task_type: 'CALL_REVIEW', assigned_to: 'agent-1', priority: 'HIGH', stage_metadata: { call_id: 'call-9', source: 'call_processor' },
         }) });
@@ -114,6 +118,25 @@ describe('staff call processing', () => {
         db.task.findFirst.mockResolvedValue({ id: 'existing' });
         await processStaffCall('call-9');
         expect(db.task.create).not.toHaveBeenCalled();
+    });
+
+    it('stale transcription workers cannot extract or save after losing their claim', async () => {
+        db.staffCall.findUnique.mockResolvedValue({ id: 'c1', recording_url: 'uploads/staff_calls/c1/recording.mp3', transcript: 'Synthetic transcript' });
+        db.staffCall.updateMany.mockResolvedValueOnce({ count: 1 }).mockResolvedValue({ count: 0 });
+        await processStaffCall('c1');
+        expect(callExtractor.extractFromTranscript).not.toHaveBeenCalled();
+        expect(db.task.create).not.toHaveBeenCalled();
+    });
+    it('interrupted final attempts become visible manual-retry failures', async () => {
+        const call = { id: 'c1', status: 'TRANSCRIBED', processing_attempts: 3, processing_claim_token: 'expired-token', staff_agent_id: 'a1', phone_number: '+919800000001' };
+        db.staffCall.findMany.mockResolvedValue([call]);
+        db.staffCall.findUnique.mockResolvedValue(call);
+        db.staffCall.updateMany.mockResolvedValue({ count: 1 });
+        db.task.findFirst.mockResolvedValue(null);
+        db.$transaction.mockImplementation(async fn => fn(db));
+        await recoverExhaustedStaffCalls();
+        expect(db.staffCall.updateMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ processing_claim_token: 'expired-token' }), data: expect.objectContaining({ status: 'PROCESSING', processing_claim_token: null }) }));
+        expect(db.task.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ task_type: 'CALL_PROCESSING_FAILURE', assigned_to: 'a1' }) }));
     });
 
     it('closes the verification task for a call', async () => {

@@ -35,7 +35,9 @@ import { captureRouteError } from '../utils/capture';
 import { foldLegacyDemand, mergeDemandSchemaValues, validateMultiValueDemand, typeNodeListFromDemand, DEMAND_BHK_LIST_KEY, DEMAND_TYPE_NODE_LIST_KEY } from '../utils/demand_canonical';
 
 import { geocodeAddress } from '../utils/geocode';
-import { refreshDealShortage } from '../services/shortage_book';
+import { refreshDealShortage, getShortageThreshold, requestTenantShortageRefresh } from '../services/shortage_book';
+
+import callingWorkRouter from './calling_work';
 
 const router = Router();
 router.use(authMiddleware);
@@ -47,14 +49,33 @@ router.get('/shortages', checkPermission('act_on_deals'), async (req: any, res) 
         where: { tenant_id: req.agent.tenant_id, status: 'OPEN', ...(teamIds ? { owner_id: { in: teamIds } } : {}) },
         orderBy: [{ match_count: 'asc' }, { updated_at: 'desc' }],
     });
-    res.json({ success: true, data: rows });
+    res.json({ success: true, data: rows, threshold: await getShortageThreshold(req.agent.tenant_id) });
+});
+
+router.patch('/shortages/settings', checkPermission('manage_settings'), async (req: any, res) => {
+    if (req.agent.role !== 'super_boss') return res.status(403).json({ error: 'Tenant administrator only' });
+    const threshold = req.body.threshold;
+    if (!Number.isInteger(threshold) || threshold < 1 || threshold > 100) {
+        return res.status(400).json({ error: 'Threshold must be an integer from 1 to 100' });
+    }
+    try {
+        await prisma.tenant.update({ where: { id: req.agent.tenant_id }, data: { shortage_match_threshold: threshold } });
+        let refreshPending = false;
+        try { await requestTenantShortageRefresh(req.agent.tenant_id); }
+        catch (err) { refreshPending = true; captureRouteError(err, req, { route: 'deals#shortage_settings_refresh' }); }
+        res.json({ success: true, threshold, refresh_pending: refreshPending });
+    } catch (err: any) {
+        captureRouteError(err, req, { route: 'deals#shortage_settings' });
+        res.status(500).json({ error: 'Could not save shortage settings' });
+    }
 });
 
 router.post('/shortages/generate-tasks', checkPermission('act_on_deals'), async (req: any, res) => {
     try {
         if (req.agent.role === 'partner') return res.status(403).json({ error: 'Staff only' });
         const { createDailySurveyTasks } = await import('../services/shortage_book');
-        await createDailySurveyTasks();
+        const ownerIds = req.agent.role === 'super_boss' ? undefined : await getTeamIds(req.agent);
+        await createDailySurveyTasks(new Date(), { tenant_id: req.agent.tenant_id, owner_ids: ownerIds });
         res.json({ success: true, message: 'Daily survey tasks generated from open shortages' });
     } catch (err: any) {
         captureRouteError(err, req, { route: 'deals#generate_shortage_tasks' });
@@ -68,7 +89,8 @@ router.post('/shortages/:id/refresh', checkPermission('act_on_deals'), async (re
         const shortage = await prisma.shortageEntry.findUnique({
             where: { id: req.params.id },
         });
-        if (!shortage || shortage.tenant_id !== req.agent.tenant_id) {
+        const teamIds = req.agent.role === 'super_boss' ? null : await getTeamIds(req.agent);
+        if (!shortage || shortage.tenant_id !== req.agent.tenant_id || (teamIds && !teamIds.includes(shortage.owner_id || ''))) {
             return res.status(404).json({ error: 'Shortage entry not found' });
         }
         await refreshDealShortage(shortage.deal_id);
@@ -80,24 +102,8 @@ router.post('/shortages/:id/refresh', checkPermission('act_on_deals'), async (re
     }
 });
 
-router.get('/calling-queue', checkPermission('act_on_deals'), async (req: any, res) => {
-    if (req.agent.role === 'partner') return res.status(403).json({ error: 'Staff only' });
-    const teamIds = req.agent.role === 'super_boss' ? null : await getTeamIds(req.agent);
-    const rows = await prisma.contact.findMany({
-        where: { tenant_id: req.agent.tenant_id, contact_type: { in: ['BUYER', 'TENANT'] },
-            ...(teamIds ? { assigned_agent_id: { in: teamIds } } : {}),
-        },
-        select: { phone_number: true, name: true, assigned_agent_id: true, created_at: true,
-            work_tasks: { where: { status: { in: ['TODO', 'IN_PROGRESS'] } }, select: { id: true, title: true, due_date: true }, orderBy: { due_date: 'asc' }, take: 1 },
-        },
-        orderBy: { created_at: 'desc' }, take: 200,
-    });
-    const cutoff = Date.now() - 48 * 60 * 60 * 1000;
-    res.json({ success: true, data: {
-        fresh: rows.filter(row => row.created_at.getTime() >= cutoff),
-        aged: rows.filter(row => row.created_at.getTime() < cutoff),
-    } });
-});
+router.use('/calling-queue', callingWorkRouter);
+
 
 // ─── POST /api/deals — Create a new deal ─────────────────────────────────────
 router.post('/', checkPermission('manage_deals'), validate(createDealSchema), async (req: any, res) => {

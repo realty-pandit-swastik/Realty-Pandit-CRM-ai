@@ -2,9 +2,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const db = vi.hoisted(() => ({
     contact: { findUnique: vi.fn() },
-    task: { create: vi.fn().mockResolvedValue({ id: 't' }) },
+    transaction: { updateMany: vi.fn() },
+    task: { findFirst: vi.fn().mockResolvedValue(null), create: vi.fn().mockResolvedValue({ id: 't' }) },
 }));
 vi.mock('../db', () => ({ default: db }));
+vi.mock('../services/call_demand', () => ({ approvedCallFields: vi.fn().mockResolvedValue({ intent: 'buy', budget_max: 6000000, demand_taxonomy_node_id: 'flat', demand_schema_values: { bhk: '2' } }) }));
 vi.mock('../services/ensure_deal', () => ({ ensureDealForLead: vi.fn() }));
 vi.mock('../services/shortage_book', () => ({ refreshDealShortage: vi.fn().mockResolvedValue(undefined) }));
 vi.mock('../services/property_sharing', () => ({ shareNextPropertyDetailed: vi.fn() }));

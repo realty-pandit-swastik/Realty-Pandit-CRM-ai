@@ -1,96 +1,65 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import express from 'express';
 import request from 'supertest';
+vi.mock('../services/portal_harvest', () => ({ ingestPortalListing: vi.fn(), HarvestError: class extends Error { constructor(public status: number, message: string) { super(message); } } }));
+import { HarvestError, ingestPortalListing } from '../services/portal_harvest';
 import prisma from '../db';
 import inventoryRouter from '../routes/inventory';
-
-const app = express();
-app.use(express.json());
-app.use((req: any, _res, next) => {
-    req.agent = { id: 'staff-1', role: 'employee', tenant_id: 'tenant-1' };
-    next();
-});
+import { csrfMiddleware } from '../middleware/csrf';
+const app = express(); app.use(express.json()); app.use(csrfMiddleware);
+app.use((req: any, _res, next) => { req.agent = { id: 'staff-1', role: 'employee', tenant_id: 'tenant-1' }; next(); });
 app.use('/api/inventory', inventoryRouter);
-
-beforeEach(() => {
-    vi.clearAllMocks();
-});
-
-describe('POST /api/inventory/harvest', () => {
-    it('rejects request when seller_phone is missing', async () => {
-        const res = await request(app).post('/api/inventory/harvest').send({
-            source: '99acres',
-            property_title: '3BHK Villa',
-        });
-        expect(res.status).toBe(400);
-        expect(res.body.error).toContain('seller_phone');
+beforeEach(() => { vi.clearAllMocks(); delete process.env.PORTAL_INGESTION_TOKEN; (prisma as any).inventory.update = vi.fn(); (prisma as any).inventory.create = vi.fn(); (prisma as any).portalListing = { findFirst: vi.fn(), findMany: vi.fn().mockResolvedValue([]), count: vi.fn().mockResolvedValue(0) }; });
+describe('staff and service harvest', () => {
+    it('passes staff identity and returns idempotent success', async () => {
+        vi.mocked(ingestPortalListing).mockResolvedValue({ success: true, duplicate: true, candidate_id: 'c', status: 'CANDIDATE' } as any);
+        const res = await request(app).post('/api/inventory/harvest').set('Authorization', 'Bearer test-staff').send({ source: '99acres', source_ref: 'x' });
+        expect(res.status).toBe(200); expect(ingestPortalListing).toHaveBeenCalledWith(expect.any(Object), expect.objectContaining({ tenant_id: 'tenant-1', id: 'staff-1' }));
+    });
+    it('returns validation failure without leaking unexpected errors', async () => {
+        vi.mocked(ingestPortalListing).mockRejectedValue(new HarvestError(400, 'source_ref is required'));
+        expect((await request(app).post('/api/inventory/harvest').set('Authorization', 'Bearer test-staff').send({})).status).toBe(400);
+        vi.mocked(ingestPortalListing).mockRejectedValue(new Error('database secret'));
+        const res = await request(app).post('/api/inventory/harvest').set('Authorization', 'Bearer test-staff').send({});
+        expect(res.status).toBe(500); expect(JSON.stringify(res.body)).not.toContain('secret');
+    });
+    it('fails closed when service token is absent or wrong', async () => {
+        expect((await request(app).post('/api/inventory/harvest/service').set('Authorization', 'Bearer x').send({})).status).toBe(503);
+        process.env.PORTAL_INGESTION_TOKEN = 'x'.repeat(40); process.env.PORTAL_INGESTION_TENANT_ID = 'bound-tenant'; process.env.PORTAL_INGESTION_AGENT_ID = 'bound-staff';
+        expect((await request(app).post('/api/inventory/harvest/service').set('Authorization', 'Bearer bad').send({})).status).toBe(401);
+        expect(ingestPortalListing).not.toHaveBeenCalled();
+    });
+    it('binds service tenant/staff and rejects unlisted sources despite payload identity', async () => {
+        process.env.PORTAL_INGESTION_TOKEN = 'x'.repeat(40); process.env.PORTAL_INGESTION_TENANT_ID = 'bound-tenant'; process.env.PORTAL_INGESTION_AGENT_ID = 'bound-staff'; process.env.PORTAL_INGESTION_SOURCES = '99acres';
+        vi.mocked(prisma.agent.findFirst).mockResolvedValue({ id: 'bound-staff', tenant_id: 'bound-tenant', role: 'employee', status: 'active' } as any);
+        vi.mocked(ingestPortalListing).mockResolvedValue({ success: true, duplicate: false, candidate_id: 'c', status: 'CANDIDATE' } as any);
+        const token = 'Bearer ' + 'x'.repeat(40);
+        expect((await request(app).post('/api/inventory/harvest/service').set('Authorization', token).send({ source: 'housing' })).status).toBe(403);
+        const res = await request(app).post('/api/inventory/harvest/service').set('Authorization', token).send({ source: '99acres', tenant_id: 'attacker', staff_id: 'attacker' });
+        expect(res.status).toBe(201); expect(ingestPortalListing).toHaveBeenCalledWith(expect.any(Object), expect.objectContaining({ tenant_id: 'bound-tenant', id: 'bound-staff' }));
+    });
+    it('lists only tenant/team candidates with bounded pagination', async () => {
+        const res = await request(app).get('/api/inventory/harvest/candidates?limit=999&page=2');
+        expect(res.status).toBe(200);
+        expect((prisma as any).portalListing.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { tenant_id: 'tenant-1', OR: [{ payload: { path: ['_ingested_by'], equals: 'staff-1' } }] }, take: 100, skip: 100 }));
+    });
+    it('does not approve pending harvested stock without scoped human-call evidence', async () => {
+        vi.mocked(prisma.inventory.findUnique).mockResolvedValue({ id: 'inventory', status: 'pending_approval', upload_source: 'portal_crawl' } as any);
+        vi.mocked(prisma.inventory.findFirst).mockResolvedValue({ id: 'inventory', tenant_id: 'tenant-1', assigned_agent_id: 'staff-1' } as any);
+        (prisma as any).portalListing.findFirst.mockResolvedValue({ id: 'candidate', owner_call_verified_at: null });
+        const res = await request(app).post('/api/inventory/inventory/approve').set('Authorization', 'Bearer test').send({});
+        expect(res.status).toBe(409); expect(prisma.inventory.update).not.toHaveBeenCalled();
+    });
+    it('cannot record a human owner call across team visibility', async () => {
+        (prisma as any).portalListing.findFirst.mockResolvedValue({ id: 'candidate', inventory_id: 'inventory' });
+        vi.mocked(prisma.inventory.findFirst).mockResolvedValue({ id: 'inventory', tenant_id: 'tenant-1', assigned_agent_id: 'other-staff' } as any);
+        const res = await request(app).post('/api/inventory/harvest/candidate/owner-call').set('Authorization', 'Bearer test').send({ owner_called: true, notes: 'Called owner and verified availability.' });
+        expect(res.status).toBe(404);
+    });
+    it('cannot clone harvested stock into active inventory', async () => {
+        vi.mocked(prisma.inventory.findFirst).mockResolvedValue({ id: 'inventory', tenant_id: 'tenant-1', upload_source: 'portal_crawl' } as any);
+        const res = await request(app).post('/api/inventory/inventory/clone').set('Authorization', 'Bearer test').send({});
+        expect(res.status).toBe(409); expect(prisma.inventory.create).not.toHaveBeenCalled();
     });
 
-    it('rejects duplicate external listing source_ref', async () => {
-        vi.mocked(prisma.inventory.findFirst).mockResolvedValue({
-            id: 'inv-existing',
-            display_id: 'RP-BLR-RES-20001',
-            status: 'pending_approval',
-        } as any);
-
-        const res = await request(app).post('/api/inventory/harvest').send({
-            source: '99acres',
-            source_ref: '99acres-listing-12345',
-            seller_phone: '9876543210',
-            seller_name: 'Property Owner',
-        });
-        expect(res.status).toBe(409);
-        expect(res.body.error).toContain('already harvested');
-    });
-
-    it('creates contact, inventory, and verification task on valid harvested listing', async () => {
-        vi.mocked(prisma.inventory.findFirst).mockResolvedValue(null);
-        vi.mocked(prisma.contact.findFirst).mockResolvedValue(null);
-        vi.mocked(prisma.contact.create).mockResolvedValue({
-            id: 'c-owner-1',
-            phone_number: '+919876543210',
-            name: 'Sunil Verma',
-        } as any);
-        vi.mocked(prisma.inventory.create).mockResolvedValue({
-            id: 'inv-harvested-1',
-            display_id: 'RP-BLR-RES-20002',
-            status: 'pending_approval',
-            upload_source: 'portal_crawl',
-        } as any);
-        (prisma as any).task = { create: vi.fn().mockResolvedValue({ id: 'task-1' }) };
-
-        const res = await request(app).post('/api/inventory/harvest').send({
-            source: 'magicbricks',
-            source_ref: 'mb-987654',
-            seller_name: 'Sunil Verma',
-            seller_phone: '9876543210',
-            property_title: '3BHK Luxury Apartment',
-            property_type: 'flat',
-            intent: 'sell',
-            price: 12500000,
-            locality: 'Whitefield',
-            city: 'Bengaluru',
-            description: 'North facing 3BHK flat near ITPL',
-        });
-
-        expect(res.status).toBe(201);
-        expect(res.body.success).toBe(true);
-        expect(res.body.inventory_id).toBe('inv-harvested-1');
-        expect(res.body.display_id).toBe('RP-BLR-RES-20002');
-        expect(res.body.contact_id).toBe('c-owner-1');
-        expect(prisma.contact.create).toHaveBeenCalledWith(expect.objectContaining({
-            data: expect.objectContaining({
-                phone_number: '+919876543210',
-                contact_type: 'LANDLORD',
-                source: 'magicbricks',
-            }),
-        }));
-        expect(prisma.inventory.create).toHaveBeenCalledWith(expect.objectContaining({
-            data: expect.objectContaining({
-                upload_source: 'portal_crawl',
-                status: 'pending_approval',
-                source_ref: 'mb-987654',
-            }),
-        }));
-    });
 });
