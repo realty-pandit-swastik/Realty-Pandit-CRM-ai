@@ -1481,6 +1481,7 @@ export default function DealPipeline({ initialDealId, onInitialDealConsumed }: D
                     dealId={logActionDeal.id}
                     stage={logActionDeal.status}
                     actionType={logActionType}
+                    deal={logActionDeal}
                     onClose={() => setLogActionDeal(null)}
                     onSuccess={() => { setLogActionDeal(null); fetchData(); }}
                 />

@@ -1242,6 +1242,8 @@ export interface Deal {
     valid_next_statuses?: string[];
     ai_status?: string;
     ai_paused?: boolean;
+    // Latest non-terminal appointment, included on list results (QUALIFIED-1)
+    appointments?: { id?: string; status: string; scheduled_at: string }[];
     created_at: string;
     updated_at: string;
 }
