@@ -1835,6 +1835,29 @@ const VALID_LOG_CALL_OUTCOMES = [
     'CLOSED_UNREACHABLE', // deal-workflow (2026-06-29): close after repeated no-answers, stamping the count
 ] as const;
 
+// Why a logged call reached nobody. Staff pick one on every no-answer form; it is stored
+// on team_actions.outcome so the pipeline tile's last-action line reads e.g.
+// "📞 Called (busy / waiting)". Mirrors frontend lib/callOutcomes.ts.
+// Allow-listed (not free text) so the tile label map stays trustworthy.
+const VALID_NO_ANSWER_REASONS = [
+    'SWITCHED_OFF',
+    'NOT_REACHABLE',
+    'BUSY',
+    'DISCONNECTED',
+    'WRONG_NUMBER',
+] as const;
+
+/** Reject an unrecognised reason up front — it must never reach team_actions/tile labels. */
+function readNoAnswerReason(payload: any): { reason: string | null; error?: string } {
+    const raw = payload?.no_answer_reason;
+    if (raw === undefined || raw === null || raw === '') return { reason: null };
+    const code = String(raw).toUpperCase();
+    if (!VALID_NO_ANSWER_REASONS.includes(code as any)) {
+        return { reason: null, error: `Unknown no-answer reason: ${raw}` };
+    }
+    return { reason: code };
+}
+
 router.post('/:id/log-call', checkPermission('act_on_deals'), async (req: any, res) => {
     try {
         if (!(await partnerOwnsDealOr403(req, res, req.params.id))) return;
@@ -1860,6 +1883,10 @@ router.post('/:id/log-call', checkPermission('act_on_deals'), async (req: any, r
         const phone = deal.demand_contact.phone_number;
         const performedBy = req.agent?.id || 'system:human';
         const performerName = req.agent?.name || 'team';
+
+        // Why the call reached nobody (NO_ANSWER / CLOSED_UNREACHABLE only). Captured here so the
+        // team-action write below — the row the pipeline tile reads as "last action" — can carry it.
+        let noAnswerReason: string | null = null;
 
         switch (outcome) {
             case 'ANSWERED_INTERESTED': {
@@ -1933,6 +1960,11 @@ router.post('/:id/log-call', checkPermission('act_on_deals'), async (req: any, r
             }
 
             case 'NO_ANSWER': {
+                // Why nobody picked up (staff-picked from the 5 codes). Recorded on the
+                // team action below so the pipeline tile shows it as the last action.
+                const parsed = readNoAnswerReason(payload);
+                if (parsed.error) return res.status(400).json({ success: false, error: parsed.error });
+                noAnswerReason = parsed.reason;
                 // Stays NEW; AI cadence continues from existing schedulers (runs alongside, per the
                 // workflow design). Deal-workflow (2026-06-29): if the member set a "call again" time,
                 // book a Google-synced reminder so the deal resurfaces for them at that time.
@@ -2026,6 +2058,9 @@ router.post('/:id/log-call', checkPermission('act_on_deals'), async (req: any, r
             case 'CLOSED_UNREACHABLE': {
                 // Deal-workflow (2026-06-29): closing after repeated no-answers. Stamp how many
                 // no-answer calls were logged on THIS deal into the close note (count is derived).
+                const parsed = readNoAnswerReason(payload);
+                if (parsed.error) return res.status(400).json({ success: false, error: parsed.error });
+                noAnswerReason = parsed.reason;
                 const naCount = await prisma.interaction.count({
                     where: {
                         phone_number: phone,
@@ -2044,6 +2079,10 @@ router.post('/:id/log-call', checkPermission('act_on_deals'), async (req: any, r
         }
 
         // Always log the human call outcome as an interaction
+        // NOTE: metadata.outcome stays the raw `outcome` (NO_ANSWER / CLOSED_UNREACHABLE), NOT the
+        // reason — the derived no_answer_count, the "N× no answer" tile badge and the N=4
+        // reassign/close gate all query metadata.path['outcome'] == 'NO_ANSWER'. The reason rides
+        // along separately via ...payload and on the team action below.
         await prisma.interaction.create({
             data: {
                 tenant_id: deal.demand_contact.tenant_id || deal.tenant_id,
@@ -2059,6 +2098,12 @@ router.post('/:id/log-call', checkPermission('act_on_deals'), async (req: any, r
         // Log the call as a TeamAction too, so the pipeline tile's "last action" line shows it
         // (CALL_LOGGED → "📞 Called (<outcome>)"). Only when a real agent performed it — the
         // agent_id is an FK and drives the tile's "who" + timestamp. (2026-07-09)
+        //
+        // For a no-answer the staff-picked reason REPLACES the generic outcome here, so the tile
+        // reads "📞 Called (busy / waiting)" instead of "📞 Called (no answer)". Safe: this
+        // column is display-only (one consumer, DealPipeline.lastActionText); every derived
+        // no-answer count reads interactions, not team_actions. Without a reason (older clients,
+        // or the no-reason path) it keeps the raw outcome.
         if (req.agent?.id) {
             await prisma.teamAction.create({
                 data: {
@@ -2067,7 +2112,7 @@ router.post('/:id/log-call', checkPermission('act_on_deals'), async (req: any, r
                     agent_id: req.agent.id,
                     stage: deal.status,            // the stage the call was logged in (NEW)
                     action_type: 'CALL_LOGGED',
-                    outcome,
+                    outcome: noAnswerReason || outcome,
                     notes: payload.notes ?? null,
                 },
             }).catch((e: any) => logger.warn('[log-call] teamAction write failed:', e?.message));
