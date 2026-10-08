@@ -1,5 +1,5 @@
-import { toDialablePhone } from '../../lib/phone';
-import { stageInfo, bhkLabel } from '../../lib/leadDisplay';
+import { toDialablePhone, isPlaceholderPhone } from '../../lib/phone';
+import { stageInfo, bhkLabel, dealerFallback, effectiveClientRole, isTemporaryClientRole, clientRoleLabel, clientRoleColor } from '../../lib/leadDisplay';
 
 interface Lead {
     phone_number: string;
@@ -25,9 +25,11 @@ interface Lead {
     property_type?: string | null;
     demand_taxonomy_node_id?: string | null;
     demand_schema_values?: Record<string, any> | null;
-    demand_transactions?: Array<{ id: string }> | null;
+    demand_transactions?: Array<{ id: string; client_role_override?: string | null }> | null;
+    // Primary client role (CLIENT | AGENT | BUILDER | FINANCER | CHOKIDAR…).
+    client_role?: string | null;
     /** The enquiry (deal) this card represents — set when a contact has several leads. */
-    _deal?: { id?: string; source_ref: string | null } | null;
+    _deal?: { id?: string; source_ref: string | null; client_role_override?: string | null } | null;
 }
 
 interface LeadCardProps {
@@ -62,13 +64,17 @@ export default function LeadCard({
     sourceColors, sourceLabels, scoreColor, formatBudget,
     subtypeLabel, matchCount, onOpenPipeline, onOpenMatches,
 }: LeadCardProps) {
-    const clientTel = toDialablePhone(lead.phone_number);          // canonical +91… for tel:, or null (placeholder/junk)
-    const partnerTel = toDialablePhone(lead.referral_partner_phone);
+    // Shown identity: the client's own name/number, else the dealer's (placeholder phone =
+    // "we don't know the client yet"). The buttons target whichever identity is shown.
+    const identity = dealerFallback(lead, isPlaceholderPhone, toDialablePhone);
+    const clientTel = identity.phone;                              // canonical +91… or null
+    const partnerTel = identity.isDealer ? null : toDialablePhone(lead.referral_partner_phone);
     const dialable = !!clientTel;
     const waHref = clientTel ? `https://wa.me/${clientTel.slice(1)}` : null;
     const score = lead.lead_score?.total_score;
     const date = new Date(lead.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
     const bhk = bhkLabel(lead);
+    const role = effectiveClientRole(lead);
     const si = stageInfo((lead as any).lifecycle_stage);
     // Subtype fallback: explicit label from the parent, else the legacy property_type slug.
     const subtype = subtypeLabel || (lead.property_type ? lead.property_type.replace(/_/g, ' ') : null);
@@ -87,14 +93,26 @@ export default function LeadCard({
                 transition: 'border-color 0.15s',
             }}
         >
-            {/* Row 1: Name + BHK + Subtype badges */}
+            {/* Row 1: Name + BHK + Subtype + Client-type badges */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px', flexWrap: 'wrap' }}>
                 <span style={{ fontWeight: 600, fontSize: '14px', color: 'var(--text-primary, #f1f5f9)' }}>
-                    {lead.name || 'Unknown'}
+                    {identity.name || 'Unknown'}
                 </span>
+                {identity.isDealer && (
+                    <span title="Client unknown — showing the dealer who brought this lead"
+                        style={{ backgroundColor: 'rgba(245,158,11,0.15)', color: '#d97706', padding: '1px 6px', borderRadius: '8px', fontSize: '9px', fontWeight: 700 }}>
+                        Dealer
+                    </span>
+                )}
                 {lead.lead_type === 'PARTNER_REFERRAL' && (
                     <span style={{ backgroundColor: '#ede9fe', color: '#7c3aed', padding: '1px 6px', borderRadius: '8px', fontSize: '9px', fontWeight: 700 }}>
                         {lead.referral_partner_name || 'Partner'}
+                    </span>
+                )}
+                {role && (
+                    <span title={isTemporaryClientRole(lead) ? 'Temporary role for this enquiry' : 'Primary role'}
+                        style={{ backgroundColor: `${clientRoleColor(role)}22`, color: clientRoleColor(role), padding: '1px 6px', borderRadius: '8px', fontSize: '9px', fontWeight: 600, textTransform: 'capitalize' }}>
+                        {clientRoleLabel(role)}
                     </span>
                 )}
                 {!!currentAgentId && lead.shared_with_ids?.includes(currentAgentId) && (
@@ -119,7 +137,7 @@ export default function LeadCard({
             {/* Row 2: Phone + Date */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
                 <span style={{ fontSize: '12px', color: 'var(--text-muted, #94a3b8)' }}>
-                    {dialable ? lead.phone_number : 'No phone'}
+                    {dialable ? (identity.phone as string) : 'No phone'}
                 </span>
                 <span style={{ fontSize: '11px', color: 'var(--text-muted, #94a3b8)' }}>{date}</span>
             </div>
@@ -252,7 +270,7 @@ export default function LeadCard({
                 <a
                     href={waHref}
                     target="_blank"
-                    rel="noreferrer"
+                    rel="noopener noreferrer"
                     onClick={(e) => e.stopPropagation()}
                     title="Chat on WhatsApp"
                     aria-label="Chat on WhatsApp"

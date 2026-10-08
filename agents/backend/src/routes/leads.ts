@@ -35,6 +35,8 @@ import { getTeamIds } from '../utils/team_scope';
 const LEAD_DEAL_SUMMARY = {
     id: true, source: true, source_ref: true, status: true, type: true, created_at: true,
     coordinator_agent_id: true, executive_agent_id: true,
+    // Temporary per-enquiry client role (overrides Contact.client_role on that row).
+    client_role_override: true,
     coordinator: { select: { id: true, name: true } },
 } as const;
 
@@ -356,6 +358,7 @@ router.get('/recent-external', async (req: any, res) => {
             budget:      d => ({ budget_max: { sort: d, nulls: 'last' } }),
             score:       d => ({ lead_score: { total_score: d } }),
             intent:      d => ({ intent: { sort: d, nulls: 'last' } }),
+            client_type: d => ({ client_role: { sort: d, nulls: 'last' } }),
             location:    d => ({ preferred_location: { sort: d, nulls: 'last' } }),
             stage:       d => ({ lifecycle_stage: d }), // 2026-07-29 pipeline stage (non-nullable → plain sort)
             date:        d => ({ created_at: d }),
@@ -446,6 +449,9 @@ router.get('/recent-external', async (req: any, res) => {
                         lead_type: true,
                         referral_partner_name: true,
                         referral_partner_phone: true,
+                        // Primary client role (CLIENT | AGENT | BUILDER | FINANCER | CHOKIDAR…)
+                        // for the CLIENT TYPE column + mobile tile. No PII; visibility unchanged.
+                        client_role: true,
                         // 2026-05-13: include assigned agent name so frontend can show
                         // "Assigned to: <name>" on tile + column without an extra lookup
                         assigned_agent: { select: { id: true, name: true, role: true } },

@@ -3,9 +3,9 @@ import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import PhoneInput from './PhoneInput';
 import CallerDossier from './CallerDossier';
 import client, { getPartnerAssignable, assignLeadToTeammate, shareLead, rosterForPickers, updateContactProfile, getDealMatchCounts } from '../api/client';
-import { isPlaceholderPhone, isDialablePhone, isValidPhoneInput, toDialablePhone, normalizePhoneInput } from '../lib/phone';
+import { isPlaceholderPhone, isValidPhoneInput, toDialablePhone, normalizePhoneInput } from '../lib/phone';
 import { drillTo } from '../lib/drill';
-import { bhkLabel as bhkLabelFor, stageInfo } from '../lib/leadDisplay';
+import { bhkLabel as bhkLabelFor, stageInfo, dealerFallback, clientRoleLabel, clientRoleColor } from '../lib/leadDisplay';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import LeadCard from './leads/LeadCard';
@@ -69,12 +69,16 @@ interface Lead {
     referral_partner_id: string | null;
     referral_partner_name: string | null;
     referral_partner_phone: string | null;
+    // Primary client role (CLIENT | AGENT | BUILDER | FINANCER | CHOKIDAR…) — standing identity.
+    client_role?: string | null;
     // One contact → many leads: the enquiries (deals) on this contact that the viewer may see.
     demand_transactions?: LeadDeal[];
 }
 
 interface LeadDeal {
     id: string; source: string; source_ref: string | null; status: string; created_at: string;
+    // Temporary per-enquiry client role — overrides Contact.client_role on that row.
+    client_role_override?: string | null;
     coordinator: { id: string; name: string | null } | null;
 }
 
@@ -1818,7 +1822,7 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
                                             </label>
                                         </th>
                                     )}
-                                    {([['Name', 'name'], ['Phone', 'phone'], ['Source', 'source'], ['Status', 'status'], ['Stage', 'stage'], ['Assigned to', 'assigned_to'], ['Budget', 'budget'], ['Score', 'score'], ['Intent', 'intent'], ['Location', 'location'], ['Date', 'date'], ['', '']] as Array<[string, string]>).map(([h, key]) => {
+                                    {([['Name', 'name'], ['Phone', 'phone'], ['Client Type', 'client_type'], ['Source', 'source'], ['Status', 'status'], ['Stage', 'stage'], ['Assigned to', 'assigned_to'], ['Budget', 'budget'], ['Score', 'score'], ['Intent', 'intent'], ['Location', 'location'], ['Date', 'date'], ['', '']] as Array<[string, string]>).map(([h, key]) => {
                                         const active = !!key && leadSortKey === key;
                                         return (
                                             <th
@@ -1846,7 +1850,15 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
                                 {filteredLeads.map(lead => {
                                     const score = lead.lead_score?.total_score ?? null;
                                     const isSelected = selectedPhone === lead.phone_number;
-                                    const rowDialable = toDialablePhone(lead.phone_number);
+                                    // Shown identity: the client's own name/number, else the dealer's (placeholder
+                                    // phone = "we don't know the client yet" — partner referrals). isDealer marks
+                                    // the fallback so the row reads "Dealer", never a misattributed client.
+                                    const identity = dealerFallback(lead, isPlaceholderPhone, toDialablePhone);
+                                    const rowDialable = identity.phone;
+                                    // Contact-level row: primary role ONLY. demand_transactions[0] belongs to
+                                    // one specific enquiry and must not label the whole contact (the mobile
+                                    // card is per-deal and correctly uses the override there).
+                                    const rowRole = (lead as Lead).client_role || null;
                                     return (
                                         <tr key={lead.phone_number} onClick={() => { if (leadSelectMode) toggleLeadSelect(lead.phone_number); else openDetail(lead.phone_number); }}
                                             style={{ borderBottom: '1px solid var(--bg-primary)', cursor: 'pointer', backgroundColor: selectedLeadPhones.has(lead.phone_number) ? 'rgba(139,92,246,0.12)' : isSelected ? 'rgba(59,130,246,0.08)' : undefined }}>
@@ -1859,7 +1871,13 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
                                             )}
                                             <td style={compactCell}>
                                                 <div>
-                                                    <span style={{ fontWeight: 500 }}>{lead.name || <span style={{ color: 'var(--text-muted)' }}>—</span>}</span>
+                                                    <span style={{ fontWeight: 500 }}>{identity.name || <span style={{ color: 'var(--text-muted)' }}>—</span>}</span>
+                                                    {identity.isDealer && (
+                                                        <span title="Client unknown — showing the dealer who brought this lead"
+                                                            style={{ backgroundColor: 'rgba(245,158,11,0.15)', color: '#d97706', padding: '1px 5px', borderRadius: '8px', fontSize: '9px', fontWeight: 700, marginLeft: '4px', whiteSpace: 'nowrap' }}>
+                                                            Dealer
+                                                        </span>
+                                                    )}
                                                     {lead.lead_type === 'PARTNER_REFERRAL' && (
                                                         <span style={{ backgroundColor: '#ede9fe', color: '#7c3aed', padding: '1px 5px', borderRadius: '8px', fontSize: '9px', fontWeight: 700, marginLeft: '4px', whiteSpace: 'nowrap' }}>
                                                             {lead.referral_partner_name || 'Partner'}
@@ -1879,9 +1897,16 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
                                                     ) : null}
                                                 </div>
                                             </td>
-                                            <td style={{ ...compactCell, color: 'var(--text-secondary)', fontSize: '11px' }}>{isDialablePhone(lead.phone_number) ? lead.phone_number : <span style={{ color: '#d97706', fontSize: '10px' }}>No phone</span>}</td>
+                                            <td style={{ ...compactCell, color: 'var(--text-secondary)', fontSize: '11px' }}>{rowDialable || <span style={{ color: '#d97706', fontSize: '10px' }}>No phone</span>}</td>
                                             <td style={compactCell}>
-                                                <span style={{ backgroundColor: (sourceColors[lead.source] || '#6b7280') + '20', color: sourceColors[lead.source] || '#6b7280', padding: '1px 6px', borderRadius: '8px', fontSize: '10px', fontWeight: 600 }}>
+                                                {rowRole ? (
+                                                    <span title="Primary role" style={{ backgroundColor: (clientRoleColor(rowRole)) + '20', color: clientRoleColor(rowRole), padding: '1px 6px', borderRadius: '8px', fontSize: '10px', fontWeight: 600, whiteSpace: 'nowrap', textTransform: 'capitalize' }}>
+                                                        {clientRoleLabel(rowRole)}
+                                                    </span>
+                                                ) : <span style={{ color: 'var(--text-muted)' }}>—</span>}
+                                            </td>
+                                            <td style={compactCell}>
+                                                <span style={{ backgroundColor: (sourceColors[lead.source] || '#6b7280') + '20', color: sourceColors[lead.source] || '#6b7280', padding: '1px 6px', borderRadius: '10px', fontSize: '10px', fontWeight: 600 }}>
                                                     {sourceLabels[lead.source] || lead.source}
                                                 </span>
                                             </td>
@@ -1923,11 +1948,11 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
                                                             title={`Call client ${rowDialable}`} aria-label={`Call client ${rowDialable}`}>📞</a>
                                                     )}
                                                     {rowDialable && (
-                                                        <a href={`https://wa.me/${rowDialable.slice(1)}`} target="_blank" rel="noreferrer"
+                                                        <a href={`https://wa.me/${rowDialable.slice(1)}`} target="_blank" rel="noopener noreferrer"
                                                             style={{ color: '#25d366', fontSize: '15px', textDecoration: 'none', lineHeight: 1 }}
                                                             title="Chat on WhatsApp" aria-label="Chat on WhatsApp">💬</a>
                                                     )}
-                                                    {toDialablePhone(lead.referral_partner_phone) && (
+                                                    {!identity.isDealer && toDialablePhone(lead.referral_partner_phone) && (
                                                         <a href={`tel:${toDialablePhone(lead.referral_partner_phone)}`}
                                                             style={{ color: '#7c3aed', fontSize: '13px', textDecoration: 'none', lineHeight: 1, whiteSpace: 'nowrap' }}
                                                             title={`Call partner ${lead.referral_partner_name || ''} ${toDialablePhone(lead.referral_partner_phone)}`}>🤝📞</a>
@@ -1944,7 +1969,7 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
                                     );
                                 })}
                                 {filteredLeads.length === 0 && (
-                                    <tr><td colSpan={11} style={{ ...compactCell, textAlign: 'center', color: 'var(--text-muted)', padding: '20px 10px' }}>
+                                    <tr><td colSpan={12} style={{ ...compactCell, textAlign: 'center', color: 'var(--text-muted)', padding: '20px 10px' }}>
                                         {error ? 'Failed to load leads' : 'No leads found'}
                                     </td></tr>
                                 )}

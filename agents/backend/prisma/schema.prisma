@@ -128,6 +128,14 @@ model Contact {
   referral_partner_name  String? // Free text name (if unregistered partner)
   referral_partner_phone String? // Phone for retroactive linking when partner registers
 
+  // Client role (primary, standing identity) — who this person IS, independent of the
+  // request/response lifecycle. Values are enum-like strings validated at the API layer:
+  // CLIENT | AGENT | BUILDER | FINANCER | CHOKIDAR (extensible — see lib/leadDisplay.ts).
+  // Deliberately separate from contact_type, which is load-bearing for lead queues,
+  // visibility scopes and filters (BUYER/TENANT/...). A per-enquiry override lives on
+  // Transaction.client_role_override and wins for that row only.
+  client_role String?
+
   last_channel     String? // whatsapp, voice
   last_interaction DateTime?
   next_action_at   DateTime?
@@ -1825,6 +1833,10 @@ model Transaction {
   partner_assignee_id  String? // PartnerAgent.id of the assigned sub-agent
   coordinator_agent_id String? // Always an internal Agent - the middleman
   deal_scenario        String? // PARTNER_INTERNAL, PARTNER_PARTNER, DIRECT_INTERNAL
+  // Client role override (temporary) — the contact's role FOR THIS ENQUIRY ONLY
+  // (e.g. a chokidar on this particular lead). Same vocabulary as Contact.client_role;
+  // wins over it wherever the row is rendered. See schema comment on Contact.client_role.
+  client_role_override String?
 
   // Deal Details
   type     TransactionType // SALE or RENT

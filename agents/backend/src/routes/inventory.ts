@@ -16,6 +16,7 @@ import logger from '../utils/logger';
 import { absurdPriceError } from '../utils/price_sanity';
 import { ensureH264Playable } from '../utils/video_transcode';
 import { normalizePhone, phoneVariants, isPlaceholderPhone } from '../utils/phone';
+import { type ClientRole } from '../utils/client_role';
 import { findInventoryIdsByAddress } from '../utils/inventory_search';
 import { generateDisplayId } from '../utils/inventory_id';
 import { getTeamIds } from '../utils/team_scope';
@@ -2127,6 +2128,10 @@ router.post('/share/add-lead', authMiddleware, async (req: any, res) => {
                 data: {
                     phone_number: pendingKey, tenant_id: agent.tenant_id, name: null, source: 'inventory_share',
                     contact_type: 'BUYER', intent: d.intent, lead_type: 'PARTNER_REFERRAL',
+                    // The on-behalf buyer IS a client. Typed as ClientRole (not a magic string) so
+                    // removing/renaming a code breaks the build here, not silently in prod. Creates
+                    // only — never overwrite an existing primary role on update paths.
+                    client_role: 'CLIENT' as ClientRole,
                     // Denormalize the partner phone/name so the deal UI (Match & Share fallback, Call-partner)
                     // has them without a join — was missing here, causing "can't share" on partner deals. (2026-06-28)
                     referral_partner_id: pa.partnerId, referral_partner_phone: pa.partnerPhone, referral_partner_name: name || 'Partner Agent',
@@ -2159,6 +2164,9 @@ router.post('/share/add-lead', authMiddleware, async (req: any, res) => {
             create: {
                 phone_number: normalized, tenant_id: agent.tenant_id, name: name || null, source: 'inventory_share',
                 contact_type: 'BUYER', intent: d.intent, preferred_location: d.preferred_location,
+                // Create-only: a shared-to buyer is a CLIENT. The update branch above must not
+                // overwrite an existing primary role.
+                client_role: 'CLIENT' as ClientRole,
                 preferred_lat: d.preferred_lat, preferred_lng: d.preferred_lng, budget_min: d.budget_min, budget_max: d.budget_max,
                 category_id: d.category_id, sub_category_id: d.sub_category_id, type_id: d.type_id,
                 demand_taxonomy_node_id: d.demand_taxonomy_node_id, demand_schema_values: demandSchema, created_by: agent.id,

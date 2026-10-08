@@ -707,8 +707,11 @@ router.post('/match-counts', checkPermission('act_on_deals'), async (req: any, r
                 demand_contact: { select: { sub_category_id: true, demand_taxonomy_node_id: true } },
             },
         });
+        // Tenant-scoped like every other inventory read: without this, another tenant's
+        // ACTIVE listings leak into every badge count (and the per-request full-table pull
+        // grows with THEIR inventory too).
         const inv = await prisma.inventory.findMany({
-            where: { status: 'active' },
+            where: { status: 'active', tenant_id: agent.tenant_id },
             select: { intent: true, sub_category_id: true, taxonomy_node_id: true, price: true, specs: true },
         });
         const { resolveTypeFilter } = await import('../utils/demand_taxonomy');
