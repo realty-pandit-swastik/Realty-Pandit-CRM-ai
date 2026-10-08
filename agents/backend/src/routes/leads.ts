@@ -445,6 +445,8 @@ router.get('/recent-external', async (req: any, res) => {
                         budget_max: true,
                         // demand_bhk dropped Phase 5 — derive from demand_schema_values.bhk
                         demand_schema_values: true,
+                        // Subtype label for the lead tile (taxonomy node name resolved client-side).
+                        demand_taxonomy_node_id: true,
                         category_id: true,
                         sub_category_id: true,
                         type_id: true,

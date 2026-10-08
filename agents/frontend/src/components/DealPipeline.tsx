@@ -80,11 +80,16 @@ const renderSourceBadge = (source?: string) => {
 
 interface DealPipelineProps {
     /** Deep link target (from ?deal=<id> in the URL, e.g. a Google Calendar/Task
-     *  reminder link). When set, the matching deal detail opens automatically on mount. */
+     *  reminder link, or a lead-tile drill). When set, the matching deal detail
+     *  opens automatically. One-shot: the owner must clear it via
+     *  onInitialDealConsumed, otherwise every later mount re-opens the deal. */
     initialDealId?: string | null;
+    /** Fired once the deep link has been acted on (deal opened or fetch failed),
+     *  so the owner can clear it. */
+    onInitialDealConsumed?: () => void;
 }
 
-export default function DealPipeline({ initialDealId }: DealPipelineProps) {
+export default function DealPipeline({ initialDealId, onInitialDealConsumed }: DealPipelineProps) {
     const isMobile = useIsMobile();
     const { showToast } = useToast();
     const { isPartner, isPartnerOwner } = useAuth();
@@ -219,10 +224,15 @@ export default function DealPipeline({ initialDealId }: DealPipelineProps) {
     useEffect(() => { setPageCount(1); }, [filterStatus, filterScenario, filterMinPriority, filterSource, filterIntent, filterCoordinatorId, filterTaxonomy, searchQuery, showClosedDeals, sortMode]);
 
     // Deep link (?deal=<id>): open that deal's detail straight away. Used by the
-    // Google Calendar/Task "call the new lead" reminder links so the member lands
-    // on the exact deal without searching. Runs once per distinct initialDealId.
+    // Google Calendar/Task "call the new lead" reminder links (and lead-tile drills)
+    // so the member lands on the exact deal without searching. One-shot per distinct
+    // initialDealId — onInitialDealConsumed clears it in the owner so a later manual
+    // visit to Deals (remount) does NOT re-open the stale deal.
+    const consumedRef = useRef<string | null>(null);
     useEffect(() => {
-        if (!initialDealId) return;
+        if (!initialDealId || consumedRef.current === initialDealId) return;
+        consumedRef.current = initialDealId;
+        onInitialDealConsumed?.();
         let cancelled = false;
         getDeal(initialDealId)
             // GET /api/deals/:id returns { success, data: deal } — unwrap, else deal.id is undefined
@@ -230,6 +240,7 @@ export default function DealPipeline({ initialDealId }: DealPipelineProps) {
             .then((res: any) => { const d = res?.data ?? res; if (!cancelled && d?.id) setSelectedDeal(d); })
             .catch(() => { /* deleted/forbidden deal — stay on the pipeline list */ });
         return () => { cancelled = true; };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [initialDealId]);
 
     useEffect(() => {

@@ -274,6 +274,10 @@ function App() {
   useEffect(() => onDrill(({ entity, filter }) => {
     if (entity === 'inventory') setDrillFilter(filter ?? null);
     if (entity === 'leads') setLeadsFilter(filter ?? null);
+    // Lead tiles drill to a specific deal: DealPipeline opens it via initialDealId
+    // (one-shot — cleared on consume). A plain drill carries no deal: clear any
+    // stale id so the pipeline opens as a list, not on the previous deal.
+    if (entity === 'deals') setDeepLinkDealId(filter?.deal ?? null);
     setView(entity);
   }), []);
 
@@ -568,13 +572,13 @@ function App() {
         case 'marketing':
           return <MobileScrollWrapper><MarketingCampaign /></MobileScrollWrapper>;
         case 'lead-tasks':
-          return <DealPipeline initialDealId={deepLinkDealId} />;
+          return <DealPipeline initialDealId={deepLinkDealId} onInitialDealConsumed={() => setDeepLinkDealId(null)} />;
         case 'tasks':
           return <MobileScrollWrapper><TaskBoard /></MobileScrollWrapper>;
         case 'analytics':
           return <MobileScrollWrapper><AdvancedAnalytics /></MobileScrollWrapper>;
         case 'deals':
-          return <DealPipeline initialDealId={deepLinkDealId} />;
+          return <DealPipeline initialDealId={deepLinkDealId} onInitialDealConsumed={() => setDeepLinkDealId(null)} />;
         case 'sourcing':
           return <MobileScrollWrapper><SourcingBoard /></MobileScrollWrapper>;
         default:
@@ -692,11 +696,11 @@ function App() {
       case 'marketing':
         return <MarketingCampaign />;
       case 'lead-tasks':
-        return <DealPipeline initialDealId={deepLinkDealId} />;
+        return <DealPipeline initialDealId={deepLinkDealId} onInitialDealConsumed={() => setDeepLinkDealId(null)} />;
       case 'tasks':
         return <TaskBoard />;
       case 'deals':
-        return <DealPipeline initialDealId={deepLinkDealId} />;
+        return <DealPipeline initialDealId={deepLinkDealId} onInitialDealConsumed={() => setDeepLinkDealId(null)} />;
       case 'sourcing':
         return <SourcingBoard />;
       case 'analytics':

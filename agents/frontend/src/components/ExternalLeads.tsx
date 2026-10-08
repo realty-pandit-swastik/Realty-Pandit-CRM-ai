@@ -1,9 +1,11 @@
 
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import PhoneInput from './PhoneInput';
 import CallerDossier from './CallerDossier';
-import client, { getPartnerAssignable, assignLeadToTeammate, shareLead, rosterForPickers, updateContactProfile } from '../api/client';
+import client, { getPartnerAssignable, assignLeadToTeammate, shareLead, rosterForPickers, updateContactProfile, getDealMatchCounts } from '../api/client';
 import { isPlaceholderPhone, isDialablePhone, isValidPhoneInput, toDialablePhone, normalizePhoneInput } from '../lib/phone';
+import { drillTo } from '../lib/drill';
+import { bhkLabel as bhkLabelFor, stageInfo } from '../lib/leadDisplay';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import LeadCard from './leads/LeadCard';
@@ -137,23 +139,8 @@ const sourceLabels: Record<string, string> = {
     'agent_registration': 'Agent Reg.',
 };
 const LEAD_STATUSES = ['cold', 'warm', 'hot', 'closed', 'lost'];
-// Pipeline stage (Contact.lifecycle_stage) — auto-driven by the deal pipeline. Shown read-only. (2026-07-29)
-const STAGE_META: Record<string, { label: string; color: string }> = {
-    NEW: { label: 'New', color: '#3b82f6' },
-    QUALIFIED: { label: 'Qualified', color: '#6366f1' },
-    MATCHED: { label: 'Matched', color: '#8b5cf6' },
-    MATCHING_APPOINTMENT: { label: 'Matching', color: '#8b5cf6' },
-    VISIT_SCHEDULED: { label: 'Visit set', color: '#f59e0b' },
-    VISITED: { label: 'Visited', color: '#14b8a6' },
-    NEGOTIATION: { label: 'Negotiation', color: '#f97316' },
-    CLOSED_WON: { label: 'Won', color: '#22c55e' },
-    CLOSED_LOST: { label: 'Lost', color: '#ef4444' },
-    ON_HOLD: { label: 'On hold', color: '#94a3b8' },
-};
-const stageInfo = (raw?: string | null): { label: string; color: string } => {
-    const key = String(raw || 'NEW').toUpperCase();
-    return STAGE_META[key === 'LEAD' ? 'NEW' : key] || { label: String(raw || 'New'), color: '#6b7280' };
-};
+// Pipeline stage display lives in lib/leadDisplay (shared with LeadCard).
+// Contact.lifecycle_stage is auto-driven by the deal pipeline. Shown read-only. (2026-07-29)
 const LIFECYCLE_STAGES = ['NEW', 'QUALIFIED', 'MATCHING_APPOINTMENT', 'VISIT_SCHEDULED', 'VISITED', 'NEGOTIATION', 'CLOSED_WON', 'CLOSED_LOST', 'ON_HOLD'];
 const SOURCES = ['99acres', 'magicbricks', 'housing', 'website', 'whatsapp', 'voice', 'manual', 'admin_created', 'inventory_workflow', 'website_popup', 'agent_registration'];
 const PRIVILEGED_ROLES = ['super_boss', 'manager'];
@@ -288,6 +275,28 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
 
     // ── Taxonomy tree (new) ──
     const [taxonomyTree, setTaxonomyTree] = useState<any[]>([]);
+    // Tile subtype labels: flatten the nested taxonomy tree (Category → Sub → [Group] → Type)
+    // into an id → name map so each lead tile can show its property subtype
+    // (e.g. "Builder Flat Front") without an extra lookup per row.
+    const taxonomyNameById = useMemo(() => {
+        const map = new Map<string, string>();
+        const walk = (nodes: any[]) => {
+            for (const n of nodes || []) {
+                if (n?.id && n?.name) map.set(String(n.id), String(n.name));
+                if (Array.isArray(n?.children) && n.children.length) walk(n.children);
+            }
+        };
+        walk(taxonomyTree);
+        return map;
+    }, [taxonomyTree]);
+    const subtypeLabelFor = useCallback((lead: Lead): string | null => {
+        const nodeId = (lead as any).demand_taxonomy_node_id;
+        if (nodeId && taxonomyNameById.has(String(nodeId))) return taxonomyNameById.get(String(nodeId))!;
+        return null;
+    }, [taxonomyNameById]);
+    // "N Matches" badge for tiles: lightweight per-deal counts (budget+type+BHK, no geo),
+    // same signal as the Deal Pipeline tiles. Keyed by deal id; missing = not loaded yet.
+    const [tileMatchCounts, setTileMatchCounts] = useState<Record<string, number>>({});
     // ── Team members ──
     const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
     // PARTNER TEAMS: the owner's OWN sub-agents. Kept in its own state on purpose — teamMembers
@@ -1317,6 +1326,48 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
         });
     };
 
+    // Tile "N Matches" counts — fetch once per visible deal set (capped; cheap endpoint).
+    // Stable string key so the fetch runs only when the actual id set changes, not on
+    // every render (leadRows is rebuilt per render and can't be a dep directly).
+    const tileDealKey = Array.from(new Set(
+        leadRows.flatMap(r => [r._deal?.id, ...(r.demand_transactions || []).map(d => d.id)]).filter((x): x is string => !!x),
+    )).slice(0, 200).sort().join(',');
+    useEffect(() => {
+        if (!tileDealKey) return;
+        let cancelled = false;
+        getDealMatchCounts(tileDealKey.split(','))
+            .then(counts => { if (!cancelled) setTileMatchCounts(counts); })
+            .catch((e: any) => {
+                // Partners lack act_on_deals so the call 403s for them: fail silent,
+                // tiles show "Matching". Real failures still surface for diagnosis.
+                if (e?.response?.status !== 403) console.warn('[ExternalLeads] match counts failed:', e?.message || e);
+            });
+        return () => { cancelled = true; };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [tileDealKey]);
+
+    // Row-deal count ONLY: never fall through to sibling deals on the same contact —
+    // each per-deal tile must show its own count, else D2's tile shows D1's matches.
+    const matchCountFor = useCallback((row: LeadRow): number | null => {
+        const id = row._deal?.id;
+        if (!id) return null;
+        return tileMatchCounts[id] ?? null;
+    }, [tileMatchCounts]);
+
+    // Tile → Deal Pipeline: deep-focus the row's deal when known, else open the pipeline plain.
+    // App.tsx turns filter.deal into DealPipeline's initialDealId (one-shot).
+    const handleOpenPipeline = useCallback((row: LeadRow) => {
+        const dealId = row._deal?.id ?? row.demand_transactions?.[0]?.id ?? null;
+        drillTo(dealId ? { entity: 'deals', filter: { deal: dealId } } : { entity: 'deals' });
+    }, []);
+
+    // Tile → Matching: the detail slide-over is contact-level (same for every enquiry
+    // row on that contact — matching runs per contact via POST /api/leads/:phone/match),
+    // so the tile label intentionally shows the row deal's count but opens shared detail.
+    const handleOpenMatches = useCallback((row: LeadRow) => {
+        openDetail(row.phone_number);
+    }, [openDetail]);
+
 
     // editSubCategories cascade removed Phase 2 demand-side unification (2026-05-29) —
     // the taxonomy cascade now lives inside <DemandRequirementsForm>.
@@ -1703,7 +1754,7 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
                         <div style={{ padding: '8px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
                             {filteredLeads.length > 0 ? leadRows.map(lead => (
                                 <LeadCard
-                                    key={lead.phone_number}
+                                    key={`${lead.phone_number}::${lead._deal?.id || 'contact'}`}
                                     lead={lead}
                                     currentAgentId={agent?.id}
                                     isSelected={leadSelectMode ? selectedLeadPhones.has(lead.phone_number) : selectedPhone === lead.phone_number}
@@ -1714,6 +1765,10 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
                                     sourceLabels={sourceLabels}
                                     scoreColor={scoreColor}
                                     formatBudget={formatBudget}
+                                    subtypeLabel={subtypeLabelFor(lead)}
+                                    matchCount={matchCountFor(lead)}
+                                    onOpenPipeline={() => handleOpenPipeline(lead)}
+                                    onOpenMatches={() => handleOpenMatches(lead)}
                                 />
                             )) : (
                                 <div className="empty-state">
@@ -1774,6 +1829,7 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
                                 {filteredLeads.map(lead => {
                                     const score = lead.lead_score?.total_score ?? null;
                                     const isSelected = selectedPhone === lead.phone_number;
+                                    const rowDialable = toDialablePhone(lead.phone_number);
                                     return (
                                         <tr key={lead.phone_number} onClick={() => { if (leadSelectMode) toggleLeadSelect(lead.phone_number); else openDetail(lead.phone_number); }}
                                             style={{ borderBottom: '1px solid var(--bg-primary)', cursor: 'pointer', backgroundColor: selectedLeadPhones.has(lead.phone_number) ? 'rgba(139,92,246,0.12)' : isSelected ? 'rgba(59,130,246,0.08)' : undefined }}>
@@ -1798,7 +1854,12 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
                                                             🤝 Shared
                                                         </span>
                                                     )}
-                                                    {lead.demand_bhk ? <span style={{ color: 'var(--text-muted)', fontSize: '10px', marginLeft: '4px' }}>{lead.demand_bhk}BHK</span> : null}
+                                                    {bhkLabelFor(lead) ? <span style={{ color: 'var(--text-muted)', fontSize: '10px', marginLeft: '4px' }}>{bhkLabelFor(lead)}</span> : null}
+                                                    {subtypeLabelFor(lead) ? (
+                                                        <span title="Property subtype" style={{ backgroundColor: 'rgba(139,92,246,0.15)', color: '#a78bfa', padding: '1px 5px', borderRadius: '8px', fontSize: '9px', fontWeight: 600, marginLeft: '4px', whiteSpace: 'nowrap', textTransform: 'capitalize' }}>
+                                                            {subtypeLabelFor(lead)}
+                                                        </span>
+                                                    ) : null}
                                                 </div>
                                             </td>
                                             <td style={{ ...compactCell, color: 'var(--text-secondary)', fontSize: '11px' }}>{isDialablePhone(lead.phone_number) ? lead.phone_number : <span style={{ color: '#d97706', fontSize: '10px' }}>No phone</span>}</td>
@@ -1839,16 +1900,27 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
                                             <td style={{ ...compactCell, color: 'var(--text-muted)', fontSize: '10px', whiteSpace: 'nowrap' }}>{new Date(lead.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}</td>
                                             <td style={compactCell} onClick={e => e.stopPropagation()}>
                                                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                                    {toDialablePhone(lead.phone_number) && (
-                                                        <a href={`tel:${toDialablePhone(lead.phone_number)}`}
+                                                    {rowDialable && (
+                                                        <a href={`tel:${rowDialable}`}
                                                             style={{ color: '#22c55e', fontSize: '15px', textDecoration: 'none', lineHeight: 1 }}
-                                                            title={`Call client ${toDialablePhone(lead.phone_number)}`}>📞</a>
+                                                            title={`Call client ${rowDialable}`} aria-label={`Call client ${rowDialable}`}>📞</a>
+                                                    )}
+                                                    {rowDialable && (
+                                                        <a href={`https://wa.me/${rowDialable.slice(1)}`} target="_blank" rel="noreferrer"
+                                                            style={{ color: '#25d366', fontSize: '15px', textDecoration: 'none', lineHeight: 1 }}
+                                                            title="Chat on WhatsApp" aria-label="Chat on WhatsApp">💬</a>
                                                     )}
                                                     {toDialablePhone(lead.referral_partner_phone) && (
                                                         <a href={`tel:${toDialablePhone(lead.referral_partner_phone)}`}
                                                             style={{ color: '#7c3aed', fontSize: '13px', textDecoration: 'none', lineHeight: 1, whiteSpace: 'nowrap' }}
                                                             title={`Call partner ${lead.referral_partner_name || ''} ${toDialablePhone(lead.referral_partner_phone)}`}>🤝📞</a>
                                                     )}
+                                                    <button type="button" onClick={() => handleOpenPipeline(lead as LeadRow)}
+                                                        style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '14px', lineHeight: 1, padding: 0 }}
+                                                        title="Open in Deal Pipeline" aria-label="Open in Deal Pipeline">📊</button>
+                                                    <button type="button" onClick={() => handleOpenMatches(lead as LeadRow)}
+                                                        style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '14px', lineHeight: 1, padding: 0 }}
+                                                        title="View matching properties" aria-label="View matching properties">🏠</button>
                                                 </div>
                                             </td>
                                         </tr>
