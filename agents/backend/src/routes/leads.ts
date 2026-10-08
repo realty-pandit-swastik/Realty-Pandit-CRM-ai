@@ -159,6 +159,10 @@ router.get('/recent-external', async (req: any, res) => {
         const subCategoryId = req.query.sub_category_id as string | undefined;
         const typeId = req.query.type_id as string | undefined;
         const taxonomyNodeIds = req.query.taxonomy_node_ids as string | undefined;
+        // Stage filter (2026-10-08) — comma-separated pipeline stages. Matches a contact when ANY
+        // of its visible deals is in the set, or when its own stage is (deal-less contacts).
+        const stageParam = req.query.stage as string | undefined;
+        const stageFilters = (stageParam || '').split(',').map(s => s.trim().toUpperCase()).filter(Boolean) as string[];
         const lat = req.query.lat ? parseFloat(req.query.lat as string) : undefined;
         const lng = req.query.lng ? parseFloat(req.query.lng as string) : undefined;
         const radiusKm = req.query.radius_km ? parseFloat(req.query.radius_km as string) : 2;
@@ -203,12 +207,28 @@ router.get('/recent-external', async (req: any, res) => {
         // Explicit status param wins over active/archived toggle
         if (status) {
             where.lead_status = status;
-        } else if (activeFilter === 'active') {
+        } else if (activeFilter === 'active' && stageFilters.length === 0) {
+            // A stage filter implies "show me leads at this stage", so the default active/archived
+            // split is relaxed — otherwise filtering by CLOSED_LOST in the default view returns
+            // nothing at all (lost/closed leads are excluded there), which is exactly the
+            // "rework my lost leads" job this filter exists for.
             where.lead_status = { notIn: ['lost', 'closed'] };
-        } else if (activeFilter === 'archived') {
+        } else if (activeFilter === 'archived' && stageFilters.length === 0) {
             where.lead_status = { in: ['lost', 'closed'] };
         }
-        // activeFilter === 'all' → no lead_status constraint
+        // activeFilter === 'all' → no lead_status constraint. Same when stageFilters is set.
+
+        // Stage filter — AND-ed, never a top-level OR (see the partner-scope warning below).
+        // Ext. Leads renders one ROW PER DEAL and badges each row with its own deal status, so a
+        // contact-level filter alone would leave sibling rows on screen showing a stage the user
+        // just filtered out. The frontend re-filters rows; this narrows the candidate set.
+        if (stageFilters.length) {
+            const stageOr: any[] = [
+                { lifecycle_stage: { in: stageFilters } },
+                { demand_transactions: { some: { status: { in: stageFilters } } } },
+            ];
+            where.AND = [...(where.AND || []), { OR: stageOr }];
+        }
 
         // Search across name + phone (handles raw digits, +91 prefix, spaces, dashes)
         if (search) {
@@ -367,7 +387,10 @@ router.get('/recent-external', async (req: any, res) => {
             intent:      d => ({ intent: { sort: d, nulls: 'last' } }),
             location:    d => ({ preferred_location: { sort: d, nulls: 'last' } }),
             stage:       d => ({ lifecycle_stage: d }), // 2026-07-29 pipeline stage (non-nullable → plain sort)
-            date:        d => ({ created_at: d }),
+            // "Added" means the CURRENT cycle: a recycled lead must surface at the top of the
+            // default newest-first sort — that is the entire point of renewing it. created_at
+            // stays the first-seen date for reports/audit and is deliberately NOT the sort key.
+            date:        d => ({ cycle_start_at: d }),
         };
         const sortKey = String(req.query.sort || 'date');
         const sortDir: 'asc' | 'desc' = String(req.query.direction || 'desc') === 'asc' ? 'asc' : 'desc';
@@ -433,6 +456,12 @@ router.get('/recent-external', async (req: any, res) => {
                         preferred_lat: true,
                         preferred_lng: true,
                         lifecycle_stage: true,
+                        // Lead-cycle renewal (2026-10-08): cycle_start_at is the "Added" date the
+                        // UI shows and the date filter compares against; recycled_at/lead_cycle let
+                        // it badge a renewed lead. created_at is still selected for first-seen views.
+                        recycled_at: true,
+                        cycle_start_at: true,
+                        lead_cycle: true,
                         created_at: true,
                         notes: true,
                         assigned_agent_id: true,

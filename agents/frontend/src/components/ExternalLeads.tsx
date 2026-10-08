@@ -243,7 +243,12 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
     const [notContactedDays, setNotContactedDays] = useState(initialFilter?.not_contacted_days ? Number(initialFilter.not_contacted_days) : 0);
     const [noShowcaseDays, setNoShowcaseDays] = useState(0);
     const [budgetMinFilter, setBudgetMinFilter] = useState(''); // lead budget filter (#3, 2026-06-28)
-    const [budgetMaxFilter, setBudgetMaxFilter] = useState('');
+const [budgetMaxFilter, setBudgetMaxFilter] = useState('');
+    // Pipeline stage filter (2026-10-08). Multi-select. Server-side for the candidate set; rows
+    // are re-filtered below because this list renders one ROW PER DEAL and each row carries its
+    // own stage — filtering only contacts would leave sibling rows on screen at another stage.
+    const [stageFilters, setStageFilters] = useState<string[]>([]);
+    const toggleStageFilter = (s: string) => setStageFilters(prev => prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s]);
     // Bulk reassign (#4, 2026-06-28)
     const [leadSelectMode, setLeadSelectMode] = useState(false);
     const [selectedLeadPhones, setSelectedLeadPhones] = useState<Set<string>>(new Set());
@@ -444,6 +449,7 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
                         budget_min: budgetMinFilter.trim() || undefined,
                         budget_max: budgetMaxFilter.trim() || undefined,
                         ...(sharedWithMe ? { shared_with_me: 'true' } : {}),
+                        ...(stageFilters.length > 0 ? { stage: stageFilters.join(',') } : {}),
                         limit: String(pageLimit),
                         sort: leadSortKey,
                         direction: leadSortDir,
@@ -460,7 +466,7 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
         } finally {
             setLoading(false);
         }
-    }, [sourceFilter, statusFilter, agentFilter, intentFilter, filterTaxonomy, locationSelection, notContactedDays, noShowcaseDays, budgetMinFilter, budgetMaxFilter, debouncedSearch, activeFilter, sharedWithMe, pageLimit, leadSortKey, leadSortDir]);
+    }, [sourceFilter, statusFilter, agentFilter, intentFilter, filterTaxonomy, locationSelection, notContactedDays, noShowcaseDays, budgetMinFilter, budgetMaxFilter, debouncedSearch, activeFilter, sharedWithMe, stageFilters.join(','), pageLimit, leadSortKey, leadSortDir]);
 
     useEffect(() => { loadData(); }, [loadData]);
     useEffect(() => {
@@ -1280,6 +1286,7 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
         noShowcaseDays > 0 ? '1' : '',
         (budgetMinFilter.trim() || budgetMaxFilter.trim()) ? '1' : '',
         sharedWithMe ? '1' : '',
+        stageFilters.length > 0 ? '1' : '',
     ].filter(Boolean).length + (filterTaxonomy.nodeIds.length > 0 ? 1 : 0) + (filterTaxonomy.bhk.length > 0 ? 1 : 0);
 
     // 2026-05-13: Server now handles search + status + source + agent + activeFilter.
@@ -1288,30 +1295,39 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
     // locally (defensive). The phone-search bug was here: lead.phone_number stored as
     // "+91XXXXXXXXXX" while user types "9958..." — `.includes()` mismatched. Server now
     // handles phone variants via extractSearchDigits + phoneVariants.
+// "Added" = the CURRENT lead cycle (2026-10-08). A recycled lead reports its renewal date so a
+    // date-range filter behaves the way the user expects; created_at stays the first-seen date and
+    // is deliberately left untouched on the backend.
+const leadCycleStartOf = (lead: any): string => {
+        const raw = lead?.cycle_start_at || lead?.recycled_at || lead?.created_at;
+        const d = raw ? new Date(raw) : null;
+        return d && !isNaN(d.getTime()) ? d.toISOString().slice(0, 10) : '';
+    };
     const filteredLeads = recentLeads.filter(lead => {
-        if (dateFrom) {
-            const leadDate = new Date(lead.created_at).toISOString().slice(0, 10);
-            if (leadDate < dateFrom) return false;
-        }
-        if (dateTo) {
-            const leadDate = new Date(lead.created_at).toISOString().slice(0, 10);
-            if (leadDate > dateTo) return false;
-        }
+        const leadDate = leadCycleStartOf(lead);
+        if (dateFrom && (!leadDate || leadDate < dateFrom)) return false;
+        if (dateTo && (!leadDate || leadDate > dateTo)) return false;
         return true;
     });
 
-    // ── Select-all (header checkbox only) ──
+    // ── Select-all (header checkbox only) ──────────────────────────────────────
     // Operates on currently loaded + filtered rows (not the server-side recentTotal).
     // One row per enquiry (deal): the same contact appears once per lead, each with its own source,
     // property, assignee and stage. A contact with no visible deals stays a single contact-level row.
     // Counts / select-all / filters remain contact-based (filteredLeads).
+    //
+    // Stage filter (2026-10-08): re-applied per ROW because this list renders one row per DEAL and
+    // each row carries its own stage. The server narrows the candidate contacts; without this the
+    // user could filter by "Visited" and still see sibling rows badged "New".
     const leadRows: LeadRow[] = filteredLeads.flatMap((l): LeadRow[] =>
-        l.demand_transactions?.length
+        (l.demand_transactions?.length
             ? l.demand_transactions.map(d => ({
                 ...l, _deal: d, source: d.source, lifecycle_stage: d.status,
                 assigned_agent: d.coordinator ?? (l as any).assigned_agent,
             } as LeadRow))
-            : [l]);
+            : [l]
+        ).filter(row => stageFilters.length === 0 || stageFilters.includes(String(row.lifecycle_stage || '').toUpperCase()))
+    );
     const allVisibleSelected = filteredLeads.length > 0 && filteredLeads.every(l => selectedLeadPhones.has(l.phone_number));
     const someVisibleSelected = filteredLeads.some(l => selectedLeadPhones.has(l.phone_number));
     const toggleSelectAllVisible = () => {
@@ -1897,7 +1913,9 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
                                             </td>
                                             <td style={{ ...compactCell, fontSize: '11px', textTransform: 'capitalize' }}>{lead.intent || <span style={{ color: 'var(--text-muted)' }}>—</span>}</td>
                                             <td style={{ ...compactCell, fontSize: '11px', maxWidth: '120px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{lead.preferred_location || <span style={{ color: 'var(--text-muted)' }}>—</span>}</td>
-                                            <td style={{ ...compactCell, color: 'var(--text-muted)', fontSize: '10px', whiteSpace: 'nowrap' }}>{new Date(lead.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}</td>
+                                            <td style={{ ...compactCell, color: 'var(--text-muted)', fontSize: '10px', whiteSpace: 'nowrap' }}>{leadCycleStartOf(lead)
+                                                ? new Date(leadCycleStartOf(lead)).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })
+                                                : '—'}</td>
                                             <td style={compactCell} onClick={e => e.stopPropagation()}>
                                                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                                     {rowDialable && (
@@ -2911,10 +2929,30 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
                                 setLocationSelection({ label: '', lat: null, lng: null, radiusKm: 2 });
                                 setNotContactedDays(0);
                                 setNoShowcaseDays(0);
+                                setStageFilters([]);
                             }} style={{ background: 'none', border: 'none', color: 'var(--text-link)', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}>
                                 Clear All
                             </button>
                         </div>
+
+                        {/* Pipeline stage (2026-10-08). Multi-select, and it deliberately reaches leads the
+                            active/archived toggle hides — picking CLOSED_LOST is how you find
+                            lost leads to rework. */}
+                        <FilterSection title="Pipeline Stage" defaultOpen={false} badge={stageFilters.length}>
+                            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                                {LIFECYCLE_STAGES.map(s => (
+                                    <button key={s} type="button"
+                                        onClick={() => toggleStageFilter(s)}
+                                        className={`chip ${stageFilters.includes(s) ? 'chip-active' : 'chip-inactive'}`}>
+                                        {s.replace(/_/g, ' ')}
+                                    </button>
+                                ))}
+                            </div>
+                            <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '6px' }}>
+                                Filters each enquiry by its own stage. Selecting a stage also includes
+                                lost leads, which the default Active view hides.
+                            </div>
+                        </FilterSection>
 
                         {/* Intent */}
                         <FilterSection title="Intent" defaultOpen badge={intentFilter ? 1 : 0}>
