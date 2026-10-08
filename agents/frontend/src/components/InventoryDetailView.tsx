@@ -1,3 +1,4 @@
+import PersonalWhatsAppShareModal from './PersonalWhatsAppShareModal';
 import { useEffect, useRef, useState } from 'react';
 import { formatInventoryAddress, formatUnitLabel } from '../lib/address';
 import client from '../api/client';
@@ -39,6 +40,7 @@ export function InventoryDetailView({ inventoryId, onClose, onEdit }: Props) {
     const fullAccess = agent?.role === 'super_boss' || agent?.role === 'manager';
     const canEdit = hasPermission('edit_inventory');
 
+    const [personalShare, setPersonalShare] = useState(false);
     const [inv, setInv] = useState<any>(null);
     const [contacts, setContacts] = useState<Contacts | null>(null);
     const [completedInventoryId, setCompletedInventoryId] = useState<string | null>(null);
@@ -128,6 +130,7 @@ export function InventoryDetailView({ inventoryId, onClose, onEdit }: Props) {
                 <div style={{ position: 'sticky', top: 0, zIndex: 2, background: C.panel, display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 18px', borderBottom: `1px solid ${C.line}` }}>
                     <h3 style={{ margin: 0, fontSize: 16, color: C.text }}>Property Details</h3>
                     <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                        <button onClick={() => setPersonalShare(true)} style={{ padding: '6px 12px', borderRadius: 8, background: '#128c7e', color: '#fff', border: 'none' }}>My WhatsApp</button>
                         {canEdit && inv?.can_edit && onEdit && (
                             <button onClick={onEdit} style={{ background: 'rgba(96,165,250,0.15)', border: '1px solid #60a5fa', color: '#60a5fa', borderRadius: 8, padding: '6px 14px', fontSize: 13, cursor: 'pointer', fontWeight: 600 }}>✏️ Edit</button>
                         )}
@@ -280,6 +283,7 @@ export function InventoryDetailView({ inventoryId, onClose, onEdit }: Props) {
                     </div>
                 )}
             </div>
+            {personalShare && <PersonalWhatsAppShareModal inventoryIds={[inventoryId]} onClose={() => setPersonalShare(false)} />}
         </div>
     );
 }

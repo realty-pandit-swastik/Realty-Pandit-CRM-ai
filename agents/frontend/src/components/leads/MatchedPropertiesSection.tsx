@@ -1,3 +1,4 @@
+import PersonalWhatsAppShareModal from '../PersonalWhatsAppShareModal';
 import { useState } from 'react';
 import { shareToClient } from '../../api/client';
 import { toDialablePhone } from '../../lib/phone';
@@ -58,6 +59,7 @@ export default function MatchedPropertiesSection({
     // Resolve the WhatsApp recipient as a clean, country-coded number. Prefer the lead's own number;
     // for partner-referral leads (phone_number is a PENDING placeholder → not dialable) fall back to the
     // partner, who relays the property to the client. Never digit-strip a raw/placeholder value into wa.me.
+    const [personalShareIds, setPersonalShareIds] = useState<string[] | null>(null);
     const clientDial = toDialablePhone(leadPhone);
     const partnerDial = toDialablePhone(leadPartnerPhone);
     const recipient = clientDial ?? partnerDial;        // canonical +91… or null
@@ -99,15 +101,7 @@ export default function MatchedPropertiesSection({
         setSharing(false);
     };
 
-    const handleShareLink = () => {
-        if (selectedIds.size === 0 || !recipient) return;
-        const urls = Array.from(selectedIds).map(id =>
-            `https://www.realtypandit.in/properties/${id}`
-        );
-        const name = leadName || '';
-        const text = `Hi ${name}, here are some properties for you from Realty Pandit:\n\n${urls.map((u, i) => `${i + 1}. ${u}`).join('\n')}`;
-        window.open(`https://wa.me/${recipient.slice(1)}?text=${encodeURIComponent(text)}`, '_blank');
-    };
+    const handlePersonalShare = () => setPersonalShareIds(Array.from(selectedIds));
 
     return (
         <div style={{ marginBottom: '16px' }}>
@@ -153,14 +147,14 @@ export default function MatchedPropertiesSection({
 
                     {selectedIds.size > 0 && !canShare && (
                         <span style={{ fontSize: '11px', color: 'var(--text-muted, #94a3b8)', fontStyle: 'italic' }}>
-                            No phone on file — can't share
+                            Choose a recipient in My WhatsApp
                         </span>
                     )}
-                    {selectedIds.size > 0 && canShare && (
+                    {selectedIds.size > 0 && (
                         <>
                             <button
                                 onClick={handleSendWhatsApp}
-                                disabled={sharing}
+                                disabled={sharing || !canShare}
                                 title={recipientIsPartner ? 'Lead has no client phone — sends to the referring partner' : undefined}
                                 style={{
                                     padding: '4px 12px', borderRadius: '6px', fontSize: '11px', fontWeight: 600,
@@ -169,10 +163,10 @@ export default function MatchedPropertiesSection({
                                     display: 'flex', alignItems: 'center', gap: '4px',
                                 }}
                             >
-                                💬 {recipientIsPartner ? 'Share with partner' : 'Send WhatsApp'} ({selectedIds.size})
+                                💬 {recipientIsPartner ? 'Share with partner' : 'Company WhatsApp'} ({selectedIds.size})
                             </button>
                             <button
-                                onClick={handleShareLink}
+                                onClick={handlePersonalShare}
                                 title={recipientIsPartner ? 'Lead has no client phone — sends to the referring partner' : undefined}
                                 style={{
                                     padding: '4px 12px', borderRadius: '6px', fontSize: '11px', fontWeight: 600,
@@ -181,7 +175,7 @@ export default function MatchedPropertiesSection({
                                     display: 'flex', alignItems: 'center', gap: '4px',
                                 }}
                             >
-                                🔗 Share Link ({selectedIds.size})
+                                📱 My WhatsApp ({selectedIds.size})
                             </button>
                         </>
                     )}
@@ -269,6 +263,7 @@ export default function MatchedPropertiesSection({
                     );
                 })}
             </div>
+            {personalShareIds && <PersonalWhatsAppShareModal inventoryIds={personalShareIds} initialPhone={recipient || undefined} onClose={() => setPersonalShareIds(null)} />}
         </div>
     );
 }

@@ -8,6 +8,7 @@ import { ToastProvider, useToast } from './contexts/ToastContext';
 import { ToastContainer } from './components/ui/Toast';
 import { ConfirmProvider, ConfirmDialogRoot, useConfirm } from './contexts/ConfirmContext';
 import { LoginPage } from './components/LoginPage';
+import PersonalWhatsAppSetup from './components/PersonalWhatsAppSetup';
 import { SetupPasswordPage } from './components/SetupPasswordPage';
 import { DashboardLayout } from './components/DashboardLayout';
 import { ContactList } from './components/ContactList';
@@ -439,6 +440,8 @@ function App() {
       </>
     );
   }
+
+  if (window.location.pathname === '/my-whatsapp-setup') return <PersonalWhatsAppSetup />;
 
   const selectedContact = contacts.find(c => c.phone_number === selectedPhone);
 

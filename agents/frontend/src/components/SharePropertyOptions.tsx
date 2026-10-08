@@ -12,18 +12,19 @@ interface ShareableItem {
 interface Props {
     item: ShareableItem;
     onClose: () => void;
+    onPersonalWhatsAppChosen: () => void;
     onWhatsAppChosen: () => void; // open existing ShareToClientModal
 }
 
 /**
- * 3-option share popover for Inventory + Deal cards.
+ * Property sharing options: personal attachments, company WhatsApp, PDF, and link.
  *  📄 PDF      → reveals {With branding / Without branding} sub-row → downloads PDF
  *  💬 WhatsApp → close popover + open existing ShareToClientModal
  *  🔗 Link     → fetch share link, copy to clipboard
  *
  * Minimal UI: single horizontal row of icon buttons, PDF expands a small sub-row.
  */
-export default function SharePropertyOptions({ item, onClose, onWhatsAppChosen }: Props) {
+export default function SharePropertyOptions({ item, onClose, onWhatsAppChosen, onPersonalWhatsAppChosen }: Props) {
     const [pdfMode, setPdfMode] = useState<'idle' | 'choose' | 'generating'>('idle');
     const [linkBusy, setLinkBusy] = useState(false);
     const [copiedLink, setCopiedLink] = useState<string | null>(null);
@@ -98,15 +99,16 @@ export default function SharePropertyOptions({ item, onClose, onWhatsAppChosen }
                 </div>
                 <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 14, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{propertyLabel}</div>
 
-                {/* Main 3-option row */}
+                {/* Sharing options */}
                 {pdfMode === 'idle' && !copiedLink && (
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
+                        <ShareOption icon="📱" label="My WhatsApp" onClick={() => { onPersonalWhatsAppChosen(); onClose(); }} />
                         <ShareOption
                             icon="📄" label="PDF"
                             onClick={() => setPdfMode('choose')}
                         />
                         <ShareOption
-                            icon="💬" label="WhatsApp"
+                            icon="💬" label="Company WhatsApp"
                             onClick={() => { onWhatsAppChosen(); onClose(); }}
                         />
                         <ShareOption

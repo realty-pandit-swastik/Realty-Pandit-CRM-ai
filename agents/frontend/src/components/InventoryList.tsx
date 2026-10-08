@@ -1,3 +1,4 @@
+import PersonalWhatsAppShareModal from './PersonalWhatsAppShareModal';
 
 import React, { useEffect, useRef, useState } from 'react';
 import { formatInventoryAddress, formatUnitLabel } from '../lib/address';
@@ -19,7 +20,6 @@ import { MatchClientsModal } from './inventory/MatchClientsModal';
 import { GooglePlacesInput } from './GooglePlacesInput';
 import ShareToClientModal from './ShareToClientModal';
 import ShareContentPicker, { DEFAULT_SHARE_CONTENT } from './ShareContentPicker';
-import { buildWhatsAppShareText } from '../lib/buildWhatsAppShareText';
 import SharePropertyOptions from './SharePropertyOptions';
 import { pickSpecChips } from '../lib/specChips';
 import BookVisitModal from './BookVisitModal';
@@ -265,9 +265,9 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
     const [deleting, setDeleting] = useState(false);
 
     // Share to Client & Book Visit modals
+    const [personalShareIds, setPersonalShareIds] = useState<string[] | null>(null);
     const [shareItem, setShareItem] = useState<any>(null);
-    // 2026-05-13: SharePropertyOptions is the 3-option chooser shown BEFORE the
-    // existing WhatsApp share modal. Clicking 💬 inside it falls through to setShareItem.
+    // Sharing options route personal attachments and company sends separately.
     const [shareOptionsItem, setShareOptionsItem] = useState<any>(null);
     const [bookVisitItem, setBookVisitItem] = useState<any>(null);
     // #10 (2026-07-25): mark sold / on hold
@@ -552,18 +552,8 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
         }
     };
 
-    // After the company-WhatsApp send: open the team member's OWN WhatsApp at the client's
-    // chat with the numbered property text + links pre-filled (they just tap send).
-    const handleOwnWhatsAppShare = () => {
-        if (!batchShareContact) return;
-        const items = batchShareResults
-            .filter(r => r.link)
-            .map(r => ({ inv: inventory.find(i => i.id === r.id), link: r.link as string }));
-        if (items.length === 0) return;
-        const text = buildWhatsAppShareText(items, batchShareMode || 'direct');
-        const tel = batchShareContact.phone_number.replace(/^\+/, '');
-        window.open(`https://wa.me/${tel}?text=${encodeURIComponent(text)}`, '_blank');
-    };
+    // Reuse the attachment picker for a personal follow-up.
+    const handleOwnWhatsAppShare = () => setPersonalShareIds(batchShareResults.map(r => r.id));
 
     // Post-send: download the PDF of the just-shared properties — branding follows the recipient
     // (partner agent → brandless/no-RP-logo, direct client → branded RP template).
@@ -3032,10 +3022,12 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
                 </div>
             )}
 
-            {/* Share — 3-option chooser */}
+            {/* Property sharing options */}
+            {personalShareIds && <PersonalWhatsAppShareModal inventoryIds={personalShareIds} initialPhone={batchShareContact?.phone_number} onClose={() => setPersonalShareIds(null)} />}
             {shareOptionsItem && (
                 <SharePropertyOptions
                     item={shareOptionsItem}
+                    onPersonalWhatsAppChosen={() => setPersonalShareIds([shareOptionsItem.id])}
                     onClose={() => setShareOptionsItem(null)}
                     onWhatsAppChosen={() => { setShareItem(shareOptionsItem); setShareOptionsItem(null); }}
                 />
@@ -3114,6 +3106,7 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
                     <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>
                         {selectedIds.size} propert{selectedIds.size === 1 ? 'y' : 'ies'} selected
                     </span>
+                    <button onClick={() => setPersonalShareIds(Array.from(selectedIds))} style={{ padding: '8px 14px', borderRadius: 8, background: '#128c7e', color: '#fff', border: 'none', cursor: 'pointer' }}>My WhatsApp</button>
                     <button
                         onClick={() => { setShowBatchShareModal(true); setBatchShareResults([]); setBatchShareContact(null); setBatchContactSearch(''); }}
                         style={{
