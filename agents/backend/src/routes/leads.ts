@@ -391,6 +391,9 @@ router.get('/recent-external', async (req: any, res) => {
             // default newest-first sort — that is the entire point of renewing it. created_at
             // stays the first-seen date for reports/audit and is deliberately NOT the sort key.
             date:        d => ({ cycle_start_at: d }),
+            // First-seen date. Used as the fallback sort when the lead-cycle migration has not
+            // been applied on this deploy (see the retry below).
+            created_at:  d => ({ created_at: d }),
         };
         const sortKey = String(req.query.sort || 'date');
         const sortDir: 'asc' | 'desc' = String(req.query.direction || 'desc') === 'asc' ? 'asc' : 'desc';
@@ -435,11 +438,14 @@ router.get('/recent-external', async (req: any, res) => {
                 return { OR: [{ coordinator_agent_id: { in: teamIds } }, { executive_agent_id: { in: teamIds } }] };
             })();
 
-        const queryLeads = async (summaryShape: any) => {
+        const LEAD_CYCLE_FIELDS = ['cycle_start_at', 'recycled_at', 'lead_cycle'] as const;
+
+        // `withCycle` false → the deploy is running code whose migration has not been applied yet.
+        const queryLeads = async (summaryShape: any, withCycle: boolean) => {
             return Promise.all([
                 prisma.contact.findMany({
                     where,
-                    orderBy: leadOrderBy,
+                    orderBy: withCycle ? leadOrderBy : LEAD_SORTS.created_at(sortDir),
                     // shared_at re-orders below, so it must not receive a pre-paginated slice.
                     take: shareRank ? undefined : limit,
                     skip: shareRank ? undefined : (page - 1) * limit,
@@ -459,9 +465,9 @@ router.get('/recent-external', async (req: any, res) => {
                         // Lead-cycle renewal (2026-10-08): cycle_start_at is the "Added" date the
                         // UI shows and the date filter compares against; recycled_at/lead_cycle let
                         // it badge a renewed lead. created_at is still selected for first-seen views.
-                        recycled_at: true,
-                        cycle_start_at: true,
-                        lead_cycle: true,
+                        ...(withCycle
+                            ? { recycled_at: true, cycle_start_at: true, lead_cycle: true }
+                            : {}),
                         created_at: true,
                         notes: true,
                         assigned_agent_id: true,
@@ -494,7 +500,26 @@ router.get('/recent-external', async (req: any, res) => {
             ]);
         };
 
-        const [leads, total] = await queryLeads(LEAD_DEAL_SUMMARY);
+        // Schema changes go through Prisma migrations ONLY — runtime DDL at boot was explicitly
+        // reverted (705475f) because it raced across PM2 instances and fought `migrate deploy`.
+        // So we do NOT self-heal here. But `run_migrations` defaults to FALSE on the deploy
+        // workflow, meaning code CAN reach a database without this migration; without a fallback the
+        // entire leads page 500s on "column contacts.cycle_start_at does not exist". Degrade
+        // instead: retry once without the cycle columns and sort on the first-seen date, and say so
+        // loudly so the missing migration gets applied.
+        let leads: any[];
+        let total: number;
+        try {
+            [leads, total] = await queryLeads(LEAD_DEAL_SUMMARY, true);
+        } catch (qErr: any) {
+            const msg = String(qErr?.message || '');
+            if (qErr?.code === 'P2022' && LEAD_CYCLE_FIELDS.some(f => msg.includes(f))) {
+                logger.warn(`[leads] contacts.${LEAD_CYCLE_FIELDS.join('/')} missing — this deploy is missing migration 20261008120000_lead_cycle_recycling. Falling back to created_at ordering until it is applied.`);
+                [leads, total] = await queryLeads(LEAD_DEAL_SUMMARY, false);
+            } else {
+                throw qErr;
+            }
+        }
 
         // Apply the share ordering and paginate here rather than in SQL (see above).
         let pageLeads = leads;

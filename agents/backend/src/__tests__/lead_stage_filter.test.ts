@@ -73,4 +73,29 @@ describe('GET /api/leads/recent-external — pipeline stage filter', () => {
         const select: any = vi.mocked(prisma.contact.findMany).mock.calls[0][0]?.select;
         expect(select).toMatchObject({ cycle_start_at: true, recycled_at: true, lead_cycle: true, created_at: true });
     });
+
+    it('degrades to first-seen ordering instead of 500ing when the migration is missing', async () => {
+        // `run_migrations` defaults to FALSE on the deploy workflow, so code can legitimately reach
+        // a database without this migration. That must not take the whole leads page down.
+        vi.mocked(prisma.contact.findMany)
+            .mockRejectedValueOnce(Object.assign(
+                new Error('The column contacts.cycle_start_at does not exist in the current database.'),
+                { code: 'P2022' },
+            ))
+            .mockResolvedValueOnce([] as any);
+
+        const res = await request(app).get('/api/leads/recent-external?sort=date&direction=desc');
+
+        expect(res.status).toBe(200);
+        const retry = vi.mocked(prisma.contact.findMany).mock.calls[1][0] as any;
+        expect(retry.orderBy).toEqual({ created_at: 'desc' });
+        expect(retry.select).not.toHaveProperty('cycle_start_at');
+        expect(retry.select).not.toHaveProperty('lead_cycle');
+    });
+
+    it('still surfaces a genuine query error (no silent swallow)', async () => {
+        vi.mocked(prisma.contact.findMany).mockRejectedValueOnce(new Error('connection terminated'));
+        const res = await request(app).get('/api/leads/recent-external');
+        expect(res.status).toBe(500);
+    });
 });
