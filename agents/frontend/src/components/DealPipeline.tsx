@@ -8,6 +8,7 @@ import { useToast } from '../contexts/ToastContext';
 import { useAuth } from '../contexts/AuthContext';
 import { DealCloseCommissionDialog } from './DealCloseCommissionDialog';
 import LogCallOverlay, { type CallOutcome, type CallEntryMode } from './deal/LogCallOverlay';
+import { noAnswerReasonLabel } from '../lib/callOutcomes';
 import QualifiedActionsModal, { type QualifiedActionMode } from './deal/QualifiedActionsModal';
 import { DealWorkspace } from './deal/DealWorkspace';
 import { AIStatusBadge } from './AIStatusBadge';
@@ -540,7 +541,11 @@ export default function DealPipeline({ initialDealId, onInitialDealConsumed }: D
         if (!ta) return null;
         const label = LAST_ACTION_LABEL[ta.action_type] || `📝 ${String(ta.action_type).replace(/_/g, ' ').toLowerCase()}`;
         const who = (ta.agent?.name || '').trim().split(' ')[0];
-        const outcome = ta.outcome ? ` (${String(ta.outcome).replace(/_/g, ' ').toLowerCase()})` : '';
+        // No-answer calls carry a staff-picked reason (lib/callOutcomes) instead of the raw
+        // outcome, so the tile reads "📞 Called (busy / waiting)". Legacy rows and the Deal
+        // Workspace quick-log keep their readable raw form.
+        const outcomeLabel = noAnswerReasonLabel(ta.outcome);
+        const outcome = outcomeLabel ? ` (${outcomeLabel})` : '';
         // Exact date + time of the last action (user asked for date/time on the tile). e.g. "9 Jul, 2:30 pm"
         const when = new Date(ta.created_at).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' });
         return `👤 ${who ? who + ' · ' : ''}${label}${outcome} · ${when}`;

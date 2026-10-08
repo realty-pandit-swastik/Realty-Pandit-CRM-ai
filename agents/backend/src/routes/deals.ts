@@ -1835,6 +1835,25 @@ const VALID_LOG_CALL_OUTCOMES = [
     'CLOSED_UNREACHABLE', // deal-workflow (2026-06-29): close after repeated no-answers, stamping the count
 ] as const;
 
+// Why a logged call reached nobody. Staff pick one of the codes on every no-answer form.
+// Stored on team_actions.outcome as "<BASE_OUTCOME>:<REASON>" — e.g. "NO_ANSWER:BUSY".
+//
+// ⚠ The prefix is load-bearing, not decoration: team_actions.outcome is a shared free-text column.
+// WRONG_OR_SPAM already writes the bare value "WRONG_NUMBER" (see the WRONG_OR_SPAM case) and the
+// close path must keep CLOSED_UNREACHABLE, so writing a bare reason here would make two different
+// business events indistinguishable — and would erase "this deal was closed as unreachable".
+// The frontend maps the suffix back to a label (lib/callOutcomes.ts).
+//
+// Exported so __tests__/no_answer_reason_contract.test.ts can assert this list and the frontend's
+// never drift apart — the two apps deploy independently and the CRM makes the field required.
+export const VALID_NO_ANSWER_REASONS = [
+    'SWITCHED_OFF',
+    'NOT_REACHABLE',
+    'BUSY',
+    'DISCONNECTED',
+    'WRONG_NUMBER',
+] as const;
+
 router.post('/:id/log-call', checkPermission('act_on_deals'), async (req: any, res) => {
     try {
         if (!(await partnerOwnsDealOr403(req, res, req.params.id))) return;
@@ -1860,6 +1879,28 @@ router.post('/:id/log-call', checkPermission('act_on_deals'), async (req: any, r
         const phone = deal.demand_contact.phone_number;
         const performedBy = req.agent?.id || 'system:human';
         const performerName = req.agent?.name || 'team';
+
+        // Why the call reached nobody, parsed ONCE here for every outcome.
+        //
+        // Only meaningful for the two no-answer outcomes; anything else (a caller smuggling the key
+        // onto ANSWERED_INTERESTED / CALLBACK_REQUESTED / …) is ignored rather than mislabelled.
+        //
+        // Normalised to an allow-listed code or dropped — never echoed back or persisted verbatim.
+        // An unknown/absent reason is deliberately NOT a 400: this is cosmetic metadata on an
+        // action that may close a deal, and the frontend (which makes the field required) can be
+        // deployed ahead of the backend, so a version skew must degrade to "no reason", not brick
+        // the whole Log Call form.
+        const NO_ANSWER_OUTCOMES = ['NO_ANSWER', 'CLOSED_UNREACHABLE'];
+        const rawReason = NO_ANSWER_OUTCOMES.includes(outcome) ? payload?.no_answer_reason : undefined;
+        let noAnswerReason: string | null = null;
+        if (typeof rawReason === 'string' && rawReason.trim()) {
+            const code = rawReason.trim().toUpperCase().slice(0, 40);
+            if ((VALID_NO_ANSWER_REASONS as readonly string[]).includes(code)) {
+                noAnswerReason = code;
+            } else {
+                logger.warn(`[log-call] ignoring unrecognised no_answer_reason on deal ${dealId}`);
+            }
+        }
 
         switch (outcome) {
             case 'ANSWERED_INTERESTED': {
@@ -2044,6 +2085,19 @@ router.post('/:id/log-call', checkPermission('act_on_deals'), async (req: any, r
         }
 
         // Always log the human call outcome as an interaction
+        //
+        // ⚠ Spread payload FIRST, then re-assert the trusted fields. The reverse order let a caller
+        // (any holder of act_on_deals) overwrite metadata.outcome / metadata.deal_id from the body,
+        // which corrupts the derived no_answer_count (deal_service.ts) and the "closed after N
+        // no-answer calls" audit note (the count filters on phone_number + these two metadata keys,
+        // with no tenant filter) — i.e. the N=4 gate could be tripped or a close note made to lie.
+        //
+        // metadata.outcome deliberately stays the raw outcome (NO_ANSWER / CLOSED_UNREACHABLE), never
+        // the reason: the no_answer_count, the "N× no answer" badge and the N=4 gate all query
+        // metadata.path['outcome'] == 'NO_ANSWER'. `no_answer_reason` is re-added below only as the
+        // allow-listed code — the raw caller value is dropped, so untrusted text can never land in
+        // a field that the tile/timeline echo.
+        const { no_answer_reason: _untrustedReason, ...safePayload } = payload;
         await prisma.interaction.create({
             data: {
                 tenant_id: deal.demand_contact.tenant_id || deal.tenant_id,
@@ -2052,13 +2106,24 @@ router.post('/:id/log-call', checkPermission('act_on_deals'), async (req: any, r
                 direction: 'outbound',
                 event_type: 'human_call_outcome',
                 content: `Human call by ${performerName}: ${outcome}${payload.notes ? ' — ' + payload.notes : ''}`,
-                metadata: { deal_id: dealId, outcome, performed_by: performedBy, ...payload },
+                metadata: {
+                    ...safePayload,
+                    deal_id: dealId,
+                    outcome,
+                    performed_by: performedBy,
+                    ...(noAnswerReason ? { no_answer_reason: noAnswerReason } : {}),
+                },
             },
         });
 
         // Log the call as a TeamAction too, so the pipeline tile's "last action" line shows it
         // (CALL_LOGGED → "📞 Called (<outcome>)"). Only when a real agent performed it — the
         // agent_id is an FK and drives the tile's "who" + timestamp. (2026-07-09)
+        //
+        // A no-answer reason is encoded as "<outcome>:<REASON>" so the base outcome survives and can
+        // never collide with another writer of this free-text column. This column is display-only
+        // (tile last-action line + Deal Workspace timeline — both label-mapped in the frontend); every
+        // derived no-answer count reads interactions, not team_actions.
         if (req.agent?.id) {
             await prisma.teamAction.create({
                 data: {
@@ -2067,7 +2132,7 @@ router.post('/:id/log-call', checkPermission('act_on_deals'), async (req: any, r
                     agent_id: req.agent.id,
                     stage: deal.status,            // the stage the call was logged in (NEW)
                     action_type: 'CALL_LOGGED',
-                    outcome,
+                    outcome: noAnswerReason ? `${outcome}:${noAnswerReason}` : outcome,
                     notes: payload.notes ?? null,
                 },
             }).catch((e: any) => logger.warn('[log-call] teamAction write failed:', e?.message));
