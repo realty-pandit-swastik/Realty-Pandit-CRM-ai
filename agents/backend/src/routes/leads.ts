@@ -9,6 +9,7 @@ import { resolveDemandSlugs } from '../utils/classification';
 import { resolveTypeFilter } from '../utils/demand_taxonomy';
 import { foldLegacyDemand, mergeDemandSchemaValues, bhkFromString, validateMultiValueDemand, DEMAND_BHK_LIST_KEY, DEMAND_TYPE_NODE_LIST_KEY } from '../utils/demand_canonical';
 import { expandTaxonomyNodeIds } from '../utils/taxonomy_filter';
+import { buildLeadSearchFilter } from '../utils/lead_search';
 import { authMiddleware, checkPermission } from '../middleware/auth';
 import { geocodeAddress } from '../utils/geocode';
 import { sendBuyerConfirmationWhatsApp, sendBuyerConfirmationEmail } from '../services/lead_notifications';
@@ -210,23 +211,13 @@ router.get('/recent-external', async (req: any, res) => {
         }
         // activeFilter === 'all' → no lead_status constraint
 
-        // Search across name + phone (handles raw digits, +91 prefix, spaces, dashes)
-        if (search) {
-            const { extractSearchDigits, phoneVariants } = await import('../utils/phone');
-            const digits = extractSearchDigits(search);
-            const orClauses: any[] = [
-                { name: { contains: search, mode: 'insensitive' } },
-                { email: { contains: search, mode: 'insensitive' } },
-            ];
-            if (digits) {
-                // Try the 3 standard variants AND a contains-on-digits fallback
-                for (const variant of phoneVariants(digits)) {
-                    orClauses.push({ phone_number: { contains: variant } });
-                }
-                orClauses.push({ phone_number: { contains: digits } });
-            }
-            if (where.AND) where.AND.push({ OR: orClauses });
-            else where.AND = [{ OR: orClauses }];
+        // Search across names, emails and phone fragments. Multi-word input is ANDed
+        // term-by-term, and phone digits are only used for phone-shaped terms so IDs
+        // such as PENDING-1234 do not trigger noisy phone matches.
+        const searchFilter = buildLeadSearchFilter(search);
+        if (searchFilter) {
+            if (where.AND) where.AND.push(searchFilter);
+            else where.AND = [searchFilter];
         }
 
         // Advanced filters
