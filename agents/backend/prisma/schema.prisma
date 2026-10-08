@@ -89,9 +89,21 @@ model Contact {
   preferred_lat Float? // Latitude - used for radius-based property matching
   preferred_lng Float? // Longitude - used for radius-based property matching
 
-  // State Management
+  // Stage Management
   lead_status       String   @default("cold") // cold, warm, hot, closed, lost
   lifecycle_stage   String   @default("NEW") // NEW, QUALIFIED, MATCHED, VISIT_SCHEDULED, VISITED, NEGOTIATION, CLOSED_WON, CLOSED_LOST
+  /// Lead-cycle renewal (2026-10-08). Recycling a lost lead starts a NEW sales cycle without
+  /// touching created_at, so "when we first saw this customer", every age metric and the audit
+  /// trail stay exactly as they were. Lead AGE (sorting, date filters, "Added" column) reads
+  /// cycle_start_at, which equals created_at until the lead is recycled.
+  /// Nullable + defaulted: no backfill of existing rows, no rewrite.
+  recycled_at       DateTime?
+  /// Non-null denormalised "current cycle started" (== created_at until recycled). Denormalised
+  /// deliberately: `COALESCE(recycled_at, created_at)` cannot be expressed in a Prisma orderBy,
+  /// and a NULL recycled_at would sort FIRST in Postgres, putting never-recycled leads ahead of
+  /// every renewed one. A DEFAULT (not a backfill) is metadata-only in Postgres 11+.
+  cycle_start_at    DateTime @default(now())
+  lead_cycle        Int      @default(1) // 1 = original enquiry, 2+ = each recycle
   assigned_agent_id String?
   assigned_agent    Agent?   @relation(fields: [assigned_agent_id], references: [id])
   shared_with_ids   String[] @default([]) // Agent IDs this LEAD is shared with for collaboration (2026-07-31) — mirrors Inventory.shared_with_ids
@@ -212,6 +224,10 @@ model Contact {
   @@index([contact_type])
   @@index([lead_status])
   @@index([lifecycle_stage])
+  // Lead-cycle renewal (2026-10-08). The Ext. Leads stage filter reads the current cycle
+  // (cycle_start_at) as often as lifecycle_stage, and the work-queue sort scans it.
+  @@index([cycle_start_at])
+  @@index([recycled_at])
   @@index([next_action_at])
   @@index([contact_type, lead_status])
   @@index([last_interaction])

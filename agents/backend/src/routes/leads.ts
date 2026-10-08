@@ -162,6 +162,10 @@ router.get('/recent-external', async (req: any, res) => {
         const subCategoryId = req.query.sub_category_id as string | undefined;
         const typeId = req.query.type_id as string | undefined;
         const taxonomyNodeIds = req.query.taxonomy_node_ids as string | undefined;
+        // Stage filter (2026-10-08) — comma-separated pipeline stages. Matches a contact when ANY
+        // of its visible deals is in the set, or when its own stage is (deal-less contacts).
+        const stageParam = req.query.stage as string | undefined;
+        const stageFilters = (stageParam || '').split(',').map(s => s.trim().toUpperCase()).filter(Boolean) as string[];
         const lat = req.query.lat ? parseFloat(req.query.lat as string) : undefined;
         const lng = req.query.lng ? parseFloat(req.query.lng as string) : undefined;
         const radiusKm = req.query.radius_km ? parseFloat(req.query.radius_km as string) : 2;
@@ -206,12 +210,28 @@ router.get('/recent-external', async (req: any, res) => {
         // Explicit status param wins over active/archived toggle
         if (status) {
             where.lead_status = status;
-        } else if (activeFilter === 'active') {
+        } else if (activeFilter === 'active' && stageFilters.length === 0) {
+            // A stage filter implies "show me leads at this stage", so the default active/archived
+            // split is relaxed — otherwise filtering by CLOSED_LOST in the default view returns
+            // nothing at all (lost/closed leads are excluded there), which is exactly the
+            // "rework my lost leads" job this filter exists for.
             where.lead_status = { notIn: ['lost', 'closed'] };
-        } else if (activeFilter === 'archived') {
+        } else if (activeFilter === 'archived' && stageFilters.length === 0) {
             where.lead_status = { in: ['lost', 'closed'] };
         }
-        // activeFilter === 'all' → no lead_status constraint
+        // activeFilter === 'all' → no lead_status constraint. Same when stageFilters is set.
+
+        // Stage filter — AND-ed, never a top-level OR (see the partner-scope warning below).
+        // Ext. Leads renders one ROW PER DEAL and badges each row with its own deal status, so a
+        // contact-level filter alone would leave sibling rows on screen showing a stage the user
+        // just filtered out. The frontend re-filters rows; this narrows the candidate set.
+        if (stageFilters.length) {
+            const stageOr: any[] = [
+                { lifecycle_stage: { in: stageFilters } },
+                { demand_transactions: { some: { status: { in: stageFilters } } } },
+            ];
+            where.AND = [...(where.AND || []), { OR: stageOr }];
+        }
 
         // Search across names, emails and phone fragments. Multi-word input is ANDed
         // term-by-term, and phone digits are only used for phone-shaped terms so IDs
@@ -361,7 +381,13 @@ router.get('/recent-external', async (req: any, res) => {
             client_type: d => ({ client_role: { sort: d, nulls: 'last' } }),
             location:    d => ({ preferred_location: { sort: d, nulls: 'last' } }),
             stage:       d => ({ lifecycle_stage: d }), // 2026-07-29 pipeline stage (non-nullable → plain sort)
-            date:        d => ({ created_at: d }),
+            // "Added" means the CURRENT cycle: a recycled lead must surface at the top of the
+            // default newest-first sort — that is the entire point of renewing it. created_at
+            // stays the first-seen date for reports/audit and is deliberately NOT the sort key.
+            date:        d => ({ cycle_start_at: d }),
+            // First-seen date. Used as the fallback sort when the lead-cycle migration has not
+            // been applied on this deploy (see the retry below).
+            created_at:  d => ({ created_at: d }),
         };
         const sortKey = String(req.query.sort || 'date');
         const sortDir: 'asc' | 'desc' = String(req.query.direction || 'desc') === 'asc' ? 'asc' : 'desc';
@@ -406,11 +432,14 @@ router.get('/recent-external', async (req: any, res) => {
                 return { OR: [{ coordinator_agent_id: { in: teamIds } }, { executive_agent_id: { in: teamIds } }] };
             })();
 
-        const queryLeads = async (summaryShape: any) => {
+        const LEAD_CYCLE_FIELDS = ['cycle_start_at', 'recycled_at', 'lead_cycle'] as const;
+
+        // `withCycle` false → the deploy is running code whose migration has not been applied yet.
+        const queryLeads = async (summaryShape: any, withCycle: boolean) => {
             return Promise.all([
                 prisma.contact.findMany({
                     where,
-                    orderBy: leadOrderBy,
+                    orderBy: withCycle ? leadOrderBy : LEAD_SORTS.created_at(sortDir),
                     // shared_at re-orders below, so it must not receive a pre-paginated slice.
                     take: shareRank ? undefined : limit,
                     skip: shareRank ? undefined : (page - 1) * limit,
@@ -427,6 +456,12 @@ router.get('/recent-external', async (req: any, res) => {
                         preferred_lat: true,
                         preferred_lng: true,
                         lifecycle_stage: true,
+                        // Lead-cycle renewal (2026-10-08): cycle_start_at is the "Added" date the
+                        // UI shows and the date filter compares against; recycled_at/lead_cycle let
+                        // it badge a renewed lead. created_at is still selected for first-seen views.
+                        ...(withCycle
+                            ? { recycled_at: true, cycle_start_at: true, lead_cycle: true }
+                            : {}),
                         created_at: true,
                         notes: true,
                         assigned_agent_id: true,
@@ -462,7 +497,26 @@ router.get('/recent-external', async (req: any, res) => {
             ]);
         };
 
-        const [leads, total] = await queryLeads(LEAD_DEAL_SUMMARY);
+        // Schema changes go through Prisma migrations ONLY — runtime DDL at boot was explicitly
+        // reverted (705475f) because it raced across PM2 instances and fought `migrate deploy`.
+        // So we do NOT self-heal here. But `run_migrations` defaults to FALSE on the deploy
+        // workflow, meaning code CAN reach a database without this migration; without a fallback the
+        // entire leads page 500s on "column contacts.cycle_start_at does not exist". Degrade
+        // instead: retry once without the cycle columns and sort on the first-seen date, and say so
+        // loudly so the missing migration gets applied.
+        let leads: any[];
+        let total: number;
+        try {
+            [leads, total] = await queryLeads(LEAD_DEAL_SUMMARY, true);
+        } catch (qErr: any) {
+            const msg = String(qErr?.message || '');
+            if (qErr?.code === 'P2022' && LEAD_CYCLE_FIELDS.some(f => msg.includes(f))) {
+                logger.warn(`[leads] contacts.${LEAD_CYCLE_FIELDS.join('/')} missing — this deploy is missing migration 20261008120000_lead_cycle_recycling. Falling back to created_at ordering until it is applied.`);
+                [leads, total] = await queryLeads(LEAD_DEAL_SUMMARY, false);
+            } else {
+                throw qErr;
+            }
+        }
 
         // Apply the share ordering and paginate here rather than in SQL (see above).
         let pageLeads = leads;
@@ -794,6 +848,192 @@ router.post('/bulk-reassign', async (req: any, res) => {
     } catch (error: any) {
         captureRouteError(error, req, { route: 'leads#bulk-reassign' });
         console.error('[Leads] Bulk reassign error:', error);
+        res.status(500).json({ error: (error as Error).message });
+    }
+});
+
+// ─── POST /api/leads/bulk-stage — move many leads to another pipeline stage ────
+//
+// Two modes, one endpoint (the "rework my lost leads" job):
+//   mode: 'normal'  → set the stage. Enforced by the deal state machine; a jump that is illegal
+//                      from a given deal is reported per-lead instead of failing the batch.
+//   mode: 'recycle' → renew a lost lead into a NEW sales cycle: stamps recycled_at, moves the
+//                      current cycle start to now, clears the current-cycle lost fields so the lead
+//                      leaves the archived bucket, and writes a `lead_recycled` audit interaction.
+//
+// `agent_id` may ride along so "recycle these 40 lost leads and give them to X" is one action.
+//
+// Why nothing here writes `lifecycle_stage` on a lead that HAS a deal: applyLeadStageEdit drives
+// the deal and the state machine's sync hook writes the lead back. That single chokepoint is what
+// stops the lead and its deal from drifting apart again (see services/lead_stage_sync.ts).
+router.post('/bulk-stage', async (req: any, res) => {
+    try {
+        const { phones, stage, mode, reason, agent_id: reassignTo } = req.body || {};
+        const actor = req.agent;
+        if (!Array.isArray(phones) || phones.length === 0) return res.status(400).json({ error: 'phones array required' });
+        if (phones.length > 500) return res.status(400).json({ error: 'Too many leads (max 500 per call)' });
+        const isRecycle = String(mode || '').toLowerCase() === 'recycle';
+        // CLOSED_LOST → NEW is the only legal reopen, so recycle defaults to NEW; another stage is
+        // still validated per lead by the state machine rather than trusted.
+        const targetStage = String(stage || (isRecycle ? 'NEW' : '')).trim().toUpperCase();
+        if (!targetStage) return res.status(400).json({ error: 'stage is required' });
+
+        let targetAgent: { id: string; name: string; role: string; phone: string | null; email: string | null } | null = null;
+        if (reassignTo) {
+            if (reassignTo === actor.id) return res.status(400).json({ error: 'Cannot assign leads to yourself' });
+            targetAgent = await prisma.agent.findFirst({
+                where: { id: reassignTo, tenant_id: actor.tenant_id, status: 'active' },
+                select: { id: true, name: true, role: true, phone: true, email: true },
+            });
+            if (!targetAgent) return res.status(404).json({ error: 'Target agent not found or inactive' });
+        }
+
+        const actorRecord = await prisma.agent.findUnique({ where: { id: actor.id }, select: { name: true } });
+        const actorName = actorRecord?.name || actor.email || 'a team member';
+        const noteText = String(reason || (isRecycle ? `Recycled by ${actorName}` : `Bulk stage change to ${targetStage} by ${actorName}`)).trim();
+
+        // Recycle writes the lead-cycle columns, and schema changes go through migrations ONLY
+        // (`run_migrations` defaults to false on the deploy workflow). Fail the whole batch once,
+        // with an actionable message, instead of reporting the same raw Prisma error on every lead.
+        if (isRecycle) {
+            const probe = await prisma.contact.findFirst({ select: { lead_cycle: true } }).catch((e: any) => e);
+            if (probe instanceof Error || (probe as any)?.code === 'P2022') {
+                return res.status(400).json({
+                    success: false,
+                    error: 'Recycling is unavailable: migration 20261008120000_lead_cycle_recycling has not been applied on this server.',
+                });
+            }
+        }
+
+        const results: { phone: string; ok: boolean; stage?: string; error?: string }[] = [];
+        for (const raw of phones) {
+            try {
+                const phone = await resolvePhone(String(raw));
+                const contact = await prisma.contact.findUnique({
+                    where: { phone_number: phone },
+                    select: {
+                        phone_number: true, name: true, tenant_id: true, assigned_agent_id: true,
+                        lifecycle_stage: true, lead_status: true, lost_reason: true, lost_at: true,
+                        lead_cycle: true,
+                    },
+                });
+                if (!contact) { results.push({ phone: String(raw), ok: false, error: 'Lead not found' }); continue; }
+                if (contact.tenant_id !== actor.tenant_id) { results.push({ phone, ok: false, error: 'Lead not found' }); continue; }
+                // PARTNER: only leads they referred/own (mirrors the single-lead endpoints).
+                if (actor.role === 'partner') {
+                    const { partnerIdsWithSubAgents } = await import('../utils/partner_scope');
+                    const { ids } = await partnerIdsWithSubAgents(actor.id);
+                    if (!(contact.assigned_agent_id && ids.includes(contact.assigned_agent_id))) {
+                        results.push({ phone, ok: false, error: 'Not your lead' }); continue;
+                    }
+                } else if (actor.role === 'employee' && contact.assigned_agent_id !== actor.id) {
+                    results.push({ phone, ok: false, error: 'Not your lead' }); continue;
+                }
+
+                const previousStage = String(contact.lifecycle_stage || 'NEW');
+                if (isRecycle && previousStage !== 'CLOSED_LOST') {
+                    results.push({ phone, ok: false, error: `Only lost leads can be recycled (currently ${previousStage})` }); continue;
+                }
+
+                // Stage change goes through the deal (state machine + lead sync hook). A lead with
+                // no deal — the supply-side LANDLORD/PARTNER_AGENT contacts — is the one case the
+                // codebase still writes directly, matching PATCH /:phone/status.
+                let appliedStage: string = targetStage;
+                try {
+                    const r = await applyLeadStageEdit({ phone, requestedStage: targetStage, actorId: actor.id });
+                    if (!r.handled) {
+                        await prisma.contact.update({ where: { phone_number: phone }, data: { lifecycle_stage: targetStage } });
+                    }
+                } catch (e: any) {
+                    // The state machine rejected this jump. Report it for THIS lead and keep going —
+                    // one bad lead must not abandon the other 39 in the batch.
+                    if (e?.statusCode === 400 || /Invalid transition/i.test(String(e?.message || ''))) {
+                        results.push({ phone, ok: false, error: e.message }); continue;
+                    }
+                    throw e;
+                }
+                appliedStage = targetStage;
+
+                const now = new Date();
+                const contactUpdate: any = {};
+                if (isRecycle) {
+                    // New cycle: the lead's age, sorting and date filters restart from now, while
+                    // created_at keeps the original first-seen date. lead_status leaves the
+                    // lost/closed bucket, otherwise the default Active view would keep hiding it
+                    // (leads.ts active/archived filter), which defeats the whole point of recycling.
+                    contactUpdate.recycled_at = now;
+                    contactUpdate.cycle_start_at = now;
+                    contactUpdate.lead_cycle = Number(contact.lead_cycle || 1) + 1;
+                    contactUpdate.lead_status = 'cold';
+                    contactUpdate.lost_at = null;
+                    contactUpdate.lost_reason = null;
+                }
+                if (targetAgent && contact.assigned_agent_id !== targetAgent.id) {
+                    contactUpdate.assigned_agent_id = targetAgent.id;
+                    contactUpdate.assignment_method = 'manual';
+                }
+
+                await prisma.$transaction([
+                    prisma.contact.update({ where: { phone_number: phone }, data: contactUpdate }),
+                    // Keep the deal coordinator in step with the new owner, same as bulk-reassign.
+                    ...(targetAgent && contact.assigned_agent_id !== targetAgent.id
+                        ? [prisma.transaction.updateMany({
+                            where: { demand_contact_id: phone, status: { notIn: ['CLOSED_WON', 'CLOSED_LOST', 'ON_HOLD'] } },
+                            data: { coordinator_agent_id: targetAgent.id, executive_agent_id: targetAgent.id, updated_at: new Date() },
+                        })]
+                        : []),
+                    // Audit: the whole point of a recycle is that the lost cycle stays readable.
+                    prisma.interaction.create({
+                        data: {
+                            tenant_id: contact.tenant_id, phone_number: phone, channel: 'admin', direction: 'outbound',
+                            event_type: isRecycle ? 'lead_recycled' : 'lead_stage_changed',
+                            content: isRecycle
+                                ? `Lead recycled by ${actorName}: ${previousStage} → ${appliedStage} (cycle ${Number(contact.lead_cycle || 1) + 1}). Previous lost reason: ${contact.lost_reason || 'not recorded'}. ${noteText}`
+                                : `Lead stage changed by ${actorName}: ${previousStage} → ${appliedStage}. ${noteText}`,
+                            metadata: {
+                                from_stage: previousStage, to_stage: appliedStage, actor_id: actor.id, actor_name: actorName,
+                                bulk: true, recycle: isRecycle,
+                                ...(contact.lost_reason ? { previous_lost_reason: contact.lost_reason } : {}),
+                                ...(contact.lost_at ? { previous_lost_at: contact.lost_at } : {}),
+                                ...(targetAgent ? { assigned_to: targetAgent.id, assigned_to_name: targetAgent.name } : {}),
+                                reason: noteText,
+                            },
+                        },
+                    }),
+                ]);
+
+                results.push({ phone, ok: true, stage: appliedStage });
+            } catch (e: any) {
+                results.push({ phone: String(raw), ok: false, error: e?.message || 'failed' });
+            }
+        }
+
+        const okCount = results.filter(r => r.ok).length;
+        // One summary ping to the new owner rather than N.
+        if (targetAgent && okCount > 0) {
+            try {
+                notify('lead_reassigned_to_me', [{
+                    id: targetAgent.id, type: 'agent' as const, phone: targetAgent.phone ?? undefined,
+                    email: targetAgent.email || undefined, name: targetAgent.name,
+                }], { contact_name: `${okCount} leads`, contact_phone: '', from_agent_name: actor.name, reason: `${isRecycle ? 'Bulk recycle' : 'Bulk stage change'} of ${okCount} leads` });
+            } catch (notifyErr) { console.warn(`[Leads] bulk stage notify failed: ${(notifyErr as Error).message}`); }
+        }
+
+        const failed = results.filter(r => !r.ok);
+        console.info(`[Leads] bulk stage (${isRecycle ? 'recycle' : 'normal'} → ${targetStage}): ${okCount}/${phones.length} by ${actorName}`);
+        res.json({
+            success: true,
+            updated: okCount,
+            total: phones.length,
+            failed: failed.length,
+            stage: targetStage,
+            mode: isRecycle ? 'recycle' : 'normal',
+            // Per-lead failures so the UI can say exactly which leads could not move.
+            results,
+        });
+    } catch (error: any) {
+        captureRouteError(error, req, { route: 'leads#bulk-stage' });
+        console.error('[Leads] Bulk stage error:', error);
         res.status(500).json({ error: (error as Error).message });
     }
 });

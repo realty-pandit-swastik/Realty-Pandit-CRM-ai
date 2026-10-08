@@ -253,7 +253,12 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
     const [notContactedDays, setNotContactedDays] = useState(initialFilter?.not_contacted_days ? Number(initialFilter.not_contacted_days) : 0);
     const [noShowcaseDays, setNoShowcaseDays] = useState(0);
     const [budgetMinFilter, setBudgetMinFilter] = useState(''); // lead budget filter (#3, 2026-06-28)
-    const [budgetMaxFilter, setBudgetMaxFilter] = useState('');
+const [budgetMaxFilter, setBudgetMaxFilter] = useState('');
+    // Pipeline stage filter (2026-10-08). Multi-select. Server-side for the candidate set; rows
+    // are re-filtered below because this list renders one ROW PER DEAL and each row carries its
+    // own stage — filtering only contacts would leave sibling rows on screen at another stage.
+    const [stageFilters, setStageFilters] = useState<string[]>([]);
+    const toggleStageFilter = (s: string) => setStageFilters(prev => prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s]);
     // Bulk reassign (#4, 2026-06-28)
     const [leadSelectMode, setLeadSelectMode] = useState(false);
     const [selectedLeadPhones, setSelectedLeadPhones] = useState<Set<string>>(new Set());
@@ -261,6 +266,15 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
     const [leadReassignTarget, setLeadReassignTarget] = useState('');
     const [leadReassigning, setLeadReassigning] = useState(false);
     const [leadReassignMsg, setLeadReassignMsg] = useState('');
+    // Bulk stage change / recycle (2026-10-08)
+    const [showLeadStage, setShowLeadStage] = useState(false);
+    const [leadStageMode, setLeadStageMode] = useState<'normal' | 'recycle'>('normal');
+    const [leadStageTarget, setLeadStageTarget] = useState('NEW');
+    const [leadStageAssignee, setLeadStageAssignee] = useState('');
+    const [leadStageBusy, setLeadStageBusy] = useState(false);
+    const [leadStageMsg, setLeadStageMsg] = useState('');
+    const [leadStageMsgOk, setLeadStageMsgOk] = useState(true);
+    const [leadStageError, setLeadStageError] = useState('');
     const toggleLeadSelect = (phone: string) => setSelectedLeadPhones(prev => {
         const selected = new Set(prev);
         if (selected.has(phone)) selected.delete(phone);
@@ -460,6 +474,7 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
                         budget_min: budgetMinFilter.trim() || undefined,
                         budget_max: budgetMaxFilter.trim() || undefined,
                         ...(sharedWithMe ? { shared_with_me: 'true' } : {}),
+                        ...(stageFilters.length > 0 ? { stage: stageFilters.join(',') } : {}),
                         limit: String(pageLimit),
                         sort: leadSortKey,
                         direction: leadSortDir,
@@ -480,7 +495,7 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
                 setLoading(false);
             }
         }
-    }, [sourceFilter, statusFilter, agentFilter, intentFilter, filterTaxonomy, locationSelection, notContactedDays, noShowcaseDays, budgetMinFilter, budgetMaxFilter, debouncedSearch, activeFilter, sharedWithMe, pageLimit, leadSortKey, leadSortDir]);
+    }, [sourceFilter, statusFilter, agentFilter, intentFilter, filterTaxonomy, locationSelection, notContactedDays, noShowcaseDays, budgetMinFilter, budgetMaxFilter, debouncedSearch, activeFilter, sharedWithMe, stageFilters.join(','), pageLimit, leadSortKey, leadSortDir]);
 
     useEffect(() => { loadData(); }, [loadData]);
     useEffect(() => () => pendingLeadsRequest.current?.abort(), []);
@@ -1301,6 +1316,7 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
         noShowcaseDays > 0 ? '1' : '',
         (budgetMinFilter.trim() || budgetMaxFilter.trim()) ? '1' : '',
         sharedWithMe ? '1' : '',
+        stageFilters.length > 0 ? '1' : '',
     ].filter(Boolean).length + (filterTaxonomy.nodeIds.length > 0 ? 1 : 0) + (filterTaxonomy.bhk.length > 0 ? 1 : 0);
 
     // 2026-05-13: Server now handles search + status + source + agent + activeFilter.
@@ -1309,30 +1325,39 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
     // locally (defensive). The phone-search bug was here: lead.phone_number stored as
     // "+91XXXXXXXXXX" while user types "9958..." — `.includes()` mismatched. Server now
     // handles phone variants via extractSearchDigits + phoneVariants.
+// "Added" = the CURRENT lead cycle (2026-10-08). A recycled lead reports its renewal date so a
+    // date-range filter behaves the way the user expects; created_at stays the first-seen date and
+    // is deliberately left untouched on the backend.
+const leadCycleStartOf = (lead: any): string => {
+        const raw = lead?.cycle_start_at || lead?.recycled_at || lead?.created_at;
+        const d = raw ? new Date(raw) : null;
+        return d && !isNaN(d.getTime()) ? d.toISOString().slice(0, 10) : '';
+    };
     const filteredLeads = recentLeads.filter(lead => {
-        if (dateFrom) {
-            const leadDate = new Date(lead.created_at).toISOString().slice(0, 10);
-            if (leadDate < dateFrom) return false;
-        }
-        if (dateTo) {
-            const leadDate = new Date(lead.created_at).toISOString().slice(0, 10);
-            if (leadDate > dateTo) return false;
-        }
+        const leadDate = leadCycleStartOf(lead);
+        if (dateFrom && (!leadDate || leadDate < dateFrom)) return false;
+        if (dateTo && (!leadDate || leadDate > dateTo)) return false;
         return true;
     });
 
-    // ── Select-all (header checkbox only) ──
+    // ── Select-all (header checkbox only) ──────────────────────────────────────
     // Operates on currently loaded + filtered rows (not the server-side recentTotal).
     // One row per enquiry (deal): the same contact appears once per lead, each with its own source,
     // property, assignee and stage. A contact with no visible deals stays a single contact-level row.
     // Counts / select-all / filters remain contact-based (filteredLeads).
+    //
+    // Stage filter (2026-10-08): re-applied per ROW because this list renders one row per DEAL and
+    // each row carries its own stage. The server narrows the candidate contacts; without this the
+    // user could filter by "Visited" and still see sibling rows badged "New".
     const leadRows: LeadRow[] = filteredLeads.flatMap((l): LeadRow[] =>
-        l.demand_transactions?.length
+        (l.demand_transactions?.length
             ? l.demand_transactions.map(d => ({
                 ...l, _deal: d, source: d.source, lifecycle_stage: d.status,
                 assigned_agent: d.coordinator ?? (l as any).assigned_agent,
             } as LeadRow))
-            : [l]);
+            : [l]
+        ).filter(row => stageFilters.length === 0 || stageFilters.includes(String(row.lifecycle_stage || '').toUpperCase()))
+    );
     const allVisibleSelected = filteredLeads.length > 0 && filteredLeads.every(l => selectedLeadPhones.has(l.phone_number));
     const someVisibleSelected = filteredLeads.some(l => selectedLeadPhones.has(l.phone_number));
     const toggleSelectAllVisible = () => {
@@ -1939,7 +1964,9 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
                                             </td>
                                             <td style={{ ...compactCell, fontSize: '11px', textTransform: 'capitalize' }}>{lead.intent || <span style={{ color: 'var(--text-muted)' }}>—</span>}</td>
                                             <td style={{ ...compactCell, fontSize: '11px', maxWidth: '120px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{lead.preferred_location || <span style={{ color: 'var(--text-muted)' }}>—</span>}</td>
-                                            <td style={{ ...compactCell, color: 'var(--text-muted)', fontSize: '10px', whiteSpace: 'nowrap' }}>{new Date(lead.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}</td>
+                                            <td style={{ ...compactCell, color: 'var(--text-muted)', fontSize: '10px', whiteSpace: 'nowrap' }}>{leadCycleStartOf(lead)
+                                                ? new Date(leadCycleStartOf(lead)).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })
+                                                : '—'}</td>
                                             <td style={compactCell} onClick={e => e.stopPropagation()}>
                                                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                                     {rowDialable && (
@@ -2873,8 +2900,93 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
                     <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>{selectedLeadPhones.size} lead{selectedLeadPhones.size === 1 ? '' : 's'} selected</span>
                     <button onClick={() => { setShowLeadReassign(true); setLeadReassignTarget(''); setLeadReassignMsg(''); }}
                         style={{ padding: '8px 18px', borderRadius: '8px', fontSize: '13px', fontWeight: 700, cursor: 'pointer', backgroundColor: '#8b5cf6', border: 'none', color: '#fff' }}>🔄 Reassign</button>
+                    <button onClick={() => { setShowLeadStage(true); setLeadStageMode('normal'); setLeadStageTarget('NEW'); setLeadStageAssignee(''); setLeadStageMsg(''); setLeadStageError(''); }}
+                        style={{ padding: '8px 18px', borderRadius: '8px', fontSize: '13px', fontWeight: 700, cursor: 'pointer', backgroundColor: '#0ea5e9', border: 'none', color: '#fff' }}>🗂️ Stage</button>
                     <button onClick={() => { setSelectedLeadPhones(new Set()); setLeadSelectMode(false); }}
                         style={{ padding: '8px 14px', borderRadius: '8px', fontSize: '12px', cursor: 'pointer', border: '1px solid var(--border-secondary)', backgroundColor: 'transparent', color: 'var(--text-muted)' }}>Cancel</button>
+                </div>
+            )}
+
+            {/* Bulk stage change / recycle (2026-10-08) — the "rework my lost leads" action. */}
+            {showLeadStage && (
+                <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 2100, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                    onMouseDown={e => { if (e.target === e.currentTarget && !leadStageBusy) setShowLeadStage(false); }}>
+                    <div style={{ backgroundColor: 'var(--bg-primary)', borderRadius: '14px', padding: '24px', width: '440px', maxWidth: '92vw', maxHeight: '88vh', overflowY: 'auto' }}>
+                        <div style={{ fontSize: '16px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '8px' }}>
+                            🗂️ Stage {selectedLeadPhones.size} lead{selectedLeadPhones.size === 1 ? '' : 's'}
+                        </div>
+
+                        {/* Mode */}
+                        <div style={{ display: 'flex', gap: '8px', marginBottom: '14px' }}>
+                            <button type="button" onClick={() => { setLeadStageMode('normal'); setLeadStageError(''); }}
+                                style={{ flex: 1, padding: '10px', borderRadius: '8px', cursor: 'pointer', fontWeight: 600, fontSize: '13px',
+                                    border: leadStageMode === 'normal' ? '1.5px solid var(--accent-primary)' : '1px solid var(--border-secondary)',
+                                    backgroundColor: leadStageMode === 'normal' ? 'rgba(59,130,246,0.10)' : 'var(--bg-secondary)', color: 'var(--text-primary)' }}>
+                                Change stage
+                            </button>
+                            <button type="button" onClick={() => { setLeadStageMode('recycle'); setLeadStageTarget('NEW'); setLeadStageError(''); }}
+                                style={{ flex: 1, padding: '10px', borderRadius: '8px', cursor: 'pointer', fontWeight: 600, fontSize: '13px',
+                                    border: leadStageMode === 'recycle' ? '1.5px solid #22c55e' : '1px solid var(--border-secondary)',
+                                    backgroundColor: leadStageMode === 'recycle' ? 'rgba(34,197,94,0.10)' : 'var(--bg-secondary)', color: 'var(--text-primary)' }}>
+                                ♻️ Recycle lost leads
+                            </button>
+                        </div>
+
+                        <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '14px' }}>
+                            {leadStageMode === 'recycle'
+                                ? 'Starts a new sales cycle: the lead returns to New, its lead date becomes today so it resurfaces at the top of the board, and the previous lost stage and reason stay on the record. Only lost leads can be recycled.'
+                                : 'Moves each selected lead to the stage below. Stage moves follow the pipeline rules — anything that cannot legally move is reported back instead of being forced.'}
+                        </div>
+
+                        <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)' }}>Target stage</label>
+                        <select value={leadStageTarget} onChange={e => setLeadStageTarget(e.target.value)}
+                            disabled={leadStageMode === 'recycle'}
+                            style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', marginTop: '6px', marginBottom: '14px', border: '1px solid var(--border-secondary)', backgroundColor: 'var(--bg-secondary)', color: 'var(--text-primary)', fontSize: '13px', opacity: leadStageMode === 'recycle' ? 0.6 : 1 }}>
+                            {LIFECYCLE_STAGES.map(s => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}
+                        </select>
+
+                        <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)' }}>Assign to (optional)</label>
+                        <select value={leadStageAssignee} onChange={e => setLeadStageAssignee(e.target.value)}
+                            style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', marginTop: '6px', marginBottom: '14px', border: '1px solid var(--border-secondary)', backgroundColor: 'var(--bg-secondary)', color: 'var(--text-primary)', fontSize: '13px' }}>
+                            <option value="">Keep current owner</option>
+                            {teamMembers.filter(m => m.id !== agent?.id).map(m => (
+                                <option key={m.id} value={m.id}>{m.name}{(m as any).role ? ` (${(m as any).role})` : ''}</option>
+                            ))}
+                        </select>
+
+                        {leadStageError && <div role="alert" style={{ fontSize: '12px', color: '#fca5a5', marginBottom: '12px' }}>{leadStageError}</div>}
+                        {leadStageMsg && <div style={{ fontSize: '12px', color: leadStageMsgOk ? '#22c55e' : '#ef4444', marginBottom: '12px', whiteSpace: 'pre-wrap' }}>{leadStageMsg}</div>}
+
+                        <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+                            <button disabled={leadStageBusy} onClick={() => setShowLeadStage(false)}
+                                style={{ padding: '8px 16px', borderRadius: '8px', fontSize: '13px', cursor: 'pointer', border: '1px solid var(--border-secondary)', backgroundColor: 'transparent', color: 'var(--text-muted)' }}>Cancel</button>
+                            <button disabled={leadStageBusy} onClick={async () => {
+                                setLeadStageBusy(true); setLeadStageMsg(''); setLeadStageError(''); setLeadStageMsgOk(true);
+                                try {
+                                    const res = await client.post('/api/leads/bulk-stage', {
+                                        phones: Array.from(selectedLeadPhones),
+                                        stage: leadStageTarget,
+                                        mode: leadStageMode,
+                                        ...(leadStageAssignee ? { agent_id: leadStageAssignee } : {}),
+                                    });
+                                    const n = res.data?.updated ?? 0;
+                                    const failed = Array.isArray(res.data?.results) ? res.data.results.filter((r: any) => !r.ok) : [];
+                                    setLeadStageMsgOk(failed.length === 0);
+                                    setLeadStageMsg(
+                                        `${leadStageMode === 'recycle' ? 'Recycled' : 'Updated'} ${n} of ${res.data?.total ?? selectedLeadPhones.size} lead(s).`
+                                        + (failed.length ? `\n\nCouldn't move ${failed.length}:\n` + failed.slice(0, 5).map((r: any) => `• ${r.phone}: ${r.error}`).join('\n') : '')
+                                    );
+                                    await loadData();
+                                } catch (err: any) {
+                                    setLeadStageMsgOk(false);
+                                    setLeadStageError(err?.response?.data?.error || 'Bulk stage change failed');
+                                } finally { setLeadStageBusy(false); }
+                            }}
+                                style={{ padding: '8px 18px', borderRadius: '8px', fontSize: '13px', fontWeight: 700, cursor: leadStageBusy ? 'not-allowed' : 'pointer', backgroundColor: leadStageMode === 'recycle' ? '#16a34a' : 'var(--accent-primary)', border: 'none', color: '#fff', opacity: leadStageBusy ? 0.6 : 1 }}>
+                                {leadStageBusy ? 'Working…' : leadStageMode === 'recycle' ? 'Recycle leads' : 'Apply stage'}
+                            </button>
+                        </div>
+                    </div>
                 </div>
             )}
 
@@ -2953,10 +3065,30 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
                                 setLocationSelection({ label: '', lat: null, lng: null, radiusKm: 2 });
                                 setNotContactedDays(0);
                                 setNoShowcaseDays(0);
+                                setStageFilters([]);
                             }} style={{ background: 'none', border: 'none', color: 'var(--text-link)', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}>
                                 Clear All
                             </button>
                         </div>
+
+                        {/* Pipeline stage (2026-10-08). Multi-select, and it deliberately reaches leads the
+                            active/archived toggle hides — picking CLOSED_LOST is how you find
+                            lost leads to rework. */}
+                        <FilterSection title="Pipeline Stage" defaultOpen={false} badge={stageFilters.length}>
+                            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                                {LIFECYCLE_STAGES.map(s => (
+                                    <button key={s} type="button"
+                                        onClick={() => toggleStageFilter(s)}
+                                        className={`chip ${stageFilters.includes(s) ? 'chip-active' : 'chip-inactive'}`}>
+                                        {s.replace(/_/g, ' ')}
+                                    </button>
+                                ))}
+                            </div>
+                            <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '6px' }}>
+                                Filters each enquiry by its own stage. Selecting a stage also includes
+                                lost leads, which the default Active view hides.
+                            </div>
+                        </FilterSection>
 
                         {/* Intent */}
                         <FilterSection title="Intent" defaultOpen badge={intentFilter ? 1 : 0}>
