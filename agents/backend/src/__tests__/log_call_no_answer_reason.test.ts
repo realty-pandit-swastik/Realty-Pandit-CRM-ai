@@ -28,8 +28,7 @@ vi.mock('../middleware/auth', () => ({
 vi.mock('../services/deal_reminder', () => ({ createDealReminder: vi.fn().mockResolvedValue({ task_id: 'task-1' }) }));
 
 // The close-unreachable path drives the real state machine; stub it so these tests assert the
-// ROUTE's reason handling (validation + team-action outcome), not the transition rules
-// (covered by transition_noop.test.ts).
+// ROUTE's reason handling, not the transition rules (covered by transition_noop.test.ts).
 vi.mock('../services/transaction_state_machine', () => ({
     transitionTransaction: vi.fn().mockResolvedValue({ status: 'CLOSED_LOST' }),
     advanceVisitedDeal: vi.fn(),
@@ -39,6 +38,7 @@ vi.mock('../services/transaction_state_machine', () => ({
 import prisma from '../db';
 import dealsRouter from '../routes/deals';
 import { createDealReminder } from '../services/deal_reminder';
+import { transitionTransaction } from '../services/transaction_state_machine';
 
 const DEAL_ID = 'deal-1';
 const PHONE = '+919000000010';
@@ -59,6 +59,12 @@ const NEW_DEAL = {
     demand_contact: { phone_number: PHONE, name: 'Salil', tenant_id: 't1' },
 };
 
+const postLogCall = (outcome: string, payload: Record<string, any> = {}) =>
+    request(app()).post(`/api/deals/${DEAL_ID}/log-call`).send({ outcome, payload });
+
+const teamActionOutcome = () => (prisma.teamAction.create as any).mock.calls[0][0].data.outcome;
+const interactionMetadata = () => (prisma.interaction.create as any).mock.calls[0][0].data.metadata;
+
 beforeEach(() => {
     vi.clearAllMocks();
     (prisma.transaction.findUnique as any).mockResolvedValue({ ...NEW_DEAL });
@@ -69,82 +75,103 @@ beforeEach(() => {
     (createDealReminder as any).mockResolvedValue({ task_id: 'task-1' });
 });
 
-// Why a no-answer call reached nobody. The reason is recorded on team_actions.outcome so the
-// Deal Pipeline tile's "last action" line can show it, while metadata.outcome MUST stay
-// NO_ANSWER — the derived no_answer_count, the "N× no answer" badge and the N=4
-// reassign/close gate all query metadata.path['outcome'] == 'NO_ANSWER'.
+// Why a no-answer call reached nobody. Encoded on team_actions.outcome as "<BASE>:<REASON>" so the
+// base outcome survives and cannot collide with another writer of that free-text column.
+// metadata.outcome MUST stay the raw outcome — the derived no_answer_count, the "N× no answer"
+// badge and the N=4 reassign/close gate all query metadata.path['outcome'] == 'NO_ANSWER'.
 describe('POST /api/deals/:id/log-call — no-answer reason', () => {
-    it('stores the picked reason on the team action so the tile shows it as the last action', async () => {
-        const res = await request(app())
-            .post(`/api/deals/${DEAL_ID}/log-call`)
-            .send({ outcome: 'NO_ANSWER', payload: { no_answer_reason: 'BUSY' } });
+    it('records the reason alongside the base outcome so the tile can label it', async () => {
+        const res = await postLogCall('NO_ANSWER', { no_answer_reason: 'BUSY' });
 
         expect(res.status).toBe(200);
         expect(res.body).toMatchObject({ success: true, outcome: 'NO_ANSWER' });
-        expect((prisma.teamAction.create as any)).toHaveBeenCalledWith(
-            expect.objectContaining({
-                data: expect.objectContaining({ action_type: 'CALL_LOGGED', outcome: 'BUSY' }),
-            }),
-        );
+        expect(teamActionOutcome()).toBe('NO_ANSWER:BUSY');
     });
 
     it('keeps interaction metadata.outcome = NO_ANSWER so the no-answer count still derives', async () => {
-        await request(app())
-            .post(`/api/deals/${DEAL_ID}/log-call`)
-            .send({ outcome: 'NO_ANSWER', payload: { no_answer_reason: 'NOT_REACHABLE' } });
+        await postLogCall('NO_ANSWER', { no_answer_reason: 'NOT_REACHABLE' });
 
-        expect((prisma.interaction.create as any)).toHaveBeenCalledWith(
-            expect.objectContaining({
-                data: expect.objectContaining({
-                    event_type: 'human_call_outcome',
-                    metadata: expect.objectContaining({ outcome: 'NO_ANSWER', no_answer_reason: 'NOT_REACHABLE' }),
-                }),
-            }),
-        );
+        expect(interactionMetadata()).toMatchObject({
+            outcome: 'NO_ANSWER',
+            deal_id: DEAL_ID,
+            no_answer_reason: 'NOT_REACHABLE',
+        });
+    });
+
+    it('does not let a caller override the audited metadata.outcome / deal_id from the body', async () => {
+        // Without trusted-last spread ordering this makes the row look like a NO_ANSWER, inflating
+        // no_answer_count and mis-attributing it — enough to trip the N=4 close gate on a deal that
+        // was actually qualified.
+        const res = await postLogCall('ANSWERED_INTERESTED', {
+            outcome: 'NO_ANSWER',
+            deal_id: 'some-other-deal',
+            no_answer_reason: 'BUSY',
+            requirements: {
+                intent: 'buy', budget_min: 1, budget_max: 2, preferred_location: 'Noida', timeline: 'now',
+            },
+        });
+
+        expect(res.status).toBe(200);
+        expect(interactionMetadata()).toMatchObject({ outcome: 'ANSWERED_INTERESTED', deal_id: DEAL_ID });
+    });
+
+    it('never persists an unrecognised reason, and never fails the call over it', async () => {
+        // The frontend requires this field, so a frontend deployed ahead of the backend must degrade
+        // to "no reason" — not brick the whole Log Call form (which may close a deal).
+        const res = await postLogCall('NO_ANSWER', { no_answer_reason: 'killed the call 🎉'.repeat(50) });
+
+        expect(res.status).toBe(200);
+        expect(teamActionOutcome()).toBe('NO_ANSWER');
+        expect(interactionMetadata().no_answer_reason).toBeUndefined();
+    });
+
+    it('does not attach a no-answer reason to an unrelated outcome', async () => {
+        await postLogCall('CALLBACK_REQUESTED', {
+            callback_at: '2026-10-09T10:00:00.000Z',
+            no_answer_reason: 'BUSY',
+        });
+
+        expect(teamActionOutcome()).toBe('CALLBACK_REQUESTED');
+        expect(interactionMetadata().no_answer_reason).toBeUndefined();
+    });
+
+    it('keeps CLOSED_UNREACHABLE as the outcome when closing with a reason', async () => {
+        // Regression: a bare reason here would erase "closed as unreachable" AND collide with the
+        // WRONG_NUMBER value WRONG_OR_SPAM already writes to the same column.
+        const res = await postLogCall('CLOSED_UNREACHABLE', { no_answer_reason: 'WRONG_NUMBER' });
+
+        expect(res.status).toBe(200);
+        expect(teamActionOutcome()).toBe('CLOSED_UNREACHABLE:WRONG_NUMBER');
+        expect(transitionTransaction).toHaveBeenCalledWith(DEAL_ID, 'CLOSED_LOST', 'agent-1', 'admin', expect.objectContaining({ notes: expect.stringContaining('unreachable') }));
+    });
+
+    it('does not close the deal when the reason is unrecognised', async () => {
+        const res = await postLogCall('CLOSED_UNREACHABLE', { no_answer_reason: 'nope' });
+
+        expect(res.status).toBe(200);
+        expect(transitionTransaction).toHaveBeenCalled();
+        expect(teamActionOutcome()).toBe('CLOSED_UNREACHABLE');
+        expect(interactionMetadata().no_answer_reason).toBeUndefined();
     });
 
     it('accepts a reason together with a reminder and books it', async () => {
-        const res = await request(app())
-            .post(`/api/deals/${DEAL_ID}/log-call`)
-            .send({ outcome: 'NO_ANSWER', payload: { no_answer_reason: 'SWITCHED_OFF', remind_at: '2026-10-09T10:00:00.000Z' } });
+        const res = await postLogCall('NO_ANSWER', { no_answer_reason: 'SWITCHED_OFF', remind_at: '2026-10-09T10:00:00.000Z' });
 
         expect(res.status).toBe(200);
         expect(createDealReminder).toHaveBeenCalledTimes(1);
-        expect((prisma.teamAction.create as any).mock.calls[0][0].data.outcome).toBe('SWITCHED_OFF');
-    });
-
-    it('rejects an unknown reason with 400 and writes no action row', async () => {
-        const res = await request(app())
-            .post(`/api/deals/${DEAL_ID}/log-call`)
-            .send({ outcome: 'NO_ANSWER', payload: { no_answer_reason: 'killed the call' } });
-
-        expect(res.status).toBe(400);
-        expect(res.body.error).toMatch(/Unknown no-answer reason/);
-        expect(prisma.teamAction.create).not.toHaveBeenCalled();
-        expect(prisma.interaction.create).not.toHaveBeenCalled();
+        expect(teamActionOutcome()).toBe('NO_ANSWER:SWITCHED_OFF');
     });
 
     it('still logs the generic outcome when an older client sends no reason', async () => {
-        const res = await request(app())
-            .post(`/api/deals/${DEAL_ID}/log-call`)
-            .send({ outcome: 'NO_ANSWER', payload: {} });
+        const res = await postLogCall('NO_ANSWER', {});
 
         expect(res.status).toBe(200);
-        expect((prisma.teamAction.create as any).mock.calls[0][0].data.outcome).toBe('NO_ANSWER');
+        expect(teamActionOutcome()).toBe('NO_ANSWER');
     });
 
-    it('accepts a reason on the close-unreachable path and rejects an unknown one there too', async () => {
-        const ok = await request(app())
-            .post(`/api/deals/${DEAL_ID}/log-call`)
-            .send({ outcome: 'CLOSED_UNREACHABLE', payload: { no_answer_reason: 'WRONG_NUMBER' } });
-        expect(ok.status).toBe(200);
-        expect((prisma.teamAction.create as any).mock.calls[0][0].data.outcome).toBe('WRONG_NUMBER');
+    it('normalises a lowercase reason', async () => {
+        await postLogCall('NO_ANSWER', { no_answer_reason: 'busy' });
 
-        vi.clearAllMocks();
-        (prisma.transaction.findUnique as any).mockResolvedValue({ ...NEW_DEAL });
-        const bad = await request(app())
-            .post(`/api/deals/${DEAL_ID}/log-call`)
-            .send({ outcome: 'CLOSED_UNREACHABLE', payload: { no_answer_reason: 'nope' } });
-        expect(bad.status).toBe(400);
+        expect(teamActionOutcome()).toBe('NO_ANSWER:BUSY');
     });
 });

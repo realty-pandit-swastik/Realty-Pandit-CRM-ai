@@ -32,13 +32,24 @@ export const NO_ANSWER_REASONS: { code: NoAnswerReason; label: string }[] =
     NO_ANSWER_REASON_CODES.map(code => ({ code, label: NO_ANSWER_REASON_LABEL[code] }));
 
 /**
- * Tile/timeline label for a TeamAction.outcome value. Falls back to the raw
- * value's readable form so legacy rows (`no answer`, `qualified`, free text
- * written by the Deal Workspace quick-log) keep rendering as before.
+ * Tile/timeline label for a TeamAction.outcome value.
+ *
+ * The backend writes a no-answer as "<BASE_OUTCOME>:<REASON>" (e.g. "NO_ANSWER:BUSY") so the base
+ * outcome survives and cannot collide with another writer of that free-text column (WRONG_OR_SPAM
+ * already writes a bare "WRONG_NUMBER"). A bare reason code is also accepted so rows written before
+ * the prefix existed still read correctly.
+ *
+ * Anything else — legacy outcomes ("no answer", "qualified"), the reminder service's
+ * "Reminder for 8 Oct, 10:49 pm", or the Deal Workspace quick-log's free text — falls back to its
+ * readable raw form.
  */
 export function noAnswerReasonLabel(raw?: string | null): string | null {
     if (!raw) return null;
-    const code = raw.toUpperCase() as NoAnswerReason;
-    if (NO_ANSWER_REASON_LABEL[code]) return NO_ANSWER_REASON_LABEL[code];
-    return raw.replace(/_/g, ' ').toLowerCase();
+    const value = String(raw);
+    const suffix = value.includes(':') ? value.slice(value.indexOf(':') + 1) : value;
+    const code = suffix.trim().toUpperCase() as NoAnswerReason;
+    if (Object.prototype.hasOwnProperty.call(NO_ANSWER_REASON_LABEL, code)) {
+        return NO_ANSWER_REASON_LABEL[code];
+    }
+    return value.replace(/_/g, ' ').toLowerCase();
 }

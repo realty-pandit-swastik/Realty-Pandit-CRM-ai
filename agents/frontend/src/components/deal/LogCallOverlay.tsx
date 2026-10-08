@@ -647,6 +647,8 @@ function NoAnswerReasonSelect({ value, onChange }: {
         <Field label="Why no answer? *">
             <select
                 aria-label="Why no answer"
+                aria-required="true"
+                aria-invalid={!value}
                 value={value}
                 onChange={e => onChange(e.target.value as NoAnswerReason)}
                 style={inputStyle}
@@ -758,9 +760,11 @@ function NotAnsweredStep({ submitting, noAnswerCount, agents, onSetReminder, onR
                 {gateOpen && <div style={{ marginTop: '6px', color: '#b45309', fontWeight: 600 }}>⚠ Called {noAnswerCount}× with no answer — consider reassigning or closing.</div>}
             </div>
             <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                <button type="button" onClick={() => setMode('reminder')} style={tab(mode === 'reminder')}>⏰ Set reminder</button>
-                {gateOpen && <button type="button" onClick={() => setMode('reassign')} style={tab(mode === 'reassign')}>🔄 Reassign</button>}
-                {gateOpen && <button type="button" onClick={() => setMode('close')} style={tab(mode === 'close')}>❌ Close</button>}
+                {/* Reset the reason on tab switch: a pick made under "Set reminder" must not be
+                    silently pre-selected (and submitted) under "Close". */}
+                <button type="button" onClick={() => { setReason(''); setMode('reminder'); }} style={tab(mode === 'reminder')}>⏰ Set reminder</button>
+                {gateOpen && <button type="button" onClick={() => { setReason(''); setMode('reassign'); }} style={tab(mode === 'reassign')}>🔄 Reassign</button>}
+                {gateOpen && <button type="button" onClick={() => { setReason(''); setMode('close'); }} style={tab(mode === 'close')}>❌ Close</button>}
             </div>
             {mode === 'reminder' && (<>
                 <NoAnswerReasonSelect value={reason} onChange={setReason} />
