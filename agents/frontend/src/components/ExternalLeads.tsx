@@ -233,12 +233,18 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
     const [leadSortDir, setLeadSortDir] = useState<'asc' | 'desc'>('desc');
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const pendingLeadsRequest = useRef<AbortController | null>(null);
 
     // ── Filters ──
     const [searchQuery, setSearchQuery] = useState('');
     const [debouncedSearch, setDebouncedSearch] = useState('');
     useEffect(() => {
-        const t = setTimeout(() => setDebouncedSearch(searchQuery.trim()), 350);
+        const t = setTimeout(() => {
+            setDebouncedSearch(searchQuery.trim());
+            // A new query should start from the first page of results instead of
+            // retaining a previously expanded Load-more limit.
+            setPageLimit(500);
+        }, 350);
         return () => clearTimeout(t);
     }, [searchQuery]);
     const [statusFilter, setStatusFilter] = useState(initialFilter?.status ?? '');
@@ -415,9 +421,15 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
     // ─── Data Loading ─────────────────────────────────────────────────────────
 
     const loadData = useCallback(async () => {
+        // Cancel a previous list request before starting the next one. Without
+        // this, a slower response to an older search can overwrite newer results.
+        pendingLeadsRequest.current?.abort();
+        const controller = new AbortController();
+        pendingLeadsRequest.current = controller;
         try {
             setError(null);
             const recentRes = await client.get('/api/leads/recent-external', {
+                    signal: controller.signal,
                     params: {
                         ...(sourceFilter ? { source: sourceFilter } : {}),
                         ...(statusFilter ? { status: statusFilter } : {}),
@@ -447,13 +459,18 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
             // Capture the server's TRUE filtered count (recent-external returns { leads, total }).
             setRecentTotal(Array.isArray(recentData) ? loaded.length : (recentData.total ?? loaded.length));
         } catch (err: any) {
+            if (err?.code === 'ERR_CANCELED' || err?.name === 'CanceledError') return;
             setError(err?.response?.data?.error || err.message || 'Failed to load leads');
         } finally {
-            setLoading(false);
+            if (pendingLeadsRequest.current === controller) {
+                pendingLeadsRequest.current = null;
+                setLoading(false);
+            }
         }
     }, [sourceFilter, statusFilter, agentFilter, intentFilter, filterTaxonomy, locationSelection, notContactedDays, noShowcaseDays, budgetMinFilter, budgetMaxFilter, debouncedSearch, activeFilter, sharedWithMe, pageLimit, leadSortKey, leadSortDir]);
 
     useEffect(() => { loadData(); }, [loadData]);
+    useEffect(() => () => pendingLeadsRequest.current?.abort(), []);
     useEffect(() => {
         const interval = setInterval(() => { if (busyRef.current || document.hidden) return; loadData(); }, 30000);
         return () => clearInterval(interval);
