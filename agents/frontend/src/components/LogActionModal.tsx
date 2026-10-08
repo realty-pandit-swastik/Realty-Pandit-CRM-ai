@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import client, { getDealPropertyShares, bookDealAppointment } from '../api/client';
+import client, { getDealPropertyShares, bookDealAppointment, type Deal } from '../api/client';
 import { bhkOf, societyOf, propertyTypeLabel } from '../lib/specChips';
 
 export type LogActionType =
@@ -19,6 +19,7 @@ interface LogActionModalProps {
     actionType: LogActionType;
     onClose: () => void;
     onSuccess: () => void;
+    deal?: Deal;
 }
 
 const OUTCOME_LABELS: Record<string, string[]> = {
@@ -42,7 +43,7 @@ const MEETING_TYPES = [
     { value: 'LOGGED_NOTE',     label: 'Called / WhatsApped customer' },
 ];
 
-export function LogActionModal({ dealId, actionType, onClose, onSuccess }: LogActionModalProps) {
+export function LogActionModal({ dealId, actionType, onClose, onSuccess, deal }: LogActionModalProps) {
     const [outcome, setOutcome]         = useState('');
     const [notes, setNotes]             = useState('');
     const [visitDate, setVisitDate]     = useState('');
@@ -86,14 +87,24 @@ export function LogActionModal({ dealId, actionType, onClose, onSuccess }: LogAc
         setSubmitting(true);
         setError('');
         try {
-            // "I Scheduled a Visit" tied to a shared property → create a real appointment: pins the
-            // inventory, moves the deal to Visit Scheduled, and notifies customer / coordinator / key holder.
-            if (isSchedVisit && selectedInventoryId) {
+            // "I Scheduled a Visit" tied to a shared property → create/refresh the
+            // appointment on the deal so Visit tile + Calendar dashboard update.
+            if (isVisitAction) {
                 if (!visitDate || !visitTime) { setError('Please select date and time'); setSubmitting(false); return; }
-                await bookDealAppointment(dealId, { inventory_id: selectedInventoryId, date: visitDate, time: visitTime });
-                onSuccess();
-                onClose();
-                return;
+                const tiedInventoryId = selectedInventoryId || ((deal as any)?.inventory_id || '');
+                if (tiedInventoryId) {
+                    await bookDealAppointment(dealId, { inventory_id: tiedInventoryId, date: visitDate, time: visitTime });
+                    onSuccess(); onClose(); return;
+                }
+                // No property linkage — still update the existing open appointment so a
+                // CONFIRMED/RESCHEDULED visit does not stay stale on the deal/calendar.
+                const openApptId = ((deal as any)?.appointments?.[0]?.id) as string | undefined;
+                if (openApptId) {
+                    await client.patch(`/api/calendar/appointments/${openApptId}`, {
+                        scheduled_at: new Date(`${visitDate}T${visitTime}:00+05:30`).toISOString(),
+                        notes: notes || undefined,
+                    });
+                }
             }
             let resolvedActionType: string = actionType;
             let resolvedNewStatus: string | undefined;

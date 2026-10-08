@@ -21,6 +21,11 @@ on:
       - '.github/workflows/deploy-hostinger.yml'
   workflow_dispatch:
     inputs:
+      preflight_only:
+        description: 'Inspect production revision, processes, schema and backup metadata without deploying'
+        required: true
+        default: false
+        type: boolean
       run_migrations:
         description: 'Run prisma migrate deploy (requires a verified backup and migration review)'
         required: true
@@ -139,7 +144,7 @@ jobs:
 
   deploy:
     # Keep automatic delivery off until the server preflight in the handover is complete.
-    if: github.ref == 'refs/heads/main' && vars.HOSTINGER_GITHUB_DEPLOY_ENABLED == 'true'
+    if: github.ref == 'refs/heads/main' && (vars.HOSTINGER_GITHUB_DEPLOY_ENABLED == 'true' || inputs.preflight_only)
     runs-on: ubuntu-latest
     timeout-minutes: 30
     needs: [backend-check, frontend-check, website-check, extension-check]
@@ -171,7 +176,15 @@ jobs:
           printf '%s\n' "$HOSTINGER_KNOWN_HOSTS" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
 
+      - name: Inspect production without deploying
+        if: inputs.preflight_only
+        run: |
+          target="${HOSTINGER_USER}@${HOSTINGER_HOST}"
+          scp -P "$HOSTINGER_PORT" deploy/production-preflight.sh "$target:/tmp/production-preflight-${GITHUB_SHA}.sh"
+          ssh -p "$HOSTINGER_PORT" "$target" "HOSTINGER_DEPLOY_PATH='$HOSTINGER_DEPLOY_PATH' bash /tmp/production-preflight-${GITHUB_SHA}.sh"
+
       - name: Package approved revision
+        if: '!inputs.preflight_only'
         run: |
           tar -czf /tmp/realty-pandit-${GITHUB_SHA}.tgz \
             --exclude='agents/backend/node_modules' --exclude='agents/backend/.env' --exclude='agents/backend/uploads' --exclude='agents/backend/logs' \
@@ -180,6 +193,7 @@ jobs:
             agents/backend agents/frontend agents/website
 
       - name: Upload and deploy
+        if: '!inputs.preflight_only'
         run: |
           target="${HOSTINGER_USER}@${HOSTINGER_HOST}"
           archive="/tmp/realty-pandit-${GITHUB_SHA}.tgz"

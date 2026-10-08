@@ -1,0 +1,46 @@
+/**
+ * Lead-cycle helpers (2026-10-08).
+ *
+ * Recycling a lost lead starts a NEW sales cycle but must NOT rewrite history:
+ * `contacts.created_at` stays the first-seen date that every report, age metric and audit
+ * trail depends on. Instead a recycle stamps `recycled_at`, and the CURRENT cycle's start —
+ * what the user thinks of as "the lead date" — is read from here.
+ *
+ * One helper, used by the Ext. Leads list (sort + date filter + "Added" column), the
+ * staleness/age surfaces and the bulk recycle endpoint, so "how old is this lead" can never
+ * mean two different things in two places.
+ */
+
+/** Minimal shape so callers can pass a full Prisma row or a hand-built object. */
+export interface LeadCycleRow {
+    created_at: Date | string;
+    recycled_at?: Date | string | null;
+    cycle_start_at?: Date | string | null;
+    lead_cycle?: number | null;
+}
+
+/** Start of the lead's CURRENT cycle: the cycle stamp, else first seen. */
+export function leadCycleStart(row: LeadCycleRow | null | undefined): Date | null {
+    if (!row) return null;
+    const cycle = row.cycle_start_at ? new Date(row.cycle_start_at) : null;
+    if (cycle && !isNaN(cycle.getTime())) return cycle;
+    const recycled = row.recycled_at ? new Date(row.recycled_at) : null;
+    if (recycled && !isNaN(recycled.getTime())) return recycled;
+    const created = row.created_at ? new Date(row.created_at) : null;
+    return created && !isNaN(created.getTime()) ? created : null;
+}
+
+/** ISO (YYYY-MM-DD) of the current cycle start — the shape the date filters compare against. */
+export function leadCycleStartIso(row: LeadCycleRow | null | undefined): string {
+    const d = leadCycleStart(row);
+    return d ? d.toISOString().slice(0, 10) : '';
+}
+
+/** True once the lead has been renewed at least once (cycle 2+). */
+export function isRecycledLead(row: LeadCycleRow | null | undefined): boolean {
+    if (!row) return false;
+    return Number(row.lead_cycle || 1) > 1 || !!row.recycled_at;
+}
+
+/** Prisma orderBy fragment ordering by the current cycle instead of first-seen date. */
+export const LEAD_CYCLE_START_ORDER = { cycle_start_at: 'asc' as const };

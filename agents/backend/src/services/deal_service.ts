@@ -693,7 +693,7 @@ export async function listDeals(filters: {
             appointments: {
                 where: { status: { notIn: ['cancelled', 'completed', 'no_show'] } },
                 orderBy: { scheduled_at: 'desc' }, take: 1,
-                select: { status: true, scheduled_at: true },
+                select: { id: true, status: true, scheduled_at: true },
             },
             // Latest human action → powers the tile's "last team action" line (2026-06-26).
             team_actions: {
