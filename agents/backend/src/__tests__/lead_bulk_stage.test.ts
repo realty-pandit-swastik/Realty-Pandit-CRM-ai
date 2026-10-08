@@ -9,7 +9,7 @@ vi.mock('../db', () => ({
     default: {
         $queryRaw: vi.fn().mockResolvedValue([]),
         $transaction: vi.fn(),
-        contact: { findUnique: vi.fn(), findMany: vi.fn(), update: vi.fn(), count: vi.fn() },
+        contact: { findUnique: vi.fn(), findFirst: vi.fn(), findMany: vi.fn(), update: vi.fn(), count: vi.fn() },
         transaction: { findUnique: vi.fn(), findMany: vi.fn(), update: vi.fn(), updateMany: vi.fn(), count: vi.fn() },
         interaction: { create: vi.fn(), count: vi.fn() },
         agent: { findUnique: vi.fn(), findFirst: vi.fn(), findMany: vi.fn() },
@@ -65,6 +65,8 @@ beforeEach(() => {
     role = 'manager';
     stageEdit.applyLeadStageEdit.mockResolvedValue({ handled: true });
     vi.mocked(prisma.contact.findUnique).mockResolvedValue(LOST as any);
+    // Migration-present probe run by recycle mode.
+    vi.mocked(prisma.contact.findFirst).mockResolvedValue({ lead_cycle: 1 } as any);
     vi.mocked(prisma.contact.update).mockResolvedValue({} as any);
     vi.mocked(prisma.transaction.updateMany).mockResolvedValue({ count: 1 } as any);
     vi.mocked(prisma.interaction.create).mockResolvedValue({} as any);
@@ -198,6 +200,21 @@ describe('POST /api/leads/bulk-stage — recycle mode', () => {
             .post('/api/leads/bulk-stage')
             .send({ phones: [LOST.phone_number], stage: 'NEW', agent_id: 'mgr-1' });
         expect(res.status).toBe(400);
+    });
+
+    it('fails once with an actionable message when the lead-cycle migration is missing', async () => {
+        // `run_migrations` defaults to FALSE on deploy, so recycling can run against a database
+        // without the columns. One clear error beats the same Prisma text repeated per lead.
+        vi.mocked(prisma.contact.findFirst).mockRejectedValueOnce(
+            Object.assign(new Error('The column contacts.lead_cycle does not exist in the current database.'), { code: 'P2022' })
+        );
+        const res = await request(app)
+            .post('/api/leads/bulk-stage')
+            .send({ phones: [LOST.phone_number], mode: 'recycle' });
+
+        expect(res.status).toBe(400);
+        expect(res.body.error).toMatch(/20261008120000_lead_cycle_recycling/);
+        expect(prisma.contact.update).not.toHaveBeenCalled();
     });
 });
 

@@ -895,6 +895,19 @@ router.post('/bulk-stage', async (req: any, res) => {
         const actorName = actorRecord?.name || actor.email || 'a team member';
         const noteText = String(reason || (isRecycle ? `Recycled by ${actorName}` : `Bulk stage change to ${targetStage} by ${actorName}`)).trim();
 
+        // Recycle writes the lead-cycle columns, and schema changes go through migrations ONLY
+        // (`run_migrations` defaults to false on the deploy workflow). Fail the whole batch once,
+        // with an actionable message, instead of reporting the same raw Prisma error on every lead.
+        if (isRecycle) {
+            const probe = await prisma.contact.findFirst({ select: { lead_cycle: true } }).catch((e: any) => e);
+            if (probe instanceof Error || (probe as any)?.code === 'P2022') {
+                return res.status(400).json({
+                    success: false,
+                    error: 'Recycling is unavailable: migration 20261008120000_lead_cycle_recycling has not been applied on this server.',
+                });
+            }
+        }
+
         const results: { phone: string; ok: boolean; stage?: string; error?: string }[] = [];
         for (const raw of phones) {
             try {
