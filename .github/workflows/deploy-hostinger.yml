@@ -26,6 +26,11 @@ on:
         required: true
         default: false
         type: boolean
+      verify_backup:
+        description: 'With preflight only: create database/uploads backup and restore-test the reviewed migrations in an isolated database'
+        required: true
+        default: false
+        type: boolean
       run_migrations:
         description: 'Run prisma migrate deploy (requires a verified backup and migration review)'
         required: true
@@ -182,6 +187,19 @@ jobs:
           target="${HOSTINGER_USER}@${HOSTINGER_HOST}"
           scp -P "$HOSTINGER_PORT" deploy/production-preflight.sh "$target:/tmp/production-preflight-${GITHUB_SHA}.sh"
           ssh -p "$HOSTINGER_PORT" "$target" "HOSTINGER_DEPLOY_PATH='$HOSTINGER_DEPLOY_PATH' bash /tmp/production-preflight-${GITHUB_SHA}.sh"
+
+      - name: Back up and rehearse in isolated database
+        if: inputs.preflight_only && inputs.verify_backup && !cancelled()
+        run: |
+          target="${HOSTINGER_USER}@${HOSTINGER_HOST}"
+          remote="/tmp/realty-production-backup-${GITHUB_SHA}"
+          ssh -p "$HOSTINGER_PORT" "$target" "umask 077; mkdir -p '$remote'"
+          scp -P "$HOSTINGER_PORT" deploy/production-backup.cjs "$target:$remote/production-backup.cjs"
+          for migration in 20261008120000_lead_cycle_recycling 20261008130000_client_role; do
+            ssh -p "$HOSTINGER_PORT" "$target" "mkdir -p '$remote/$migration'"
+            scp -P "$HOSTINGER_PORT" "agents/backend/prisma/migrations/$migration/migration.sql" "$target:$remote/$migration/migration.sql"
+          done
+          ssh -p "$HOSTINGER_PORT" "$target" "HOSTINGER_DEPLOY_PATH='$HOSTINGER_DEPLOY_PATH' node '$remote/production-backup.cjs' '$remote/20261008120000_lead_cycle_recycling/migration.sql' '$remote/20261008130000_client_role/migration.sql'"
 
       - name: Package approved revision
         if: '!inputs.preflight_only'
