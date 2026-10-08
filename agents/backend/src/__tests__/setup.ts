@@ -14,7 +14,7 @@ vi.mock('../db', () => ({
         tenant: { findFirst: vi.fn(), count: vi.fn() },
         agent: { findUnique: vi.fn(), findFirst: vi.fn(), findMany: vi.fn(), count: vi.fn() },
         contact: { findUnique: vi.fn(), findFirst: vi.fn(), findMany: vi.fn(), upsert: vi.fn(), create: vi.fn(), update: vi.fn(), count: vi.fn() },
-        inventory: { findMany: vi.fn(), findUnique: vi.fn(), findFirst: vi.fn(), count: vi.fn(), create: vi.fn(), groupBy: vi.fn() },
+        inventory: { findMany: vi.fn(), findUnique: vi.fn(), findFirst: vi.fn(), count: vi.fn(), create: vi.fn(), update: vi.fn(), groupBy: vi.fn() },
         inventoryCounter: { upsert: vi.fn().mockResolvedValue({ counter: 20002 }) },
         task: { create: vi.fn(), findFirst: vi.fn(), findMany: vi.fn(), update: vi.fn() },
         interaction: { create: vi.fn(), findMany: vi.fn() },

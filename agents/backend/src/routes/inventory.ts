@@ -784,6 +784,9 @@ router.get('/', authMiddleware, async (req, res) => {
                         select: { id: true, name: true, role: true, phone: true },
                     },
                     referral_partner: { select: { name: true, phone_number: true } },
+                    // Owner NAME (Inventory has no owner_name column). Redacted for viewers
+                    // without owner access like any other contact relation.
+                    contact: { select: { name: true } },
                     property_category: { select: { id: true, name: true, slug: true } },
                     property_sub_category: { select: { id: true, name: true, slug: true } },
                     property_type_link: { select: { id: true, name: true, slug: true } },
@@ -854,7 +857,12 @@ router.get('/', authMiddleware, async (req, res) => {
             const canSeeSourcePhone = isSB || teamIds.includes(i.assigned_agent_id) || teamIds.includes(i.uploaded_by_agent_id);
             const isDealer = i.ownership_type === 'EXTERNAL_AGENT';
             const isAgentOwner = i.ownership_type === 'AGENT_OWNER';
-            const sourceName = (isDealer ? i.referral_partner?.name : i.owner_name) || i.uploader_name || null;
+            // Owner NAME lives on Contact (Inventory has no owner_name column). Resolved from
+            // the relation BEFORE redaction, then re-attached below alongside `source` —
+            // previously this fell straight through to uploader_name, so a listing whose owner
+            // differed from its uploader displayed the UPLOADER's name as the owner's.
+            const contactName: string | null = i.contact?.name ?? null;
+            const sourceName = (isDealer ? i.referral_partner?.name : contactName) || i.uploader_name || null;
             const sourcePhoneRaw = isDealer
                 ? (i.referral_partner?.phone_number || i.uploader_phone)
                 : (i.owner_phone || i.uploader_phone);
@@ -881,7 +889,7 @@ router.get('/', authMiddleware, async (req, res) => {
             const OWNER_PENDING_PHONES = ['+910000000000', '+910000000001'];
             const needs_owner_fix = OWNER_PENDING_PHONES.includes(i.owner_phone)
                 || (!!ownerD && (ownerD === d10(i.uploaded_by_agent?.phone) || ownerD === d10(i.assigned_agent?.phone)));
-            return { ...redacted, source, mine, can_edit, needs_owner_fix };
+            return { ...redacted, source, owner_name: contactName, mine, can_edit, needs_owner_fix };
         });
 
         res.json({
@@ -1131,7 +1139,9 @@ router.patch('/:id', authMiddleware, checkPermission('edit_inventory'), async (r
             // Ownership (Redesign v2)
             'ownership_type', 'upload_source',
             // Owner/Uploader contact correction
-            'owner_phone', 'uploader_phone',
+            // uploader_name is a real Inventory column (the owner's NAME is not — it lives on
+            // Contact.name and is synced below), so it is the one name field that is written here.
+            'owner_phone', 'uploader_phone', 'uploader_name',
         ];
         const updateData: any = {};
         // Handle renovated boolean explicitly (not in allowedFields loop to avoid string coercion)
@@ -1288,7 +1298,12 @@ router.patch('/:id', authMiddleware, checkPermission('edit_inventory'), async (r
             // member (broadened from the self-only check of 2026-06-20; 313 rows had staff-as-owner).
             const staffOwnerE = await activeStaffOwnerName(normalized);
             if (staffOwnerE) {
-                return res.status(400).json({ error: `${staffOwnerE} is a team member and cannot be set as the property owner. Enter the actual owner number.` });
+                // error_code lets the Edit modal explain the rejection inline instead of
+                // relying on a transient toast the user can easily miss.
+                return res.status(400).json({
+                    error: `${staffOwnerE} is a team member and cannot be set as the property owner. Enter the actual owner number.`,
+                    error_code: 'OWNER_IS_TEAM_MEMBER',
+                });
             }
             updateData.owner_phone = normalized;
             // Ensure Owner record exists and update FK
@@ -1297,6 +1312,18 @@ router.patch('/:id', authMiddleware, checkPermission('edit_inventory'), async (r
                 const ownerId = await ensureOwner(normalized, tenant.id);
                 updateData.owner_id = ownerId;
             }
+            // Owner NAME is not an Inventory column — it is Contact.name. Without this the
+            // "Change" action saved the new number but silently dropped the new name, so the
+            // card/header kept showing the PREVIOUS owner's name against the new number
+            // (ensureOwner only names 'Unknown' for contacts it has to create).
+            // Mirrors what POST /inventory, /transfer and /mark-sold already do.
+            const ownerName = String(req.body.owner_name ?? '').trim();
+            if (ownerName) {
+                await prisma.contact.update({ where: { phone_number: normalized }, data: { name: ownerName } })
+                    .catch((e: any) => logger.warn(`[Inventory] owner name sync failed for ${normalized}: ${e?.message}`));
+            }
+            // Keep the redundant owner_contact_id FK consistent with the new owner_phone.
+            if (existing.owner_contact_id) updateData.owner_contact_id = normalized;
         }
         if (updateData.uploader_phone) {
             const normalized = normalizePhone(updateData.uploader_phone);
@@ -1364,7 +1391,17 @@ router.patch('/:id', authMiddleware, checkPermission('edit_inventory'), async (r
             );
         }
 
-        res.json(updated);
+        // Attach the resolved owner NAME (Contact.name — not a column) so the Edit modal can
+        // refresh in place after saving an owner change instead of re-fetching. Only returned
+        // to this caller, which already passed the owner/team edit guard.
+        let ownerNameOut: string | null = null;
+        if (updated.owner_phone) {
+            const ownerContact = await prisma.contact
+                .findUnique({ where: { phone_number: updated.owner_phone }, select: { name: true } })
+                .catch(() => null);
+            ownerNameOut = (ownerContact as { name?: string | null } | null)?.name ?? null;
+        }
+        res.json({ ...updated, owner_name: ownerNameOut });
     } catch (error) {
         captureRouteError(error, req, { route: 'inventory#4' });
         logger.error('[Inventory PATCH] Error:', error);

@@ -127,6 +127,8 @@ export function MobileInventoryEdit({ item, onSaved }: MobileInventoryEditProps)
         customer_price: item.customer_price || '',
         display_price: item.display_price || '',
         owner_phone: item.owner_phone || '',
+        // owner_name is derived server-side from Contact.name (no Inventory column).
+        owner_name: item.owner_name || item.contact?.name || item.source?.name || '',
         uploader_phone: item.uploader_phone || '',
         uploader_name: item.uploader_name || '',
         key_holder_type: item.key_holder_type || '',
@@ -136,6 +138,8 @@ export function MobileInventoryEdit({ item, onSaved }: MobileInventoryEditProps)
     });
 
     const [saving, setSaving] = useState(false);
+    // Owner railguard rejection, surfaced inline instead of as a transient toast.
+    const [ownerError, setOwnerError] = useState('');
     const [nodeFields, setNodeFields] = useState<any[]>([]);
     const [schemaValues, setSchemaValues] = useState<Record<string, any>>({});
     const [classTree, setClassTree] = useState<any>({ categories: [], configurations: [], usage_types: [], investment_types: [] });
@@ -259,9 +263,16 @@ export function MobileInventoryEdit({ item, onSaved }: MobileInventoryEditProps)
             const payload: Record<string, any> = { ...data, specs: specsObj };
             for (const field of ['bedrooms', 'bathrooms', 'area', 'area_unit', 'features']) delete payload[field];
             await updateInventory(item.id, payload);
+            setOwnerError('');
             onSaved();
         } catch (err: any) {
-            showToast(err.response?.data?.error || 'Failed to save', 'error');
+            const message = err?.response?.data?.error || 'Failed to save';
+            // Owner railguard: explain inline and keep the sheet open with the form intact.
+            if (err?.response?.data?.error_code === 'OWNER_IS_TEAM_MEMBER') {
+                setOwnerError(message);
+                setExpandedSections(s => ({ ...s, owner_contact: true }));
+            }
+            showToast(message, 'error');
         } finally {
             setSaving(false);
         }
@@ -771,14 +782,21 @@ export function MobileInventoryEdit({ item, onSaved }: MobileInventoryEditProps)
                 {expandedSections.owner_contact && (
                     <MobileEditContactSection
                         currentPhone={data.owner_phone}
-                        currentName={data.uploader_name}
+                        currentName={data.owner_name}
                         color="#34d399"
                         onContactSelected={(contact) => {
+                            // Owner-only — the uploader is audit data and stays untouched.
+                            setOwnerError('');
                             set('owner_phone', contact.phone);
-                            set('uploader_phone', contact.phone);
-                            set('uploader_name', contact.name);
+                            set('owner_name', contact.name);
                         }}
                     />
+                )}
+                {ownerError && expandedSections.owner_contact && (
+                    <div role="alert" style={{
+                        padding: '10px 12px', borderRadius: '8px', fontSize: '12px', marginTop: '8px',
+                        backgroundColor: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.35)', color: '#fca5a5',
+                    }}>{ownerError}</div>
                 )}
 
                 {/* Key Holder */}
