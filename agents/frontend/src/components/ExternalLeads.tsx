@@ -256,6 +256,15 @@ const [budgetMaxFilter, setBudgetMaxFilter] = useState('');
     const [leadReassignTarget, setLeadReassignTarget] = useState('');
     const [leadReassigning, setLeadReassigning] = useState(false);
     const [leadReassignMsg, setLeadReassignMsg] = useState('');
+    // Bulk stage change / recycle (2026-10-08)
+    const [showLeadStage, setShowLeadStage] = useState(false);
+    const [leadStageMode, setLeadStageMode] = useState<'normal' | 'recycle'>('normal');
+    const [leadStageTarget, setLeadStageTarget] = useState('NEW');
+    const [leadStageAssignee, setLeadStageAssignee] = useState('');
+    const [leadStageBusy, setLeadStageBusy] = useState(false);
+    const [leadStageMsg, setLeadStageMsg] = useState('');
+    const [leadStageMsgOk, setLeadStageMsgOk] = useState(true);
+    const [leadStageError, setLeadStageError] = useState('');
     const toggleLeadSelect = (phone: string) => setSelectedLeadPhones(prev => {
         const selected = new Set(prev);
         if (selected.has(phone)) selected.delete(phone);
@@ -2849,8 +2858,93 @@ const leadCycleStartOf = (lead: any): string => {
                     <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>{selectedLeadPhones.size} lead{selectedLeadPhones.size === 1 ? '' : 's'} selected</span>
                     <button onClick={() => { setShowLeadReassign(true); setLeadReassignTarget(''); setLeadReassignMsg(''); }}
                         style={{ padding: '8px 18px', borderRadius: '8px', fontSize: '13px', fontWeight: 700, cursor: 'pointer', backgroundColor: '#8b5cf6', border: 'none', color: '#fff' }}>🔄 Reassign</button>
+                    <button onClick={() => { setShowLeadStage(true); setLeadStageMode('normal'); setLeadStageTarget('NEW'); setLeadStageAssignee(''); setLeadStageMsg(''); setLeadStageError(''); }}
+                        style={{ padding: '8px 18px', borderRadius: '8px', fontSize: '13px', fontWeight: 700, cursor: 'pointer', backgroundColor: '#0ea5e9', border: 'none', color: '#fff' }}>🗂️ Stage</button>
                     <button onClick={() => { setSelectedLeadPhones(new Set()); setLeadSelectMode(false); }}
                         style={{ padding: '8px 14px', borderRadius: '8px', fontSize: '12px', cursor: 'pointer', border: '1px solid var(--border-secondary)', backgroundColor: 'transparent', color: 'var(--text-muted)' }}>Cancel</button>
+                </div>
+            )}
+
+            {/* Bulk stage change / recycle (2026-10-08) — the "rework my lost leads" action. */}
+            {showLeadStage && (
+                <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 2100, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                    onMouseDown={e => { if (e.target === e.currentTarget && !leadStageBusy) setShowLeadStage(false); }}>
+                    <div style={{ backgroundColor: 'var(--bg-primary)', borderRadius: '14px', padding: '24px', width: '440px', maxWidth: '92vw', maxHeight: '88vh', overflowY: 'auto' }}>
+                        <div style={{ fontSize: '16px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '8px' }}>
+                            🗂️ Stage {selectedLeadPhones.size} lead{selectedLeadPhones.size === 1 ? '' : 's'}
+                        </div>
+
+                        {/* Mode */}
+                        <div style={{ display: 'flex', gap: '8px', marginBottom: '14px' }}>
+                            <button type="button" onClick={() => { setLeadStageMode('normal'); setLeadStageError(''); }}
+                                style={{ flex: 1, padding: '10px', borderRadius: '8px', cursor: 'pointer', fontWeight: 600, fontSize: '13px',
+                                    border: leadStageMode === 'normal' ? '1.5px solid var(--accent-primary)' : '1px solid var(--border-secondary)',
+                                    backgroundColor: leadStageMode === 'normal' ? 'rgba(59,130,246,0.10)' : 'var(--bg-secondary)', color: 'var(--text-primary)' }}>
+                                Change stage
+                            </button>
+                            <button type="button" onClick={() => { setLeadStageMode('recycle'); setLeadStageTarget('NEW'); setLeadStageError(''); }}
+                                style={{ flex: 1, padding: '10px', borderRadius: '8px', cursor: 'pointer', fontWeight: 600, fontSize: '13px',
+                                    border: leadStageMode === 'recycle' ? '1.5px solid #22c55e' : '1px solid var(--border-secondary)',
+                                    backgroundColor: leadStageMode === 'recycle' ? 'rgba(34,197,94,0.10)' : 'var(--bg-secondary)', color: 'var(--text-primary)' }}>
+                                ♻️ Recycle lost leads
+                            </button>
+                        </div>
+
+                        <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '14px' }}>
+                            {leadStageMode === 'recycle'
+                                ? 'Starts a new sales cycle: the lead returns to New, its lead date becomes today so it resurfaces at the top of the board, and the previous lost stage and reason stay on the record. Only lost leads can be recycled.'
+                                : 'Moves each selected lead to the stage below. Stage moves follow the pipeline rules — anything that cannot legally move is reported back instead of being forced.'}
+                        </div>
+
+                        <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)' }}>Target stage</label>
+                        <select value={leadStageTarget} onChange={e => setLeadStageTarget(e.target.value)}
+                            disabled={leadStageMode === 'recycle'}
+                            style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', marginTop: '6px', marginBottom: '14px', border: '1px solid var(--border-secondary)', backgroundColor: 'var(--bg-secondary)', color: 'var(--text-primary)', fontSize: '13px', opacity: leadStageMode === 'recycle' ? 0.6 : 1 }}>
+                            {LIFECYCLE_STAGES.map(s => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}
+                        </select>
+
+                        <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)' }}>Assign to (optional)</label>
+                        <select value={leadStageAssignee} onChange={e => setLeadStageAssignee(e.target.value)}
+                            style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', marginTop: '6px', marginBottom: '14px', border: '1px solid var(--border-secondary)', backgroundColor: 'var(--bg-secondary)', color: 'var(--text-primary)', fontSize: '13px' }}>
+                            <option value="">Keep current owner</option>
+                            {teamMembers.filter(m => m.id !== agent?.id).map(m => (
+                                <option key={m.id} value={m.id}>{m.name}{(m as any).role ? ` (${(m as any).role})` : ''}</option>
+                            ))}
+                        </select>
+
+                        {leadStageError && <div role="alert" style={{ fontSize: '12px', color: '#fca5a5', marginBottom: '12px' }}>{leadStageError}</div>}
+                        {leadStageMsg && <div style={{ fontSize: '12px', color: leadStageMsgOk ? '#22c55e' : '#ef4444', marginBottom: '12px', whiteSpace: 'pre-wrap' }}>{leadStageMsg}</div>}
+
+                        <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+                            <button disabled={leadStageBusy} onClick={() => setShowLeadStage(false)}
+                                style={{ padding: '8px 16px', borderRadius: '8px', fontSize: '13px', cursor: 'pointer', border: '1px solid var(--border-secondary)', backgroundColor: 'transparent', color: 'var(--text-muted)' }}>Cancel</button>
+                            <button disabled={leadStageBusy} onClick={async () => {
+                                setLeadStageBusy(true); setLeadStageMsg(''); setLeadStageError(''); setLeadStageMsgOk(true);
+                                try {
+                                    const res = await client.post('/api/leads/bulk-stage', {
+                                        phones: Array.from(selectedLeadPhones),
+                                        stage: leadStageTarget,
+                                        mode: leadStageMode,
+                                        ...(leadStageAssignee ? { agent_id: leadStageAssignee } : {}),
+                                    });
+                                    const n = res.data?.updated ?? 0;
+                                    const failed = Array.isArray(res.data?.results) ? res.data.results.filter((r: any) => !r.ok) : [];
+                                    setLeadStageMsgOk(failed.length === 0);
+                                    setLeadStageMsg(
+                                        `${leadStageMode === 'recycle' ? 'Recycled' : 'Updated'} ${n} of ${res.data?.total ?? selectedLeadPhones.size} lead(s).`
+                                        + (failed.length ? `\n\nCouldn't move ${failed.length}:\n` + failed.slice(0, 5).map((r: any) => `• ${r.phone}: ${r.error}`).join('\n') : '')
+                                    );
+                                    await loadData();
+                                } catch (err: any) {
+                                    setLeadStageMsgOk(false);
+                                    setLeadStageError(err?.response?.data?.error || 'Bulk stage change failed');
+                                } finally { setLeadStageBusy(false); }
+                            }}
+                                style={{ padding: '8px 18px', borderRadius: '8px', fontSize: '13px', fontWeight: 700, cursor: leadStageBusy ? 'not-allowed' : 'pointer', backgroundColor: leadStageMode === 'recycle' ? '#16a34a' : 'var(--accent-primary)', border: 'none', color: '#fff', opacity: leadStageBusy ? 0.6 : 1 }}>
+                                {leadStageBusy ? 'Working…' : leadStageMode === 'recycle' ? 'Recycle leads' : 'Apply stage'}
+                            </button>
+                        </div>
+                    </div>
                 </div>
             )}
 
