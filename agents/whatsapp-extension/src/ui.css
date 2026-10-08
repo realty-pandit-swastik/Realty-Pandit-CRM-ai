@@ -1,0 +1,10 @@
+:root { color-scheme: light dark; font-family: system-ui, sans-serif; }
+body { margin: 0; background: #101827; color: #eef2ff; }
+main { max-width: 720px; min-width: 300px; margin: auto; padding: 24px; }
+h1 { font-size: 23px; } h2 { font-size: 16px; overflow-wrap: anywhere; }
+p { line-height: 1.6; } pre { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; }
+section { border: 1px solid #475569; padding: 16px; border-radius: 12px; margin: 12px 0; }
+img { max-width: 100%; max-height: 220px; object-fit: contain; }
+.actions { display: flex; gap: 12px; }
+button { padding: 12px 18px; background: #15803d; color: white; border: 0; border-radius: 8px; cursor: pointer; font: inherit; }
+button:disabled { opacity: .5; cursor: default; }

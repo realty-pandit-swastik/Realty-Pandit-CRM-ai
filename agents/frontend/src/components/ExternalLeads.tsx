@@ -1,9 +1,11 @@
 
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import PhoneInput from './PhoneInput';
 import CallerDossier from './CallerDossier';
-import client, { getPartnerAssignable, assignLeadToTeammate, shareLead, rosterForPickers, updateContactProfile } from '../api/client';
-import { isPlaceholderPhone, isDialablePhone, isValidPhoneInput, toDialablePhone, normalizePhoneInput } from '../lib/phone';
+import client, { getPartnerAssignable, assignLeadToTeammate, shareLead, rosterForPickers, updateContactProfile, getDealMatchCounts } from '../api/client';
+import { isPlaceholderPhone, isValidPhoneInput, toDialablePhone, normalizePhoneInput } from '../lib/phone';
+import { drillTo } from '../lib/drill';
+import { bhkLabel as bhkLabelFor, stageInfo, dealerFallback, clientRoleLabel, clientRoleColor } from '../lib/leadDisplay';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import LeadCard from './leads/LeadCard';
@@ -67,12 +69,16 @@ interface Lead {
     referral_partner_id: string | null;
     referral_partner_name: string | null;
     referral_partner_phone: string | null;
+    // Primary client role (CLIENT | AGENT | BUILDER | FINANCER | CHOKIDAR…) — standing identity.
+    client_role?: string | null;
     // One contact → many leads: the enquiries (deals) on this contact that the viewer may see.
     demand_transactions?: LeadDeal[];
 }
 
 interface LeadDeal {
     id: string; source: string; source_ref: string | null; status: string; created_at: string;
+    // Temporary per-enquiry client role — overrides Contact.client_role on that row.
+    client_role_override?: string | null;
     coordinator: { id: string; name: string | null } | null;
 }
 
@@ -137,23 +143,8 @@ const sourceLabels: Record<string, string> = {
     'agent_registration': 'Agent Reg.',
 };
 const LEAD_STATUSES = ['cold', 'warm', 'hot', 'closed', 'lost'];
-// Pipeline stage (Contact.lifecycle_stage) — auto-driven by the deal pipeline. Shown read-only. (2026-07-29)
-const STAGE_META: Record<string, { label: string; color: string }> = {
-    NEW: { label: 'New', color: '#3b82f6' },
-    QUALIFIED: { label: 'Qualified', color: '#6366f1' },
-    MATCHED: { label: 'Matched', color: '#8b5cf6' },
-    MATCHING_APPOINTMENT: { label: 'Matching', color: '#8b5cf6' },
-    VISIT_SCHEDULED: { label: 'Visit set', color: '#f59e0b' },
-    VISITED: { label: 'Visited', color: '#14b8a6' },
-    NEGOTIATION: { label: 'Negotiation', color: '#f97316' },
-    CLOSED_WON: { label: 'Won', color: '#22c55e' },
-    CLOSED_LOST: { label: 'Lost', color: '#ef4444' },
-    ON_HOLD: { label: 'On hold', color: '#94a3b8' },
-};
-const stageInfo = (raw?: string | null): { label: string; color: string } => {
-    const key = String(raw || 'NEW').toUpperCase();
-    return STAGE_META[key === 'LEAD' ? 'NEW' : key] || { label: String(raw || 'New'), color: '#6b7280' };
-};
+// Pipeline stage display lives in lib/leadDisplay (shared with LeadCard).
+// Contact.lifecycle_stage is auto-driven by the deal pipeline. Shown read-only. (2026-07-29)
 const LIFECYCLE_STAGES = ['NEW', 'QUALIFIED', 'MATCHING_APPOINTMENT', 'VISIT_SCHEDULED', 'VISITED', 'NEGOTIATION', 'CLOSED_WON', 'CLOSED_LOST', 'ON_HOLD'];
 const SOURCES = ['99acres', 'magicbricks', 'housing', 'website', 'whatsapp', 'voice', 'manual', 'admin_created', 'inventory_workflow', 'website_popup', 'agent_registration'];
 const PRIVILEGED_ROLES = ['super_boss', 'manager'];
@@ -233,12 +224,18 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
     const [leadSortDir, setLeadSortDir] = useState<'asc' | 'desc'>('desc');
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const pendingLeadsRequest = useRef<AbortController | null>(null);
 
     // ── Filters ──
     const [searchQuery, setSearchQuery] = useState('');
     const [debouncedSearch, setDebouncedSearch] = useState('');
     useEffect(() => {
-        const t = setTimeout(() => setDebouncedSearch(searchQuery.trim()), 350);
+        const t = setTimeout(() => {
+            setDebouncedSearch(searchQuery.trim());
+            // A new query should start from the first page of results instead of
+            // retaining a previously expanded Load-more limit.
+            setPageLimit(500);
+        }, 350);
         return () => clearTimeout(t);
     }, [searchQuery]);
     const [statusFilter, setStatusFilter] = useState(initialFilter?.status ?? '');
@@ -256,7 +253,12 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
     const [notContactedDays, setNotContactedDays] = useState(initialFilter?.not_contacted_days ? Number(initialFilter.not_contacted_days) : 0);
     const [noShowcaseDays, setNoShowcaseDays] = useState(0);
     const [budgetMinFilter, setBudgetMinFilter] = useState(''); // lead budget filter (#3, 2026-06-28)
-    const [budgetMaxFilter, setBudgetMaxFilter] = useState('');
+const [budgetMaxFilter, setBudgetMaxFilter] = useState('');
+    // Pipeline stage filter (2026-10-08). Multi-select. Server-side for the candidate set; rows
+    // are re-filtered below because this list renders one ROW PER DEAL and each row carries its
+    // own stage — filtering only contacts would leave sibling rows on screen at another stage.
+    const [stageFilters, setStageFilters] = useState<string[]>([]);
+    const toggleStageFilter = (s: string) => setStageFilters(prev => prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s]);
     // Bulk reassign (#4, 2026-06-28)
     const [leadSelectMode, setLeadSelectMode] = useState(false);
     const [selectedLeadPhones, setSelectedLeadPhones] = useState<Set<string>>(new Set());
@@ -264,6 +266,15 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
     const [leadReassignTarget, setLeadReassignTarget] = useState('');
     const [leadReassigning, setLeadReassigning] = useState(false);
     const [leadReassignMsg, setLeadReassignMsg] = useState('');
+    // Bulk stage change / recycle (2026-10-08)
+    const [showLeadStage, setShowLeadStage] = useState(false);
+    const [leadStageMode, setLeadStageMode] = useState<'normal' | 'recycle'>('normal');
+    const [leadStageTarget, setLeadStageTarget] = useState('NEW');
+    const [leadStageAssignee, setLeadStageAssignee] = useState('');
+    const [leadStageBusy, setLeadStageBusy] = useState(false);
+    const [leadStageMsg, setLeadStageMsg] = useState('');
+    const [leadStageMsgOk, setLeadStageMsgOk] = useState(true);
+    const [leadStageError, setLeadStageError] = useState('');
     const toggleLeadSelect = (phone: string) => setSelectedLeadPhones(prev => {
         const selected = new Set(prev);
         if (selected.has(phone)) selected.delete(phone);
@@ -288,6 +299,28 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
 
     // ── Taxonomy tree (new) ──
     const [taxonomyTree, setTaxonomyTree] = useState<any[]>([]);
+    // Tile subtype labels: flatten the nested taxonomy tree (Category → Sub → [Group] → Type)
+    // into an id → name map so each lead tile can show its property subtype
+    // (e.g. "Builder Flat Front") without an extra lookup per row.
+    const taxonomyNameById = useMemo(() => {
+        const map = new Map<string, string>();
+        const walk = (nodes: any[]) => {
+            for (const n of nodes || []) {
+                if (n?.id && n?.name) map.set(String(n.id), String(n.name));
+                if (Array.isArray(n?.children) && n.children.length) walk(n.children);
+            }
+        };
+        walk(taxonomyTree);
+        return map;
+    }, [taxonomyTree]);
+    const subtypeLabelFor = useCallback((lead: Lead): string | null => {
+        const nodeId = (lead as any).demand_taxonomy_node_id;
+        if (nodeId && taxonomyNameById.has(String(nodeId))) return taxonomyNameById.get(String(nodeId))!;
+        return null;
+    }, [taxonomyNameById]);
+    // "N Matches" badge for tiles: lightweight per-deal counts (budget+type+BHK, no geo),
+    // same signal as the Deal Pipeline tiles. Keyed by deal id; missing = not loaded yet.
+    const [tileMatchCounts, setTileMatchCounts] = useState<Record<string, number>>({});
     // ── Team members ──
     const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
     // PARTNER TEAMS: the owner's OWN sub-agents. Kept in its own state on purpose — teamMembers
@@ -415,9 +448,15 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
     // ─── Data Loading ─────────────────────────────────────────────────────────
 
     const loadData = useCallback(async () => {
+        // Cancel a previous list request before starting the next one. Without
+        // this, a slower response to an older search can overwrite newer results.
+        pendingLeadsRequest.current?.abort();
+        const controller = new AbortController();
+        pendingLeadsRequest.current = controller;
         try {
             setError(null);
             const recentRes = await client.get('/api/leads/recent-external', {
+                    signal: controller.signal,
                     params: {
                         ...(sourceFilter ? { source: sourceFilter } : {}),
                         ...(statusFilter ? { status: statusFilter } : {}),
@@ -435,6 +474,7 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
                         budget_min: budgetMinFilter.trim() || undefined,
                         budget_max: budgetMaxFilter.trim() || undefined,
                         ...(sharedWithMe ? { shared_with_me: 'true' } : {}),
+                        ...(stageFilters.length > 0 ? { stage: stageFilters.join(',') } : {}),
                         limit: String(pageLimit),
                         sort: leadSortKey,
                         direction: leadSortDir,
@@ -447,13 +487,18 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
             // Capture the server's TRUE filtered count (recent-external returns { leads, total }).
             setRecentTotal(Array.isArray(recentData) ? loaded.length : (recentData.total ?? loaded.length));
         } catch (err: any) {
+            if (err?.code === 'ERR_CANCELED' || err?.name === 'CanceledError') return;
             setError(err?.response?.data?.error || err.message || 'Failed to load leads');
         } finally {
-            setLoading(false);
+            if (pendingLeadsRequest.current === controller) {
+                pendingLeadsRequest.current = null;
+                setLoading(false);
+            }
         }
-    }, [sourceFilter, statusFilter, agentFilter, intentFilter, filterTaxonomy, locationSelection, notContactedDays, noShowcaseDays, budgetMinFilter, budgetMaxFilter, debouncedSearch, activeFilter, sharedWithMe, pageLimit, leadSortKey, leadSortDir]);
+    }, [sourceFilter, statusFilter, agentFilter, intentFilter, filterTaxonomy, locationSelection, notContactedDays, noShowcaseDays, budgetMinFilter, budgetMaxFilter, debouncedSearch, activeFilter, sharedWithMe, stageFilters.join(','), pageLimit, leadSortKey, leadSortDir]);
 
     useEffect(() => { loadData(); }, [loadData]);
+    useEffect(() => () => pendingLeadsRequest.current?.abort(), []);
     useEffect(() => {
         const interval = setInterval(() => { if (busyRef.current || document.hidden) return; loadData(); }, 30000);
         return () => clearInterval(interval);
@@ -1271,6 +1316,7 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
         noShowcaseDays > 0 ? '1' : '',
         (budgetMinFilter.trim() || budgetMaxFilter.trim()) ? '1' : '',
         sharedWithMe ? '1' : '',
+        stageFilters.length > 0 ? '1' : '',
     ].filter(Boolean).length + (filterTaxonomy.nodeIds.length > 0 ? 1 : 0) + (filterTaxonomy.bhk.length > 0 ? 1 : 0);
 
     // 2026-05-13: Server now handles search + status + source + agent + activeFilter.
@@ -1279,30 +1325,39 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
     // locally (defensive). The phone-search bug was here: lead.phone_number stored as
     // "+91XXXXXXXXXX" while user types "9958..." — `.includes()` mismatched. Server now
     // handles phone variants via extractSearchDigits + phoneVariants.
+// "Added" = the CURRENT lead cycle (2026-10-08). A recycled lead reports its renewal date so a
+    // date-range filter behaves the way the user expects; created_at stays the first-seen date and
+    // is deliberately left untouched on the backend.
+const leadCycleStartOf = (lead: any): string => {
+        const raw = lead?.cycle_start_at || lead?.recycled_at || lead?.created_at;
+        const d = raw ? new Date(raw) : null;
+        return d && !isNaN(d.getTime()) ? d.toISOString().slice(0, 10) : '';
+    };
     const filteredLeads = recentLeads.filter(lead => {
-        if (dateFrom) {
-            const leadDate = new Date(lead.created_at).toISOString().slice(0, 10);
-            if (leadDate < dateFrom) return false;
-        }
-        if (dateTo) {
-            const leadDate = new Date(lead.created_at).toISOString().slice(0, 10);
-            if (leadDate > dateTo) return false;
-        }
+        const leadDate = leadCycleStartOf(lead);
+        if (dateFrom && (!leadDate || leadDate < dateFrom)) return false;
+        if (dateTo && (!leadDate || leadDate > dateTo)) return false;
         return true;
     });
 
-    // ── Select-all (header checkbox only) ──
+    // ── Select-all (header checkbox only) ──────────────────────────────────────
     // Operates on currently loaded + filtered rows (not the server-side recentTotal).
     // One row per enquiry (deal): the same contact appears once per lead, each with its own source,
     // property, assignee and stage. A contact with no visible deals stays a single contact-level row.
     // Counts / select-all / filters remain contact-based (filteredLeads).
+    //
+    // Stage filter (2026-10-08): re-applied per ROW because this list renders one row per DEAL and
+    // each row carries its own stage. The server narrows the candidate contacts; without this the
+    // user could filter by "Visited" and still see sibling rows badged "New".
     const leadRows: LeadRow[] = filteredLeads.flatMap((l): LeadRow[] =>
-        l.demand_transactions?.length
+        (l.demand_transactions?.length
             ? l.demand_transactions.map(d => ({
                 ...l, _deal: d, source: d.source, lifecycle_stage: d.status,
                 assigned_agent: d.coordinator ?? (l as any).assigned_agent,
             } as LeadRow))
-            : [l]);
+            : [l]
+        ).filter(row => stageFilters.length === 0 || stageFilters.includes(String(row.lifecycle_stage || '').toUpperCase()))
+    );
     const allVisibleSelected = filteredLeads.length > 0 && filteredLeads.every(l => selectedLeadPhones.has(l.phone_number));
     const someVisibleSelected = filteredLeads.some(l => selectedLeadPhones.has(l.phone_number));
     const toggleSelectAllVisible = () => {
@@ -1316,6 +1371,48 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
             return next;
         });
     };
+
+    // Tile "N Matches" counts — fetch once per visible deal set (capped; cheap endpoint).
+    // Stable string key so the fetch runs only when the actual id set changes, not on
+    // every render (leadRows is rebuilt per render and can't be a dep directly).
+    const tileDealKey = Array.from(new Set(
+        leadRows.flatMap(r => [r._deal?.id, ...(r.demand_transactions || []).map(d => d.id)]).filter((x): x is string => !!x),
+    )).slice(0, 200).sort().join(',');
+    useEffect(() => {
+        if (!tileDealKey) return;
+        let cancelled = false;
+        getDealMatchCounts(tileDealKey.split(','))
+            .then(counts => { if (!cancelled) setTileMatchCounts(counts); })
+            .catch((e: any) => {
+                // Partners lack act_on_deals so the call 403s for them: fail silent,
+                // tiles show "Matching". Real failures still surface for diagnosis.
+                if (e?.response?.status !== 403) console.warn('[ExternalLeads] match counts failed:', e?.message || e);
+            });
+        return () => { cancelled = true; };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [tileDealKey]);
+
+    // Row-deal count ONLY: never fall through to sibling deals on the same contact —
+    // each per-deal tile must show its own count, else D2's tile shows D1's matches.
+    const matchCountFor = useCallback((row: LeadRow): number | null => {
+        const id = row._deal?.id;
+        if (!id) return null;
+        return tileMatchCounts[id] ?? null;
+    }, [tileMatchCounts]);
+
+    // Tile → Deal Pipeline: deep-focus the row's deal when known, else open the pipeline plain.
+    // App.tsx turns filter.deal into DealPipeline's initialDealId (one-shot).
+    const handleOpenPipeline = useCallback((row: LeadRow) => {
+        const dealId = row._deal?.id ?? row.demand_transactions?.[0]?.id ?? null;
+        drillTo(dealId ? { entity: 'deals', filter: { deal: dealId } } : { entity: 'deals' });
+    }, []);
+
+    // Tile → Matching: the detail slide-over is contact-level (same for every enquiry
+    // row on that contact — matching runs per contact via POST /api/leads/:phone/match),
+    // so the tile label intentionally shows the row deal's count but opens shared detail.
+    const handleOpenMatches = useCallback((row: LeadRow) => {
+        openDetail(row.phone_number);
+    }, [openDetail]);
 
 
     // editSubCategories cascade removed Phase 2 demand-side unification (2026-05-29) —
@@ -1703,7 +1800,7 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
                         <div style={{ padding: '8px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
                             {filteredLeads.length > 0 ? leadRows.map(lead => (
                                 <LeadCard
-                                    key={lead.phone_number}
+                                    key={`${lead.phone_number}::${lead._deal?.id || 'contact'}`}
                                     lead={lead}
                                     currentAgentId={agent?.id}
                                     isSelected={leadSelectMode ? selectedLeadPhones.has(lead.phone_number) : selectedPhone === lead.phone_number}
@@ -1714,6 +1811,10 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
                                     sourceLabels={sourceLabels}
                                     scoreColor={scoreColor}
                                     formatBudget={formatBudget}
+                                    subtypeLabel={subtypeLabelFor(lead)}
+                                    matchCount={matchCountFor(lead)}
+                                    onOpenPipeline={() => handleOpenPipeline(lead)}
+                                    onOpenMatches={() => handleOpenMatches(lead)}
                                 />
                             )) : (
                                 <div className="empty-state">
@@ -1746,7 +1847,7 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
                                             </label>
                                         </th>
                                     )}
-                                    {([['Name', 'name'], ['Phone', 'phone'], ['Source', 'source'], ['Status', 'status'], ['Stage', 'stage'], ['Assigned to', 'assigned_to'], ['Budget', 'budget'], ['Score', 'score'], ['Intent', 'intent'], ['Location', 'location'], ['Date', 'date'], ['', '']] as Array<[string, string]>).map(([h, key]) => {
+                                    {([['Name', 'name'], ['Phone', 'phone'], ['Client Type', 'client_type'], ['Source', 'source'], ['Status', 'status'], ['Stage', 'stage'], ['Assigned to', 'assigned_to'], ['Budget', 'budget'], ['Score', 'score'], ['Intent', 'intent'], ['Location', 'location'], ['Date', 'date'], ['', '']] as Array<[string, string]>).map(([h, key]) => {
                                         const active = !!key && leadSortKey === key;
                                         return (
                                             <th
@@ -1774,6 +1875,15 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
                                 {filteredLeads.map(lead => {
                                     const score = lead.lead_score?.total_score ?? null;
                                     const isSelected = selectedPhone === lead.phone_number;
+                                    // Shown identity: the client's own name/number, else the dealer's (placeholder
+                                    // phone = "we don't know the client yet" — partner referrals). isDealer marks
+                                    // the fallback so the row reads "Dealer", never a misattributed client.
+                                    const identity = dealerFallback(lead, isPlaceholderPhone, toDialablePhone);
+                                    const rowDialable = identity.phone;
+                                    // Contact-level row: primary role ONLY. demand_transactions[0] belongs to
+                                    // one specific enquiry and must not label the whole contact (the mobile
+                                    // card is per-deal and correctly uses the override there).
+                                    const rowRole = (lead as Lead).client_role || null;
                                     return (
                                         <tr key={lead.phone_number} onClick={() => { if (leadSelectMode) toggleLeadSelect(lead.phone_number); else openDetail(lead.phone_number); }}
                                             style={{ borderBottom: '1px solid var(--bg-primary)', cursor: 'pointer', backgroundColor: selectedLeadPhones.has(lead.phone_number) ? 'rgba(139,92,246,0.12)' : isSelected ? 'rgba(59,130,246,0.08)' : undefined }}>
@@ -1786,7 +1896,13 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
                                             )}
                                             <td style={compactCell}>
                                                 <div>
-                                                    <span style={{ fontWeight: 500 }}>{lead.name || <span style={{ color: 'var(--text-muted)' }}>—</span>}</span>
+                                                    <span style={{ fontWeight: 500 }}>{identity.name || <span style={{ color: 'var(--text-muted)' }}>—</span>}</span>
+                                                    {identity.isDealer && (
+                                                        <span title="Client unknown — showing the dealer who brought this lead"
+                                                            style={{ backgroundColor: 'rgba(245,158,11,0.15)', color: '#d97706', padding: '1px 5px', borderRadius: '8px', fontSize: '9px', fontWeight: 700, marginLeft: '4px', whiteSpace: 'nowrap' }}>
+                                                            Dealer
+                                                        </span>
+                                                    )}
                                                     {lead.lead_type === 'PARTNER_REFERRAL' && (
                                                         <span style={{ backgroundColor: '#ede9fe', color: '#7c3aed', padding: '1px 5px', borderRadius: '8px', fontSize: '9px', fontWeight: 700, marginLeft: '4px', whiteSpace: 'nowrap' }}>
                                                             {lead.referral_partner_name || 'Partner'}
@@ -1798,12 +1914,24 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
                                                             🤝 Shared
                                                         </span>
                                                     )}
-                                                    {lead.demand_bhk ? <span style={{ color: 'var(--text-muted)', fontSize: '10px', marginLeft: '4px' }}>{lead.demand_bhk}BHK</span> : null}
+                                                    {bhkLabelFor(lead) ? <span style={{ color: 'var(--text-muted)', fontSize: '10px', marginLeft: '4px' }}>{bhkLabelFor(lead)}</span> : null}
+                                                    {subtypeLabelFor(lead) ? (
+                                                        <span title="Property subtype" style={{ backgroundColor: 'rgba(139,92,246,0.15)', color: '#a78bfa', padding: '1px 5px', borderRadius: '8px', fontSize: '9px', fontWeight: 600, marginLeft: '4px', whiteSpace: 'nowrap', textTransform: 'capitalize' }}>
+                                                            {subtypeLabelFor(lead)}
+                                                        </span>
+                                                    ) : null}
                                                 </div>
                                             </td>
-                                            <td style={{ ...compactCell, color: 'var(--text-secondary)', fontSize: '11px' }}>{isDialablePhone(lead.phone_number) ? lead.phone_number : <span style={{ color: '#d97706', fontSize: '10px' }}>No phone</span>}</td>
+                                            <td style={{ ...compactCell, color: 'var(--text-secondary)', fontSize: '11px' }}>{rowDialable || <span style={{ color: '#d97706', fontSize: '10px' }}>No phone</span>}</td>
                                             <td style={compactCell}>
-                                                <span style={{ backgroundColor: (sourceColors[lead.source] || '#6b7280') + '20', color: sourceColors[lead.source] || '#6b7280', padding: '1px 6px', borderRadius: '8px', fontSize: '10px', fontWeight: 600 }}>
+                                                {rowRole ? (
+                                                    <span title="Primary role" style={{ backgroundColor: (clientRoleColor(rowRole)) + '20', color: clientRoleColor(rowRole), padding: '1px 6px', borderRadius: '8px', fontSize: '10px', fontWeight: 600, whiteSpace: 'nowrap', textTransform: 'capitalize' }}>
+                                                        {clientRoleLabel(rowRole)}
+                                                    </span>
+                                                ) : <span style={{ color: 'var(--text-muted)' }}>—</span>}
+                                            </td>
+                                            <td style={compactCell}>
+                                                <span style={{ backgroundColor: (sourceColors[lead.source] || '#6b7280') + '20', color: sourceColors[lead.source] || '#6b7280', padding: '1px 6px', borderRadius: '10px', fontSize: '10px', fontWeight: 600 }}>
                                                     {sourceLabels[lead.source] || lead.source}
                                                 </span>
                                             </td>
@@ -1836,26 +1964,39 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
                                             </td>
                                             <td style={{ ...compactCell, fontSize: '11px', textTransform: 'capitalize' }}>{lead.intent || <span style={{ color: 'var(--text-muted)' }}>—</span>}</td>
                                             <td style={{ ...compactCell, fontSize: '11px', maxWidth: '120px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{lead.preferred_location || <span style={{ color: 'var(--text-muted)' }}>—</span>}</td>
-                                            <td style={{ ...compactCell, color: 'var(--text-muted)', fontSize: '10px', whiteSpace: 'nowrap' }}>{new Date(lead.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}</td>
+                                            <td style={{ ...compactCell, color: 'var(--text-muted)', fontSize: '10px', whiteSpace: 'nowrap' }}>{leadCycleStartOf(lead)
+                                                ? new Date(leadCycleStartOf(lead)).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })
+                                                : '—'}</td>
                                             <td style={compactCell} onClick={e => e.stopPropagation()}>
                                                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                                    {toDialablePhone(lead.phone_number) && (
-                                                        <a href={`tel:${toDialablePhone(lead.phone_number)}`}
+                                                    {rowDialable && (
+                                                        <a href={`tel:${rowDialable}`}
                                                             style={{ color: '#22c55e', fontSize: '15px', textDecoration: 'none', lineHeight: 1 }}
-                                                            title={`Call client ${toDialablePhone(lead.phone_number)}`}>📞</a>
+                                                            title={`Call client ${rowDialable}`} aria-label={`Call client ${rowDialable}`}>📞</a>
                                                     )}
-                                                    {toDialablePhone(lead.referral_partner_phone) && (
+                                                    {rowDialable && (
+                                                        <a href={`https://wa.me/${rowDialable.slice(1)}`} target="_blank" rel="noopener noreferrer"
+                                                            style={{ color: '#25d366', fontSize: '15px', textDecoration: 'none', lineHeight: 1 }}
+                                                            title="Chat on WhatsApp" aria-label="Chat on WhatsApp">💬</a>
+                                                    )}
+                                                    {!identity.isDealer && toDialablePhone(lead.referral_partner_phone) && (
                                                         <a href={`tel:${toDialablePhone(lead.referral_partner_phone)}`}
                                                             style={{ color: '#7c3aed', fontSize: '13px', textDecoration: 'none', lineHeight: 1, whiteSpace: 'nowrap' }}
                                                             title={`Call partner ${lead.referral_partner_name || ''} ${toDialablePhone(lead.referral_partner_phone)}`}>🤝📞</a>
                                                     )}
+                                                    <button type="button" onClick={() => handleOpenPipeline(lead as LeadRow)}
+                                                        style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '14px', lineHeight: 1, padding: 0 }}
+                                                        title="Open in Deal Pipeline" aria-label="Open in Deal Pipeline">📊</button>
+                                                    <button type="button" onClick={() => handleOpenMatches(lead as LeadRow)}
+                                                        style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '14px', lineHeight: 1, padding: 0 }}
+                                                        title="View matching properties" aria-label="View matching properties">🏠</button>
                                                 </div>
                                             </td>
                                         </tr>
                                     );
                                 })}
                                 {filteredLeads.length === 0 && (
-                                    <tr><td colSpan={11} style={{ ...compactCell, textAlign: 'center', color: 'var(--text-muted)', padding: '20px 10px' }}>
+                                    <tr><td colSpan={12} style={{ ...compactCell, textAlign: 'center', color: 'var(--text-muted)', padding: '20px 10px' }}>
                                         {error ? 'Failed to load leads' : 'No leads found'}
                                     </td></tr>
                                 )}
@@ -2759,8 +2900,93 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
                     <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>{selectedLeadPhones.size} lead{selectedLeadPhones.size === 1 ? '' : 's'} selected</span>
                     <button onClick={() => { setShowLeadReassign(true); setLeadReassignTarget(''); setLeadReassignMsg(''); }}
                         style={{ padding: '8px 18px', borderRadius: '8px', fontSize: '13px', fontWeight: 700, cursor: 'pointer', backgroundColor: '#8b5cf6', border: 'none', color: '#fff' }}>🔄 Reassign</button>
+                    <button onClick={() => { setShowLeadStage(true); setLeadStageMode('normal'); setLeadStageTarget('NEW'); setLeadStageAssignee(''); setLeadStageMsg(''); setLeadStageError(''); }}
+                        style={{ padding: '8px 18px', borderRadius: '8px', fontSize: '13px', fontWeight: 700, cursor: 'pointer', backgroundColor: '#0ea5e9', border: 'none', color: '#fff' }}>🗂️ Stage</button>
                     <button onClick={() => { setSelectedLeadPhones(new Set()); setLeadSelectMode(false); }}
                         style={{ padding: '8px 14px', borderRadius: '8px', fontSize: '12px', cursor: 'pointer', border: '1px solid var(--border-secondary)', backgroundColor: 'transparent', color: 'var(--text-muted)' }}>Cancel</button>
+                </div>
+            )}
+
+            {/* Bulk stage change / recycle (2026-10-08) — the "rework my lost leads" action. */}
+            {showLeadStage && (
+                <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 2100, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                    onMouseDown={e => { if (e.target === e.currentTarget && !leadStageBusy) setShowLeadStage(false); }}>
+                    <div style={{ backgroundColor: 'var(--bg-primary)', borderRadius: '14px', padding: '24px', width: '440px', maxWidth: '92vw', maxHeight: '88vh', overflowY: 'auto' }}>
+                        <div style={{ fontSize: '16px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '8px' }}>
+                            🗂️ Stage {selectedLeadPhones.size} lead{selectedLeadPhones.size === 1 ? '' : 's'}
+                        </div>
+
+                        {/* Mode */}
+                        <div style={{ display: 'flex', gap: '8px', marginBottom: '14px' }}>
+                            <button type="button" onClick={() => { setLeadStageMode('normal'); setLeadStageError(''); }}
+                                style={{ flex: 1, padding: '10px', borderRadius: '8px', cursor: 'pointer', fontWeight: 600, fontSize: '13px',
+                                    border: leadStageMode === 'normal' ? '1.5px solid var(--accent-primary)' : '1px solid var(--border-secondary)',
+                                    backgroundColor: leadStageMode === 'normal' ? 'rgba(59,130,246,0.10)' : 'var(--bg-secondary)', color: 'var(--text-primary)' }}>
+                                Change stage
+                            </button>
+                            <button type="button" onClick={() => { setLeadStageMode('recycle'); setLeadStageTarget('NEW'); setLeadStageError(''); }}
+                                style={{ flex: 1, padding: '10px', borderRadius: '8px', cursor: 'pointer', fontWeight: 600, fontSize: '13px',
+                                    border: leadStageMode === 'recycle' ? '1.5px solid #22c55e' : '1px solid var(--border-secondary)',
+                                    backgroundColor: leadStageMode === 'recycle' ? 'rgba(34,197,94,0.10)' : 'var(--bg-secondary)', color: 'var(--text-primary)' }}>
+                                ♻️ Recycle lost leads
+                            </button>
+                        </div>
+
+                        <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '14px' }}>
+                            {leadStageMode === 'recycle'
+                                ? 'Starts a new sales cycle: the lead returns to New, its lead date becomes today so it resurfaces at the top of the board, and the previous lost stage and reason stay on the record. Only lost leads can be recycled.'
+                                : 'Moves each selected lead to the stage below. Stage moves follow the pipeline rules — anything that cannot legally move is reported back instead of being forced.'}
+                        </div>
+
+                        <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)' }}>Target stage</label>
+                        <select value={leadStageTarget} onChange={e => setLeadStageTarget(e.target.value)}
+                            disabled={leadStageMode === 'recycle'}
+                            style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', marginTop: '6px', marginBottom: '14px', border: '1px solid var(--border-secondary)', backgroundColor: 'var(--bg-secondary)', color: 'var(--text-primary)', fontSize: '13px', opacity: leadStageMode === 'recycle' ? 0.6 : 1 }}>
+                            {LIFECYCLE_STAGES.map(s => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}
+                        </select>
+
+                        <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)' }}>Assign to (optional)</label>
+                        <select value={leadStageAssignee} onChange={e => setLeadStageAssignee(e.target.value)}
+                            style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', marginTop: '6px', marginBottom: '14px', border: '1px solid var(--border-secondary)', backgroundColor: 'var(--bg-secondary)', color: 'var(--text-primary)', fontSize: '13px' }}>
+                            <option value="">Keep current owner</option>
+                            {teamMembers.filter(m => m.id !== agent?.id).map(m => (
+                                <option key={m.id} value={m.id}>{m.name}{(m as any).role ? ` (${(m as any).role})` : ''}</option>
+                            ))}
+                        </select>
+
+                        {leadStageError && <div role="alert" style={{ fontSize: '12px', color: '#fca5a5', marginBottom: '12px' }}>{leadStageError}</div>}
+                        {leadStageMsg && <div style={{ fontSize: '12px', color: leadStageMsgOk ? '#22c55e' : '#ef4444', marginBottom: '12px', whiteSpace: 'pre-wrap' }}>{leadStageMsg}</div>}
+
+                        <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+                            <button disabled={leadStageBusy} onClick={() => setShowLeadStage(false)}
+                                style={{ padding: '8px 16px', borderRadius: '8px', fontSize: '13px', cursor: 'pointer', border: '1px solid var(--border-secondary)', backgroundColor: 'transparent', color: 'var(--text-muted)' }}>Cancel</button>
+                            <button disabled={leadStageBusy} onClick={async () => {
+                                setLeadStageBusy(true); setLeadStageMsg(''); setLeadStageError(''); setLeadStageMsgOk(true);
+                                try {
+                                    const res = await client.post('/api/leads/bulk-stage', {
+                                        phones: Array.from(selectedLeadPhones),
+                                        stage: leadStageTarget,
+                                        mode: leadStageMode,
+                                        ...(leadStageAssignee ? { agent_id: leadStageAssignee } : {}),
+                                    });
+                                    const n = res.data?.updated ?? 0;
+                                    const failed = Array.isArray(res.data?.results) ? res.data.results.filter((r: any) => !r.ok) : [];
+                                    setLeadStageMsgOk(failed.length === 0);
+                                    setLeadStageMsg(
+                                        `${leadStageMode === 'recycle' ? 'Recycled' : 'Updated'} ${n} of ${res.data?.total ?? selectedLeadPhones.size} lead(s).`
+                                        + (failed.length ? `\n\nCouldn't move ${failed.length}:\n` + failed.slice(0, 5).map((r: any) => `• ${r.phone}: ${r.error}`).join('\n') : '')
+                                    );
+                                    await loadData();
+                                } catch (err: any) {
+                                    setLeadStageMsgOk(false);
+                                    setLeadStageError(err?.response?.data?.error || 'Bulk stage change failed');
+                                } finally { setLeadStageBusy(false); }
+                            }}
+                                style={{ padding: '8px 18px', borderRadius: '8px', fontSize: '13px', fontWeight: 700, cursor: leadStageBusy ? 'not-allowed' : 'pointer', backgroundColor: leadStageMode === 'recycle' ? '#16a34a' : 'var(--accent-primary)', border: 'none', color: '#fff', opacity: leadStageBusy ? 0.6 : 1 }}>
+                                {leadStageBusy ? 'Working…' : leadStageMode === 'recycle' ? 'Recycle leads' : 'Apply stage'}
+                            </button>
+                        </div>
+                    </div>
                 </div>
             )}
 
@@ -2839,10 +3065,30 @@ export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterC
                                 setLocationSelection({ label: '', lat: null, lng: null, radiusKm: 2 });
                                 setNotContactedDays(0);
                                 setNoShowcaseDays(0);
+                                setStageFilters([]);
                             }} style={{ background: 'none', border: 'none', color: 'var(--text-link)', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}>
                                 Clear All
                             </button>
                         </div>
+
+                        {/* Pipeline stage (2026-10-08). Multi-select, and it deliberately reaches leads the
+                            active/archived toggle hides — picking CLOSED_LOST is how you find
+                            lost leads to rework. */}
+                        <FilterSection title="Pipeline Stage" defaultOpen={false} badge={stageFilters.length}>
+                            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                                {LIFECYCLE_STAGES.map(s => (
+                                    <button key={s} type="button"
+                                        onClick={() => toggleStageFilter(s)}
+                                        className={`chip ${stageFilters.includes(s) ? 'chip-active' : 'chip-inactive'}`}>
+                                        {s.replace(/_/g, ' ')}
+                                    </button>
+                                ))}
+                            </div>
+                            <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '6px' }}>
+                                Filters each enquiry by its own stage. Selecting a stage also includes
+                                lost leads, which the default Active view hides.
+                            </div>
+                        </FilterSection>
 
                         {/* Intent */}
                         <FilterSection title="Intent" defaultOpen badge={intentFilter ? 1 : 0}>

@@ -1,16 +1,31 @@
 name: Deploy to Hostinger
 
 on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'agents/backend/**'
+      - 'agents/frontend/**'
+      - 'agents/website/**'
+      - 'agents/whatsapp-extension/**'
+      - 'deploy/github-hostinger-release.sh'
+      - '.github/workflows/deploy-hostinger.yml'
   push:
     branches: [main]
     paths:
       - 'agents/backend/**'
       - 'agents/frontend/**'
       - 'agents/website/**'
+      - 'agents/whatsapp-extension/**'
       - 'deploy/github-hostinger-release.sh'
       - '.github/workflows/deploy-hostinger.yml'
   workflow_dispatch:
     inputs:
+      preflight_only:
+        description: 'Inspect production revision, processes, schema and backup metadata without deploying'
+        required: true
+        default: false
+        type: boolean
       run_migrations:
         description: 'Run prisma migrate deploy (requires a verified backup and migration review)'
         required: true
@@ -75,10 +90,11 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: '20'
+          node-version: '22.23.2'
           cache: npm
           cache-dependency-path: agents/frontend/package-lock.json
       - run: npm ci
+      - run: npm run test:personal-whatsapp
       - run: npm run lint
       - run: npm run build
       - run: npm audit --omit=dev --audit-level=high
@@ -104,12 +120,34 @@ jobs:
       - run: npm run build
       - run: npm audit --omit=dev --audit-level=high
 
+  extension-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: agents/whatsapp-extension
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '22.23.2'
+          cache: npm
+          cache-dependency-path: agents/whatsapp-extension/package-lock.json
+      - run: npm ci --ignore-scripts
+      - run: npm test
+      - run: npm audit --omit=dev --audit-level=high
+      - run: npm run package
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: my-whatsapp-extension
+          path: agents/whatsapp-extension/release/*.zip
+
   deploy:
     # Keep automatic delivery off until the server preflight in the handover is complete.
-    if: github.ref == 'refs/heads/main' && vars.HOSTINGER_GITHUB_DEPLOY_ENABLED == 'true'
+    if: github.ref == 'refs/heads/main' && (vars.HOSTINGER_GITHUB_DEPLOY_ENABLED == 'true' || inputs.preflight_only)
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    needs: [backend-check, frontend-check, website-check]
+    needs: [backend-check, frontend-check, website-check, extension-check]
     environment: production
     env:
       HOSTINGER_HOST: ${{ secrets.HOSTINGER_HOST }}
@@ -138,7 +176,15 @@ jobs:
           printf '%s\n' "$HOSTINGER_KNOWN_HOSTS" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
 
+      - name: Inspect production without deploying
+        if: inputs.preflight_only
+        run: |
+          target="${HOSTINGER_USER}@${HOSTINGER_HOST}"
+          scp -P "$HOSTINGER_PORT" deploy/production-preflight.sh "$target:/tmp/production-preflight-${GITHUB_SHA}.sh"
+          ssh -p "$HOSTINGER_PORT" "$target" "HOSTINGER_DEPLOY_PATH='$HOSTINGER_DEPLOY_PATH' bash /tmp/production-preflight-${GITHUB_SHA}.sh"
+
       - name: Package approved revision
+        if: '!inputs.preflight_only'
         run: |
           tar -czf /tmp/realty-pandit-${GITHUB_SHA}.tgz \
             --exclude='agents/backend/node_modules' --exclude='agents/backend/.env' --exclude='agents/backend/uploads' --exclude='agents/backend/logs' \
@@ -147,6 +193,7 @@ jobs:
             agents/backend agents/frontend agents/website
 
       - name: Upload and deploy
+        if: '!inputs.preflight_only'
         run: |
           target="${HOSTINGER_USER}@${HOSTINGER_HOST}"
           archive="/tmp/realty-pandit-${GITHUB_SHA}.tgz"

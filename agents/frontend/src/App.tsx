@@ -8,6 +8,7 @@ import { ToastProvider, useToast } from './contexts/ToastContext';
 import { ToastContainer } from './components/ui/Toast';
 import { ConfirmProvider, ConfirmDialogRoot, useConfirm } from './contexts/ConfirmContext';
 import { LoginPage } from './components/LoginPage';
+import PersonalWhatsAppSetup from './components/PersonalWhatsAppSetup';
 import { SetupPasswordPage } from './components/SetupPasswordPage';
 import { DashboardLayout } from './components/DashboardLayout';
 import { ContactList } from './components/ContactList';
@@ -274,6 +275,10 @@ function App() {
   useEffect(() => onDrill(({ entity, filter }) => {
     if (entity === 'inventory') setDrillFilter(filter ?? null);
     if (entity === 'leads') setLeadsFilter(filter ?? null);
+    // Lead tiles drill to a specific deal: DealPipeline opens it via initialDealId
+    // (one-shot — cleared on consume). A plain drill carries no deal: clear any
+    // stale id so the pipeline opens as a list, not on the previous deal.
+    if (entity === 'deals') setDeepLinkDealId(filter?.deal ?? null);
     setView(entity);
   }), []);
 
@@ -440,6 +445,8 @@ function App() {
     );
   }
 
+  if (window.location.pathname === '/my-whatsapp-setup') return <PersonalWhatsAppSetup />;
+
   const selectedContact = contacts.find(c => c.phone_number === selectedPhone);
 
   // PARTNER-SCOPED: never mount a team-only view — not even for the render before the effect above
@@ -568,13 +575,13 @@ function App() {
         case 'marketing':
           return <MobileScrollWrapper><MarketingCampaign /></MobileScrollWrapper>;
         case 'lead-tasks':
-          return <DealPipeline initialDealId={deepLinkDealId} />;
+          return <DealPipeline initialDealId={deepLinkDealId} onInitialDealConsumed={() => setDeepLinkDealId(null)} />;
         case 'tasks':
           return <MobileScrollWrapper><TaskBoard /></MobileScrollWrapper>;
         case 'analytics':
           return <MobileScrollWrapper><AdvancedAnalytics /></MobileScrollWrapper>;
         case 'deals':
-          return <DealPipeline initialDealId={deepLinkDealId} />;
+          return <DealPipeline initialDealId={deepLinkDealId} onInitialDealConsumed={() => setDeepLinkDealId(null)} />;
         case 'sourcing':
           return <MobileScrollWrapper><SourcingBoard /></MobileScrollWrapper>;
         default:
@@ -692,11 +699,11 @@ function App() {
       case 'marketing':
         return <MarketingCampaign />;
       case 'lead-tasks':
-        return <DealPipeline initialDealId={deepLinkDealId} />;
+        return <DealPipeline initialDealId={deepLinkDealId} onInitialDealConsumed={() => setDeepLinkDealId(null)} />;
       case 'tasks':
         return <TaskBoard />;
       case 'deals':
-        return <DealPipeline initialDealId={deepLinkDealId} />;
+        return <DealPipeline initialDealId={deepLinkDealId} onInitialDealConsumed={() => setDeepLinkDealId(null)} />;
       case 'sourcing':
         return <SourcingBoard />;
       case 'analytics':

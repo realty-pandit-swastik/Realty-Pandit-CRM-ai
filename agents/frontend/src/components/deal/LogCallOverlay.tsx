@@ -16,6 +16,7 @@ import { MatchShareTab } from './MatchShareTab';
 // legacy <BuyerRequirementsForm> for the Quick-Edit "Answered — interested" path.
 import DemandRequirementsForm, { type DemandPayload } from '../leads/DemandRequirementsForm';
 import { defaultReminderLocal } from '../../lib/defaultReminder';
+import { NO_ANSWER_REASONS, type NoAnswerReason } from '../../lib/callOutcomes';
 
 // Legacy RequirementsValues shape kept inline so we can delete BuyerRequirementsForm.tsx.
 // The backend /api/deals/:id/log-call route still consumes this shape; canonical
@@ -250,9 +251,9 @@ export default function LogCallOverlay({
                             submitting={submitting}
                             noAnswerCount={noAnswerCount}
                             agents={agents}
-                            onSetReminder={(remindAt, notes) => submitOutcome('NO_ANSWER', { remind_at: remindAt, notes })}
+                            onSetReminder={(remindAt, notes, reason) => submitOutcome('NO_ANSWER', { remind_at: remindAt, notes, no_answer_reason: reason })}
                             onReassign={reassignTo}
-                            onCloseUnreachable={(notes) => submitOutcome('CLOSED_UNREACHABLE', { notes })}
+                            onCloseUnreachable={(notes, reason) => submitOutcome('CLOSED_UNREACHABLE', { notes, no_answer_reason: reason })}
                             onCancel={onClose}
                         />
                     )}
@@ -446,12 +447,16 @@ function NoAnswerPath({ submitting, onSubmit, onCancel }: {
     onSubmit: (p: any) => void;
     onCancel: () => void;
 }) {
+    // Same required reason as the guided path — logging the no-answer without
+    // saying WHY is exactly what the tile's last action is supposed to show.
+    const [reason, setReason] = useState<NoAnswerReason | ''>('');
     return (
         <PathShell
             onCancel={onCancel}
-            onSubmit={() => onSubmit({})}
+            onSubmit={() => reason && onSubmit({ no_answer_reason: reason })}
             submitLabel="Log no-answer"
             submitting={submitting}
+            disabled={!reason}
         >
             <div style={{
                 padding: '12px 14px', borderRadius: '8px',
@@ -460,6 +465,9 @@ function NoAnswerPath({ submitting, onSubmit, onCancel }: {
             }}>
                 Deal stays in <strong>NEW</strong>. AI continues its retry cadence
                 (5 min → 1 hr → every 3 hr) per Stage 1 KRA.
+            </div>
+            <div style={{ marginTop: '12px' }}>
+                <NoAnswerReasonSelect value={reason} onChange={setReason} />
             </div>
         </PathShell>
     );
@@ -625,6 +633,33 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
     );
 }
 
+/**
+ * Required "why did nobody answer?" dropdown, shared by every no-answer form
+ * (guided reminder/close tabs + the legacy No-answer path) so the same 5 reasons
+ * are always offered. The selected reason is sent as `no_answer_reason` and is
+ * what the Deal Pipeline tile shows as the last action.
+ */
+function NoAnswerReasonSelect({ value, onChange }: {
+    value: NoAnswerReason | '';
+    onChange: (v: NoAnswerReason) => void;
+}) {
+    return (
+        <Field label="Why no answer? *">
+            <select
+                aria-label="Why no answer"
+                aria-required="true"
+                aria-invalid={!value}
+                value={value}
+                onChange={e => onChange(e.target.value as NoAnswerReason)}
+                style={inputStyle}
+            >
+                <option value="">Select a reason…</option>
+                {NO_ANSWER_REASONS.map(r => <option key={r.code} value={r.code}>{r.label}</option>)}
+            </select>
+        </Field>
+    );
+}
+
 // ─── GUIDED 2-BUTTON ENTRY STEPS (deal-workflow, 2026-06-29) ────────────────────
 
 function AnsweredStep({ onInterested, onNotInterested }: { onInterested: () => void; onNotInterested: () => void }) {
@@ -700,15 +735,18 @@ function NotAnsweredStep({ submitting, noAnswerCount, agents, onSetReminder, onR
     submitting: boolean;
     noAnswerCount: number;
     agents: { id: string; name: string }[];
-    onSetReminder: (remindAtISO: string, notes: string) => void;
+    onSetReminder: (remindAtISO: string, notes: string, reason: NoAnswerReason) => void;
     onReassign: (agentId: string) => void;
-    onCloseUnreachable: (notes: string) => void;
+    onCloseUnreachable: (notes: string, reason: NoAnswerReason) => void;
     onCancel: () => void;
 }) {
     const [mode, setMode] = useState<'reminder' | 'reassign' | 'close'>('reminder');
     const [remindAt, setRemindAt] = useState(() => defaultReminderLocal());
     const [notes, setNotes] = useState('');
     const [agentId, setAgentId] = useState('');
+    // Why nobody picked up — required on both the reminder and close paths; it is
+    // what surfaces as the tile's last action.
+    const [reason, setReason] = useState<NoAnswerReason | ''>('');
     const gateOpen = noAnswerCount >= 4; // N = 4
     const tab = (active: boolean): React.CSSProperties => ({
         padding: '8px 12px', borderRadius: '8px', fontSize: '12px', fontWeight: 700, cursor: 'pointer',
@@ -722,14 +760,17 @@ function NotAnsweredStep({ submitting, noAnswerCount, agents, onSetReminder, onR
                 {gateOpen && <div style={{ marginTop: '6px', color: '#b45309', fontWeight: 600 }}>⚠ Called {noAnswerCount}× with no answer — consider reassigning or closing.</div>}
             </div>
             <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                <button type="button" onClick={() => setMode('reminder')} style={tab(mode === 'reminder')}>⏰ Set reminder</button>
-                {gateOpen && <button type="button" onClick={() => setMode('reassign')} style={tab(mode === 'reassign')}>🔄 Reassign</button>}
-                {gateOpen && <button type="button" onClick={() => setMode('close')} style={tab(mode === 'close')}>❌ Close</button>}
+                {/* Reset the reason on tab switch: a pick made under "Set reminder" must not be
+                    silently pre-selected (and submitted) under "Close". */}
+                <button type="button" onClick={() => { setReason(''); setMode('reminder'); }} style={tab(mode === 'reminder')}>⏰ Set reminder</button>
+                {gateOpen && <button type="button" onClick={() => { setReason(''); setMode('reassign'); }} style={tab(mode === 'reassign')}>🔄 Reassign</button>}
+                {gateOpen && <button type="button" onClick={() => { setReason(''); setMode('close'); }} style={tab(mode === 'close')}>❌ Close</button>}
             </div>
             {mode === 'reminder' && (<>
+                <NoAnswerReasonSelect value={reason} onChange={setReason} />
                 <Field label="Call again at *"><input aria-label="Date and time" type="datetime-local" value={remindAt} onChange={e => setRemindAt(e.target.value)} style={inputStyle} /></Field>
                 <Field label="Note (optional)"><textarea rows={2} value={notes} onChange={e => setNotes(e.target.value)} style={inputStyle} placeholder="What to mention next time?" /></Field>
-                <ActionRow submitting={submitting} onCancel={onCancel} disabled={!remindAt} label="Set reminder" onSubmit={() => onSetReminder(new Date(remindAt).toISOString(), notes)} />
+                <ActionRow submitting={submitting} onCancel={onCancel} disabled={!remindAt || !reason} label="Set reminder" onSubmit={() => reason && onSetReminder(new Date(remindAt).toISOString(), notes, reason)} />
             </>)}
             {mode === 'reassign' && (<>
                 <Field label="Reassign to *">
@@ -741,11 +782,12 @@ function NotAnsweredStep({ submitting, noAnswerCount, agents, onSetReminder, onR
                 <ActionRow submitting={submitting} onCancel={onCancel} disabled={!agentId} label="Reassign deal" onSubmit={() => onReassign(agentId)} />
             </>)}
             {mode === 'close' && (<>
+                <NoAnswerReasonSelect value={reason} onChange={setReason} />
                 <div style={{ padding: '10px 12px', borderRadius: '8px', backgroundColor: 'rgba(239,68,68,0.08)', fontSize: '13px', color: 'var(--text-primary)' }}>
                     Closes the deal as unreachable — the {noAnswerCount} no-answer call{noAnswerCount === 1 ? '' : 's'} are recorded.
                 </div>
                 <Field label="Note (optional)"><textarea rows={2} value={notes} onChange={e => setNotes(e.target.value)} style={inputStyle} placeholder="Anything to add?" /></Field>
-                <ActionRow submitting={submitting} onCancel={onCancel} disabled={false} label="Close — couldn't reach" onSubmit={() => onCloseUnreachable(notes)} danger />
+                <ActionRow submitting={submitting} onCancel={onCancel} disabled={!reason} label="Close — couldn't reach" onSubmit={() => reason && onCloseUnreachable(notes, reason)} danger />
             </>)}
         </div>
     );

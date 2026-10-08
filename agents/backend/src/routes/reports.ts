@@ -468,7 +468,10 @@ router.get('/lead/cancelled-reasons', async (req: Request, res: Response) => {
     const fromDate = parseDate(from as string);
     const toDate = parseDate(to as string);
 
-    const query: any = { lifecycle_stage: 'CLOSED_LOST' };
+    // Lead-cycle renewal (2026-10-08): a recycled lead is back in an OPEN cycle, so it must leave the
+    // current-cycle lost bucket. Its loss is not deleted — mark-lost/recycle both wrote interactions,
+    // which remain on the lead's history and timeline.
+    const query: any = { lifecycle_stage: 'CLOSED_LOST', recycled_at: null };
     if (fromDate || toDate) {
       query.updated_at = {};
       if (fromDate) query.updated_at.gte = fromDate;

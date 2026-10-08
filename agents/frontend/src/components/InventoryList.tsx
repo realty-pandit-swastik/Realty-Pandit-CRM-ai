@@ -1,3 +1,4 @@
+import PersonalWhatsAppShareModal from './PersonalWhatsAppShareModal';
 
 import React, { useEffect, useRef, useState } from 'react';
 import { formatInventoryAddress, formatUnitLabel } from '../lib/address';
@@ -19,7 +20,6 @@ import { MatchClientsModal } from './inventory/MatchClientsModal';
 import { GooglePlacesInput } from './GooglePlacesInput';
 import ShareToClientModal from './ShareToClientModal';
 import ShareContentPicker, { DEFAULT_SHARE_CONTENT } from './ShareContentPicker';
-import { buildWhatsAppShareText } from '../lib/buildWhatsAppShareText';
 import SharePropertyOptions from './SharePropertyOptions';
 import { pickSpecChips } from '../lib/specChips';
 import BookVisitModal from './BookVisitModal';
@@ -51,12 +51,14 @@ function formatPrice(price: number | null, intent: string): string {
 }
 
 // ─── Inline Contact Search for Edit Form ────────────────────────────────────
-function EditContactSection({ label, color, currentPhone, currentName, onContactSelected }: {
+function EditContactSection({ label, color, currentPhone, currentName, onContactSelected, error }: {
     label: string;
     color: string;
     currentPhone: string;
     currentName: string;
     onContactSelected: (contact: SelectedContact) => void;
+    /** Inline rejection (e.g. the backend refusing a team member as property owner). */
+    error?: string;
 }) {
     const [searching, setSearching] = useState(false);
 
@@ -115,6 +117,13 @@ function EditContactSection({ label, color, currentPhone, currentName, onContact
                         border: '1px dashed var(--border-secondary)', cursor: 'pointer', textAlign: 'center',
                     }}
                 >+ Search & Select Contact</button>
+            )}
+            {error && (
+                <div role="alert" style={{
+                    marginTop: '8px', padding: '8px 12px', borderRadius: '6px', fontSize: '12px',
+                    backgroundColor: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.35)',
+                    color: '#fca5a5',
+                }}>{error}</div>
             )}
         </div>
     );
@@ -259,15 +268,18 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
     const [editingItem, setEditingItem] = useState<any>(null);
     const [editData, setEditData] = useState<Record<string, any>>({});
     const [saving, setSaving] = useState(false);
+    // Inline rejection for the owner-change railguard ("X is a team member…"). A toast is easy
+    // to miss and the save looked like it silently did nothing.
+    const [editOwnerError, setEditOwnerError] = useState('');
 
     // Delete state
     const [deletingId, setDeletingId] = useState<string | null>(null);
     const [deleting, setDeleting] = useState(false);
 
     // Share to Client & Book Visit modals
+    const [personalShareIds, setPersonalShareIds] = useState<string[] | null>(null);
     const [shareItem, setShareItem] = useState<any>(null);
-    // 2026-05-13: SharePropertyOptions is the 3-option chooser shown BEFORE the
-    // existing WhatsApp share modal. Clicking 💬 inside it falls through to setShareItem.
+    // Sharing options route personal attachments and company sends separately.
     const [shareOptionsItem, setShareOptionsItem] = useState<any>(null);
     const [bookVisitItem, setBookVisitItem] = useState<any>(null);
     // #10 (2026-07-25): mark sold / on hold
@@ -552,18 +564,8 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
         }
     };
 
-    // After the company-WhatsApp send: open the team member's OWN WhatsApp at the client's
-    // chat with the numbered property text + links pre-filled (they just tap send).
-    const handleOwnWhatsAppShare = () => {
-        if (!batchShareContact) return;
-        const items = batchShareResults
-            .filter(r => r.link)
-            .map(r => ({ inv: inventory.find(i => i.id === r.id), link: r.link as string }));
-        if (items.length === 0) return;
-        const text = buildWhatsAppShareText(items, batchShareMode || 'direct');
-        const tel = batchShareContact.phone_number.replace(/^\+/, '');
-        window.open(`https://wa.me/${tel}?text=${encodeURIComponent(text)}`, '_blank');
-    };
+    // Reuse the attachment picker for a personal follow-up.
+    const handleOwnWhatsAppShare = () => setPersonalShareIds(batchShareResults.map(r => r.id));
 
     // Post-send: download the PDF of the just-shared properties — branding follows the recipient
     // (partner agent → brandless/no-RP-logo, direct client → branded RP template).
@@ -727,7 +729,10 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
             display_price: item.display_price || '',
             customer_price: item.customer_price || '',
             // Owner / Source Contact
+            // owner_name is derived server-side from Contact.name (Inventory has no such column),
+            // so fall back to the computed `source` block the list endpoint returns.
             owner_phone: item.owner_phone || '',
+            owner_name: item.owner_name || item.contact?.name || item.source?.name || '',
             uploader_phone: item.uploader_phone || '',
             uploader_name: item.uploader_name || '',
             // Key Holder
@@ -756,6 +761,7 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
         setEditingItem(item);   // ← Phase 1 dedup: keep raw row for save-merge
         setEditTab('media');
         setEditLoading(true);
+        setEditOwnerError('');
         setEditDocuments([]);
         setEditNodeFields([]);
         setEditSchemaValues({});
@@ -962,12 +968,33 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
 
             await updateInventory(editingId, payload);
             await loadInventory();
+            // Keep the OPEN modal in sync with what was just persisted. Previously only the
+            // list was refetched, so an owner/uploader change appeared to revert (or never
+            // apply) until the modal was closed and reopened.
+            const saved: any = await getInventoryItem(editingId).catch(() => null);
+            if (saved) {
+                setEditingItem(saved);
+                setEditData((prev: Record<string, any>) => ({
+                    ...prev,
+                    owner_phone: saved.owner_phone ?? prev.owner_phone,
+                    owner_name: saved.owner_name ?? saved.contact?.name ?? prev.owner_name,
+                    uploader_phone: saved.uploader_phone ?? prev.uploader_phone,
+                    uploader_name: saved.uploader_name ?? prev.uploader_name,
+                    key_holder_name: saved.key_holder_name ?? prev.key_holder_name,
+                    key_holder_phone: saved.key_holder_phone ?? prev.key_holder_phone,
+                }));
+            }
+            setEditOwnerError('');
             if (closeAfterSave) {
                 setEditingId(null);
                 setEditData({});
             }
         } catch (err: any) {
-            showToast(err.response?.data?.error || 'Failed to update', 'error');
+            // Owner railguard: keep the form open, explain inline, and don't pretend it saved.
+            const code = err?.response?.data?.error_code;
+            const message = err?.response?.data?.error || err.message || 'Failed to update';
+            if (code === 'OWNER_IS_TEAM_MEMBER') setEditOwnerError(message);
+            showToast(message, 'error');
         } finally {
             setSaving(false);
         }
@@ -1578,13 +1605,18 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
                                         label="Owner / Source Contact"
                                         color="#34d399"
                                         currentPhone={editData.owner_phone}
-                                        currentName={editData.uploader_name}
-                                        onContactSelected={(contact) => setEditData({
-                                            ...editData,
-                                            owner_phone: contact.phone,
-                                            uploader_phone: contact.phone,
-                                            uploader_name: contact.name,
-                                        })}
+                                        currentName={editData.owner_name}
+                                        error={editOwnerError}
+                                        onContactSelected={(contact) => {
+                                            // Owner-only: the uploader is audit data (who added the
+                                            // listing) and must not be repointed by changing the owner.
+                                            setEditOwnerError('');
+                                            setEditData({
+                                                ...editData,
+                                                owner_phone: contact.phone,
+                                                owner_name: contact.name,
+                                            });
+                                        }}
                                     />
 
                                     {/* ── Section: Key Holder ── */}
@@ -2127,8 +2159,10 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
                                 <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', marginTop: '6px', fontSize: '12px' }}>
                                     {editItem?.owner_phone && (
                                         <span style={{ color: 'var(--text-secondary)' }}>
-                                            <span style={{ color: 'var(--text-muted)' }}>Owner:</span> {editItem.owner_name || editItem.owner_phone}
-                                            {editItem.owner_name && editItem.owner_phone && <span style={{ color: 'var(--text-muted)', marginLeft: 4 }}>({editItem.owner_phone})</span>}
+                                            {/* Prefer the in-form value so a picked owner shows
+                                                immediately, before/after saving. */}
+                                            <span style={{ color: 'var(--text-muted)' }}>Owner:</span> {editData.owner_name || editItem.owner_name || editItem.owner_phone}
+                                            {(editData.owner_name || editItem.owner_name) && <span style={{ color: 'var(--text-muted)', marginLeft: 4 }}>({editData.owner_phone || editItem.owner_phone})</span>}
                                         </span>
                                     )}
                                     {(editItem?.uploaded_by_agent || editItem?.uploader_name) && (
@@ -2677,13 +2711,12 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
                                         label="Owner / Source Contact"
                                         color="#34d399"
                                         currentPhone={editData.owner_phone}
-                                        currentName={editData.uploader_name}
-                                        onContactSelected={(contact) => setEditData({
-                                            ...editData,
-                                            owner_phone: contact.phone,
-                                            uploader_phone: contact.phone,
-                                            uploader_name: contact.name,
-                                        })}
+                                        currentName={editData.owner_name}
+                                        error={editOwnerError}
+                                        onContactSelected={(contact) => {
+                                            setEditOwnerError('');
+                                            setEditData({ ...editData, owner_phone: contact.phone, owner_name: contact.name });
+                                        }}
                                     />
                                     <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-link)', marginBottom: '12px', borderBottom: '1px solid var(--border-secondary)', paddingBottom: '4px' }}>Key Holder</div>
                                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px', marginBottom: '20px' }}>
@@ -3032,10 +3065,12 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
                 </div>
             )}
 
-            {/* Share — 3-option chooser */}
+            {/* Property sharing options */}
+            {personalShareIds && <PersonalWhatsAppShareModal inventoryIds={personalShareIds} initialPhone={batchShareContact?.phone_number} onClose={() => setPersonalShareIds(null)} />}
             {shareOptionsItem && (
                 <SharePropertyOptions
                     item={shareOptionsItem}
+                    onPersonalWhatsAppChosen={() => setPersonalShareIds([shareOptionsItem.id])}
                     onClose={() => setShareOptionsItem(null)}
                     onWhatsAppChosen={() => { setShareItem(shareOptionsItem); setShareOptionsItem(null); }}
                 />
@@ -3114,6 +3149,7 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
                     <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>
                         {selectedIds.size} propert{selectedIds.size === 1 ? 'y' : 'ies'} selected
                     </span>
+                    <button onClick={() => setPersonalShareIds(Array.from(selectedIds))} style={{ padding: '8px 14px', borderRadius: 8, background: '#128c7e', color: '#fff', border: 'none', cursor: 'pointer' }}>My WhatsApp</button>
                     <button
                         onClick={() => { setShowBatchShareModal(true); setBatchShareResults([]); setBatchShareContact(null); setBatchContactSearch(''); }}
                         style={{

@@ -1,0 +1,14 @@
+{
+  "name": "realty-pandit-personal-whatsapp",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "package": "npm run build && node package.mjs",
+    "test": "node --test tests/*.test.mjs"
+  },
+  "dependencies": {
+    "@wppconnect/wa-js": "4.6.1"
+  }
+}

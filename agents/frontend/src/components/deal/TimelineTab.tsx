@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { InventoryPreviewModal } from './MatchShareTab';
+import { noAnswerReasonLabel } from '../../lib/callOutcomes';
 
 // Raw timeline event exactly as returned by GET /api/deals/:id/timeline
 interface RawEvent {
@@ -119,7 +120,7 @@ function renderEvent(ev: RawEvent, onPreview?: (id: string) => void): { icon: st
                 detail: (
                     <div>
                         {ev.notes && <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{ev.notes}</div>}
-                        {ev.outcome && <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Outcome: {ev.outcome}</div>}
+                        {ev.outcome && <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Outcome: {noAnswerReasonLabel(ev.outcome)}</div>}
                         {ev.agent_name && <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>by {ev.agent_name}</div>}
                     </div>
                 ),
