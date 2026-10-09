@@ -1807,7 +1807,7 @@ router.patch('/:phone/mark-lost', async (req, res) => {
 
         const contact = await prisma.contact.findUnique({
             where: { phone_number: phone },
-            select: { phone_number: true, name: true, assigned_agent_id: true },
+            select: { phone_number: true, name: true, assigned_agent_id: true, tenant_id: true },
         });
         if (!contact) return res.status(404).json({ error: 'Contact not found' });
 
@@ -1851,11 +1851,15 @@ router.patch('/:phone/mark-lost', async (req, res) => {
             select: { phone_number: true, name: true, lead_status: true, lifecycle_stage: true },
         });
 
-        // Log an interaction so the timeline shows who closed it and why
+        // Log an interaction so the timeline shows who closed it and why.
+        // tenant_id is REQUIRED on Interaction — omitting it fails the write, which this
+        // .catch would swallow, silently losing the audit event (found live 2026-10-09: no
+        // lead_marked_lost row was ever written, so a recycled lead's loss half of the cycle
+        // was invisible in history).
         await prisma.interaction.create({
             data: {
+                tenant_id: contact.tenant_id,
                 phone_number: phone,
-                contact: { connect: { phone_number: phone } },
                 channel: 'admin',
                 direction: 'outbound',
                 event_type: 'lead_marked_lost',
