@@ -39,3 +39,41 @@ export async function recordLeadReingest(opts: {
         logger.warn(`[LeadReingest] ${opts.phone} (${opts.source}) failed: ${(e as Error).message}`);
     }
 }
+
+/**
+ * Dedupe-hit marker (2026-10-09). A repeat enquiry for the SAME listing inside the dedupe
+ * window attaches to the existing deal instead of spawning a duplicate — but that re-engagement
+ * is still real work arriving today, so it gets its own timeline row naming the attached deal.
+ * Without this the row visibly never changes and the enquiry looks lost ("same !!!").
+ */
+export async function recordLeadReengaged(opts: {
+    phone: string;
+    source: string;
+    sourceRef?: string | null;
+    dealId: string;
+    attributedAgentId?: string | null;
+}): Promise<void> {
+    try {
+        const contact = await prisma.contact.findUnique({
+            where: { phone_number: opts.phone },
+            select: { phone_number: true, tenant_id: true },
+        });
+        if (!contact) return;
+        await prisma.interaction.create({
+            data: {
+                tenant_id: contact.tenant_id,
+                phone_number: contact.phone_number,
+                channel: opts.source,
+                direction: 'inbound',
+                event_type: 'lead_reengaged',
+                content: `Customer enquired again via ${opts.source}${opts.sourceRef ? ` for ${opts.sourceRef}` : ''} — attached to existing deal`,
+                metadata: {
+                    source: opts.source, source_ref: opts.sourceRef ?? null,
+                    deal_id: opts.dealId, attributed_agent_id: opts.attributedAgentId ?? null,
+                },
+            },
+        }).catch(() => {});
+    } catch (e) {
+        logger.warn(`[LeadReingest] reengaged marker failed for ${opts.phone} (${opts.source}): ${(e as Error).message}`);
+    }
+}

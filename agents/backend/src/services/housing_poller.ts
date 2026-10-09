@@ -310,23 +310,33 @@ export class HousingPoller {
 
         // One contact → many leads: every enquiry gets its own deal (a repeat of the same listing dedups
         // inside ensureDealForLead). A known contact's new enquiry goes to ITS attributed agent.
+        // (2026-10-09: one shared handler — awaits the deal write, stamps the contact cycle so the
+        // row visibly renews, and notifies the listing owner.)
         {
             const brokerEmail = (lead as any).broker_email || (lead as any).agent_email || null;
             let dealAgentId: string | null = finalAgentId;
             if (!isNew) {
                 const reAttr = brokerEmail ? await resolveAgentByEmail(brokerEmail) : null;
-                const { recordLeadReingest } = await import('./lead_reingest');
-                await recordLeadReingest({ phone: phoneNumber, source: 'housing', attributedAgentId: reAttr, subUser: brokerEmail, sourceRef: propertyRef != null ? String(propertyRef) : null });
+                const { handlePortalReenquiry } = await import('./portal_reenquiry');
+                await handlePortalReenquiry({
+                    phone: phoneNumber, source: 'housing',
+                    sourceRef: propertyRef != null ? String(propertyRef) : null,
+                    subUser: brokerEmail, tenantId,
+                    attributedAgentId: reAttr ?? null,
+                }).catch((err) => {
+                    logger.error(`[Housing] re-enquiry failed for ${phoneNumber}: ${(err as Error).message}`);
+                });
                 dealAgentId = reAttr ?? null;
+            } else {
+                ensureDealForLead({
+                    contactPhone: phoneNumber,
+                    source: 'housing',
+                    sourceRef: propertyRef != null ? String(propertyRef) : null,
+                    assignedAgentId: dealAgentId,
+                }).catch((err) => {
+                    logger.error(`[Housing] ensureDealForLead failed for ${phoneNumber}: ${(err as Error).message}`);
+                });
             }
-            ensureDealForLead({
-                contactPhone: phoneNumber,
-                source: 'housing',
-                sourceRef: propertyRef != null ? String(propertyRef) : null,
-                assignedAgentId: dealAgentId,
-            }).catch((err) => {
-                logger.error(`[Housing] ensureDealForLead failed for ${phoneNumber}: ${(err as Error).message}`);
-            });
         }
 
         // ── Notify team (new leads only) ────────────────────────────────────

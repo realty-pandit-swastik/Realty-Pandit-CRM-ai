@@ -675,13 +675,18 @@ export class NinetyNineAcresPoller {
 
         // One contact → many leads: a re-enquiry from a known contact gets its OWN lead (deal), assigned
         // to the agent this enquiry is attributed to. Existing leads are never reassigned or shared.
+        // (2026-10-09: one shared handler — it awaits the deal write so failures surface in the poll
+        // loop instead of vanishing into a fire-and-forget .catch, stamps the contact's cycle so the
+        // row visibly renews, and notifies the listing owner, who previously learned nothing.)
         const sourceRef = lead.propertyCode || lead.productId || lead.projName || null;
         if (!isNew) {
             const reAttr = lead.subUserName ? await resolveAgentByEmail(lead.subUserName) : null;
-            const { recordLeadReingest } = await import('./lead_reingest');
-            await recordLeadReingest({ phone: phoneNumber, source: '99acres', attributedAgentId: reAttr, subUser: lead.subUserName, sourceRef });
-            ensureDealForLead({ contactPhone: phoneNumber, source: '99acres', sourceRef, assignedAgentId: reAttr ?? undefined })
-                .catch((err) => logger.error(`[99acres] re-enquiry ensureDealForLead failed for ${phoneNumber}: ${(err as Error).message}`));
+            const { handlePortalReenquiry } = await import('./portal_reenquiry');
+            await handlePortalReenquiry({
+                phone: phoneNumber, source: '99acres', sourceRef,
+                subUser: lead.subUserName ?? null, tenantId,
+                attributedAgentId: reAttr ?? null, contactName: contact.name,
+            });
         }
 
         // ── New contact: routing, notifications, escalation ───────────────────
