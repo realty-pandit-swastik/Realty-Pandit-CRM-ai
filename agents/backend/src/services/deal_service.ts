@@ -527,6 +527,15 @@ export async function listDeals(filters: {
     page?: number;
     limit?: number;
     search?: string;
+    /**
+     * Exact one-lead scope (2026-10-09): narrows to deals whose demand contact is this phone.
+     * demand_contact_id IS the Contact PK, so this is an equality match with no join.
+     *
+     * Deliberately NOT routed through `search`: that path digit-strips the term, which would
+     * make a placeholder key like "PENDING-9812345678-m1" match the DEALER's number and pull in
+     * another person's deals (see the dealer fallback in the leads list).
+     */
+    contact_phone?: string;
     taxonomy_node_ids?: string;
     bhk?: string;
     hide_closed?: boolean;
@@ -535,18 +544,21 @@ export async function listDeals(filters: {
     /** 'asc' | 'desc' — omitted falls back to the per-key default */
     direction?: string;
 }) {
-    const { tenant_id, status, deal_scenario, coordinator_agent_id, team_ids, partner_ids, demand_handler_id, supply_handler_id, min_priority, page = 1, limit = 20, search, taxonomy_node_ids, bhk, hide_closed, sort, direction } = filters;
+    const { tenant_id, status, deal_scenario, coordinator_agent_id, team_ids, partner_ids, demand_handler_id, supply_handler_id, min_priority, page = 1, limit = 20, search, contact_phone, taxonomy_node_ids, bhk, hide_closed, sort, direction } = filters;
 
     const where: any = { tenant_id };
+    const narrowing = !!(search && String(search).trim()) || !!(contact_phone && String(contact_phone).trim());
     if (status) {
         where.status = status;
-    } else if (hide_closed && !(search && String(search).trim())) {
+    } else if (hide_closed && !narrowing) {
         // 2026-05-13: kanban columns already segment stages, but CLOSED_WON +
         // CLOSED_LOST are clutter for daily work. Hide by default; reveal via toggle.
         // #2 (2026-07-01): when the user is SEARCHING, DON'T hide Won/Lost — otherwise a search
         // for a past (esp. Won) client returns nothing. Search spans all stages.
         // 2026-07-21: ON_HOLD added — it was only dropped from the kanban COLUMN list
         // client-side, so 145 on-hold deals still leaked into the mobile + list views.
+        // 2026-10-09: same for an exact contact_phone scope — a lead tapped from Ext. Leads whose
+        // only deal is Won/Lost must still show that deal.
         where.status = { notIn: ['CLOSED_WON', 'CLOSED_LOST', 'ON_HOLD'] };
     }
     if (deal_scenario) where.deal_scenario = deal_scenario;
@@ -591,6 +603,14 @@ export async function listDeals(filters: {
             };
         });
         where.AND = [...(where.AND || []), ...termGroups];
+    }
+
+    // Exact one-lead scope (2026-10-09). demand_contact_id IS the Contact PK, so this is equality
+    // on the stored key — no normalization (a PENDING-/TEMP- placeholder must match exactly, and
+    // reformatting would make it match nothing). AND-ed so it narrows within the existing
+    // tenant + team/partner visibility rather than replacing it.
+    if (contact_phone && String(contact_phone).trim()) {
+        where.AND = [...(where.AND || []), { demand_contact_id: String(contact_phone).trim() }];
     }
 
     // Taxonomy filter (new tree): the deal's demand contact node IN (selected + descendants).
