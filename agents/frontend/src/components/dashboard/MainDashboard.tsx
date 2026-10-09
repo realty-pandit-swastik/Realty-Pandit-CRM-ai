@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   getContacts, getManagementAlerts, getWorkflowTaskQueue, getMarketTrends,
   getFinancialSummary, getInventory, getDealPipeline, getTeamActivity, getSpeedToLead,
@@ -31,11 +31,17 @@ interface Cockpit {
   };
   temperature: { hot: number; warm: number; cold: number; total: number };
   activity: Array<{ ts: number; icon: string; text: string }>;
+  /** Sources that failed this load — their tiles must read "couldn't load", never 0. */
+  failed: string[];
 }
 
 const PRIORITY_RANK: Record<string, number> = { URGENT: 3, HIGH: 2, MEDIUM: 1, LOW: 0 };
 const iso = (d: Date) => d.toISOString();
-const inRange = (d: string, a: Date, b: Date) => { const t = new Date(d).getTime(); return t >= a.getTime() && t <= b.getTime(); };
+// Backend groups series by IST calendar date and returns bare YYYY-MM-DD. Compare as IST day
+// strings — never epoch millis: `new Date("YYYY-MM-DD")` is UTC midnight, which misattributes
+// the 00:00–05:30 IST window on non-IST browsers (and across DST transitions).
+const istDay = (d: Date) => d.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+const inRange = (day: string, a: Date, b: Date) => day >= istDay(a) && day <= istDay(b);
 const pctDelta = (cur: number, prev: number): number | null => (prev > 0 ? ((cur - prev) / prev) * 100 : cur > 0 ? 100 : null);
 
 const Drill: React.FC<{ target: DrillTarget; children: React.ReactNode }> = ({ target, children }) => (
@@ -52,17 +58,29 @@ async function loadCockpit(range: DateRange): Promise<Cockpit> {
   const prevFrom = new Date(from.getTime() - span);
   const prevTo = new Date(from.getTime() - 1);
 
-  // getContacts is the spine — NOT caught (auth failure → ErrorState). Others degrade gracefully.
+  // getContacts is the spine — NOT caught (auth failure → ErrorState). Every other source is
+  // tracked individually: a failure must surface as "couldn't load" on its tiles, never as a
+  // plausible 0 / empty list (see AsyncState — a failure is `error`, never collapsed into empty).
+  const failed: string[] = [];
+  const grab = async <T,>(key: string, p: Promise<T>, fallback: T): Promise<T> => {
+    try {
+      return await p;
+    } catch (err) {
+      console.error(`[dashboard] ${key} failed`, err);
+      failed.push(key);
+      return fallback;
+    }
+  };
   const contactsP = getContacts();
   const [alertsRes, queueRes, trends, fin, inv, pipeline, activity, stl] = await Promise.all([
-    getManagementAlerts().catch(() => ({ alerts: [] as Alert[] })),
-    getWorkflowTaskQueue().catch(() => ({ tasks: [] as Task[] })),
-    getMarketTrends({ from: iso(prevFrom), to: iso(to) }).catch(() => ({ leads: [], visits: [], sales: [] })),
-    getFinancialSummary({ from: iso(from), to: iso(to) }).catch(() => ({ total_commission: 0, total_deals: 0 })),
-    getInventory({ status: 'active', limit: 1 }).catch(() => ({ total: 0 })),
-    getDealPipeline().catch(() => ({} as Record<string, number>)),
-    getTeamActivity({ from: iso(from), to: iso(to), limit: 20 }).catch(() => ({ shares: [], appointments: [] })),
-    getSpeedToLead({ from: iso(from), to: iso(to) }).catch(() => ({ median_minutes: null })),
+    grab('alerts', getManagementAlerts(), { alerts: [] as Alert[] }),
+    grab('tasks', getWorkflowTaskQueue(), { tasks: [] as Task[] }),
+    grab('trends', getMarketTrends({ from: iso(prevFrom), to: iso(to) }), { leads: [], visits: [], sales: [] }),
+    grab('finance', getFinancialSummary({ from: iso(from), to: iso(to) }), { total_commission: 0, total_deals: 0 }),
+    grab('inventory', getInventory({ status: 'active', limit: 1 }), { total: 0 }),
+    grab('pipeline', getDealPipeline(), {} as Record<string, number>),
+    grab('activity', getTeamActivity({ from: iso(from), to: iso(to), limit: 20 }), { shares: [], appointments: [] }),
+    grab('stl', getSpeedToLead({ from: iso(from), to: iso(to) }), { median_minutes: null }),
   ]);
   const contacts: any[] = await contactsP;
 
@@ -119,6 +137,7 @@ async function loadCockpit(range: DateRange): Promise<Cockpit> {
     },
     temperature: t,
     activity: feed.slice(0, 15),
+    failed,
   };
 }
 
@@ -134,7 +153,12 @@ export const MainDashboard: React.FC = () => {
   const { agent } = useAuth();
   const isMobile = useIsMobile();
   const [range, setRange] = useState<DateRange>(defaultRange());
-  const [now] = useState(Date.now);
+  // Tick so OVERDUE flags don't go stale on a long-open tab.
+  const [now, setNow] = useState(Date.now);
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 60000);
+    return () => clearInterval(t);
+  }, []);
 
   const { status, data, reload } = useAsyncData<Cockpit>(
     () => loadCockpit(range),
@@ -169,8 +193,12 @@ export const MainDashboard: React.FC = () => {
   const pad = isMobile ? 16 : '24px 32px';
   const kpiGrid: React.CSSProperties = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 'var(--bento-gap)' };
   const colTwo: React.CSSProperties = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 14 };
+  // Per-source failures: affected tiles read "couldn't load", never 0 — a failed request must not
+  // masquerade as an empty period (the headline below must not assert zeros either).
+  const failed = new Set(d.failed || []);
+  const hasFailed = failed.size > 0;
   const actionTotal = openByType.callbacks + openByType.visits + openByType.overdue + alertBy('stale_leads') + alertBy('inventory_missing_photos');
-  const stateLine = `${formatNum(d.pulse.leads.cur)} new leads · ${formatNum(d.pulse.visits.cur)} visits · ${formatNum(d.pulse.deals.cur)} deals closed this period — ${formatNum(actionTotal)} things need action.`;
+  const stateLine = `${formatNum(d.pulse.leads.cur)} new leads · ${formatNum(d.pulse.visits.cur)} visits · ${formatNum(d.pulse.deals.cur)} deals closed this period — ${formatNum(actionTotal)} things need action.${hasFailed ? ' ⚠️ Some figures couldn’t load.' : ''}`;
 
   return (
     <div style={{ flex: 1, overflowY: 'auto', padding: pad, backgroundColor: 'var(--bg-primary)' }}>
@@ -181,16 +209,23 @@ export const MainDashboard: React.FC = () => {
 
       <RangeBar range={range} onRange={setRange} />
 
+      {hasFailed && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginTop: 12, padding: '10px 14px', borderRadius: 10, backgroundColor: 'rgba(245,158,11,0.10)', border: '1px solid rgba(245,158,11,0.35)', fontSize: 12.5, color: 'var(--text-secondary)' }}>
+          <span>⚠️ Couldn’t load: {[...failed].join(', ')}. Figures below may be incomplete — not zero.</span>
+          <button onClick={reload} style={{ marginLeft: 'auto', padding: '5px 14px', borderRadius: 8, border: 'none', background: '#f59e0b', color: '#fff', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>Retry</button>
+        </div>
+      )}
+
       <div style={{ display: 'flex', flexDirection: 'column', gap: 18, marginTop: 14 }}>
         {/* Do This Now */}
         <div>
           <SectionLabel icon="⚡">Do This Now</SectionLabel>
           <div style={kpiGrid}>
-            <Drill target={{ entity: 'tasks' }}><KpiCard label="Callbacks Now" value={formatNum(openByType.callbacks)} accent="#ef4444" icon="📞" /></Drill>
-            <Drill target={{ entity: 'tasks' }}><KpiCard label="Visits ASAP" value={formatNum(openByType.visits)} accent="#f43f5e" icon="🏃" /></Drill>
-            <Drill target={{ entity: 'tasks' }}><KpiCard label="Overdue Tasks" value={formatNum(openByType.overdue)} accent="#f59e0b" icon="⏰" /></Drill>
-            <Drill target={{ entity: 'leads' }}><KpiCard label="Neglected Leads" value={formatNum(alertBy('stale_leads'))} accent="#8b5cf6" icon="😴" /></Drill>
-            <Drill target={{ entity: 'inventory', filter: { status: 'active' } }}><KpiCard label="Missing Photos" value={formatNum(alertBy('inventory_missing_photos'))} accent="#ec4899" icon="📷" /></Drill>
+            <Drill target={{ entity: 'tasks' }}><KpiCard label="Callbacks Now" value={failed.has('tasks') ? '—' : formatNum(openByType.callbacks)} sub={failed.has('tasks') ? 'couldn’t load' : undefined} accent="#ef4444" icon="📞" /></Drill>
+            <Drill target={{ entity: 'tasks' }}><KpiCard label="Visits ASAP" value={failed.has('tasks') ? '—' : formatNum(openByType.visits)} sub={failed.has('tasks') ? 'couldn’t load' : undefined} accent="#f43f5e" icon="🏃" /></Drill>
+            <Drill target={{ entity: 'tasks' }}><KpiCard label="Overdue Tasks" value={failed.has('tasks') ? '—' : formatNum(openByType.overdue)} sub={failed.has('tasks') ? 'couldn’t load' : undefined} accent="#f59e0b" icon="⏰" /></Drill>
+            <Drill target={{ entity: 'leads' }}><KpiCard label="Neglected Leads" value={failed.has('alerts') ? '—' : formatNum(alertBy('stale_leads'))} sub={failed.has('alerts') ? 'couldn’t load' : undefined} accent="#8b5cf6" icon="😴" /></Drill>
+            <Drill target={{ entity: 'inventory', filter: { status: 'active' } }}><KpiCard label="Missing Photos" value={failed.has('alerts') ? '—' : formatNum(alertBy('inventory_missing_photos'))} sub={failed.has('alerts') ? 'couldn’t load' : undefined} accent="#ec4899" icon="📷" /></Drill>
           </div>
         </div>
 
@@ -198,13 +233,13 @@ export const MainDashboard: React.FC = () => {
         <div>
           <SectionLabel icon="📊">Pulse</SectionLabel>
           <div style={kpiGrid}>
-            <KpiCard label="New Leads" value={formatNum(d.pulse.leads.cur)} delta={pctDelta(d.pulse.leads.cur, d.pulse.leads.prev)} accent="#3b82f6" icon="👥" />
-            <KpiCard label="Visits" value={formatNum(d.pulse.visits.cur)} delta={pctDelta(d.pulse.visits.cur, d.pulse.visits.prev)} accent="#06b6d4" icon="📅" />
-            <KpiCard label="Deals Closed" value={formatNum(d.pulse.deals.cur)} delta={pctDelta(d.pulse.deals.cur, d.pulse.deals.prev)} accent="#22c55e" icon="✅" />
-            <KpiCard label="Commission" value={formatINR(d.pulse.commission)} accent="#f59e0b" icon="₹" />
-            <KpiCard label="Speed-to-Lead" value={formatMins(d.pulse.stl_median)} sub="median, 1st reply" accent="#ef4444" icon="⚡" />
-            <Drill target={{ entity: 'inventory', filter: { status: 'active' } }}><KpiCard label="Active Listings" value={formatNum(d.pulse.activeListings)} accent="#14b8a6" icon="🏠" /></Drill>
-            <Drill target={{ entity: 'deals' }}><KpiCard label="Open Deals" value={formatNum(d.pulse.openDeals)} accent="#6366f1" icon="🎯" /></Drill>
+            <KpiCard label="New Leads" value={failed.has('trends') ? '—' : formatNum(d.pulse.leads.cur)} delta={failed.has('trends') ? null : pctDelta(d.pulse.leads.cur, d.pulse.leads.prev)} sub={failed.has('trends') ? 'couldn’t load' : undefined} accent="#3b82f6" icon="👥" />
+            <KpiCard label="Visits" value={failed.has('trends') ? '—' : formatNum(d.pulse.visits.cur)} delta={failed.has('trends') ? null : pctDelta(d.pulse.visits.cur, d.pulse.visits.prev)} sub={failed.has('trends') ? 'couldn’t load' : undefined} accent="#06b6d4" icon="📅" />
+            <KpiCard label="Deals Closed" value={failed.has('trends') ? '—' : formatNum(d.pulse.deals.cur)} delta={failed.has('trends') ? null : pctDelta(d.pulse.deals.cur, d.pulse.deals.prev)} sub={failed.has('trends') ? 'couldn’t load' : undefined} accent="#22c55e" icon="✅" />
+            <KpiCard label="Commission" value={failed.has('finance') ? '—' : formatINR(d.pulse.commission)} sub={failed.has('finance') ? 'couldn’t load' : undefined} accent="#f59e0b" icon="₹" />
+            <KpiCard label="Speed-to-Lead" value={failed.has('stl') ? '—' : formatMins(d.pulse.stl_median)} sub={failed.has('stl') ? 'couldn’t load' : 'median, 1st reply'} accent="#ef4444" icon="⚡" />
+            <Drill target={{ entity: 'inventory', filter: { status: 'active' } }}><KpiCard label="Active Listings" value={failed.has('inventory') ? '—' : formatNum(d.pulse.activeListings)} sub={failed.has('inventory') ? 'couldn’t load' : undefined} accent="#14b8a6" icon="🏠" /></Drill>
+            <Drill target={{ entity: 'deals' }}><KpiCard label="Open Deals" value={failed.has('pipeline') ? '—' : formatNum(d.pulse.openDeals)} sub={failed.has('pipeline') ? 'couldn’t load' : undefined} accent="#6366f1" icon="🎯" /></Drill>
           </div>
         </div>
 
@@ -215,7 +250,7 @@ export const MainDashboard: React.FC = () => {
           </ClayCard>
           <ClayCard title="Next Actions" subtitle="Your most urgent tasks">
             {nextActions.length === 0 ? (
-              <div style={{ padding: 24, textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>✅ All caught up</div>
+              <div style={{ padding: 24, textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>{failed.has('tasks') ? '⚠️ Couldn’t load tasks — retry above.' : '✅ All caught up'}</div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {nextActions.map((tk) => {
@@ -239,7 +274,7 @@ export const MainDashboard: React.FC = () => {
         <div style={colTwo}>
           <ClayCard title="Live Activity" subtitle="Recent shares & visits">
             {d.activity.length === 0 ? (
-              <div style={{ padding: 24, textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>No activity in this period</div>
+              <div style={{ padding: 24, textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>{failed.has('activity') ? '⚠️ Couldn’t load activity — retry above.' : 'No activity in this period'}</div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
                 {d.activity.map((e, i) => (
@@ -252,9 +287,15 @@ export const MainDashboard: React.FC = () => {
           </ClayCard>
           <ClayCard title="Housekeeping" subtitle="Keep the data clean">
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <Drill target={{ entity: 'inventory', filter: { status: 'active' } }}><HouseRow label="Listings missing price" count={alertBy('inventory_missing_price')} /></Drill>
-              <HouseRow label="Inactive team members" count={alertBy('inactive_agents')} />
-              <HouseRow label="Google Calendar not connected" count={alertBy('google_not_connected')} />
+              {failed.has('alerts') ? (
+                <div style={{ padding: 16, textAlign: 'center', color: 'var(--text-muted)', fontSize: 12.5 }}>⚠️ Couldn’t load housekeeping checks — retry above.</div>
+              ) : (
+                <>
+                  <Drill target={{ entity: 'inventory', filter: { status: 'active' } }}><HouseRow label="Listings missing price" count={alertBy('inventory_missing_price')} /></Drill>
+                  <HouseRow label="Inactive team members" count={alertBy('inactive_agents')} />
+                  <HouseRow label="Google Calendar not connected" count={alertBy('google_not_connected')} />
+                </>
+              )}
             </div>
           </ClayCard>
         </div>
