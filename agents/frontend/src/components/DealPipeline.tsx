@@ -88,9 +88,20 @@ interface DealPipelineProps {
     /** Fired once the deep link has been acted on (deal opened or fetch failed),
      *  so the owner can clear it. */
     onInitialDealConsumed?: () => void;
+    /** Exact one-lead scope (2026-10-09): set when the Pipeline button on a lead tile
+     *  is tapped. Narrows the board to that contact's deals (server-side equality on
+     *  demand_contact_id). One-shot — cleared via onInitialContactConsumed so a later
+     *  manual visit to Deals is not silently filtered. */
+    initialContactPhone?: string | null;
+    /** Display name for the lead being filtered (shown in the filter chip). */
+    initialContactName?: string | null;
+    /** Fired once the contact filter has been applied, so the owner can clear it. */
+    onInitialContactConsumed?: () => void;
 }
 
-export default function DealPipeline({ initialDealId, onInitialDealConsumed }: DealPipelineProps) {
+export default function DealPipeline({
+    initialDealId, onInitialDealConsumed, initialContactPhone, initialContactName, onInitialContactConsumed,
+}: DealPipelineProps) {
     const isMobile = useIsMobile();
     const { showToast } = useToast();
     const { isPartner, isPartnerOwner } = useAuth();
@@ -128,6 +139,11 @@ export default function DealPipeline({ initialDealId, onInitialDealConsumed }: D
     }, [showFilterSheet]);
     const [searchInput, setSearchInput] = useState<string>('');
     const [searchQuery, setSearchQuery] = useState<string>('');
+    // Exact one-lead scope from the Ext. Leads "Pipeline" button. Server-side equality on
+    // demand_contact_id (NOT the `search` box: that digit-strips, which would let a placeholder
+    // key like PENDING-9812… match the dealer's number and drag in someone else's deals).
+    const [contactPhone, setContactPhone] = useState<string>('');
+    const [contactName, setContactName] = useState<string>('');
     // 2026-05-13: hide CLOSED_WON + CLOSED_LOST kanban columns by default to declutter the
     // daily-work view. Toggle reveals them. Stage filter dropdown still lets you pick them explicitly.
     const [showClosedDeals, setShowClosedDeals] = useState(false);
@@ -192,6 +208,7 @@ export default function DealPipeline({ initialDealId, onInitialDealConsumed }: D
             if (filterTaxonomy.nodeIds.length > 0) params.taxonomy_node_ids = filterTaxonomy.nodeIds.join(',');
             if (filterTaxonomy.bhk.length > 0) params.bhk = filterTaxonomy.bhk.join(',');
             if (searchQuery.trim()) params.search = searchQuery.trim();
+            if (contactPhone.trim()) params.contact_phone = contactPhone.trim();
             // Send hide_closed flag (server-side default is true, this just makes intent explicit)
             params.hide_closed = showClosedDeals ? 'false' : 'true';
 
@@ -216,13 +233,13 @@ export default function DealPipeline({ initialDealId, onInitialDealConsumed }: D
         } finally {
             if (!opts?.silent) setLoading(false);
         }
-    }, [filterStatus, filterScenario, filterMinPriority, filterSource, filterIntent, filterCoordinatorId, filterTaxonomy, searchQuery, showClosedDeals, sortMode, pageCount]);
+    }, [filterStatus, filterScenario, filterMinPriority, filterSource, filterIntent, filterCoordinatorId, filterTaxonomy, searchQuery, contactPhone, showClosedDeals, sortMode, pageCount]);
 
     useEffect(() => { fetchData(); }, [fetchData]);
 
     // Any change to filters / search / sort restarts paging at the first page, so a
     // previously-grown limit isn't carried into an unrelated result set.
-    useEffect(() => { setPageCount(1); }, [filterStatus, filterScenario, filterMinPriority, filterSource, filterIntent, filterCoordinatorId, filterTaxonomy, searchQuery, showClosedDeals, sortMode]);
+    useEffect(() => { setPageCount(1); }, [filterStatus, filterScenario, filterMinPriority, filterSource, filterIntent, filterCoordinatorId, filterTaxonomy, searchQuery, contactPhone, showClosedDeals, sortMode]);
 
     // Deep link (?deal=<id>): open that deal's detail straight away. Used by the
     // Google Calendar/Task "call the new lead" reminder links (and lead-tile drills)
@@ -243,6 +260,27 @@ export default function DealPipeline({ initialDealId, onInitialDealConsumed }: D
         return () => { cancelled = true; };
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [initialDealId]);
+
+    // Exact one-lead scope (2026-10-09): the Ext. Leads "Pipeline" button narrows the BOARD to
+    // that lead's deals instead of leaving the user on the full pipeline. One-shot per distinct
+    // initialContactPhone — onInitialContactConsumed clears it in the owner so a later manual
+    // visit to Deals is not silently filtered. Unlike the search box this is an exact equality
+    // filter — a name can collide ("Mamta" vs "Mamtaram") and placeholder leads have no name.
+    const contactConsumedRef = useRef<string | null>(null);
+    useEffect(() => {
+        if (!initialContactPhone || contactConsumedRef.current === initialContactPhone) return;
+        contactConsumedRef.current = initialContactPhone;
+        onInitialContactConsumed?.();
+        setContactPhone(initialContactPhone);
+        setContactName(initialContactName || '');
+        setSelectedDeal(null); // never leave a stale deal open over the newly-filtered board
+        // Reset other narrowing filters so the tapped lead is actually visible — a leftover
+        // stage/search filter from earlier would hide it and read as "no deals".
+        setFilterStatus('');
+        setSearchInput('');
+        setSearchQuery('');
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [initialContactPhone, initialContactName]);
 
     useEffect(() => {
         client.get('/public/master/categories')
@@ -432,7 +470,7 @@ export default function DealPipeline({ initialDealId, onInitialDealConsumed }: D
     const totalDeals = Object.values(pipeline).reduce((a, b) => a + b, 0);
     // #7 (2026-06-28): when a filter/search is active, the header total + per-stage counts come from the
     // FILTERED result so they reflect the filter; otherwise use the full (unfiltered) pipeline stats.
-    const anyFilterActive = !!(searchQuery || filterStatus || filterTaxonomy.nodeIds.length || filterTaxonomy.bhk.length || filterScenario || filterMinPriority || filterSource || filterIntent || filterCoordinatorId);
+    const anyFilterActive = !!(searchQuery || contactPhone || filterStatus || filterTaxonomy.nodeIds.length || filterTaxonomy.bhk.length || filterScenario || filterMinPriority || filterSource || filterIntent || filterCoordinatorId);
     const stageCounts: Record<string, number> = anyFilterActive
         ? deals.reduce((acc: Record<string, number>, d: any) => { acc[d.status] = (acc[d.status] || 0) + 1; return acc; }, {})
         : pipeline;
@@ -754,6 +792,30 @@ export default function DealPipeline({ initialDealId, onInitialDealConsumed }: D
                         >×</button>
                     )}
                 </div>
+
+                {/* Exact one-lead scope chip — explains WHY the board is short, and how to undo it. */}
+                {contactPhone && (
+                    <div
+                        title="Showing only this lead's deals. Click ✕ to return to the full pipeline."
+                        style={{
+                            display: 'inline-flex', alignItems: 'center', gap: '6px', flexShrink: 0,
+                            padding: '6px 10px', borderRadius: '10px', fontSize: '12px', fontWeight: 600,
+                            backgroundColor: 'rgba(59,130,246,0.10)', border: '1px solid rgba(59,130,246,0.40)',
+                            color: 'var(--text-primary)',
+                        }}
+                    >
+                        <span>👤 {contactName || contactPhone}</span>
+                        <button
+                            type="button"
+                            aria-label="Clear lead filter"
+                            onClick={() => { setContactPhone(''); setContactName(''); }}
+                            style={{
+                                background: 'none', border: 'none', cursor: 'pointer', padding: 0,
+                                color: 'var(--text-muted)', fontSize: '14px', lineHeight: 1,
+                            }}
+                        >✕</button>
+                    </div>
+                )}
 
                 {/* Stage dropdown */}
                 <select

@@ -207,6 +207,13 @@ function App() {
   // Deep link: ?deal=<id> opens the Deal Pipeline straight to that deal (from Google
   // Calendar/Task new-lead notifications). Consumed by DealPipeline via initialDealId.
   const [deepLinkDealId, setDeepLinkDealId] = useState<string | null>(null);
+  // One-shot exact-lead scope for the Deal Pipeline (lead tile → Pipeline button). 2026-10-09.
+  const [deepLinkContactPhone, setDeepLinkContactPhone] = useState<string | null>(null);
+  const [deepLinkContactName, setDeepLinkContactName] = useState<string | null>(null);
+  const clearDeepLinkContact = useCallback(() => {
+    setDeepLinkContactPhone(null);
+    setDeepLinkContactName(null);
+  }, []);
   // Drill-through (2026-07-16): a one-shot pre-filter passed to InventoryList when a dashboard
   // tile is clicked. Cleared once consumed so a later manual Inventory visit starts clean.
   const [drillFilter, setDrillFilter] = useState<Record<string, string> | null>(null);
@@ -277,7 +284,12 @@ function App() {
     // Lead tiles drill to a specific deal: DealPipeline opens it via initialDealId
     // (one-shot — cleared on consume). A plain drill carries no deal: clear any
     // stale id so the pipeline opens as a list, not on the previous deal.
-    if (entity === 'deals') setDeepLinkDealId(filter?.deal ?? null);
+    if (entity === 'deals') {
+        setDeepLinkDealId(filter?.deal ?? null);
+        // Lead tiles also narrow the board to that one lead (exact contact filter, one-shot).
+        setDeepLinkContactPhone(filter?.contact ?? null);
+        setDeepLinkContactName(filter?.name ?? null);
+    }
     setView(entity);
   }), []);
 
@@ -571,14 +583,14 @@ function App() {
           return <MobileScrollWrapper><WorkflowBuilder /></MobileScrollWrapper>;
         case 'marketing':
           return <MobileScrollWrapper><MarketingCampaign /></MobileScrollWrapper>;
-        case 'lead-tasks':
-          return <DealPipeline initialDealId={deepLinkDealId} onInitialDealConsumed={() => setDeepLinkDealId(null)} />;
+case 'lead-tasks':
+          return <DealPipeline initialDealId={deepLinkDealId} initialContactPhone={deepLinkContactPhone} initialContactName={deepLinkContactName} onInitialDealConsumed={() => setDeepLinkDealId(null)} onInitialContactConsumed={clearDeepLinkContact} />;
         case 'tasks':
           return <MobileScrollWrapper><TaskBoard /></MobileScrollWrapper>;
         case 'analytics':
           return <MobileScrollWrapper><AdvancedAnalytics /></MobileScrollWrapper>;
         case 'deals':
-          return <DealPipeline initialDealId={deepLinkDealId} onInitialDealConsumed={() => setDeepLinkDealId(null)} />;
+          return <DealPipeline initialDealId={deepLinkDealId} initialContactPhone={deepLinkContactPhone} initialContactName={deepLinkContactName} onInitialDealConsumed={() => setDeepLinkDealId(null)} onInitialContactConsumed={clearDeepLinkContact} />;
         case 'sourcing':
           return <MobileScrollWrapper><SourcingBoard /></MobileScrollWrapper>;
         default:
@@ -695,12 +707,12 @@ function App() {
         return <WorkflowBuilder />;
       case 'marketing':
         return <MarketingCampaign />;
-      case 'lead-tasks':
-        return <DealPipeline initialDealId={deepLinkDealId} onInitialDealConsumed={() => setDeepLinkDealId(null)} />;
-      case 'tasks':
-        return <TaskBoard />;
-      case 'deals':
-        return <DealPipeline initialDealId={deepLinkDealId} onInitialDealConsumed={() => setDeepLinkDealId(null)} />;
+case 'lead-tasks':
+          return <DealPipeline initialDealId={deepLinkDealId} initialContactPhone={deepLinkContactPhone} initialContactName={deepLinkContactName} onInitialDealConsumed={() => setDeepLinkDealId(null)} onInitialContactConsumed={clearDeepLinkContact} />;
+        case 'tasks':
+          return <TaskBoard />;
+        case 'deals':
+          return <DealPipeline initialDealId={deepLinkDealId} initialContactPhone={deepLinkContactPhone} initialContactName={deepLinkContactName} onInitialDealConsumed={() => setDeepLinkDealId(null)} onInitialContactConsumed={clearDeepLinkContact} />;
       case 'sourcing':
         return <SourcingBoard />;
       case 'analytics':
