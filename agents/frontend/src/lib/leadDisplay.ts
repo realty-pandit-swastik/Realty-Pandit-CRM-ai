@@ -90,7 +90,6 @@ function clientRoleOverrideOf(row: ClientRoleRow | null | undefined): string | n
         ?? row?.demand_transactions?.[0]?.client_role_override
         ?? null;
 }
-
 /**
  * Effective client type for a rendered row: the row's temporary per-enquiry override wins,
  * else the contact's primary role, else null (unclassified — renders as "—", never a guess).
@@ -102,6 +101,35 @@ export function effectiveClientRole(row: ClientRoleRow | null | undefined): stri
 /** True when the rendered role comes from the temporary per-enquiry override. */
 export function isTemporaryClientRole(row: ClientRoleRow | null | undefined): boolean {
     return !!clientRoleOverrideOf(row);
+}
+
+export interface ContactKind {
+    /** Client | Dealer | Owner | Team — always resolved, never null. */
+    label: 'Client' | 'Dealer' | 'Owner' | 'Team';
+    color: string;
+    bg: string;
+}
+
+/**
+ * Who a contact IS, from the always-populated `contact_type` — the fallback behind the
+ * `client_role` badge, which is NULL for every legacy row (that column only fills for newly
+ * classified contacts). Without this, unclassified rows render with NO tag at all next to the
+ * name, and a dealer contact reads exactly like a client.
+ *
+ * Deliberately separate from `contact_type` itself, which is load-bearing for queues/visibility.
+ */
+export function contactKind(contactType?: string | null): ContactKind {
+    switch (String(contactType || '').trim().toUpperCase()) {
+        case 'PARTNER_AGENT':
+            return { label: 'Dealer', color: '#d97706', bg: 'rgba(245,158,11,0.15)' };
+        case 'LANDLORD':
+            return { label: 'Owner', color: '#16a34a', bg: 'rgba(34,197,94,0.12)' };
+        case 'MANAGEMENT':
+            return { label: 'Team', color: '#64748b', bg: 'rgba(100,116,139,0.15)' };
+        default:
+            // BUYER, TENANT, UNKNOWN, null — a demand-side lead is a client until known otherwise.
+            return { label: 'Client', color: '#3b82f6', bg: 'rgba(59,130,246,0.12)' };
+    }
 }
 
 export interface DealerFallback {
