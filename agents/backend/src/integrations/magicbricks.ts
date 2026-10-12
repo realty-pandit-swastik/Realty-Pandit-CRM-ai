@@ -109,12 +109,17 @@ async function handleMagicBricksPush(req: any, res: any) {
             // Task 2+3 (2026-07-31): duplicate re-enquiry — timeline marker + share with the newly-attributed agent.
             // One contact → many leads: a new enquiry is a NEW lead assigned to this enquiry's own agent.
             // ensureDealForLead dedups only a repeat of the same listing (DUPLICATE_ENQUIRY_WINDOW_DAYS).
+            // (2026-10-09: one shared handler — awaits the deal write, stamps the contact cycle so the
+            // row visibly renews, and notifies the listing owner.)
             try {
                 const reAttr = sub_user ? await resolveAgentByMagicBricksSubUser(String(sub_user)) : null;
                 const sourceRef = (listing_id ? String(listing_id) : projectNameRaw(project)) || null;
-                const { recordLeadReingest } = await import('../services/lead_reingest');
-                await recordLeadReingest({ phone: phoneNumber, source: 'magicbricks', attributedAgentId: reAttr, subUser: sub_user ? String(sub_user) : null, sourceRef });
-                const deal = await ensureDealForLead({ contactPhone: phoneNumber, source: 'magicbricks', sourceRef, assignedAgentId: reAttr ?? undefined });
+                const { handlePortalReenquiry } = await import('../services/portal_reenquiry');
+                const deal = await handlePortalReenquiry({
+                    phone: phoneNumber, source: 'magicbricks', sourceRef,
+                    subUser: sub_user ? String(sub_user) : null, tenantId: tenant.id,
+                    attributedAgentId: reAttr ?? null,
+                });
                 return res.send(deal.created ? 'Success: Lead punched in the CRM' : 'Failure: Lead already exist');
             } catch (e) { logger.warn('[MagicBricks] re-enquiry lead failed: ' + (e as Error).message); }
             return res.send('Failure: Lead already exist');

@@ -128,6 +128,23 @@ export const NOTIFICATION_EVENTS: Record<string, NotificationEventConfig> = {
         actionUrl: (d) => `#/leads`,
         prefKey: 'new_lead_notification',
     },
+    // 2026-10-09: a repeat portal enquiry that attaches to an EXISTING deal (same listing inside
+    // the dedupe window) still assigns fresh work — the attributed agent must learn the customer
+    // re-engaged today. Worded as re-engagement, NOT assignment: nothing was transferred.
+    //
+    // No waTemplate yet — there is no approved Meta template for a re-engagement ping (same
+    // situation as lead_shared above documents). Without one, notify() falls back to free-form
+    // text, which only delivers inside the recipient's 24h window; the in-app bell row is written
+    // unconditionally either way.
+    lead_reengaged: {
+        event: 'lead_reengaged',
+        category: 'lead',
+        title: (d) => 'Customer Enquired Again',
+        body: (d) => `${d.name || 'A lead'} (${d.phone || ''}) enquired again via ${d.source || 'a portal'}${d.property_label ? ` for ${d.property_label}` : ''} — attached to the existing deal`,
+        defaultChannels: ['whatsapp', 'push'],
+        actionUrl: (d) => `#/leads`,
+        prefKey: 'new_lead_notification',
+    },
     lead_escalation: {
         event: 'lead_escalation',
         category: 'lead',

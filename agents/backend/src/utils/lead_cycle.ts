@@ -42,5 +42,31 @@ export function isRecycledLead(row: LeadCycleRow | null | undefined): boolean {
     return Number(row.lead_cycle || 1) > 1 || !!row.recycled_at;
 }
 
+/**
+ * Stamp a fresh engagement cycle on a contact (portal re-enquiry auto-renew, 2026-10-09).
+ *
+ * Same semantics as a manual recycle — recycled_at/cycle_start_at move to now and the cycle
+ * counter increments — but deliberately WITHOUT the recycle's status changes: a portal
+ * re-enquiry must not flip lead_status or clear lost fields on a lead that may be mid-pipeline.
+ * created_at is never touched. Returns the stamp, or null when the contact is missing.
+ */
+export async function stampNewLeadCycle(
+    phone: string,
+    db?: { contact: { update: Function; findUnique: Function } },
+): Promise<Date | null> {
+    const client: any = db || (await import('../db')).default;
+    const existing = await client.contact.findUnique({
+        where: { phone_number: phone },
+        select: { lead_cycle: true },
+    });
+    if (!existing) return null;
+    const now = new Date();
+    await client.contact.update({
+        where: { phone_number: phone },
+        data: { recycled_at: now, cycle_start_at: now, lead_cycle: Number((existing as any).lead_cycle || 1) + 1 },
+    });
+    return now;
+}
+
 /** Prisma orderBy fragment ordering by the current cycle instead of first-seen date. */
 export const LEAD_CYCLE_START_ORDER = { cycle_start_at: 'asc' as const };
