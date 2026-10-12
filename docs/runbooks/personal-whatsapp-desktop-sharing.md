@@ -1,5 +1,7 @@
 # Personal WhatsApp property sharing — desktop pilot
 
+Android selected-client follow-up (2026-10-13): the [standalone proof APK and acceptance checklist](android-my-whatsapp-handoff-proof.md) can be distributed to a small phone pilot. The setup-page change adds download/testing instructions; it does not enable CRM-to-helper sharing. Keep selected-client integration disabled until handset tests pass. Existing Android Share sheet and desktop behavior remain unchanged.
+
 Implemented locally on 2026-10-08. On 2026-10-09, the user confirmed successful local CRM → extension → personal WhatsApp sharing. Production deployment and the full multi-user/media/interruption acceptance matrix remain pending. Android Web Share was subsequently integrated into the internal CRM on 2026-10-09; the isolated public-site prototype remains outside this release.
 
 ## Android and production installation update (2026-10-09)
