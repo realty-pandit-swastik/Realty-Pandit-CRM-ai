@@ -1,5 +1,5 @@
 import { toDialablePhone, isPlaceholderPhone } from '../../lib/phone';
-import { stageInfo, bhkLabel, dealerFallback, effectiveClientRole, isTemporaryClientRole, clientRoleLabel, clientRoleColor } from '../../lib/leadDisplay';
+import { stageInfo, bhkLabel, dealerFallback, effectiveClientRole, isTemporaryClientRole, clientRoleLabel, clientRoleColor, contactKind } from '../../lib/leadDisplay';
 
 interface Lead {
     phone_number: string;
@@ -28,6 +28,9 @@ interface Lead {
     demand_transactions?: Array<{ id: string; client_role_override?: string | null }> | null;
     // Primary client role (CLIENT | AGENT | BUILDER | FINANCER | CHOKIDAR…).
     client_role?: string | null;
+    // Demand/supply classification (BUYER | TENANT | LANDLORD | PARTNER_AGENT | …) — always
+    // populated, so it backs the Client/Dealer/Owner tag when client_role is not set.
+    contact_type?: string | null;
     /** The enquiry (deal) this card represents — set when a contact has several leads. */
     _deal?: { id?: string; source_ref: string | null; client_role_override?: string | null } | null;
 }
@@ -75,6 +78,9 @@ export default function LeadCard({
     const date = new Date(lead.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
     const bhk = bhkLabel(lead);
     const role = effectiveClientRole(lead);
+    // Client/Dealer/Owner tag from the always-populated contact_type. Rendered unless the row
+    // already shows the Dealer fallback identity — never zero tags, never two Dealer tags.
+    const kind = identity.isDealer ? null : contactKind(lead.contact_type);
     const si = stageInfo((lead as any).lifecycle_stage);
     // Subtype fallback: explicit label from the parent, else the legacy property_type slug.
     const subtype = subtypeLabel || (lead.property_type ? lead.property_type.replace(/_/g, ' ') : null);
@@ -113,6 +119,12 @@ export default function LeadCard({
                     <span title={isTemporaryClientRole(lead) ? 'Temporary role for this enquiry' : 'Primary role'}
                         style={{ backgroundColor: `${clientRoleColor(role)}22`, color: clientRoleColor(role), padding: '1px 6px', borderRadius: '8px', fontSize: '9px', fontWeight: 600, textTransform: 'capitalize' }}>
                         {clientRoleLabel(role)}
+                    </span>
+                )}
+                {kind && (
+                    <span title="Whether this contact is a client, dealer, owner or team member"
+                        style={{ backgroundColor: kind.bg, color: kind.color, padding: '1px 6px', borderRadius: '8px', fontSize: '9px', fontWeight: 700 }}>
+                        {kind.label}
                     </span>
                 )}
                 {!!currentAgentId && lead.shared_with_ids?.includes(currentAgentId) && (

@@ -91,6 +91,56 @@ export async function resolveAgentByEmail(email: string | null | undefined): Pro
 }
 
 /**
+ * Resolve the team member who owns the portal LISTING an enquiry came in on.
+ *
+ * Second link in the portal-attribution chain (after the sub-user email match): the enquiry's
+ * property code (e.g. 99acres PROPERTY_CODE "S94715572") is looked up as a harvested
+ * PortalListing for this tenant+source, and the linked inventory's assigned agent is returned.
+ * Active employee/manager only; null when the listing was never harvested or its assignee is
+ * gone — callers then fall through to round-robin, never to a wrong guess.
+ */
+export async function resolveListingOwnerAgent(opts: {
+    source: string;
+    sourceRef: string | null | undefined;
+    tenantId: string;
+}): Promise<string | null> {
+    const ref = (opts.sourceRef || '').trim();
+    if (!ref) return null;
+    try {
+        const listing = await prisma.portalListing.findFirst({
+            where: { tenant_id: opts.tenantId, source: opts.source, external_id: ref },
+            select: { inventory_id: true },
+        });
+        if (!listing?.inventory_id) {
+            logger.info(`[LeadAssign] No harvested listing ${opts.source}:${ref} linked to inventory — listing-owner fallback missed`);
+            return null;
+        }
+        const inv = await prisma.inventory.findUnique({
+            where: { id: listing.inventory_id },
+            select: { assigned_agent_id: true },
+        });
+        const agentId = inv?.assigned_agent_id || null;
+        if (!agentId) {
+            logger.info(`[LeadAssign] Harvested listing ${opts.source}:${ref} has no assigned agent`);
+            return null;
+        }
+        const agent = await prisma.agent.findFirst({
+            where: { id: agentId, role: { in: ['employee', 'manager'] }, status: 'active' },
+            select: { id: true, name: true },
+        });
+        if (!agent) {
+            logger.info(`[LeadAssign] Listing ${opts.source}:${ref} assignee ${agentId} is not an active team member`);
+            return null;
+        }
+        logger.info(`[LeadAssign] Enquiry ${opts.source}:${ref} attributed to listing owner ${agent.name} (${agent.id})`);
+        return agent.id;
+    } catch (err) {
+        logger.warn(`[LeadAssign] resolveListingOwnerAgent error for "${opts.source}:${ref}": ${(err as Error).message}`);
+        return null;
+    }
+}
+
+/**
  * Resolve an active agent from a MagicBricks `sub_user` value.
  * MagicBricks sub-users arrive as `<agent's registered phone>@timesgroup.com`
  * (e.g. "7906597808@timesgroup.com" = the lister's mobile). We match the embedded

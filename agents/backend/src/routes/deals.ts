@@ -195,6 +195,14 @@ router.get('/', async (req: any, res) => {
         if (contact_phone && typeof contact_phone === 'string' && contact_phone.trim()) filters.contact_phone = contact_phone.trim();
         if (taxonomy_node_ids && typeof taxonomy_node_ids === 'string' && taxonomy_node_ids.trim()) filters.taxonomy_node_ids = taxonomy_node_ids.trim();
         if (bhk && typeof bhk === 'string' && bhk.trim()) filters.bhk = bhk.trim();
+        // Exact one-lead scope: match by contact phone (demand_contact_id) — exact equality,
+        // not the tokenized search path. This avoids placeholder digits matching the wrong person.
+        // Bound the length: the value is a phone PK (≤20 chars); anything longer is a malformed
+        // client and must fail closed rather than flow into Prisma + logs.
+        if (contact_phone && typeof contact_phone === 'string' && contact_phone.trim()) {
+            if (contact_phone.trim().length > 64) return res.status(400).json({ success: false, error: 'contact_phone is too long' });
+            filters.contact_phone = contact_phone.trim();
+        }
         // Ordering (2026-07-21): 'next_action' (default) | 'lead_date' | 'reminder_date',
         // with direction 'asc' | 'desc'. Sorting runs across the WHOLE filtered set
         // server-side — see listDeals(); the board no longer re-sorts client-side.

@@ -15,6 +15,7 @@
 import { TransactionStatus, TransactionLogAction, TransactionType } from '@prisma/client';
 import prisma from '../db';
 import { partnerDealOr } from '../utils/partner_scope';
+import { isPlaceholderPhone, normalizePhone } from '../utils/phone';
 import { assignExecutive } from './executive_assigner';
 import { findExistingTransaction } from './transaction_service';
 import { MatchingEngine } from './matching_engine';
@@ -527,14 +528,7 @@ export async function listDeals(filters: {
     page?: number;
     limit?: number;
     search?: string;
-    /**
-     * Exact one-lead scope (2026-10-09): narrows to deals whose demand contact is this phone.
-     * demand_contact_id IS the Contact PK, so this is an equality match with no join.
-     *
-     * Deliberately NOT routed through `search`: that path digit-strips the term, which would
-     * make a placeholder key like "PENDING-9812345678-m1" match the DEALER's number and pull in
-     * another person's deals (see the dealer fallback in the leads list).
-     */
+    /** Exact one-lead scope: filter by the demand contact's phone (the Contact PK). */
     contact_phone?: string;
     taxonomy_node_ids?: string;
     bhk?: string;
@@ -558,7 +552,9 @@ export async function listDeals(filters: {
         // 2026-07-21: ON_HOLD added — it was only dropped from the kanban COLUMN list
         // client-side, so 145 on-hold deals still leaked into the mobile + list views.
         // 2026-10-09: same for an exact contact_phone scope — a lead tapped from Ext. Leads whose
-        // only deal is Won/Lost must still show that deal.
+        // only deal is Won/Lost must still show that deal. Deliberate: even an EXPLICIT
+        // hide_closed=true is overridden while narrowing, because "one lead, no deals" would
+        // otherwise read as a bug. Re-apply the toggle (or pick a stage) to hide closed again.
         where.status = { notIn: ['CLOSED_WON', 'CLOSED_LOST', 'ON_HOLD'] };
     }
     if (deal_scenario) where.deal_scenario = deal_scenario;
@@ -605,12 +601,22 @@ export async function listDeals(filters: {
         where.AND = [...(where.AND || []), ...termGroups];
     }
 
-    // Exact one-lead scope (2026-10-09). demand_contact_id IS the Contact PK, so this is equality
-    // on the stored key — no normalization (a PENDING-/TEMP- placeholder must match exactly, and
-    // reformatting would make it match nothing). AND-ed so it narrows within the existing
-    // tenant + team/partner visibility rather than replacing it.
-    if (contact_phone && String(contact_phone).trim()) {
-        where.AND = [...(where.AND || []), { demand_contact_id: String(contact_phone).trim() }];
+    // Exact one-lead scope: narrow to deals whose demand contact is this phone.
+    // demand_contact_id IS the Contact PK (phone_number), so this is a direct equality match.
+    // Canonicalize first (2026-10-09): the client sends whatever the tile holds — bare 10-digit,
+    // 91-prefixed, spaced/dashed — and an exact miss renders as "no deals". Placeholders
+    // ("PENDING-…"/"TEMP_…") must match EXACTLY, never normalized: digit-stripping one would
+    // resolve to the dealer's number and surface someone else's deals. Unparseable input matches
+    // nothing (an empty `in` list) rather than widening to the full board.
+    const rawContactPhone = contact_phone ? String(contact_phone).trim() : '';
+    if (rawContactPhone) {
+        if (isPlaceholderPhone(rawContactPhone)) {
+            where.AND = [...(where.AND || []), { demand_contact_id: rawContactPhone }];
+        } else {
+            const canonical = normalizePhone(rawContactPhone);
+            where.AND = [...(where.AND || []),
+                canonical ? { demand_contact_id: canonical } : { demand_contact_id: { in: [] } }];
+        }
     }
 
     // Taxonomy filter (new tree): the deal's demand contact node IN (selected + descendants).

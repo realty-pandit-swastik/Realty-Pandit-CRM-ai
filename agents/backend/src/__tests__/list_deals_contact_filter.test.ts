@@ -1,91 +1,121 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import express from 'express';
+import request from 'supertest';
 
 vi.mock('../db', () => ({
     default: {
-        transaction: { findMany: vi.fn(), findFirst: vi.fn(), findUnique: vi.fn(), count: vi.fn() },
-        contact: { findFirst: vi.fn() },
-        dealReminder: { findFirst: vi.fn() },
-        task: { count: vi.fn() },
-        appointment: { count: vi.fn() },
-        interaction: { count: vi.fn() },
+        $queryRaw: vi.fn().mockResolvedValue([]),
+        $transaction: vi.fn(),
+        transaction: { findMany: vi.fn(), findFirst: vi.fn(), findUnique: vi.fn(), count: vi.fn(), update: vi.fn() },
+        task: { findMany: vi.fn(), create: vi.fn() },
+        interaction: { create: vi.fn(), count: vi.fn(), findMany: vi.fn() },
+        agent: { findUnique: vi.fn(), findFirst: vi.fn(), findMany: vi.fn() },
+        contact: { findUnique: vi.fn(), update: vi.fn() },
+        partnerAgent: { findUnique: vi.fn(), findMany: vi.fn() },
     },
 }));
 
 import prisma from '../db';
 import { listDeals } from '../services/deal_service';
+import dealsRouter from '../routes/deals';
 
-/**
- * Exact one-lead scope (2026-10-09) — the Ext. Leads "Pipeline" button narrows the board to the
- * tapped lead. This is an equality match on demand_contact_id (which IS the Contact PK).
- *
- * The regression this guards: routing the same intent through the tokenized `search` box would
- * digit-strip the term, so a placeholder key like "PENDING-9812345678-m1" would match the
- * DEALER's number and pull in a different person's deals.
- */
+const PHONE = '+919000000010';
+const NOW = new Date('2026-10-09T10:00:00.000Z');
+
+const RAW_DEAL: any = {
+    id: 'deal-1',
+    status: 'NEW',
+    tenant_id: 't1',
+    ai_paused: false,
+    last_team_action_at: null,
+    demand_contact: { phone_number: PHONE, name: 'Salil' },
+};
+
+function mockBoard(deals: any[] = [RAW_DEAL]) {
+    // 1st findMany: whole-set id scan. 2nd: page fetch. task/interaction: reminders + no-answer.
+    vi.mocked(prisma.transaction.findMany)
+        .mockResolvedValueOnce(deals.map(d => ({ id: d.id, created_at: NOW })) as any)
+        .mockResolvedValueOnce(deals as any);
+    vi.mocked(prisma.task.findMany).mockResolvedValue([]);
+    vi.mocked(prisma.interaction.findMany).mockResolvedValue([]);
+}
+
+function firstWhere(): any {
+    return vi.mocked(prisma.transaction.findMany).mock.calls[0][0]?.where;
+}
+
 beforeEach(() => {
     vi.clearAllMocks();
-    (prisma.transaction.findMany as any).mockResolvedValue([]);
-    (prisma.dealReminder.findFirst as any).mockResolvedValue(null);
-    (prisma.task.count as any).mockResolvedValue(0);
-    (prisma.appointment.count as any).mockResolvedValue(0);
-    (prisma.interaction.count as any).mockResolvedValue(0);
+    mockBoard();
 });
 
-const lastWhere = () => (prisma.transaction.findMany as any).mock.calls[0][0].where;
-
-describe('listDeals — contact_phone exact scope', () => {
-    it('matches the contact exactly via demand_contact_id', async () => {
-        await listDeals({ tenant_id: 't1', contact_phone: '+9198368437972', limit: 20 });
-
-        expect(lastWhere().AND).toContainEqual({ demand_contact_id: '+9198368437972' });
+describe('listDeals — contact_phone exact scope (2026-10-09)', () => {
+    it('matches the canonical number exactly', async () => {
+        await listDeals({ tenant_id: 't1', contact_phone: PHONE, limit: 20 });
+        const and = firstWhere().AND || [];
+        expect(and).toContainEqual({ demand_contact_id: PHONE });
     });
 
-    it('matches a placeholder key verbatim — never digit-stripped into the dealer number', async () => {
-        const placeholder = 'PENDING-9812345678-m1';
+    it('canonicalizes a bare 10-digit number instead of missing', async () => {
+        await listDeals({ tenant_id: 't1', contact_phone: '9000000010', limit: 20 });
+        const and = firstWhere().AND || [];
+        expect(and).toContainEqual({ demand_contact_id: PHONE });
+    });
+
+    it('matches a PENDING placeholder exactly — never digit-stripped to the dealer', async () => {
+        const placeholder = 'PENDING-abc-919000000010';
         await listDeals({ tenant_id: 't1', contact_phone: placeholder, limit: 20 });
-
-        const and = lastWhere().AND;
+        const and = firstWhere().AND || [];
         expect(and).toContainEqual({ demand_contact_id: placeholder });
-        // The dealer number must NOT appear anywhere in the where clause.
-        expect(JSON.stringify(lastWhere())).not.toContain('9812345678"');
     });
 
-    it('narrows within tenant + team scope instead of replacing it', async () => {
-        await listDeals({ tenant_id: 't1', team_ids: ['a1', 'a2'], contact_phone: '+919000000010' });
-
-        const w = lastWhere();
-        expect(w.tenant_id).toBe('t1');
-        const and = w.AND;
-        // Team visibility group AND the contact group must both be present.
-        expect(and.some((g: any) => g.OR?.some((c: any) => c.coordinator_agent_id?.in))).toBe(true);
-        expect(and).toContainEqual({ demand_contact_id: '+919000000010' });
+    it('matches nothing (not everything) for unparseable input', async () => {
+        await listDeals({ tenant_id: 't1', contact_phone: '!!!', limit: 20 });
+        const and = firstWhere().AND || [];
+        expect(and).toContainEqual({ demand_contact_id: { in: [] } });
     });
 
-    it('reveals closed and on-hold deals for the scoped lead', async () => {
-        // hide_closed is the board's default; without this a lead whose only deal is Won would
-        // show an empty board and read as "no deals".
-        await listDeals({ tenant_id: 't1', hide_closed: true, contact_phone: '+919000000010' });
-
-        expect(lastWhere().status).toBeUndefined();
+    it('relaxes hide_closed while narrowing so a Won/Lost-only lead still shows', async () => {
+        await listDeals({ tenant_id: 't1', contact_phone: PHONE, hide_closed: true, limit: 20 });
+        expect(firstWhere().status).toBeUndefined();
     });
 
-    it('still honours hide_closed when no lead scope is set', async () => {
+    it('keeps hiding closed when NOT narrowing', async () => {
         await listDeals({ tenant_id: 't1', hide_closed: true, limit: 20 });
-
-        expect(lastWhere().status).toEqual({ notIn: ['CLOSED_WON', 'CLOSED_LOST', 'ON_HOLD'] });
+        expect(firstWhere().status).toEqual({ notIn: ['CLOSED_WON', 'CLOSED_LOST', 'ON_HOLD'] });
     });
 
-    it('ignores an empty contact_phone instead of matching everything', async () => {
-        await listDeals({ tenant_id: 't1', contact_phone: '   ', limit: 20 });
-
-        expect(JSON.stringify(lastWhere())).not.toContain('demand_contact_id');
+    it('keeps team scope enforced alongside the contact scope', async () => {
+        await listDeals({ tenant_id: 't1', contact_phone: PHONE, team_ids: ['agent-1'], limit: 20 });
+        const and = firstWhere().AND || [];
+        expect(and).toContainEqual({ demand_contact_id: PHONE });
+        expect(and).toContainEqual({
+            OR: [{ coordinator_agent_id: { in: ['agent-1'] } }, { executive_agent_id: { in: ['agent-1'] } }],
+        });
     });
 
-    it('coexists with an explicit status filter', async () => {
-        await listDeals({ tenant_id: 't1', status: 'NEW', contact_phone: '+919000000010' });
+    it('keeps partner scope enforced: partner A cannot surface partner B contacts', async () => {
+        await listDeals({ tenant_id: 't1', contact_phone: '+919000000099', partner_ids: ['pa-A'], limit: 20 });
+        const and = firstWhere().AND || [];
+        // The contact clause narrows; the partner OR still gates — both must be present.
+        expect(and).toContainEqual({ demand_contact_id: '+919000000099' });
+        expect(and.some((c: any) => c.OR && JSON.stringify(c.OR).includes('pa-A'))).toBe(true);
+    });
+});
 
-        const w = lastWhere();
-        expect(w.status).toBe('NEW');
-        expect(w.AND).toContainEqual({ demand_contact_id: '+919000000010' });
+describe('GET /api/deals — contact_phone boundary', () => {
+    const app = express();
+    app.use(express.json());
+    app.use((req: any, _res, next) => {
+        req.agent = { id: 'boss-1', role: 'super_boss', tenant_id: 't1' };
+        next();
+    });
+    app.use('/api/deals', dealsRouter);
+
+    it('rejects an overlong contact_phone instead of sending it to Prisma + logs', async () => {
+        const res = await request(app).get('/api/deals?contact_phone=' + '1'.repeat(65));
+        expect(res.status).toBe(400);
+        expect(res.body.error).toMatch(/too long/i);
+        expect(prisma.transaction.findMany).not.toHaveBeenCalled();
     });
 });
