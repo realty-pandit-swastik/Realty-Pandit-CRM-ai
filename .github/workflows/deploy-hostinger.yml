@@ -70,6 +70,7 @@ jobs:
       DATABASE_URL: postgresql://test:test@localhost:5432/test_db?schema=public
       REDIS_HOST: localhost
       REDIS_PORT: '6379'
+      RUN_HANDOFF_REDIS_TESTS: '1'
       JWT_SECRET: ci-test-jwt-secret
       AGENT_JWT_SECRET: ci-test-agent-jwt-secret
       NODE_ENV: test

@@ -1,3 +1,4 @@
+import personalWhatsAppHandoffs from './routes/personal_whatsapp_handoffs';
 
 import express from 'express';
 import path from 'path';
@@ -364,6 +365,8 @@ app.get('/api/team/google/callback', publicLimiter, async (req, res) => {
 });
 
 // API Routes (JWT auth)
+// Helper claims use narrow capabilities; create/cancel enforce staff auth in the router.
+app.use('/api/personal-whatsapp/handoffs', apiLimiter, personalWhatsAppHandoffs);
 app.use('/api', apiLimiter, apiRoutes);
 app.use('/api/leads', apiLimiter, leadRoutes);
 app.use('/api/calls', apiLimiter, staffCallRoutes); // Staff Call Intelligence

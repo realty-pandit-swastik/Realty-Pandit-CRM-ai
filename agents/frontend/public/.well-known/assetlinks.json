@@ -1,0 +1,14 @@
+[
+  {
+    "relation": [
+      "delegate_permission/common.handle_all_urls"
+    ],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.realtypandit.mywhatsapp",
+      "sha256_cert_fingerprints": [
+        "E9:57:19:8E:BF:2D:6F:9D:16:C3:51:C7:E9:6B:11:66:F2:B4:59:0F:31:23:ED:B2:C4:D0:30:1B:F7:F0:F8:8C"
+      ]
+    }
+  }
+]
