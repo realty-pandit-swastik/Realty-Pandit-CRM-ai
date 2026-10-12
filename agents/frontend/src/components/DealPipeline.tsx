@@ -88,14 +88,15 @@ interface DealPipelineProps {
     /** Fired once the deep link has been acted on (deal opened or fetch failed),
      *  so the owner can clear it. */
     onInitialDealConsumed?: () => void;
-    /** Exact one-lead scope (2026-10-09): set when the Pipeline button on a lead tile
-     *  is tapped. Narrows the board to that contact's deals (server-side equality on
-     *  demand_contact_id). One-shot — cleared via onInitialContactConsumed so a later
-     *  manual visit to Deals is not silently filtered. */
+    /**
+     * Exact one-lead scope (2026-10-09) — set when the Pipeline button on a lead tile is tapped.
+     * `initialContactPhone` narrows the board to that contact's deals (server-side equality on
+     * demand_contact_id); `initialContactName` is display-only so the chip can say who is shown.
+     * Both are one-shot: cleared via onInitialContactConsumed so a later manual visit to Deals
+     * is not silently filtered.
+     */
     initialContactPhone?: string | null;
-    /** Display name for the lead being filtered (shown in the filter chip). */
     initialContactName?: string | null;
-    /** Fired once the contact filter has been applied, so the owner can clear it. */
     onInitialContactConsumed?: () => void;
 }
 
@@ -263,9 +264,9 @@ export default function DealPipeline({
 
     // Exact one-lead scope (2026-10-09): the Ext. Leads "Pipeline" button narrows the BOARD to
     // that lead's deals instead of leaving the user on the full pipeline. One-shot per distinct
-    // initialContactPhone — onInitialContactConsumed clears it in the owner so a later manual
-    // visit to Deals is not silently filtered. Unlike the search box this is an exact equality
-    // filter — a name can collide ("Mamta" vs "Mamtaram") and placeholder leads have no name.
+    // phone (same contract as the deal deep link above) so a later manual visit to Deals is
+    // not silently filtered. Unlike the search box this is an exact equality filter — a name can
+    // collide ("Mamta" vs "Mamtaram") and placeholder leads have no name at all.
     const contactConsumedRef = useRef<string | null>(null);
     useEffect(() => {
         if (!initialContactPhone || contactConsumedRef.current === initialContactPhone) return;
@@ -277,6 +278,12 @@ export default function DealPipeline({
         // Reset other narrowing filters so the tapped lead is actually visible — a leftover
         // stage/search filter from earlier would hide it and read as "no deals".
         setFilterStatus('');
+        setFilterScenario('');
+        setFilterMinPriority('');
+        setFilterSource('');
+        setFilterIntent('');
+        setFilterCoordinatorId('');
+        setFilterTaxonomy({ nodeIds: [], bhk: [] });
         setSearchInput('');
         setSearchQuery('');
         // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -478,7 +485,7 @@ export default function DealPipeline({
     // 2026-05-13: kanban columns. CLOSED_WON / CLOSED_LOST / ON_HOLD hidden by
     // default; toggling showClosedDeals reveals CLOSED_WON + CLOSED_LOST so the team
     // can review past outcomes without losing focus on active work.
-    const activeStages = showClosedDeals
+    const activeStages = contactPhone ? STAGES : showClosedDeals
         ? STAGES.filter(s => s !== 'ON_HOLD')
         : STAGES.filter(s => s !== 'CLOSED_WON' && s !== 'CLOSED_LOST' && s !== 'ON_HOLD');
 
@@ -753,7 +760,7 @@ export default function DealPipeline({
                 <div>
                     <h2 style={{ margin: 0, fontSize: isMobile ? '18px' : '20px', fontWeight: 700, color: 'var(--text-primary)' }}>Deal Pipeline</h2>
                     <p style={{ margin: '2px 0 0', fontSize: '12px', color: 'var(--text-secondary)' }}>
-                        {searchQuery || filterStatus || filterTaxonomy.nodeIds.length > 0 || [filterScenario, filterMinPriority, filterSource, filterIntent, filterCoordinatorId].some(Boolean)
+                        {searchQuery || contactPhone || filterStatus || filterTaxonomy.nodeIds.length > 0 || [filterScenario, filterMinPriority, filterSource, filterIntent, filterCoordinatorId].some(Boolean)
                             ? `${deals.length} result${deals.length !== 1 ? 's' : ''} (of ${displayTotal})`
                             : `${displayTotal} total deals`}
                     </p>
@@ -769,6 +776,29 @@ export default function DealPipeline({
 
             {/* Header — Row 2: Search + Stage + Filters */}
             <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '20px', flexWrap: isMobile ? 'wrap' : 'nowrap' }}>
+                {/* Exact one-lead scope chip — explains WHY the board is short, and how to undo it. */}
+                {contactPhone && (
+                    <div
+                        title="Showing only this lead's deals"
+                        style={{
+                            display: 'inline-flex', alignItems: 'center', gap: '8px', flexShrink: 0,
+                            padding: '7px 10px', borderRadius: '10px', fontSize: '12.5px', fontWeight: 600,
+                            backgroundColor: 'rgba(59,130,246,0.10)', border: '1px solid rgba(59,130,246,0.40)',
+                            color: 'var(--text-primary)',
+                        }}
+                    >
+                        <span>👤 {contactName || contactPhone}</span>
+                        <button
+                            type="button"
+                            aria-label="Clear lead filter"
+                            onClick={() => { setContactPhone(''); setContactName(''); }}
+                            style={{
+                                background: 'none', border: 'none', cursor: 'pointer', padding: 0,
+                                color: 'var(--text-muted)', fontSize: '14px', lineHeight: 1,
+                            }}
+                        >✕</button>
+                    </div>
+                )}
                 {/* Search bar */}
                 <div style={{ position: 'relative', flex: 1, minWidth: isMobile ? '100%' : '220px' }}>
                     <span style={{ position: 'absolute', left: '11px', top: '50%', transform: 'translateY(-50%)', fontSize: '14px', color: 'var(--text-muted)', pointerEvents: 'none' }}>🔍</span>
@@ -792,30 +822,6 @@ export default function DealPipeline({
                         >×</button>
                     )}
                 </div>
-
-                {/* Exact one-lead scope chip — explains WHY the board is short, and how to undo it. */}
-                {contactPhone && (
-                    <div
-                        title="Showing only this lead's deals. Click ✕ to return to the full pipeline."
-                        style={{
-                            display: 'inline-flex', alignItems: 'center', gap: '6px', flexShrink: 0,
-                            padding: '6px 10px', borderRadius: '10px', fontSize: '12px', fontWeight: 600,
-                            backgroundColor: 'rgba(59,130,246,0.10)', border: '1px solid rgba(59,130,246,0.40)',
-                            color: 'var(--text-primary)',
-                        }}
-                    >
-                        <span>👤 {contactName || contactPhone}</span>
-                        <button
-                            type="button"
-                            aria-label="Clear lead filter"
-                            onClick={() => { setContactPhone(''); setContactName(''); }}
-                            style={{
-                                background: 'none', border: 'none', cursor: 'pointer', padding: 0,
-                                color: 'var(--text-muted)', fontSize: '14px', lineHeight: 1,
-                            }}
-                        >✕</button>
-                    </div>
-                )}
 
                 {/* Stage dropdown */}
                 <select

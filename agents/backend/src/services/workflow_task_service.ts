@@ -1118,8 +1118,14 @@ export async function snoozeTask(taskId: string, params: {
 
 /**
  * Get agent's workflow task queue — sorted: overdue → due today → upcoming
+ *
+ * Tenant scope: managers/super_bosses previously received the whole tasks table, and Task has
+ * no tenant_id column — a cross-tenant leak in multi-tenant use. Tasks are scoped through
+ * their contact's tenant; contact-less tasks (general/deal-linked) stay visible as before —
+ * closing that residual needs a tenant_id column on tasks (schema change, all writers updated).
+ * Team scoping for managers (own team vs whole org) is a separate product decision, untouched.
  */
-export async function getWorkflowQueue(agentId: string, role: string): Promise<any[]> {
+export async function getWorkflowQueue(agentId: string, role: string, tenantId?: string): Promise<any[]> {
     const where: any = {
         task_type: { not: 'GENERAL' },
         status: { not: 'DONE' },
@@ -1130,6 +1136,15 @@ export async function getWorkflowQueue(agentId: string, role: string): Promise<a
     };
     if (role !== 'super_boss' && role !== 'manager') {
         where.assigned_to = agentId;
+    }
+    if (tenantId && (role === 'super_boss' || role === 'manager')) {
+        // AND-ed with the snooze OR above (never a top-level OR — that would clobber it).
+        where.AND = [...(where.AND || []), {
+            OR: [
+                { contact: { tenant_id: tenantId } },
+                { contact_phone: null },
+            ],
+        }];
     }
 
     return prisma.task.findMany({

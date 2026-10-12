@@ -5,7 +5,7 @@ import CallerDossier from './CallerDossier';
 import client, { getPartnerAssignable, assignLeadToTeammate, shareLead, rosterForPickers, updateContactProfile, getDealMatchCounts } from '../api/client';
 import { isPlaceholderPhone, isValidPhoneInput, toDialablePhone, normalizePhoneInput } from '../lib/phone';
 import { drillTo } from '../lib/drill';
-import { bhkLabel as bhkLabelFor, stageInfo, dealerFallback, clientRoleLabel, clientRoleColor, contactKind } from '../lib/leadDisplay';
+import { bhkLabel as bhkLabelFor, stageInfo, dealerFallback, clientRoleLabel, clientRoleColor } from '../lib/leadDisplay';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import LeadCard from './leads/LeadCard';
@@ -1401,12 +1401,15 @@ const leadCycleStartOf = (lead: any): string => {
     }, [tileMatchCounts]);
 
     // Tile → Deal Pipeline: narrow the BOARD to this lead's deals (2026-10-09). Previously this only
-    // passed the row's deal id, which opened that deal's workspace on top of a completely unfiltered
-    // pipeline — the board behind it still showed every other lead, so you had to hunt for your deal.
-    //
+// passed the row's deal id, which opened that deal's workspace on top of a completely unfiltered
+// pipeline — the board behind still showed every other lead.
     // The filter is the contact phone (exact, server-side) rather than the name: names collide
     // ("Mamta" vs "Mamtaram") and placeholder/dealer-fallback rows have no usable name at all.
+    // Deal-less rows still filter — they correctly show an empty board with a clearable chip
+    // instead of dumping the user on an unrelated pipeline.
     const handleOpenPipeline = useCallback((row: LeadRow) => {
+        // Reuse the tile's own identity resolution so the pipeline chip names whoever the user
+        // just saw on the tile (the client, or the dealer when the client is unknown).
         const identity = dealerFallback(row, isPlaceholderPhone, toDialablePhone);
         drillTo({
             entity: 'deals',
@@ -1910,12 +1913,6 @@ const leadCycleStartOf = (lead: any): string => {
                                                             Dealer
                                                         </span>
                                                     )}
-                                                    {!identity.isDealer && (() => { const k = contactKind(lead.contact_type); return (
-                                                        <span title="Whether this contact is a client, dealer, owner or team member"
-                                                            style={{ backgroundColor: k.bg, color: k.color, padding: '1px 5px', borderRadius: '8px', fontSize: '9px', fontWeight: 700, marginLeft: '4px', whiteSpace: 'nowrap' }}>
-                                                            {k.label}
-                                                        </span>
-                                                    ); })()}
                                                     {lead.lead_type === 'PARTNER_REFERRAL' && (
                                                         <span style={{ backgroundColor: '#ede9fe', color: '#7c3aed', padding: '1px 5px', borderRadius: '8px', fontSize: '9px', fontWeight: 700, marginLeft: '4px', whiteSpace: 'nowrap' }}>
                                                             {lead.referral_partner_name || 'Partner'}
@@ -1941,11 +1938,7 @@ const leadCycleStartOf = (lead: any): string => {
                                                     <span title="Primary role" style={{ backgroundColor: (clientRoleColor(rowRole)) + '20', color: clientRoleColor(rowRole), padding: '1px 6px', borderRadius: '8px', fontSize: '10px', fontWeight: 600, whiteSpace: 'nowrap', textTransform: 'capitalize' }}>
                                                         {clientRoleLabel(rowRole)}
                                                     </span>
-                                                ) : (() => { const k = contactKind(lead.contact_type); return (
-                                                    <span title="Whether this contact is a client, dealer, owner or team member" style={{ backgroundColor: k.bg, color: k.color, padding: '1px 6px', borderRadius: '8px', fontSize: '10px', fontWeight: 700, whiteSpace: 'nowrap' }}>
-                                                        {k.label}
-                                                    </span>
-                                                ); })()}
+                                                ) : <span style={{ color: 'var(--text-muted)' }}>—</span>}
                                             </td>
                                             <td style={compactCell}>
                                                 <span style={{ backgroundColor: (sourceColors[lead.source] || '#6b7280') + '20', color: sourceColors[lead.source] || '#6b7280', padding: '1px 6px', borderRadius: '10px', fontSize: '10px', fontWeight: 600 }}>

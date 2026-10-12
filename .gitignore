@@ -2,6 +2,7 @@
 agents/backend/node_modules/
 agents/frontend/node_modules/
 agents/website/node_modules/
+agents/whatsapp-extension/node_modules/
 .graphifyignore
 .gitignore
 .codex
@@ -10,6 +11,8 @@ agents/website/node_modules/
 agents/frontend/dist/
 agents/website/.next/
 agents/website/out/
+agents/whatsapp-extension/dist/
+agents/whatsapp-extension/release/
 
 # Deploy tarballs (build artifacts — never commit)
 *.tar.gz
@@ -26,6 +29,7 @@ agents/frontend/.env
 agents/frontend/.env.*
 !agents/backend/.env.example
 !agents/website/.env.example
+!agents/frontend/.env.example
 
 # Prisma generated client
 agents/backend/node_modules/.prisma/

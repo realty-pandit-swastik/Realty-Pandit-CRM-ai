@@ -1,3 +1,4 @@
+import PersonalWhatsAppShareModal from '../PersonalWhatsAppShareModal';
 
 import { useEffect, useState, useRef } from 'react';
 import { formatInventoryAddress, formatUnitLabel } from '../../lib/address';
@@ -15,7 +16,6 @@ import { relativeAge } from '../../lib/age';
 import { MatchClientsModal } from '../inventory/MatchClientsModal';
 import { pickSpecChips } from '../../lib/specChips';
 import { CopyChip } from '../CopyChip';
-import { buildWhatsAppShareText } from '../../lib/buildWhatsAppShareText';
 import {
     FilterSection,
     FilterTaxonomySection,
@@ -89,6 +89,7 @@ export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryLis
     // Request sequencing (2026-07-15): overlapping filter fetches — only the newest applies,
     // so a slower earlier response can't overwrite the correct filtered results.
     const loadReqIdRef = useRef(0);
+    const [personalShareIds, setPersonalShareIds] = useState<string[] | null>(null);
     const [shareItem, setShareItem] = useState<any>(null);
     const [bookVisitItem, setBookVisitItem] = useState<any>(null);
     // #10 (2026-07-25): mark sold / on hold
@@ -282,16 +283,7 @@ export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryLis
         }
     };
 
-    const handleOwnWhatsAppShare = () => {
-        if (!batchShareContact) return;
-        const shareItems = batchShareResults
-            .filter(r => r.link)
-            .map(r => ({ inv: items.find(i => i.id === r.id), link: r.link as string }));
-        if (shareItems.length === 0) return;
-        const text = buildWhatsAppShareText(shareItems, batchShareMode || 'direct');
-        const tel = batchShareContact.phone_number.replace(/^\+/, '');
-        window.open(`https://wa.me/${tel}?text=${encodeURIComponent(text)}`, '_blank');
-    };
+    const handleOwnWhatsAppShare = () => setPersonalShareIds(batchShareResults.map(r => r.id));
 
     // Post-send personal share (2026-06-27): PDF branding follows the recipient (partner→brandless, direct→branded).
     const [postPdfBusy, setPostPdfBusy] = useState(false);
@@ -659,6 +651,7 @@ export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryLis
                 </button>
             )}
 
+            {personalShareIds && <PersonalWhatsAppShareModal inventoryIds={personalShareIds} initialPhone={batchShareContact?.phone_number} onClose={() => setPersonalShareIds(null)} />}
             {shareItem && (
                 <ShareToClientModal item={shareItem} onClose={() => setShareItem(null)} onShared={() => setShareItem(null)} />
             )}
@@ -717,6 +710,7 @@ export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryLis
                     <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)', flex: 1 }}>
                         {selectedIds.size} propert{selectedIds.size === 1 ? 'y' : 'ies'} selected
                     </span>
+                    <button onClick={() => setPersonalShareIds(Array.from(selectedIds))} style={{ padding: '8px 14px', borderRadius: 8, background: '#128c7e', color: '#fff', border: 'none', cursor: 'pointer' }}>My WhatsApp</button>
                     <button
                         type="button"
                         onClick={() => { setShowBatchShareModal(true); setBatchShareResults([]); setBatchShareContact(null); setBatchContactSearch(''); }}
@@ -997,6 +991,7 @@ export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryLis
                         </button>
 
                         {/* Share Listing */}
+                        <button onClick={() => { setPersonalShareIds([activeSheetItem.id]); setActiveSheetItem(null); }} style={{ padding: 12, borderRadius: 8, background: '#128c7e', color: '#fff' }}>My WhatsApp</button>
                         <button
                             type="button"
                             onClick={() => { setSelectedIds(new Set([activeSheetItem.id])); setShowBatchShareModal(true); setBatchShareResults([]); setBatchShareContact(null); setBatchContactSearch(''); setActiveSheetItem(null); }}

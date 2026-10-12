@@ -1,0 +1,39 @@
+name: Android share helper proof
+
+on:
+  pull_request:
+    branches: [main]
+    paths: ['agents/android/**', '.github/workflows/android-share-helper-ci.yml']
+  push:
+    branches: [main]
+    paths: ['agents/android/**', '.github/workflows/android-share-helper-ci.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  helper-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: agents/android
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+      - name: Build isolated helper and check rules
+        run: bash ./gradlew -p share-helper assembleDebug testDebugUnitTest lintDebug assembleDebugAndroidTest --console=plain
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: android-my-whatsapp-proof
+          path: |
+            agents/android/share-helper/build/outputs/apk/debug/*.apk
+            agents/android/share-helper/build/outputs/apk/androidTest/debug/*.apk
+            agents/android/share-helper/build/test-results/testDebugUnitTest/*.xml
+            agents/android/share-helper/build/reports/lint-results-debug.*
+          if-no-files-found: error

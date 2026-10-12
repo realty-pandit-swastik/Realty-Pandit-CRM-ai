@@ -1,10 +1,10 @@
+import PersonalWhatsAppShareModal from '../PersonalWhatsAppShareModal';
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import type { Deal } from '../../api/client';
-import { getDealMatchedInventory, shareDealProperties, recordPersonalShare, getInventoryItem, getTaxonomyTree } from '../../api/client';
+import { getDealMatchedInventory, shareDealProperties, getInventoryItem, getTaxonomyTree } from '../../api/client';
 import { useToast } from '../../contexts/ToastContext';
 import { useConfirm } from '../../contexts/ConfirmContext';
 import { toDialablePhone } from '../../lib/phone';
-import { getDisplayFloor } from '../../lib/floor';
 import { CopyChip } from '../CopyChip';
 import { InventoryFilterCommandBar } from './InventoryFilterCommandBar';
 import { bhkOf, societyOf, propertyTypeLabel } from '../../lib/specChips';
@@ -65,11 +65,7 @@ function prettyType(type: string): string {
     return type.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 }
 
-// Title-case a slug-ish value ("south_west" → "South West", "3-5_years" → "3-5 Years").
-function prettyValue(s?: string | null): string {
-    if (!s) return '';
-    return s.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-}
+
 
 // Most listings don't fill specs.bhk_count, but the slug encodes it ("3bhk-villa-…").
 function bhkFromSlug(slug?: string | null): number | null {
@@ -77,29 +73,11 @@ function bhkFromSlug(slug?: string | null): number | null {
     return m ? parseInt(m[1], 10) : null;
 }
 
-// Multi-word state → initials ("Uttar Pradesh" → "UP"); single-word kept as-is.
-function abbrevState(state?: string | null): string {
-    if (!state) return '';
-    const words = state.trim().split(/\s+/);
-    return words.length > 1 ? words.map(w => w[0].toUpperCase()).join('') : state;
-}
 
-// Price in compact Indian units, trimming trailing zeros (1.25Cr, 40 L, 18 K).
-function priceForMsg(n?: number | null): string {
-    if (!n || n <= 0) return 'Price on request';
-    const trim = (x: number) => parseFloat(x.toFixed(2)).toString();
-    if (n >= 1e7) return `₹${trim(n / 1e7)} Cr`;
-    if (n >= 1e5) return `₹${trim(n / 1e5)} L`;
-    if (n >= 1e3) return `₹${Math.round(n / 1e3)} K`;
-    return `₹${n}`;
-}
 
-// Amenities from the saved `features` JSON (object of truthy flags, or array).
-function featureList(features?: Record<string, any> | string[] | null): string {
-    if (!features) return '';
-    const list = Array.isArray(features) ? features : Object.keys(features).filter(k => (features as any)[k]);
-    return list.slice(0, 6).map(f => prettyValue(String(f))).join(', ');
-}
+
+
+
 
 // ── Taxonomy helpers ──────────────────────────────────────────────────────────
 // Path root→node (used to resolve the deal's category / sub-category / type).
@@ -211,6 +189,7 @@ const BHK_CHOICES = [1, 2, 3, 4, 5];
 const RADIUS_CHOICES = [2, 5, 10, 20];
 
 export function MatchShareTab({ deal, onShared }: Props) {
+    const [personalShareIds, setPersonalShareIds] = useState<string[] | null>(null);
     const { showToast } = useToast();
     const confirm = useConfirm();
 
@@ -480,78 +459,7 @@ export function MatchShareTab({ deal, onShared }: Props) {
         }
     };
 
-    const sendViaPersonalWA = () => {
-        if (selected.size === 0) return;
-        const selectedProps = results.filter(r => selected.has(r.id));
-        const multi = selectedProps.length > 1;
-        const isRent = (i?: string) => i === 'rent' || i === 'rent_lease' || i === 'lease';
-        // 2026-07-29: a partner-referral deal (no client phone) shares to the PARTNER AGENT — send a
-        // BRANDLESS message (no RP sign-off, no exact locality/unit, no RP link) so they present it as
-        // their own to their buyer. A normal client deal keeps the full branded message.
-        const brandless = shareToPartner;
-
-        const blocks = selectedProps.map((p, i) => {
-            const beds = p.specs?.bhk_count || p.specs?.bedrooms || bhkFromSlug(p.slug);
-            const title = beds ? `${beds}BHK ${prettyType(p.type)}` : prettyType(p.type);
-            const intentLabel = isRent(p.intent) ? 'For Rent' : 'For Sale';
-
-            const seenLoc = new Set<string>();
-            const locParts = (brandless
-                ? [(p as any).apartment_name, p.locality, p.city, abbrevState(p.state)]
-                : [p.sub_locality, p.locality, p.city, abbrevState(p.state)])
-                .map(x => (x || '').trim())
-                .filter(x => { const k = x.toLowerCase(); if (!x || seenLoc.has(k)) return false; seenLoc.add(k); return true; });
-            let locLine = locParts.join(', ');
-            if (!brandless && p.pincode) locLine += ` – ${p.pincode}`;
-
-            const specBits: string[] = [];
-            if (p.specs?.area) specBits.push(`📐 ${p.specs.area} ${p.specs.area_unit || 'sq.ft'}`);
-            if (beds) specBits.push(`🛏 ${beds} Bed`);
-            if (p.specs?.bathrooms) specBits.push(`🛁 ${p.specs.bathrooms} Bath`);
-
-            const ffBits: string[] = [];
-            { const _fl = getDisplayFloor(p); if (_fl && p.total_floors) ffBits.push(`🏢 Floor ${_fl} of ${p.total_floors}`); else if (_fl) ffBits.push(`🏢 Floor ${_fl}`); }
-            if (p.facing) ffBits.push(`🧭 ${prettyValue(p.facing)}`);
-
-            const amenities = featureList(p.features);
-            const desc = p.description ? p.description.replace(/\s+/g, ' ').trim().slice(0, 160) : '';
-            const link = `https://www.realtypandit.in/properties/${p.slug || p.display_id || p.id}`;
-
-            const lines: string[] = [`🏡 *${title}* — ${intentLabel}`];
-            if (locLine) lines.push(`📍 ${locLine}`);
-            lines.push('');
-            lines.push(`💰 *${priceForMsg(p.display_price ?? p.price)}*${isRent(p.intent) ? '/month' : ''}`);
-            if (specBits.length) lines.push(specBits.join('   '));
-            if (ffBits.length) lines.push(ffBits.join('   '));
-            if (p.property_age) lines.push(`🏗 Age: ${prettyValue(p.property_age)}`);
-            if (p.furnishing) lines.push(`🛋 ${prettyValue(p.furnishing)}`);
-            if (amenities) lines.push(`✨ ${amenities}`);
-            if (desc) lines.push(`📝 ${desc}`);
-            if (!brandless) {   // partner (brandless) → omit the Realty Pandit website link
-                lines.push('');
-                lines.push('🔗 Photos & full details:');
-                lines.push(link);
-            }
-
-            const block = lines.join('\n');
-            return multi ? `*${i + 1}.*\n${block}` : block;
-        });
-
-        const body = blocks.join('\n\n');
-        const msg = encodeURIComponent(
-            brandless
-                ? body   // partner: brandless — no Realty Pandit sign-off
-                : `Hi! Here are some properties for you:\n\n${body}\n\n— Realty Pandit Team`
-        );
-        if (!shareTel) return;
-        window.open(`https://wa.me/${shareTel.slice(1)}?text=${msg}`, '_blank');
-
-        // Record the personal-WhatsApp share so it appears in the Shared tab + timeline (owner-approved).
-        const sharedIds = selectedProps.map(p => p.id);
-        recordPersonalShare(deal.id, sharedIds, brandless).then(() => onShared()).catch(() => { /* non-fatal — wa.me already opened */ });
-        showToast(brandless ? 'Opened personal WhatsApp (brandless, for partner) — recorded' : 'Opened personal WhatsApp — recorded', 'success');
-        setSelected(new Set());
-    };
+    const sendViaPersonalWA = () => setPersonalShareIds(Array.from(selected));
 
     const inputStyle: React.CSSProperties = {
         padding: '6px 10px', borderRadius: 7, border: '1px solid var(--border-secondary)',
@@ -624,9 +532,15 @@ export function MatchShareTab({ deal, onShared }: Props) {
                     <span style={{ fontSize: 12, color: 'var(--text-secondary)', flex: 1, alignSelf: 'center' }}>
                         {selected.size} selected
                     </span>
+                        <button onClick={sendViaPersonalWA} style={{
+                                padding: '6px 14px', borderRadius: 7, fontSize: 12, fontWeight: 700, cursor: 'pointer',
+                                backgroundColor: 'rgba(59,130,246,0.1)', border: '1.5px solid rgba(59,130,246,0.4)', color: 'var(--btn-blue-text)',
+                            }}>
+                                💬 Personal WhatsApp
+                            </button>
                     {!shareTel && (
                         <span style={{ fontSize: 12, color: 'var(--text-muted)', fontStyle: 'italic', alignSelf: 'center' }}>
-                            No customer or partner phone on file — can't share
+                            Choose a recipient in My WhatsApp; company sharing needs a phone on file
                         </span>
                     )}
                     {shareTel && (
@@ -642,12 +556,7 @@ export function MatchShareTab({ deal, onShared }: Props) {
                             }}>
                                 {sending ? '⏳ Sending…' : (shareToPartner ? '📤 Send brochure to partner' : '📤 Company WhatsApp')}
                             </button>
-                            <button onClick={sendViaPersonalWA} style={{
-                                padding: '6px 14px', borderRadius: 7, fontSize: 12, fontWeight: 700, cursor: 'pointer',
-                                backgroundColor: 'rgba(59,130,246,0.1)', border: '1.5px solid rgba(59,130,246,0.4)', color: 'var(--btn-blue-text)',
-                            }}>
-                                💬 Personal WhatsApp
-                            </button>
+
                         </>
                     )}
                 </div>
@@ -736,6 +645,7 @@ export function MatchShareTab({ deal, onShared }: Props) {
             {previewId && (
                 <InventoryPreviewModal inventoryId={previewId} onClose={() => setPreviewId(null)} />
             )}
+            {personalShareIds && <PersonalWhatsAppShareModal inventoryIds={personalShareIds} initialPhone={shareTel || undefined} onClose={() => setPersonalShareIds(null)} />}
         </div>
     );
 }

@@ -190,6 +190,9 @@ router.get('/', async (req: any, res) => {
         if (page) filters.page = parseInt(page);
         if (limit) filters.limit = parseInt(limit);
         if (search && typeof search === 'string' && search.trim()) filters.search = search.trim();
+        // Exact one-lead scope (lead tile -> Pipeline button). Unlike `search` this is an
+        // equality match on demand_contact_id, which IS the Contact PK (phone_number).
+        if (contact_phone && typeof contact_phone === 'string' && contact_phone.trim()) filters.contact_phone = contact_phone.trim();
         if (taxonomy_node_ids && typeof taxonomy_node_ids === 'string' && taxonomy_node_ids.trim()) filters.taxonomy_node_ids = taxonomy_node_ids.trim();
         if (bhk && typeof bhk === 'string' && bhk.trim()) filters.bhk = bhk.trim();
         // Exact one-lead scope: match by contact phone (demand_contact_id) — exact equality,
