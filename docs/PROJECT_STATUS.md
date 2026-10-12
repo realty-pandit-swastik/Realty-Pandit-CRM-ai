@@ -5,11 +5,13 @@
 
 > This file is the **live state**. When you see contradictions with anything else in /docs/, this wins. Update the timestamp on each meaningful change.
 
-## Dashboard PR #38 — validated, awaiting production activation (2026-10-13)
+## Dashboard PR #38 — merged and production verified (2026-10-13)
 
 - Retargeted Kshitiz's PR #38 from `fix-dev` to `main` and merged current main into its branch, preserving the existing WhatsApp setup/sharing release. Dashboard source failures remain visible with retry; the headline no longer reports fallback zeros. Market-trend dates use IST calendar days; overdue indicators refresh each minute. Lead tiles narrow the pipeline by exact contact key without replacing tenant/team visibility.
 - Managers/super bosses scope contact-linked workflow tasks through the contact tenant. Contact-less tasks retain the existing visibility; complete task tenant isolation remains a separate schema/writer change.
-- Local validation: backend 656 passed / 3 skipped, including queue tenant and exact-contact filter regressions; dashboard loader/render tests 4 passed; CRM TypeScript/Vite build passed. Added dashboard tests to guarded release CI. Production preflight found revision `76eeaab`, stable PM2, connected DB/Redis, and unchanged queues (social 10/scheduled 14 failed); verified database/uploads restore proof from 2026-10-12 19:23 UTC is retained. No migrations or provider sends are part of this release. Merge, CI and production verification remain pending.
+- Local validation: backend 656 passed / 3 skipped, including queue tenant and exact-contact filter regressions; dashboard loader/render tests 4 passed; CRM TypeScript/Vite build passed; lint 0 errors / 953 warnings. Added dashboard tests to guarded release CI. All PR checks passed before merge. Lead-scoped pipeline views reveal closed/on-hold stages and clear previous filters.
+- PR #38 merged as `139babb26ec4050d816dc7598ec2889e4eda805d`; [guarded deployment 38300802886](https://github.com/realty-pandit-swastik/Realty-Pandit-CRM-ai/actions/runs/38300802886) succeeded. Live revision and all eight changed application source hashes match. Public site, admin and service worker return 200; anonymous inventory returns 401. Backend/website online with expected restart counts 10/10/21; DB/Redis connected and existing queue failures unchanged (social 10/scheduled 14, WhatsApp inbound 0).
+- Authenticated production browser smoke passed for dashboard loading, changing to the 3-day range, and opening a lead's Pipeline button: exactly one matching deal, clearable lead chip, and all stages visible. The browser's loaded asset matches the deployed index. Failure rendering and IST midnight cases were verified with mocks, without disrupting live feeds. Verified database/uploads restore proof from 2026-10-12 19:23 UTC is retained; previous release `76eeaab` is available for application rollback. No migrations or provider sends were performed. Existing empty nightly database backups remain a separate repair item.
 
 ## 2026-10-13 — Android proof publication (PRODUCTION SETUP VERIFIED; HANDSET PROOF PENDING)
 
