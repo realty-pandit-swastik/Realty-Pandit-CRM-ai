@@ -19,6 +19,7 @@ import { normalizePhone, phoneVariants, isPlaceholderPhone } from '../utils/phon
 import { type ClientRole } from '../utils/client_role';
 import { findInventoryIdsByAddress } from '../utils/inventory_search';
 import { generateDisplayId } from '../utils/inventory_id';
+import { inventorySourceKind } from '../utils/inventory_source';
 import { getTeamIds } from '../utils/team_scope';
 import { partnerOwnInventoryWhere } from '../utils/partner_scope';
 import { expandTaxonomyNodeIds, bhkSpecsFilter } from '../utils/taxonomy_filter';
@@ -855,8 +856,11 @@ router.get('/', authMiddleware, async (req, res) => {
         const isSB = agent.role === 'super_boss';
         const data = inventory.map((i: any) => {
             const canSeeSourcePhone = isSB || teamIds.includes(i.assigned_agent_id) || teamIds.includes(i.uploaded_by_agent_id);
-            const isDealer = i.ownership_type === 'EXTERNAL_AGENT';
-            const isAgentOwner = i.ownership_type === 'AGENT_OWNER';
+            // Source KIND (2026-10-09): ownership_type alone cannot decide dealer-vs-owner — it is
+            // NULL on most rows, so partner-attributed listings used to read as "Owner".
+            const sourceKind = inventorySourceKind(i);
+            const isDealer = sourceKind === 'DEALER';
+            const isAgentOwner = sourceKind === 'AGENT_OWNER';
             // Owner NAME lives on Contact (Inventory has no owner_name column). Resolved from
             // the relation BEFORE redaction, then re-attached below alongside `source` —
             // previously this fell straight through to uploader_name, so a listing whose owner
@@ -867,7 +871,7 @@ router.get('/', authMiddleware, async (req, res) => {
                 ? (i.referral_partner?.phone_number || i.uploader_phone)
                 : (i.owner_phone || i.uploader_phone);
             const source = {
-                type: isDealer ? 'DEALER' : (isAgentOwner ? 'AGENT_OWNER' : 'OWNER'),
+                type: sourceKind,
                 name: sourceName,
                 phone: canSeeSourcePhone ? (sourcePhoneRaw || null) : null,
             };
