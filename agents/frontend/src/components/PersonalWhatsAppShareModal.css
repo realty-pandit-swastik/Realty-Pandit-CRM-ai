@@ -1,0 +1,29 @@
+.personal-wa-overlay { position: fixed; inset: 0; z-index: 6000; background: rgba(0,0,0,.65); display: flex; justify-content: center; align-items: center; padding: 16px; }
+.personal-wa-panel { background: var(--bg-primary, #101827); color: var(--text-primary, white); width: 760px; max-width: 100%; max-height: 90vh; overflow: auto; border-radius: 14px; padding: 24px; outline: none; }
+.personal-wa-heading, .personal-wa-actions { display: flex; justify-content: space-between; gap: 12px; align-items: center; }
+.personal-wa-heading h2 { font-size: 20px; margin: 0; }
+.personal-wa-panel button { padding: 10px 14px; border-radius: 8px; border: 1px solid var(--border-secondary, #475569); background: var(--bg-secondary, #1e293b); color: inherit; cursor: pointer; }
+.personal-wa-panel button:disabled { opacity: .5; cursor: default; }
+.personal-wa-panel a { color: var(--btn-blue-text, #60a5fa); }
+.personal-wa-panel fieldset { border: 0; padding: 0; margin-top: 20px; min-width: 0; }
+.personal-wa-panel label { display: flex; gap: 8px; align-items: center; margin: 10px 0; flex-wrap: wrap; }
+.personal-wa-panel input[type=tel] { width: 100%; padding: 10px; border: 1px solid var(--border-secondary, #475569); border-radius: 8px; background: var(--bg-secondary, #1e293b); color: inherit; box-sizing: border-box; }
+.personal-wa-property { border-top: 1px solid var(--border-secondary, #475569); margin-top: 20px; padding-top: 10px; }
+.personal-wa-gallery { display: grid; grid-template-columns: repeat(auto-fill,minmax(150px,1fr)); gap: 12px; }
+.personal-wa-card { border: 1px solid var(--border-secondary, #475569); border-radius: 10px; padding: 10px; }
+.personal-wa-card img, .personal-wa-card video { width: 100%; height: 120px; object-fit: cover; border-radius: 8px; }
+.personal-wa-card label { font-size: 13px; }
+.personal-wa-panel pre { white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; background: var(--bg-secondary, #1e293b); padding: 12px; border-radius: 8px; }
+.personal-wa-help { color: var(--text-muted, #94a3b8); font-size: 13px; }
+.personal-wa-error { color: #ef4444; }
+.personal-wa-actions { margin-top: 20px; }
+.personal-wa-actions button:last-child { background: #15803d; color: white; }
+.personal-wa-setup-page { margin: 32px auto; box-sizing: border-box; }
+.personal-wa-setup h2 { font-size: 16px; }
+@media (max-width: 600px) {
+    .personal-wa-overlay { padding: 8px; }
+    .personal-wa-panel { padding: 16px; max-height: 94dvh; }
+    .personal-wa-heading h2 { font-size: 18px; }
+    .personal-wa-actions { flex-wrap: wrap; }
+    .personal-wa-actions button { flex: 1; }
+}

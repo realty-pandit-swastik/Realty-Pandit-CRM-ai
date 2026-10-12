@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test:personal-whatsapp": "node --experimental-strip-types --test tests/personalWhatsApp.test.mjs"
   },
   "dependencies": {
     "@react-google-maps/api": "^2.20.8",

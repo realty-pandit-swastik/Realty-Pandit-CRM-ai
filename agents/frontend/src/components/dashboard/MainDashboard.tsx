@@ -71,8 +71,8 @@ async function loadCockpit(range: DateRange): Promise<Cockpit> {
       return fallback;
     }
   };
-  const contactsP = getContacts();
-  const [alertsRes, queueRes, trends, fin, inv, pipeline, activity, stl] = await Promise.all([
+  const [contacts, alertsRes, queueRes, trends, fin, inv, pipeline, activity, stl] = await Promise.all([
+    getContacts(),
     grab('alerts', getManagementAlerts(), { alerts: [] as Alert[] }),
     grab('tasks', getWorkflowTaskQueue(), { tasks: [] as Task[] }),
     grab('trends', getMarketTrends({ from: iso(prevFrom), to: iso(to) }), { leads: [], visits: [], sales: [] }),
@@ -82,7 +82,6 @@ async function loadCockpit(range: DateRange): Promise<Cockpit> {
     grab('activity', getTeamActivity({ from: iso(from), to: iso(to), limit: 20 }), { shares: [], appointments: [] }),
     grab('stl', getSpeedToLead({ from: iso(from), to: iso(to) }), { median_minutes: null }),
   ]);
-  const contacts: any[] = await contactsP;
 
   // pulse deltas — bucket the market-trends daily series into current vs previous windows
   const bucket = (series: Array<{ date: string; count: number }>) => {
@@ -101,7 +100,7 @@ async function loadCockpit(range: DateRange): Promise<Cockpit> {
 
   // lead temperature (client-side over role-scoped contacts)
   const LEAD_TYPES = new Set(['BUYER', 'TENANT', 'UNKNOWN']);
-  const leads = contacts.filter((c) => !c.contact_type || LEAD_TYPES.has(c.contact_type));
+  const leads = contacts.filter((c: any) => !c.contact_type || LEAD_TYPES.has(c.contact_type));
   const t = { hot: 0, warm: 0, cold: 0, total: 0 };
   for (const c of leads) {
     if (c.lead_status === 'hot') t.hot++;
@@ -198,7 +197,9 @@ export const MainDashboard: React.FC = () => {
   const failed = new Set(d.failed || []);
   const hasFailed = failed.size > 0;
   const actionTotal = openByType.callbacks + openByType.visits + openByType.overdue + alertBy('stale_leads') + alertBy('inventory_missing_photos');
-  const stateLine = `${formatNum(d.pulse.leads.cur)} new leads · ${formatNum(d.pulse.visits.cur)} visits · ${formatNum(d.pulse.deals.cur)} deals closed this period — ${formatNum(actionTotal)} things need action.${hasFailed ? ' ⚠️ Some figures couldn’t load.' : ''}`;
+  const stateLine = hasFailed
+    ? 'Some dashboard figures couldn’t load. Review the available figures below and retry.'
+    : `${formatNum(d.pulse.leads.cur)} new leads · ${formatNum(d.pulse.visits.cur)} visits · ${formatNum(d.pulse.deals.cur)} deals closed this period — ${formatNum(actionTotal)} things need action.`;
 
   return (
     <div style={{ flex: 1, overflowY: 'auto', padding: pad, backgroundColor: 'var(--bg-primary)' }}>

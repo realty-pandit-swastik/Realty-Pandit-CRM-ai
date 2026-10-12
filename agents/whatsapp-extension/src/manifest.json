@@ -1,0 +1,16 @@
+{
+  "manifest_version": 3,
+  "name": "Realty Pandit — My WhatsApp",
+  "version": "0.2.0",
+  "icons": { "16": "icons/icon16.png", "48": "icons/icon48.png", "128": "icons/icon128.png" },
+  "description": "Share selected property attachments through your own WhatsApp Web, after confirmation.",
+  "permissions": ["scripting", "alarms"],
+  "host_permissions": ["https://web.whatsapp.com/*"],
+  "background": { "service_worker": "background.js", "type": "module" },
+  "action": { "default_title": "Open my WhatsApp", "default_popup": "popup.html" },
+  "content_scripts": [{
+    "matches": ["https://admin.realtypandit.in/*", "https://www.realtypandit.in/*", "https://agents.realtypandit.in/*", "http://localhost/*", "http://127.0.0.1/*"],
+    "js": ["crm-bridge.js"],
+    "run_at": "document_start"
+  }]
+}

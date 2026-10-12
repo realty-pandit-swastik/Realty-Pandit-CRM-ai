@@ -13,6 +13,7 @@ export interface SelectedContact {
 
 interface ContactSearchFieldProps {
     onContactSelected: (contact: SelectedContact) => void;
+    allowCreate?: boolean;
     label?: string;
     placeholder?: string;
 }
@@ -50,6 +51,7 @@ function getRoleBadge(contactType: string, identifiedType?: string): { label: st
 
 export const ContactSearchField: React.FC<ContactSearchFieldProps> = ({
     onContactSelected,
+    allowCreate = true,
     label = 'Search contact by name or phone',
     placeholder = 'Enter name or phone number',
 }) => {
@@ -236,7 +238,8 @@ export const ContactSearchField: React.FC<ContactSearchFieldProps> = ({
             )}
 
             {/* Not Found — Create New */}
-            {notFound && (
+            {notFound && !allowCreate && <p>No CRM contact found. You can use the recipient number entered above.</p>}
+            {notFound && allowCreate && (
                 <div style={styles.notFoundCard}>
                     <div style={{ fontSize: '14px', color: 'var(--text-muted)', marginBottom: '16px' }}>
                         No contact found for <strong style={{ color: 'var(--text-primary)' }}>+91 {query}</strong>
