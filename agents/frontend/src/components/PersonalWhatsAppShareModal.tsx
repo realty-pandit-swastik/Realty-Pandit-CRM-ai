@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import client from '../api/client';
 import { toDialablePhone, isValidPhoneInput } from '../lib/phone';
 import { buildWhatsAppShareText } from '../lib/buildWhatsAppShareText';
@@ -6,6 +6,7 @@ import { propertyAttachments, orderedPropertyAttachments, blobDataUrl, downloadP
     MAX_PERSONAL_SHARE_BYTES, isAndroidDevice, validatePersonalWhatsAppFile, nativePropertyShareSteps, validateNativeShares,
     type NativePropertyShare, type AttachmentSelection, type PreparedWhatsAppFile } from '../lib/personalWhatsAppFiles';
 import { personalWhatsAppStatus, preparePersonalWhatsAppShare, personalWhatsAppResult, type PersonalShareResult } from '../lib/personalWhatsAppBridge';
+import { androidHandoffPayload, androidHandoffLaunch, validateAndroidHandoff, type AndroidHandoff, type AndroidSendingApp } from '../lib/androidWhatsAppHandoff';
 import { ContactSearchField } from './ContactSearchField';
 import PersonalWhatsAppSetup from './PersonalWhatsAppSetup';
 import './PersonalWhatsAppShareModal.css';
@@ -42,13 +43,35 @@ export default function PersonalWhatsAppShareModal({ inventoryIds, initialPhone,
     const [nativeSteps, setNativeSteps] = useState<NativePropertyShare[]>([]);
     const [nativeIndex, setNativeIndex] = useState(0);
     const [handedOff, setHandedOff] = useState(false);
+    const [androidMode, setAndroidMode] = useState<'helper' | 'manual'>('helper');
+    const [sendingApp, setSendingApp] = useState<AndroidSendingApp>('com.whatsapp');
+    const [handoff, setHandoff] = useState<AndroidHandoff | null>(null);
+    const [pilotState, setPilotState] = useState<'idle' | 'preparing' | 'ready' | 'opened' | 'cancelled' | 'expired' | 'failed'>('idle');
+    const handoffRef = useRef<AndroidHandoff | null>(null);
+    const preparingRef = useRef(false);
+    const generation = useRef(0);
     const android = isAndroidDevice(navigator.userAgent);
     const unsupportedMobile = !android && /iPhone|iPad|iPod/i.test(navigator.userAgent);
     const panel = useRef<HTMLDivElement>(null);
     const active = useRef(true);
     const apiBase = client.defaults.baseURL || window.location.origin;
 
+    const cancelPrepared = useCallback(() => {
+        const prepared = handoffRef.current;
+        handoffRef.current = null;
+        if (prepared) void client.post('/api/personal-whatsapp/handoffs/cancel', { launch_token: prepared.launch_token }).catch(() => {
+            if (active.current) setError('Could not confirm cancellation. The previous share may remain usable until it expires.');
+        });
+    }, []);
+
+    const invalidate = useCallback(() => {
+        generation.current++;
+        cancelPrepared(); setHandoff(null); setPilotState('idle');
+        setNativeSteps([]); setNativeIndex(0); setHandedOff(false); setProgress(''); setError('');
+    }, [cancelPrepared]);
+
     useEffect(() => {
+        invalidate(); setLoadedKey(''); setLoadError(''); setInventories([]); setSelections({});
         let alive = true;
         Promise.all(idsKey.split(',').map(async id => {
             const response = await client.get(`/api/inventory/${encodeURIComponent(id)}`);
@@ -57,14 +80,14 @@ export default function PersonalWhatsAppShareModal({ inventoryIds, initialPhone,
             if (alive) { setInventories(items); setLoadedKey(idsKey); setNativeSteps([]); setNativeIndex(0); setHandedOff(false); }
         }).catch(() => { if (alive) setLoadError('Could not load the selected properties. Close and retry.'); });
         return () => { alive = false; };
-    }, [idsKey]);
+    }, [idsKey, invalidate]);
 
     useEffect(() => {
         active.current = true;
         const previous = document.activeElement as HTMLElement | null;
         panel.current?.focus();
-        return () => { active.current = false; previous?.focus(); };
-    }, []);
+        return () => { active.current = false; generation.current++; cancelPrepared(); previous?.focus(); };
+    }, [cancelPrepared]);
 
     const caption = (inv: ShareInventory) => [`Property ID: ${inv.display_id || inv.id}`,
         buildWhatsAppShareText([{ inv, link: '' }], 'dealer')].filter(Boolean).join('\n').replace(/https?:\/\/\S+/gi, '').trim();
@@ -73,7 +96,39 @@ export default function PersonalWhatsAppShareModal({ inventoryIds, initialPhone,
         return selection && (selection.urls.length > 0 || selection.pdf);
     });
 
+    useEffect(() => {
+        if (!handoff) return;
+        const timer = window.setTimeout(() => {
+            cancelPrepared(); setHandoff(null); setPilotState('expired');
+            setProgress('Prepared share expired. Prepare again; nothing was automatically retried.');
+        }, Math.max(0, handoff.expires_at - Date.now()));
+        return () => window.clearTimeout(timer);
+    }, [handoff, cancelPrepared]);
+
+    async function prepareAndroid() {
+        if (preparingRef.current || handoffRef.current) return;
+        preparingRef.current = true;
+        const current = ++generation.current;
+        setBusy(true); setError(''); setPilotState('preparing'); setProgress('Preparing your selected recipient and attachments…');
+        try {
+            const payload = androidHandoffPayload(phone, sendingApp, inventories, selections, apiBase);
+            const response = await client.post('/api/personal-whatsapp/handoffs', payload);
+            const prepared = validateAndroidHandoff(response.data?.data ?? response.data);
+            if (!active.current || generation.current !== current) {
+                void client.post('/api/personal-whatsapp/handoffs/cancel', { launch_token: prepared.launch_token }).catch(() => {});
+                return;
+            }
+            handoffRef.current = prepared; setHandoff(prepared); setPilotState('ready');
+            setProgress('Ready. Open My WhatsApp to review the selected client and files in the helper. No message has been sent.');
+        } catch (err) {
+            if (active.current && generation.current === current) {
+                setPilotState('failed'); setProgress(''); setError(err instanceof Error ? err.message : 'Could not prepare the share. Prepare again.');
+            }
+        } finally { preparingRef.current = false; if (active.current) setBusy(false); }
+    }
+
     function update(id: string, selection: AttachmentSelection) {
+        invalidate();
         setSelections(previous => ({ ...previous, [id]: selection }));
         setError(''); setProgress(''); setNativeSteps([]); setNativeIndex(0); setHandedOff(false);
     }
@@ -86,6 +141,7 @@ export default function PersonalWhatsAppShareModal({ inventoryIds, initialPhone,
     }
 
     async function send() {
+        if (android && androidMode === 'helper') { await prepareAndroid(); return; }
         const recipient = isValidPhoneInput(phone) ? toDialablePhone(phone) : null;
         if ((!android && !recipient) || !chosen.length) { setError('Choose at least one property photo or video, and a recipient for desktop sharing.'); return; }
         setBusy(true); setError(''); setOutcome(null);
@@ -197,7 +253,7 @@ export default function PersonalWhatsAppShareModal({ inventoryIds, initialPhone,
     function keyboard(event: React.KeyboardEvent) {
         if (event.key === 'Escape' && !busy) onClose();
         if (event.key !== 'Tab') return;
-        const nodes = panel.current?.querySelectorAll<HTMLElement>('button:not(:disabled),input:not(:disabled),a[href],[tabindex="0"]');
+        const nodes = panel.current?.querySelectorAll<HTMLElement>('button:not(:disabled),input:not(:disabled),select:not(:disabled),a[href],[tabindex="0"]');
         if (!nodes?.length) return;
         const first = nodes[0], last = nodes[nodes.length - 1];
         if (event.shiftKey && (document.activeElement === first || document.activeElement === panel.current)) { event.preventDefault(); last.focus(); }
@@ -208,7 +264,13 @@ export default function PersonalWhatsAppShareModal({ inventoryIds, initialPhone,
         <div className="personal-wa-panel" ref={panel} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="personal-wa-title">
             <div className="personal-wa-heading"><h2 id="personal-wa-title">My WhatsApp — choose attachments</h2>
                 <button type="button" onClick={onClose} disabled={busy} aria-label="Close sharing">×</button></div>
-            {android ? <p>Prepare selected photos/videos, then choose WhatsApp and the recipient in your phone’s share sheet and tap Send. Each property is shared separately; its PDF is another step. Caption placement and order depend on WhatsApp.</p>
+            {android ? <><p><strong>Android selected-client pilot — phone compatibility unverified.</strong> The helper attempts to open the selected number, including unsaved/new recipients. Review the recipient, attachments, order, and details before tapping Send in WhatsApp. Media and PDF are separate steps; sending is never confirmed by CRM.</p>
+                <p><a href="/my-whatsapp-setup" target="_blank" rel="noreferrer">Install / update the Android helper</a></p>
+                <fieldset disabled={busy}><legend>Android sharing method</legend>
+                    <label><input type="radio" name="android-mode" checked={androidMode === 'helper'} onChange={() => { invalidate(); setAndroidMode('helper'); }} />Selected client via Android helper (pilot)</label>{' '}
+                    <label><input type="radio" name="android-mode" checked={androidMode === 'manual'} onChange={() => { invalidate(); setAndroidMode('manual'); }} />Phone share sheet — choose recipient manually</label>
+                </fieldset>
+                {androidMode === 'manual' && <p>Prepare selected photos/videos, then choose WhatsApp and the recipient in your phone’s share sheet and tap Send. Each property is shared separately; its PDF is another step. Caption placement and order depend on WhatsApp. Unsaved recipients may not appear.</p>}</>
                 : unsupportedMobile ? <p role="alert">Use Android Chrome for phone sharing, or desktop Chrome with the My WhatsApp extension.</p>
                     : <><PersonalWhatsAppSetup compact />
                         <button type="button" onClick={checkConnection} disabled={busy || checking}>{checking ? 'Checking…' : 'Check sending account'}</button></>}
@@ -219,9 +281,13 @@ export default function PersonalWhatsAppShareModal({ inventoryIds, initialPhone,
             <fieldset disabled={busy || !!outcome}>
                 <legend>Recipient</legend>
                 <label>WhatsApp number (include country code for international numbers)
-                    <input type="tel" value={phone} onChange={e => setPhone(e.target.value)} placeholder="Phone number" /></label>
-                <ContactSearchField label="Or choose a CRM contact" allowCreate={false} onContactSelected={contact => setPhone(contact.sourceId || contact.phone)} />
-                {android && <p>This number is a reminder. Select the final recipient inside WhatsApp for every share step.</p>}
+                    <input type="tel" value={phone} onChange={e => { invalidate(); setPhone(e.target.value); }} placeholder="Phone number" /></label>
+                <ContactSearchField label="Or choose a CRM contact" allowCreate={false} onContactSelected={contact => { invalidate(); setPhone(contact.phone || contact.sourceId || ''); }} />
+                {android && androidMode === 'manual' && <p>This number is a reminder. Select the final recipient inside WhatsApp for every share step.</p>}
+                {android && androidMode === 'helper' && <><p>The selected number is passed to the helper. Check the final WhatsApp preview before sending.</p>
+                    <label>Sending app <select value={sendingApp} onChange={e => { invalidate(); setSendingApp(e.target.value as AndroidSendingApp); }}>
+                        <option value="com.whatsapp">WhatsApp</option><option value="com.whatsapp.w4b">WhatsApp Business</option>
+                    </select></label></>}
                 {inventories.map(inv => {
                     const attachments = propertyAttachments(inv, apiBase);
                     const selection = selections[inv.id] || EMPTY_ATTACHMENT_SELECTION;
@@ -244,14 +310,14 @@ export default function PersonalWhatsAppShareModal({ inventoryIds, initialPhone,
                             <h4>{android ? 'Property details supplied as share text' : 'First photo/video caption'}</h4><pre>{caption(inv)}</pre>
                             {android && <button type="button" onClick={() => copyDetails(caption(inv))}>Copy property details</button>}
                             <p>{selection.urls.length} media selected{selection.pdf ? ' + PDF' : ''}. Prepared order: chosen first photo, remaining photos, videos{android ? '; PDF shared separately.' : ', PDF. Video-only details go on the first video.'}</p>
-                            {!selection.urls.length && <p role="alert">Choose at least one photo or video.</p>}
+                            {!selection.urls.length && !(android && androidMode === 'helper') && <p role="alert">Choose at least one photo or video.</p>}
                         </> : <p>Select only the photos and videos you want to send.</p>}
                     </section>;
                 })}
             </fieldset>
             {error && <p className="personal-wa-error" role="alert">{error}</p>}
             <p role="status" aria-live="polite">{progress}</p>
-            {android && loadedKey === idsKey && nativeSteps.length > 0 && <section aria-label="Prepared shares">
+            {android && androidMode === 'manual' && loadedKey === idsKey && nativeSteps.length > 0 && <section aria-label="Prepared shares">
                 <h3>Step {nativeIndex + 1} of {nativeSteps.length}: {nativeSteps[nativeIndex].label} — {nativeSteps[nativeIndex].kind}</h3>
                 {phone && <p>Intended recipient: {phone}. Check this recipient inside WhatsApp.</p>}
                 <p>{nativeSteps[nativeIndex].files.length} files ready. No CRM sent record will be created.</p>
@@ -261,14 +327,27 @@ export default function PersonalWhatsAppShareModal({ inventoryIds, initialPhone,
                     setNativeIndex(i => i + 1); setHandedOff(false); setProgress('Choose WhatsApp and the recipient again for this step.');
                 }}>I checked WhatsApp — next step</button>}
             </section>}
+            {android && androidMode === 'helper' && <section aria-label="Android pilot share">
+                <p>Pilot status: {pilotState}. No CRM sent record will be created.</p>
+                {handoff && <><p>Recipient: {phone}. App: {sendingApp === 'com.whatsapp' ? 'WhatsApp' : 'WhatsApp Business'}. Expires at {new Date(handoff.expires_at).toLocaleTimeString()}.</p>
+                    <button type="button" disabled={pilotState === 'opened'} onClick={() => {
+                        if (Date.now() >= handoff.expires_at) { invalidate(); setPilotState('expired'); setProgress('Prepared share expired. Prepare again.'); return; }
+                        setPilotState('opened'); setProgress('Helper launch requested. Check your phone; CRM cannot confirm the app opened or that anything was sent.');
+                        // Keep capabilities out of DOM links and click breadcrumbs; launch synchronously from this user gesture.
+                        window.location.assign(androidHandoffLaunch(handoff.launch_token, navigator.userAgent));
+                    }}>{pilotState === 'opened' ? 'Launch requested — check your phone' : 'Open My WhatsApp'}</button>{' '}
+                    <button type="button" onClick={() => { invalidate(); setPilotState('cancelled'); setProgress('Prepared share cancelled. Any WhatsApp preview already open must be closed on your phone.'); }}>Cancel prepared share</button>
+                    {pilotState === 'opened' && <p>If the helper did not open, install/update it from setup, then cancel this share and prepare again. App installation cannot be detected reliably.</p>}
+                </>}
+            </section>}
             {outcome && <div role="status">
                 <p>{outcome.status === 'sent' ? 'WhatsApp acknowledged all selected attachments. Recipient delivery is not confirmed.'
                     : outcome.status === 'cancelled' ? 'Sharing cancelled. No attachments were sent.' : outcome.error || 'Check WhatsApp before sharing again.'}</p>
                 {outcome.results.map(item => <p key={item.key}>{item.filename}: {item.status === 'sent' ? 'acknowledged by WhatsApp' : 'not confirmed'}</p>)}
             </div>}
             <div className="personal-wa-actions"><button type="button" onClick={onClose} disabled={busy}>Close</button>
-                <button type="button" onClick={send} disabled={unsupportedMobile || busy || checking || !!outcome || !chosen.length || loadedKey !== idsKey || !!loadError || (android && nativeSteps.length > 0)}>
-                    {busy ? 'Preparing / sharing…' : android ? 'Prepare selected attachments' : 'Review and send from my WhatsApp'}</button></div>
+                <button type="button" onClick={send} disabled={unsupportedMobile || busy || checking || !!outcome || !chosen.length || loadedKey !== idsKey || !!loadError || (android && (androidMode === 'helper' ? !!handoff : nativeSteps.length > 0))}>
+                    {busy ? 'Preparing / sharing…' : android ? androidMode === 'helper' ? 'Prepare selected-client pilot' : 'Prepare manual share attachments' : 'Review and send from my WhatsApp'}</button></div>
         </div>
     </div>;
 }

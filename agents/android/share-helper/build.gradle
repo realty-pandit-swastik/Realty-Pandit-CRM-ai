@@ -4,13 +4,24 @@ android {
     namespace 'com.realtypandit.shareproof'
     compileSdk 34
     defaultConfig {
-        applicationId 'com.realtypandit.shareproof'
+        applicationId 'com.realtypandit.mywhatsapp'
         minSdk 26
         targetSdk 34
-        versionCode 1
-        versionName '0.1.0-proof'
+        versionCode 2
+        versionName '0.2.0-pilot'
         testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
     }
+    signingConfigs {
+        release {
+            if (System.getenv('MY_WHATSAPP_KEYSTORE')) {
+                storeFile file(System.getenv('MY_WHATSAPP_KEYSTORE'))
+                storePassword System.getenv('MY_WHATSAPP_STORE_PASSWORD')
+                keyAlias 'my-whatsapp'
+                keyPassword System.getenv('MY_WHATSAPP_KEY_PASSWORD')
+            }
+        }
+    }
+    buildTypes { release { signingConfig signingConfigs.release } }
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
