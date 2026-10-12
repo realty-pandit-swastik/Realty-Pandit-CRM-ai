@@ -278,6 +278,12 @@ export default function DealPipeline({
         // Reset other narrowing filters so the tapped lead is actually visible — a leftover
         // stage/search filter from earlier would hide it and read as "no deals".
         setFilterStatus('');
+        setFilterScenario('');
+        setFilterMinPriority('');
+        setFilterSource('');
+        setFilterIntent('');
+        setFilterCoordinatorId('');
+        setFilterTaxonomy({ nodeIds: [], bhk: [] });
         setSearchInput('');
         setSearchQuery('');
         // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -479,7 +485,7 @@ export default function DealPipeline({
     // 2026-05-13: kanban columns. CLOSED_WON / CLOSED_LOST / ON_HOLD hidden by
     // default; toggling showClosedDeals reveals CLOSED_WON + CLOSED_LOST so the team
     // can review past outcomes without losing focus on active work.
-    const activeStages = showClosedDeals
+    const activeStages = contactPhone ? STAGES : showClosedDeals
         ? STAGES.filter(s => s !== 'ON_HOLD')
         : STAGES.filter(s => s !== 'CLOSED_WON' && s !== 'CLOSED_LOST' && s !== 'ON_HOLD');
 
