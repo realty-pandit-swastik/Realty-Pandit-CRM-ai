@@ -1,9 +1,16 @@
 # Realty Pandit — Live Project Status
 
-**Last updated:** 2026-10-09
+**Last updated:** 2026-10-13
 **Update trigger:** Significant deployments, phase completions, blockers cleared/added.
 
 > This file is the **live state**. When you see contradictions with anything else in /docs/, this wins. Update the timestamp on each meaningful change.
+
+## 2026-10-13 — Android proof publication (CRM SETUP DEPLOYMENT PENDING)
+
+- Standalone local-file proof app added under `agents/android/share-helper`; independent build avoids the staff app's missing Kotlin implementation. It supports explicit WhatsApp/Business choice, canonical recipient, cover ordering, media details, separate PDF, temporary read-only file grants, and 40-MiB/100-file limits. No CRM credentials, network access or database migration is involved.
+- Debug-signed test APK 0.1.0 and handset checklist are prepared for versioned GitHub release `android-share-proof-v0.1.0`. CRM `/my-whatsapp-setup` gains installation/testing links. User explicitly chose this proof publication; selected-client backend/CRM integration remains gated on phone acceptance and has not been implemented.
+- Local checks: 9 helper JVM tests, helper app/native-test APK builds and signature verification passed; 10 CRM sharing tests, CRM build and scoped setup lint passed. Native tests compile but have not run on a device. A dedicated Android helper CI workflow uses JDK 17 and the independent module.
+- Read-only production preflight run `38294552138` passed all four code-check jobs, then failed operational inspection: deployment UID 5002 lacks passwordless sudo for PM2/nginx and cannot inspect the root-owned release backup directory. Production remains at application `b99da2b`; API/database/Redis are healthy, queues report the existing social 10/scheduled 14 failures. No deployment or migration was attempted. Restore intended deployment privileges before activating the setup-page change; do not bypass the preflight.
 
 ## 2026-10-09 — Collaborator CRM + personal WhatsApp release (PRODUCTION VERIFIED)
 

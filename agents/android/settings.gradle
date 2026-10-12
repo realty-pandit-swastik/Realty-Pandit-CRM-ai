@@ -16,3 +16,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "Realty Pandit Staff App"
 include ':app'
+include ':share-helper'
