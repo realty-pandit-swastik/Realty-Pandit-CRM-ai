@@ -1400,11 +1400,18 @@ const leadCycleStartOf = (lead: any): string => {
         return tileMatchCounts[id] ?? null;
     }, [tileMatchCounts]);
 
-    // Tile → Deal Pipeline: deep-focus the row's deal when known, else open the pipeline plain.
-    // App.tsx turns filter.deal into DealPipeline's initialDealId (one-shot).
+    // Tile → Deal Pipeline: narrow the BOARD to this lead's deals (2026-10-09). Previously this only
+    // passed the row's deal id, which opened that deal's workspace on top of a completely unfiltered
+    // pipeline — the board behind it still showed every other lead, so you had to hunt for your deal.
+    //
+    // The filter is the contact phone (exact, server-side) rather than the name: names collide
+    // ("Mamta" vs "Mamtaram") and placeholder/dealer-fallback rows have no usable name at all.
     const handleOpenPipeline = useCallback((row: LeadRow) => {
-        const dealId = row._deal?.id ?? row.demand_transactions?.[0]?.id ?? null;
-        drillTo(dealId ? { entity: 'deals', filter: { deal: dealId } } : { entity: 'deals' });
+        const identity = dealerFallback(row, isPlaceholderPhone, toDialablePhone);
+        drillTo({
+            entity: 'deals',
+            filter: { contact: row.phone_number, name: row.name || identity.name || '' },
+        });
     }, []);
 
     // Tile → Matching: the detail slide-over is contact-level (same for every enquiry
