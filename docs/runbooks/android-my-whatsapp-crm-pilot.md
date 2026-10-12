@@ -1,10 +1,10 @@
 # Android CRM My WhatsApp pilot
 
-Status: implementation verified locally; production publication pending. The user authorized this production pilot before handset acceptance. Test with synthetic property media and your own second number or a consenting recipient.
+Status: production pilot verified at application revision `05f2fc12a7c7a16a1bf26df0d59a303fafedf13d`; handset acceptance pending. The user authorized this production pilot before handset acceptance. Test with synthetic property media and your own second number or a consenting recipient.
 
 ## Install the correct helper
 
-On Android, open CRM's `/my-whatsapp-setup` and install the signed **My WhatsApp pilot 0.2.0-pilot**. Planned download: [my-whatsapp-pilot.apk](https://github.com/realty-pandit-swastik/Realty-Pandit-CRM-ai/releases/download/android-crm-pilot-v0.2.0/my-whatsapp-pilot.apk). Package: `com.realtypandit.mywhatsapp`. The old **My WhatsApp proof** APK is a separate app and cannot receive CRM handoffs. Disable the browser's unknown-app installation permission after installing.
+On Android, open CRM's `/my-whatsapp-setup` and install the signed **My WhatsApp pilot 0.2.0-pilot**. Download: [my-whatsapp-pilot.apk](https://github.com/realty-pandit-swastik/Realty-Pandit-CRM-ai/releases/download/android-crm-pilot-v0.2.0/my-whatsapp-pilot.apk). Package: `com.realtypandit.mywhatsapp`. The old **My WhatsApp proof** APK is a separate app and cannot receive CRM handoffs. Disable the browser's unknown-app installation permission after installing.
 
 APK SHA-256: `40b43547cf515d0b04ea0c09b2216e12dc81e4c4fcc6083b6b93ea35b8a01c77`.
 
@@ -28,3 +28,5 @@ The ordinary **Share sheet** action is independent: it asks you to pick a WhatsA
 Publish the verified signed APK and verify its public digest before activating CRM links. Pass all candidate CI checks, then use the existing guarded deployment with `RUN_MIGRATIONS=0`. Verify the deployed revision, source hashes, website/admin, static `/my-whatsapp/open.html`, asset association and APK links, DB/Redis, PM2, nginx and queues. No production client fixtures or provider sends are part of deployment verification.
 
 Real-handset targeting, app-link launch, caption placement and ordering remain unverified until this checklist passes. If unsupported, keep the failure visible and review the product behavior before broader rollout. Application rollback restores the prior release without database changes; temporary handoffs expire. Signing material and private staged media must never be committed or published.
+
+Production record: PR #47 / guarded workflow [38317868368](https://github.com/realty-pandit-swastik/Realty-Pandit-CRM-ai/actions/runs/38317868368) succeeded with migrations disabled. Public APK digest matches above; production source hashes and service/queue health were verified. The static launch page strips the fragment and delivers a CSP that blocks Cloudflare-injected external beacon markup and all beacon network requests. Direct browser execution, authenticated CRM UI smoke and real-handset acceptance were not performed.

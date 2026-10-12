@@ -2,7 +2,7 @@
 
 # Complete Android My WhatsApp flow from CRM
 
-Status: IMPLEMENTED FOR AUTHORIZED PRODUCTION PILOT; publication pending. The user authorized implementation and production testing on 2026-10-13. Real-phone acceptance gates broader rollout, not this explicitly requested pilot. No automatic sends or confirmed-send records.
+Status: IMPLEMENTED AND PUBLISHED AS AUTHORIZED PRODUCTION PILOT; real-phone acceptance pending. The user authorized implementation and production testing on 2026-10-13. Real-phone acceptance gates broader rollout, not this explicitly requested pilot. No automatic sends or confirmed-send records.
 
 ## Outcome and scope
 
@@ -31,7 +31,7 @@ Initial rollout: Android Chrome and the Android CRM PWA, internal staff, WhatsAp
 
 Discovery for this plan is complete against application revision `139babb26ec4050d816dc7598ec2889e4eda805d`. No handset proof was performed while planning.
 
-Use the existing standalone proof APK and its runbook before connecting CRM. Record phone model, Android version, browser/PWA, WhatsApp package/version, recipient history, selected files, and observed outcome. Use synthetic files and consenting test recipients.
+Use the release-signed CRM pilot helper and its [integrated test runbook](../runbooks/android-my-whatsapp-crm-pilot.md) to prove acceptance before broader rollout. The older standalone proof remains historical evidence, not the CRM receiver. Record phone model, Android version, browser/PWA, WhatsApp package/version, recipient history, selected files, and observed outcome. Use synthetic files and consenting test recipients.
 
 Required matrix:
 
