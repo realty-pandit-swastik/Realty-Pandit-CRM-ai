@@ -100,6 +100,7 @@ jobs:
           cache-dependency-path: agents/frontend/package-lock.json
       - run: npm ci
       - run: npm run test:personal-whatsapp
+      - run: node --test tests/dashboard.test.mjs
       - run: npm run lint
       - run: npm run build
       - run: npm audit --omit=dev --audit-level=high

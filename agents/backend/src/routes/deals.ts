@@ -178,7 +178,7 @@ async function partnerOwnsDealOr403(req: any, res: any, dealId: string): Promise
 router.get('/', async (req: any, res) => {
     try {
         const agent = req.agent;
-        const { status, deal_scenario, coordinator_agent_id, demand_handler_id, supply_handler_id, min_priority, page, limit, search, hide_closed, taxonomy_node_ids, bhk, sort, direction } = req.query;
+        const { status, deal_scenario, coordinator_agent_id, demand_handler_id, supply_handler_id, min_priority, page, limit, search, contact_phone, hide_closed, taxonomy_node_ids, bhk, sort, direction } = req.query;
 
         const filters: any = { tenant_id: agent.tenant_id };
         if (status) filters.status = status;
@@ -190,6 +190,9 @@ router.get('/', async (req: any, res) => {
         if (page) filters.page = parseInt(page);
         if (limit) filters.limit = parseInt(limit);
         if (search && typeof search === 'string' && search.trim()) filters.search = search.trim();
+        // Exact one-lead scope (lead tile -> Pipeline button). Unlike `search` this is an
+        // equality match on demand_contact_id, which IS the Contact PK (phone_number).
+        if (contact_phone && typeof contact_phone === 'string' && contact_phone.trim()) filters.contact_phone = contact_phone.trim();
         if (taxonomy_node_ids && typeof taxonomy_node_ids === 'string' && taxonomy_node_ids.trim()) filters.taxonomy_node_ids = taxonomy_node_ids.trim();
         if (bhk && typeof bhk === 'string' && bhk.trim()) filters.bhk = bhk.trim();
         // Ordering (2026-07-21): 'next_action' (default) | 'lead_date' | 'reminder_date',

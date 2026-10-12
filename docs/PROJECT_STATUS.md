@@ -5,6 +5,12 @@
 
 > This file is the **live state**. When you see contradictions with anything else in /docs/, this wins. Update the timestamp on each meaningful change.
 
+## Dashboard PR #38 — validated, awaiting production activation (2026-10-13)
+
+- Retargeted Kshitiz's PR #38 from `fix-dev` to `main` and merged current main into its branch, preserving the existing WhatsApp setup/sharing release. Dashboard source failures remain visible with retry; the headline no longer reports fallback zeros. Market-trend dates use IST calendar days; overdue indicators refresh each minute. Lead tiles narrow the pipeline by exact contact key without replacing tenant/team visibility.
+- Managers/super bosses scope contact-linked workflow tasks through the contact tenant. Contact-less tasks retain the existing visibility; complete task tenant isolation remains a separate schema/writer change.
+- Local validation: backend 656 passed / 3 skipped, including queue tenant and exact-contact filter regressions; dashboard loader/render tests 4 passed; CRM TypeScript/Vite build passed. Added dashboard tests to guarded release CI. Production preflight found revision `76eeaab`, stable PM2, connected DB/Redis, and unchanged queues (social 10/scheduled 14 failed); verified database/uploads restore proof from 2026-10-12 19:23 UTC is retained. No migrations or provider sends are part of this release. Merge, CI and production verification remain pending.
+
 ## 2026-10-13 — Android proof publication (PRODUCTION SETUP VERIFIED; HANDSET PROOF PENDING)
 
 - Standalone local-file proof app added under `agents/android/share-helper`; independent build avoids the staff app's missing Kotlin implementation. It supports explicit WhatsApp/Business choice, canonical recipient, cover ordering, media details, separate PDF, temporary read-only file grants, and 40-MiB/100-file limits. No CRM credentials, network access or database migration is involved.

@@ -36,7 +36,7 @@ router.use(authMiddleware);
 router.get('/my-queue', async (req: Request, res: Response) => {
     try {
         const agent = (req as any).agent;
-        const tasks = await getWorkflowQueue(agent.id, agent.role);
+        const tasks = await getWorkflowQueue(agent.id, agent.role, agent.tenant_id);
         res.json({ tasks, total: tasks.length });
     } catch (err) {
         captureRouteError(err, req, { route: 'workflow_tasks#1' });
