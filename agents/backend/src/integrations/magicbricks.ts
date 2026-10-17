@@ -4,7 +4,7 @@ import prisma from '../db';
 import { deriveBudgetMin, DEFAULT_TIMELINE } from '../utils/demand_defaults';
 import { apiKeyAuth } from '../middleware/apikey';
 import logger from '../utils/logger';
-import { normalizePhone } from '../utils/phone';
+import { normalizePhone, resolveStoredContactPhone } from '../utils/phone';
 import { sendBuyerConfirmationWhatsApp, sendBuyerConfirmationEmail } from '../services/lead_notifications';
 import { assignViaRoundRobin, assignViaPropertyUploader, assignViaManagerRoundRobin, resolveAgentByMagicBricksSubUser } from '../services/lead_assignment';
 import { assignContact, type AssignmentMethod } from '../services/assign_contact';
@@ -51,7 +51,7 @@ async function handleMagicBricksPush(req: any, res: any) {
     }
 
     const rawPhone = mobile || params.phone;
-    const phoneNumber = normalizePhone(rawPhone ? String(rawPhone) : '');
+    let phoneNumber = normalizePhone(rawPhone ? String(rawPhone) : '');
     if (!phoneNumber) {
         logger.warn('[MagicBricks] Missing or invalid mobile:', rawPhone);
         return res.status(400).send('mobile is required');
@@ -62,9 +62,11 @@ async function handleMagicBricksPush(req: any, res: any) {
     try {
         const tenant = await prisma.tenant.findFirst();
         if (!tenant) return res.status(500).send('System not configured');
+        phoneNumber = await resolveStoredContactPhone(phoneNumber, prisma) || phoneNumber;
 
         // Check duplicate
         const existing = await prisma.contact.findUnique({ where: { phone_number: phoneNumber } });
+        if (existing && existing.tenant_id !== tenant.id) return res.status(409).send('Contact belongs to another tenant');
         if (existing) {
             // Update last interaction + re-log the enquiry. If the new msg carries a granular area and the
             // stored preferred_location is blank or just the city, upgrade it (+ geocode) — never downgrade.
@@ -115,14 +117,24 @@ async function handleMagicBricksPush(req: any, res: any) {
                 const reAttr = sub_user ? await resolveAgentByMagicBricksSubUser(String(sub_user)) : null;
                 const sourceRef = (listing_id ? String(listing_id) : projectNameRaw(project)) || null;
                 const { handlePortalReenquiry } = await import('../services/portal_reenquiry');
-                const deal = await handlePortalReenquiry({
+                await handlePortalReenquiry({
                     phone: phoneNumber, source: 'magicbricks', sourceRef,
                     subUser: sub_user ? String(sub_user) : null, tenantId: tenant.id,
                     attributedAgentId: reAttr ?? null,
+                    demand: {
+                        intent: /rent|lease/i.test(String(looking_for || property_for || '')) ? 'rent' : 'buy',
+                        location: reGranular || cityVal || null,
+                        budgetMin: min_budget ? Number(String(min_budget).replace(/[^\d.]/g, '')) || null : null,
+                        budgetMax: max_budget || budget ? Number(String(max_budget || budget).replace(/[^\d.]/g, '')) || null : null,
+                        schemaValues: { ...(bhk || bedroom ? { bhk: String(bhk || bedroom) } : {}) },
+                        taxonomyNodeId: null,
+                    },
                 });
-                return res.send(deal.created ? 'Success: Lead punched in the CRM' : 'Failure: Lead already exist');
-            } catch (e) { logger.warn('[MagicBricks] re-enquiry lead failed: ' + (e as Error).message); }
-            return res.send('Failure: Lead already exist');
+                return res.send('Success: Lead punched in the CRM');
+            } catch (e) {
+                logger.warn('[MagicBricks] re-enquiry lead failed: ' + (e as Error).message);
+                return res.status(500).send('Enquiry could not be saved; retry');
+            }
         }
 
         const leadCity = String(City || city || '').trim() || null;
@@ -217,8 +229,10 @@ async function handleMagicBricksPush(req: any, res: any) {
         // Stage 3 (2026-05-31): resolve the requirement into the canonical taxonomy node.
         const demandTax = await resolveDemandTaxonomy({ main_category: demandMainCategory || undefined, property_type: demandTypeSlug || mappedPropertyType || undefined, bhk: bhkInt ?? null });
 
-        const contact = await prisma.contact.create({
-            data: {
+        const contact = await prisma.contact.upsert({
+            where: { phone_number: phoneNumber, tenant_id: tenant.id },
+            update: { last_channel: 'magicbricks', last_interaction: new Date() },
+            create: {
                 phone_number: phoneNumber,
                 name: leadName,
                 email: leadEmail,
@@ -313,20 +327,21 @@ async function handleMagicBricksPush(req: any, res: any) {
             }
         }
         if (agentId) {
-            await assignContact(phoneNumber, agentId, method);
+            if (!contact.assigned_agent_id) await assignContact(phoneNumber, agentId, method);
             const { createQualifyTask } = await import('../services/workflow_task_service');
             createQualifyTask({ tenantId: tenant.id, contactPhone: phoneNumber, assignedTo: agentId, source: 'magicbricks' })
                 .catch(err => logger.warn('[MagicBricks] Workflow task failed:', (err as Error).message));
         }
 
         // Auto-create NEW deal so AI qualification cadence kicks in (B1).
-        ensureDealForLead({
+        await ensureDealForLead({
             contactPhone: phoneNumber,
             source: 'magicbricks',
             sourceRef: (listing_id ? String(listing_id) : projectNameRaw(project)) || null,
             assignedAgentId: agentId ?? null,
-        }).catch((err) => {
-            logger.error(`[MagicBricks] ensureDealForLead failed for ${phoneNumber}: ${(err as Error).message}`);
+            demand: { intent, location: granularLocation, budgetMin, budgetMax,
+                taxonomyNodeId: demandTax.demand_taxonomy_node_id ?? null,
+                schemaValues: foldLegacyDemand({ demand_bhk: bhkInt }).demand_schema_values ?? null },
         });
 
         sendBuyerConfirmationWhatsApp(phoneNumber, leadName, 'magicbricks')
@@ -360,7 +375,7 @@ router.post('/webhook', apiKeyAuth, async (req, res) => {
         looking_for, property_type
     } = req.body;
 
-    const phoneNumber = normalizePhone(buyer_phone || phone);
+    let phoneNumber = normalizePhone(buyer_phone || phone);
     const leadName = buyer_name || name;
     const leadEmail = buyer_email || email;
 
@@ -371,6 +386,9 @@ router.post('/webhook', apiKeyAuth, async (req, res) => {
     try {
         const tenant = await prisma.tenant.findFirst();
         if (!tenant) return res.status(500).json({ error: 'System not configured' });
+        phoneNumber = await resolveStoredContactPhone(phoneNumber, prisma) || phoneNumber;
+        const prior = await prisma.contact.findUnique({ where: { phone_number: phoneNumber }, select: { tenant_id: true } });
+        if (prior && prior.tenant_id !== tenant.id) return res.status(409).json({ error: 'Contact belongs to another tenant' });
 
         let intent: string | null = null;
         if (looking_for) {
@@ -383,7 +401,7 @@ router.post('/webhook', apiKeyAuth, async (req, res) => {
         const parsedBudget = budget_range ? parseFloat(String(budget_range).replace(/[^\d.]/g, '')) : (budget ? parseFloat(String(budget)) : null);
 
         const contact = await prisma.contact.upsert({
-            where: { phone_number: phoneNumber },
+            where: { phone_number: phoneNumber, tenant_id: tenant.id },
             update: {
                 name: leadName || undefined,
                 email: leadEmail || undefined,
@@ -446,15 +464,11 @@ router.post('/webhook', apiKeyAuth, async (req, res) => {
                     .catch(err => logger.warn('[MagicBricks] Workflow task failed:', (err as Error).message));
             }
 
-            // Auto-create NEW deal so AI qualification cadence kicks in (B1 — legacy /webhook path).
-            ensureDealForLead({
-                contactPhone: phoneNumber,
-                source: 'magicbricks',
-                assignedAgentId: agentId,
-            }).catch((err) => {
-                logger.error(`[MagicBricks] ensureDealForLead failed for ${phoneNumber}: ${(err as Error).message}`);
-            });
         }
+
+        await ensureDealForLead({ contactPhone: phoneNumber, source: 'magicbricks',
+            sourceRef: property_id ? String(property_id) : null, newEnquiry: true,
+            demand: { intent, location, budgetMax: parsedBudget, budgetMin: null } });
 
         sendBuyerConfirmationWhatsApp(phoneNumber, leadName || null, 'magicbricks')
             .catch(err => logger.warn('[MagicBricks] Buyer WA failed:', err.message));

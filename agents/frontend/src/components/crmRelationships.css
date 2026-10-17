@@ -1,0 +1,41 @@
+.crm-page {
+    --crm-space: 8px;
+    --crm-radius: 12px;
+    --crm-border: 1px solid var(--border-secondary);
+    --crm-surface: var(--bg-secondary);
+    --crm-ink: var(--text-primary);
+    --crm-subtle: var(--text-secondary);
+    --crm-accent: var(--accent-primary);
+    color: var(--crm-ink);
+    background: var(--bg-primary);
+    padding: calc(2 * var(--crm-space));
+    min-height: 100%;
+    box-sizing: border-box;
+    font-size: 14px;
+    line-height: 1.5;
+    overflow-wrap: anywhere;
+}
+.crm-page h1 { font-size: 20px; margin: 0; }
+.crm-page h2 { font-size: 18px; margin: 0 0 var(--crm-space); }
+.crm-page h3 { font-size: 14px; margin: 0 0 var(--crm-space); }
+.crm-page p { margin: var(--crm-space) 0; }
+.crm-header, .crm-actions, .crm-tabs, .crm-filters { display: flex; gap: var(--crm-space); align-items: center; flex-wrap: wrap; margin-bottom: calc(2 * var(--crm-space)); }
+.crm-card { border: var(--crm-border); border-radius: var(--crm-radius); background: var(--crm-surface); padding: calc(2 * var(--crm-space)); margin: 0 0 calc(2 * var(--crm-space)); }
+.crm-button, .crm-link { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: var(--crm-space) calc(2 * var(--crm-space)); box-sizing: border-box; border: var(--crm-border); border-radius: 8px; color: var(--crm-ink); background: var(--crm-surface); text-decoration: none; font: inherit; cursor: pointer; }
+.crm-button:hover, .crm-link:hover { border-color: var(--crm-accent); }
+.crm-link { color: var(--text-primary); background: var(--bg-secondary); border: 1px solid var(--border-secondary); padding: 8px 12px; }
+.crm-button:active, .contact-icon:active { transform: translateY(1px); }
+.crm-button:disabled { opacity: .55; cursor: default; }
+.crm-button[aria-current] { border-color: var(--crm-accent); box-shadow: inset 0 -2px var(--crm-accent); }
+.crm-page :focus-visible, .contact-icon:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 2px; }
+.crm-tag { display: inline-block; border: var(--crm-border); border-radius: 8px; padding: 2px var(--crm-space); color: var(--crm-subtle); font-size: 12px; }
+.crm-timeline { list-style: none; padding: 0; margin: 0; }
+.crm-timeline time { color: var(--crm-subtle); font-size: 12px; }
+.crm-error { border: var(--crm-border); padding: calc(2 * var(--crm-space)); margin-bottom: calc(2 * var(--crm-space)); color: var(--crm-ink); }
+.crm-filters label { flex: 1; min-width: 130px; }
+.crm-filters select, .crm-filters input, .crm-page input[type="datetime-local"] { display: block; width: 100%; min-height: 44px; box-sizing: border-box; border: var(--crm-border); border-radius: 8px; background: var(--crm-surface); color: var(--crm-ink); padding: var(--crm-space); font: inherit; }
+.contact-icon { display: inline-flex; align-items: center; justify-content: center; min-width: 28px; min-height: 28px; margin-inline: 4px; padding: 2px; border: 1px solid var(--border-secondary); border-radius: 4px; color: var(--text-primary); background: var(--bg-secondary); font-size: 12px; font-weight: 700; cursor: pointer; vertical-align: middle; }
+.contact-icon:disabled { opacity: .4; cursor: default; }
+.relationship-dialog { position: fixed; inset: 0; width: 100%; max-width: none; height: 100dvh; max-height: 100dvh; margin: 0; padding: 0; border: 0; color: var(--text-primary); background: var(--bg-primary); overflow-y: auto; }
+.relationship-dialog::backdrop { background: var(--bg-primary); }
+@media (min-width: 768px) { .relationship-page { max-width: 960px; margin: 0 auto; } }

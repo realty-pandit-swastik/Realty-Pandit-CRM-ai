@@ -1,4 +1,6 @@
 import { toDialablePhone, isPlaceholderPhone } from '../../lib/phone';
+import { ContactButton } from '../ContactButton';
+import type { MatchSendState } from '../../hooks/useSendMatches';
 import { stageInfo, bhkLabel, dealerFallback, effectiveClientRole, isTemporaryClientRole, clientRoleLabel, clientRoleColor, contactKind } from '../../lib/leadDisplay';
 
 interface Lead {
@@ -53,8 +55,9 @@ interface LeadCardProps {
     matchCount?: number | null;
     /** Open the Deal Pipeline (focused on this lead's deal when known). */
     onOpenPipeline?: (lead: Lead) => void;
-    /** Open the lead detail to view/find matching properties. */
+    /** Find and send matches immediately for this enquiry. */
     onOpenMatches?: (lead: Lead) => void;
+    matchSendState?: MatchSendState;
 }
 
 const STATUSES = ['cold', 'warm', 'hot', 'closed', 'lost'];
@@ -65,7 +68,7 @@ const statusColors: Record<string, string> = {
 export default function LeadCard({
     lead, currentAgentId, isSelected, onSelect, onStatusChange, updatingPhone,
     sourceColors, sourceLabels, scoreColor, formatBudget,
-    subtypeLabel, matchCount, onOpenPipeline, onOpenMatches,
+    subtypeLabel, matchCount, onOpenPipeline, onOpenMatches, matchSendState,
 }: LeadCardProps) {
     // Shown identity: the client's own name/number, else the dealer's (placeholder phone =
     // "we don't know the client yet"). The buttons target whichever identity is shown.
@@ -104,6 +107,7 @@ export default function LeadCard({
                 <span style={{ fontWeight: 600, fontSize: '14px', color: 'var(--text-primary, #f1f5f9)' }}>
                     {identity.name || 'Unknown'}
                 </span>
+                <ContactButton phone={lead.phone_number} name={lead.name} />
                 {identity.isDealer && (
                     <span title="Client unknown — showing the dealer who brought this lead"
                         style={{ backgroundColor: 'rgba(245,158,11,0.15)', color: '#d97706', padding: '1px 6px', borderRadius: '8px', fontSize: '9px', fontWeight: 700 }}>
@@ -168,7 +172,7 @@ export default function LeadCard({
                 </span>
 
                 {/* Status dropdown */}
-                <select
+                {!lead._deal && <select
                     value={lead.lead_status}
                     onClick={(e) => e.stopPropagation()}
                     onChange={(e) => { e.stopPropagation(); onStatusChange(lead.phone_number, e.target.value); }}
@@ -182,7 +186,7 @@ export default function LeadCard({
                     }}
                 >
                     {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
-                </select>
+                </select>}
 
                 {/* Pipeline stage */}
                 <span title="Pipeline stage"
@@ -263,17 +267,20 @@ export default function LeadCard({
                         <button
                             type="button"
                             onClick={(e) => { e.stopPropagation(); onOpenMatches(lead); }}
-                            title="View matching properties for this lead"
-                            aria-label="View matching properties for this lead"
+                            disabled={matchSendState === 'sending' || matchSendState === 'sent' || matchSendState === 'manual_hi'}
+                            aria-busy={matchSendState === 'sending'}
+                            title="Find and send matching inventory for this enquiry"
+                            aria-label="Find and send matching inventory for this enquiry"
                             style={{
                                 flex: 1, padding: '6px 0', borderRadius: '8px', fontSize: '11px', fontWeight: 700,
                                 backgroundColor: 'rgba(139,92,246,0.12)', color: '#a78bfa',
                                 border: '1px solid rgba(139,92,246,0.4)', cursor: 'pointer',
                             }}
                         >
-                            🏠 {matchCount != null ? `${matchCount} Matches` : 'Matching'}
+                            {matchSendState === 'sending' ? 'Sending…' : matchSendState === 'sent' || matchSendState === 'manual_hi' ? 'Matched ✓' : matchSendState === 'retry' ? 'Retry matches' : `🏠 ${matchCount != null ? `${matchCount} Matches` : 'Matching'}`}
                         </button>
                     )}
+                    {matchSendState === 'manual_hi' && clientTel && <a className="crm-link" href={`https://wa.me/${clientTel.slice(1)}?text=Hi`} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()}>Send Hi</a>}
                 </div>
             )}
 

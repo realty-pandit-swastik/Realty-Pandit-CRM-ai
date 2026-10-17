@@ -1,4 +1,5 @@
 import PersonalWhatsAppShareModal from '../PersonalWhatsAppShareModal';
+import { ContactButton } from '../ContactButton';
 
 import { useEffect, useState, useRef } from 'react';
 import { formatInventoryAddress, formatUnitLabel } from '../../lib/address';
@@ -577,6 +578,7 @@ export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryLis
                                             <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', color: 'var(--text-secondary)', flexWrap: 'wrap' }}>
                                                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                                                     {badge.icon} {item.source.name || 'Unknown'}
+                                                    <ContactButton phone={item.source.phone} name={item.source.name} />
                                                     <span title={clientRoleLabel(item.source.designation) || badge.label} style={{ backgroundColor: badge.bg, color: 'var(--text-primary)', padding: '1px 6px', borderRadius: '8px', fontSize: '9px', fontWeight: 700 }}>
                                                         {clientRoleLabel(item.source.designation) || badge.label}
                                                     </span>

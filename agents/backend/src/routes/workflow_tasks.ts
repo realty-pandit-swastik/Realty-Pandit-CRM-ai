@@ -25,6 +25,8 @@ import {
 import prisma from '../db';
 import logger from '../utils/logger';
 import { captureRouteError } from '../utils/capture';
+import { accessibleActivityTask } from '../services/activity_feed';
+import { CrmError } from '../services/contact_relationship';
 
 const router = Router();
 
@@ -160,26 +162,26 @@ router.post('/:id/complete', async (req: Request, res: Response) => {
     try {
         const agent = (req as any).agent;
         const taskId = req.params.id;
-        const task = await prisma.task.findUnique({ where: { id: taskId } });
+        const task = await accessibleActivityTask(agent, String(taskId));
         if (!task) return res.status(404).json({ error: 'Task not found' });
 
         let result: any;
 
         switch (task.task_type) {
             case 'QUALIFY_LEAD':
-                result = await completeQualifyTask(taskId, { agentId: agent.id, ...req.body });
+                result = await completeQualifyTask(taskId, { ...req.body, agentId: agent.id });
                 break;
             case 'SHARE_PROPERTIES':
-                result = await completeShareTask(taskId, { agentId: agent.id, ...req.body });
+                result = await completeShareTask(taskId, { ...req.body, agentId: agent.id });
                 break;
             case 'SCHEDULE_VISIT':
-                result = await completeScheduleTask(taskId, { agentId: agent.id, ...req.body });
+                result = await completeScheduleTask(taskId, { ...req.body, agentId: agent.id });
                 break;
             case 'VISIT_FEEDBACK':
-                result = await completeVisitFeedbackTask(taskId, { agentId: agent.id, ...req.body });
+                result = await completeVisitFeedbackTask(taskId, { ...req.body, agentId: agent.id });
                 break;
             case 'NEGOTIATE_DEAL':
-                result = await completeNegotiateTask(taskId, { agentId: agent.id, ...req.body });
+                result = await completeNegotiateTask(taskId, { ...req.body, agentId: agent.id });
                 break;
             default:
                 return res.status(400).json({ error: `Unknown task type: ${task.task_type}` });
@@ -190,7 +192,7 @@ router.post('/:id/complete', async (req: Request, res: Response) => {
         captureRouteError(err, req, { route: 'workflow_tasks#7' });
         const msg = (err as Error).message;
         logger.error(`[WorkflowTasks] POST /:id/complete error: ${msg}`);
-        res.status(400).json({ error: msg });
+        res.status(err instanceof CrmError ? err.status : 400).json({ error: msg });
     }
 });
 
@@ -199,6 +201,7 @@ router.post('/:id/complete', async (req: Request, res: Response) => {
 router.post('/:id/snooze', async (req: Request, res: Response) => {
     try {
         const agent = (req as any).agent;
+        if (!await accessibleActivityTask(agent, String(req.params.id))) return res.status(404).json({ error: 'Task not found' });
         const task = await snoozeTask(req.params.id, {
             agentId: agent.id,
             reason: req.body.reason || 'No answer',
@@ -209,7 +212,7 @@ router.post('/:id/snooze', async (req: Request, res: Response) => {
         captureRouteError(err, req, { route: 'workflow_tasks#8' });
         const msg = (err as Error).message;
         logger.error(`[WorkflowTasks] POST /:id/snooze error: ${msg}`);
-        res.status(400).json({ error: msg });
+        res.status(err instanceof CrmError ? err.status : 400).json({ error: msg });
     }
 });
 

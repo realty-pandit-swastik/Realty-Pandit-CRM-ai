@@ -1,4 +1,5 @@
 import PersonalWhatsAppShareModal from './PersonalWhatsAppShareModal';
+import { ContactButton } from './ContactButton';
 
 import React, { useEffect, useRef, useState } from 'react';
 import { formatInventoryAddress, formatUnitLabel } from '../lib/address';
@@ -1809,6 +1810,7 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
                                                 {item.source && (
                                                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                                                         {item.source.type === 'DEALER' ? '🤝' : '👤'} {item.source.name || (item.source.type === 'DEALER' ? 'Dealer' : 'Owner')}
+                                                        <ContactButton phone={item.source.phone} name={item.source.name} />
                                                         <span
                                                             title="Source designation"
                                                             style={{

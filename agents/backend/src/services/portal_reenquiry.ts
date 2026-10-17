@@ -13,9 +13,8 @@
  *      how fresh enquiries kept landing on the wrong member with nobody noticing.
  *
  *   2. Deal — awaited (never fire-and-forget: the 99acres swallowed failures were one live
- *      cause of "the new lead never appeared"). Same-listing repeats inside
- *      DUPLICATE_ENQUIRY_WINDOW_DAYS attach to the existing deal by design; everything else
- *      creates a fresh deal for the attributed agent. Existing assignments are never moved (RC2).
+ *      cause of "the new lead never appeared"). Each new portal enquiry creates a fresh deal,
+ *      even for the same listing. Existing assignments are never moved (RC2).
  *
  *   3. Renewal + notify — the customer re-engaged TODAY, so the contact's cycle stamps refresh
  *      (the "Added" date surfaces as today while created_at keeps first-seen history), a
@@ -25,7 +24,7 @@
 
 import prisma from '../db';
 import logger from '../utils/logger';
-import { ensureDealForLead } from './ensure_deal';
+import { ensureDealForLead, type EnsureDealArgs } from './ensure_deal';
 import { recordLeadReingest, recordLeadReengaged } from './lead_reingest';
 import { resolveListingOwnerAgent } from './lead_assignment';
 import { stampNewLeadCycle } from '../utils/lead_cycle';
@@ -45,6 +44,7 @@ export interface PortalReenquiryArgs {
     attributedAgentId?: string | null;
     /** Contact display name for notifications. */
     contactName?: string | null;
+    demand?: EnsureDealArgs['demand'];
 }
 
 export interface PortalReenquiryResult {
@@ -91,6 +91,8 @@ export async function handlePortalReenquiry(args: PortalReenquiryArgs): Promise<
         source,
         sourceRef,
         assignedAgentId: attributedAgentId ?? undefined,
+        newEnquiry: true,
+        demand: args.demand,
     });
 
     // ── 4. Renewal — the customer re-engaged today, on both paths. ──
