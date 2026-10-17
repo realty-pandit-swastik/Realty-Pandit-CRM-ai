@@ -16,6 +16,7 @@ import { CopyChip } from './CopyChip';
 import AddressFields, { inferAddressLayout } from './AddressFields';
 import { toDialablePhone } from '../lib/phone';
 import { relativeAge } from '../lib/age';
+import { clientRoleLabel } from '../lib/leadDisplay';
 import { MatchClientsModal } from './inventory/MatchClientsModal';
 import { GooglePlacesInput } from './GooglePlacesInput';
 import ShareToClientModal from './ShareToClientModal';
@@ -34,6 +35,11 @@ import {
 } from './filters/FilterSheetShared';
 import type { TaxonomySelection, LocationSelection } from './filters/FilterSheetShared';
 import { compressVideo, isCompressionSupported } from '../utils/video_compress';
+
+const tileContactActionStyle = {
+    display: 'inline-flex', alignItems: 'center', minHeight: 24,
+    padding: '0 4px', color: 'var(--text-primary)', textDecoration: 'underline',
+} as const;
 
 function formatPrice(price: number | null, intent: string): string {
     if (!price || price === 0) return 'Price on request';
@@ -1801,9 +1807,48 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
                                                     <span style={{ color: 'var(--text-muted)' }} title="Listed">🕐 {relativeAge(item.created_at)}</span>
                                                 )}
                                                 {item.source && (
-                                                    <span>
-                                                        {item.source.type === 'DEALER' ? '🤝 Dealer' : item.source.type === 'AGENT_OWNER' ? '👤 Owner (agent)' : '👤 Owner'}
-                                                        {item.source.name ? `: ${item.source.name}` : ''}
+                                                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                                                        {item.source.type === 'DEALER' ? '🤝' : '👤'} {item.source.name || (item.source.type === 'DEALER' ? 'Dealer' : 'Owner')}
+                                                        <span
+                                                            title="Source designation"
+                                                            style={{
+                                                                backgroundColor: item.source.type === 'DEALER' ? 'rgba(245,158,11,0.15)' : item.source.type === 'AGENT_OWNER' ? 'rgba(167,139,250,0.15)' : 'rgba(34,197,94,0.12)',
+                                                                color: 'var(--text-primary)',
+                                                                padding: '1px 6px', borderRadius: '8px', fontSize: '10px', fontWeight: 700,
+                                                            }}
+                                                        >{clientRoleLabel(item.source.designation) || (item.source.type === 'DEALER' ? 'Dealer' : item.source.type === 'AGENT_OWNER' ? 'Agent' : 'Owner')}</span>
+                                                        {toDialablePhone(item.source.phone) && (
+                                                            <>
+                                                                <a style={tileContactActionStyle} href={`tel:${toDialablePhone(item.source.phone)}`} onClick={e => e.stopPropagation()} aria-label={`Call ${item.source.name || 'main contact'}`}>Call</a>
+                                                                <a style={tileContactActionStyle} href={`https://wa.me/${toDialablePhone(item.source.phone)!.slice(1)}`} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} aria-label={`WhatsApp ${item.source.name || 'main contact'}`}>WhatsApp</a>
+                                                            </>
+                                                        )}
+                                                    </span>
+                                                )}
+                                                {/* Key holder + designation (2026-10-09). Name/phone redacted server-side for viewers without access. */}
+                                                {item.key_holder_type && (
+                                                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                                                        🔑 Key holder: {item.key_holder_name || (item.key_holder_type === 'EXTERNAL' ? 'External' : item.key_holder_type === 'OWNER' ? 'Owner' : 'Uploader')}
+                                                        <span title="Key holder designation" style={{ backgroundColor: 'rgba(59,130,246,0.12)', color: 'var(--text-primary)', padding: '1px 6px', borderRadius: '8px', fontSize: '10px', fontWeight: 700 }}>
+                                                            {clientRoleLabel(item.key_holder_designation) || (item.key_holder_type === 'EXTERNAL' ? 'External' : item.key_holder_type === 'OWNER' ? 'Owner' : 'Uploader')}
+                                                        </span>
+                                                        {toDialablePhone(item.key_holder_phone) && (
+                                                            <>
+                                                                <a style={tileContactActionStyle} href={`tel:${toDialablePhone(item.key_holder_phone)}`} onClick={e => e.stopPropagation()} aria-label={`Call key holder ${item.key_holder_name || ''}`}>Call</a>
+                                                                <a style={tileContactActionStyle} href={`https://wa.me/${toDialablePhone(item.key_holder_phone)!.slice(1)}`} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} aria-label={`WhatsApp key holder ${item.key_holder_name || ''}`}>WhatsApp</a>
+                                                            </>
+                                                        )}
+                                                    </span>
+                                                )}
+                                                {/* Last contact + next action (2026-10-09). Metadata only — safe for every viewer. */}
+                                                {(
+                                                    <span title="Last contact with the owner / uploader / key holder" style={{ color: 'var(--text-muted)' }}>
+                                                        Last contacted: {item.last_contacted_at ? new Date(item.last_contacted_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : 'Not recorded'}
+                                                    </span>
+                                                )}
+                                                {(
+                                                    <span title="Earliest open task or upcoming appointment for this property" style={{ color: 'var(--text-primary)', fontWeight: 600 }}>
+                                                        Next action: {item.next_action_at ? new Date(item.next_action_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : 'Not scheduled'}
                                                     </span>
                                                 )}
                                             </div>
@@ -1856,6 +1901,9 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
                                             {/* Row 5: Action Buttons */}
                                             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'center' }} onClick={e => e.stopPropagation()}>
                                                 {/* Call Button */}
+                                                {/* Contact actions — a "Call" dropdown and a "WhatsApp" dropdown over the
+                                                    same gated numbers (owner / uploader / key holder). Each entry
+                                                    offers both call + WhatsApp; the dropdown keeps the tile compact. */}
                                                 {item.can_edit && (item.uploader_phone || item.owner_phone || item.key_holder_phone) && (
                                                     <div style={{ position: 'relative', display: 'inline-block' }}>
                                                         <button
@@ -1868,30 +1916,56 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
                                                         {callDropdownId === item.id && (
                                                             <div style={s.callDropdown} onClick={e => e.stopPropagation()}>
                                                                 {toDialablePhone(item.uploader_phone) && (
-                                                                    <a href={`tel:${toDialablePhone(item.uploader_phone)}`} style={s.callEntry}
-                                                                       onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--bg-primary)')}
-                                                                       onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}>
-                                                                        <span style={s.callLabel}>{item.ownership_type === 'OWNER' ? 'Owner' : 'Uploader'}</span>
-                                                                        <span style={s.callName}>{item.uploader_name || 'Unknown'}</span>
-                                                                        <span style={s.callPhone}>{item.uploader_phone}</span>
-                                                                    </a>
+                                                                    <>
+                                                                        <a href={`tel:${toDialablePhone(item.uploader_phone)}`} style={s.callEntry}
+                                                                           onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--bg-primary)')}
+                                                                           onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}>
+                                                                            <span style={s.callLabel}>{item.ownership_type === 'OWNER' ? 'Owner' : 'Uploader'}</span>
+                                                                            <span style={s.callName}>{item.uploader_name || 'Unknown'}</span>
+                                                                            <span style={s.callPhone}>{item.uploader_phone}</span>
+                                                                        </a>
+                                                                        <a href={`https://wa.me/${toDialablePhone(item.uploader_phone)!.slice(1)}`} target="_blank" rel="noreferrer" style={s.callEntry}
+                                                                           onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--bg-primary)')}
+                                                                           onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}>
+                                                                            <span style={{ ...s.callLabel, color: '#25d366' }}>WhatsApp</span>
+                                                                            <span style={s.callName}>{item.uploader_name || 'Unknown'}</span>
+                                                                        </a>
+                                                                    </>
                                                                 )}
                                                                 {toDialablePhone(item.owner_phone) && item.owner_phone !== item.uploader_phone && (
-                                                                    <a href={`tel:${toDialablePhone(item.owner_phone)}`} style={s.callEntry}
-                                                                       onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--bg-primary)')}
-                                                                       onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}>
-                                                                        <span style={s.callLabel}>Owner</span>
-                                                                        <span style={s.callPhone}>{item.owner_phone}</span>
-                                                                    </a>
+                                                                    <>
+                                                                        <a href={`tel:${toDialablePhone(item.owner_phone)}`} style={s.callEntry}
+                                                                           onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--bg-primary)')}
+                                                                           onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}>
+                                                                            <span style={s.callLabel}>Owner</span>
+                                                                            <span style={s.callPhone}>{item.owner_phone}</span>
+                                                                        </a>
+                                                                        <a href={`https://wa.me/${toDialablePhone(item.owner_phone)!.slice(1)}`} target="_blank" rel="noreferrer" style={s.callEntry}
+                                                                           onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--bg-primary)')}
+                                                                           onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}>
+                                                                            <span style={{ ...s.callLabel, color: '#25d366' }}>WhatsApp</span>
+                                                                            <span style={s.callPhone}>{item.owner_phone}</span>
+                                                                        </a>
+                                                                    </>
                                                                 )}
-                                                                {item.key_holder_type === 'EXTERNAL' && toDialablePhone(item.key_holder_phone) && (
-                                                                    <a href={`tel:${toDialablePhone(item.key_holder_phone)}`} style={s.callEntry}
-                                                                       onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--bg-primary)')}
-                                                                       onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}>
-                                                                        <span style={s.callLabel}>Key Holder</span>
-                                                                        <span style={s.callName}>{item.key_holder_name || 'Unknown'}</span>
-                                                                        <span style={s.callPhone}>{item.key_holder_phone}</span>
-                                                                    </a>
+                                                                {item.key_holder_type && toDialablePhone(item.key_holder_phone) && (
+                                                                    <>
+                                                                        <a href={`tel:${toDialablePhone(item.key_holder_phone)}`} style={s.callEntry}
+                                                                           onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--bg-primary)')}
+                                                                           onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}>
+                                                                            <span style={s.callLabel}>
+                                                                                Key Holder{item.key_holder_type === 'EXTERNAL' ? '' : ` (${item.key_holder_type === 'OWNER' ? 'Owner' : 'Uploader'})`}
+                                                                            </span>
+                                                                            <span style={s.callName}>{item.key_holder_name || 'Unknown'}</span>
+                                                                            <span style={s.callPhone}>{item.key_holder_phone}</span>
+                                                                        </a>
+                                                                        <a href={`https://wa.me/${toDialablePhone(item.key_holder_phone)!.slice(1)}`} target="_blank" rel="noreferrer" style={s.callEntry}
+                                                                           onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--bg-primary)')}
+                                                                           onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}>
+                                                                            <span style={{ ...s.callLabel, color: '#25d366' }}>WhatsApp</span>
+                                                                            <span style={s.callName}>{item.key_holder_name || 'Unknown'}</span>
+                                                                        </a>
+                                                                    </>
                                                                 )}
                                                             </div>
                                                         )}
