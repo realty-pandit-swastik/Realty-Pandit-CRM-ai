@@ -8,8 +8,8 @@ process.env.DATABASE_URL = 'postgresql://test:test@localhost:5432/test_db';
 process.env.PORT = '0'; // Random available port
 
 // Mock Prisma
-vi.mock('../db', () => ({
-    default: {
+vi.mock('../db', () => {
+    const db: any = {
         $queryRaw: vi.fn().mockResolvedValue([{ '?column?': 1 }]),
         tenant: { findFirst: vi.fn(), count: vi.fn() },
         agent: { findUnique: vi.fn(), findFirst: vi.fn(), findMany: vi.fn(), count: vi.fn() },
@@ -31,8 +31,10 @@ vi.mock('../db', () => ({
         taskFollowup: { findMany: vi.fn(), create: vi.fn(), findUnique: vi.fn(), update: vi.fn() },
         transaction: { count: vi.fn(), aggregate: vi.fn(), findMany: vi.fn(), findUnique: vi.fn(), findFirst: vi.fn() },
         shortageEntry: { findMany: vi.fn(), findFirst: vi.fn(), upsert: vi.fn(), updateMany: vi.fn(), create: vi.fn() },
-    }
-}));
+    };
+    db.$transaction = vi.fn((work: any) => typeof work === 'function' ? work(db) : Promise.all(work));
+    return { default: db };
+});
 
 // Mock auth middleware
 const passthrough = (req: any, _res: any, next: any) => next();

@@ -28,6 +28,8 @@ import userAuthRoutes from './routes/user_auth';
 import aiChatRoutes from './routes/ai_chat';
 import authOTPRoutes from './routes/auth_otp'; // Website chat OTP authentication
 import calendarRoutes from './routes/calendar'; // Calendar system
+import contactRelationshipRoutes from './routes/contact_relationship';
+import activitiesRoutes from './routes/activities';
 import emailRoutes from './routes/email'; // Email system (Panditji AI)
 import teamRoutes from './routes/team'; // Team management + bulk upload
 import agentDashboardRoutes from './routes/agent_dashboard'; // Multi-agent dashboard
@@ -368,6 +370,8 @@ app.use('/api', apiLimiter, apiRoutes);
 app.use('/api/leads', apiLimiter, leadRoutes);
 app.use('/api/calls', apiLimiter, staffCallRoutes); // Staff Call Intelligence
 app.use('/api/calendar', apiLimiter, calendarRoutes); // Calendar system
+app.use('/api/crm', apiLimiter, contactRelationshipRoutes);
+app.use('/api/activities', apiLimiter, activitiesRoutes);
 app.use('/api/email', apiLimiter, emailRoutes); // Email system (Panditji AI controls all)
 app.use('/api/team', apiLimiter, teamRoutes); // Team management + bulk inventory upload
 // app.use('/api/master', masterRoutes); // Moved to public

@@ -146,6 +146,17 @@ export const getInteractions = async (phoneNumber: string) => {
     return res.data;
 };
 
+export const getContactRelationship = async (phone: string, page = 1) =>
+    (await client.get(`/api/crm/contacts/${encodeURIComponent(phone)}/relationship`, { params: { page } })).data;
+export const sendEnquiryMatches = async (id: string, requestId: string) =>
+    (await client.post(`/api/crm/enquiries/${encodeURIComponent(id)}/send-matches`, { request_id: requestId }, { timeout: 180000 })).data;
+export const sendContactMatches = async (phone: string, requestId: string) =>
+    (await client.post(`/api/crm/contacts/${encodeURIComponent(phone)}/send-matches`, { request_id: requestId }, { timeout: 180000 })).data;
+export const getActivities = async (params: Record<string, string | number>) =>
+    (await client.get('/api/activities', { params })).data;
+export const updateActivity = async (kind: string, id: string, data: { action: 'complete' | 'reschedule'; scheduled_at?: string }) =>
+    (await client.patch(`/api/activities/${encodeURIComponent(kind)}/${encodeURIComponent(id)}`, data)).data;
+
 export const getInventory = async (params?: Record<string, any>) => {
     const res = await client.get('/api/inventory', { params });
     return res.data;

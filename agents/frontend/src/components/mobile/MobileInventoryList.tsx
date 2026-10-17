@@ -1,4 +1,5 @@
 import PersonalWhatsAppShareModal from '../PersonalWhatsAppShareModal';
+import { ContactButton } from '../ContactButton';
 
 import { useEffect, useState, useRef } from 'react';
 import { formatInventoryAddress, formatUnitLabel } from '../../lib/address';
@@ -13,6 +14,7 @@ import BookVisitModal from '../BookVisitModal';
 import { InventoryDetailView } from '../InventoryDetailView';
 import { toDialablePhone } from '../../lib/phone';
 import { relativeAge } from '../../lib/age';
+import { clientRoleLabel } from '../../lib/leadDisplay';
 import { MatchClientsModal } from '../inventory/MatchClientsModal';
 import { pickSpecChips } from '../../lib/specChips';
 import { CopyChip } from '../CopyChip';
@@ -24,6 +26,11 @@ import {
     StalenessSection,
 } from '../filters/FilterSheetShared';
 import type { TaxonomySelection, LocationSelection } from '../filters/FilterSheetShared';
+
+const tileContactActionStyle = {
+    display: 'inline-flex', alignItems: 'center', minHeight: 24,
+    padding: '0 4px', color: 'var(--text-primary)', textDecoration: 'underline', fontWeight: 700,
+} as const;
 
 interface MobileInventoryListProps {
     onEditItem: (item: any) => void;
@@ -560,14 +567,67 @@ export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryLis
                                     })()}
 
                                     {/* Source (owner/dealer) + name (all) + contact (assigned manager + super_boss only, via item.source.phone) */}
-                                    {item.source && (
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', color: 'var(--text-secondary)', flexWrap: 'wrap' }}>
-                                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                                                {item.source.type === 'DEALER' ? '🤝 Dealer' : item.source.type === 'AGENT_OWNER' ? '👤 Owner (agent)' : '👤 Owner'}
-                                                {item.source.name ? `: ${item.source.name}` : ''}
-                                            </span>
-                                            {toDialablePhone(item.source.phone) && (
-                                                <a href={`tel:${toDialablePhone(item.source.phone)}`} onClick={(e) => e.stopPropagation()} title="Call source" style={{ color: '#22c55e', textDecoration: 'none', fontWeight: 700 }}>📞 Call</a>
+                                    {item.source && (() => {
+                                        const badge = item.source.type === 'DEALER'
+                                            ? { label: 'Dealer', color: '#d97706', bg: 'rgba(245,158,11,0.15)', icon: '🤝' }
+                                            : item.source.type === 'AGENT_OWNER'
+                                                ? { label: 'Agent', color: '#a78bfa', bg: 'rgba(167,139,250,0.15)', icon: '👤' }
+                                                : { label: 'Owner', color: '#16a34a', bg: 'rgba(34,197,94,0.12)', icon: '👤' };
+                                        const dialable = toDialablePhone(item.source.phone);
+                                        return (
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', color: 'var(--text-secondary)', flexWrap: 'wrap' }}>
+                                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                                                    {badge.icon} {item.source.name || 'Unknown'}
+                                                    <ContactButton phone={item.source.phone} name={item.source.name} />
+                                                    <span title={clientRoleLabel(item.source.designation) || badge.label} style={{ backgroundColor: badge.bg, color: 'var(--text-primary)', padding: '1px 6px', borderRadius: '8px', fontSize: '9px', fontWeight: 700 }}>
+                                                        {clientRoleLabel(item.source.designation) || badge.label}
+                                                    </span>
+                                                </span>
+                                                {dialable && (
+                                                    <>
+                                                        <a href={`tel:${dialable}`} onClick={(e) => e.stopPropagation()} aria-label={`Call ${item.source.name || 'main contact'}`} style={tileContactActionStyle}>Call</a>
+                                                        <a href={`https://wa.me/${dialable.slice(1)}`} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} aria-label={`WhatsApp ${item.source.name || 'main contact'}`} style={tileContactActionStyle}>WhatsApp</a>
+                                                    </>
+                                                )}
+                                            </div>
+                                        );
+                                    })()}
+
+                                    {/* Key holder + designation (2026-10-09). Name/phone are redacted server-side
+                                        for viewers without access, so an absent row simply means "not visible". */}
+                                    {item.key_holder_type ? (() => {
+                                        const typeLabel = clientRoleLabel(item.key_holder_designation) || (item.key_holder_type === 'EXTERNAL' ? 'External' : item.key_holder_type === 'OWNER' ? 'Owner' : 'Uploader');
+                                        const dialable = toDialablePhone(item.key_holder_phone);
+                                        return (
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', color: 'var(--text-secondary)', flexWrap: 'wrap' }}>
+                                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                                                    🔑 Key holder: {item.key_holder_name || typeLabel}
+                                                    <span title="Key holder designation" style={{ backgroundColor: 'rgba(59,130,246,0.12)', color: 'var(--text-primary)', padding: '1px 6px', borderRadius: '8px', fontSize: '9px', fontWeight: 700 }}>
+                                                        {typeLabel}
+                                                    </span>
+                                                </span>
+                                                {dialable && (
+                                                    <>
+                                                        <a href={`tel:${dialable}`} onClick={(e) => e.stopPropagation()} aria-label={`Call key holder ${item.key_holder_name || ''}`} style={tileContactActionStyle}>Call</a>
+                                                        <a href={`https://wa.me/${dialable.slice(1)}`} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} aria-label={`WhatsApp key holder ${item.key_holder_name || ''}`} style={tileContactActionStyle}>WhatsApp</a>
+                                                    </>
+                                                )}
+                                            </div>
+                                        );
+                                    })() : null}
+
+                                    {/* Last contact + next action (2026-10-09). Metadata only — safe for every viewer. */}
+                                    {(
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', fontSize: '11px', color: 'var(--text-muted)', flexWrap: 'wrap' }}>
+                                            {(
+                                                <span title="Last contact with the owner/uploader/key holder">
+                                                    Last contacted: {item.last_contacted_at ? new Date(item.last_contacted_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : 'Not recorded'}
+                                                </span>
+                                            )}
+                                            {(
+                                                    <span title="Earliest open task or upcoming appointment for this property" style={{ color: 'var(--text-primary)', fontWeight: 600 }}>
+                                                    Next action: {item.next_action_at ? new Date(item.next_action_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : 'Not scheduled'}
+                                                </span>
                                             )}
                                         </div>
                                     )}

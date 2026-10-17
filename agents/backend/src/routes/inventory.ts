@@ -787,7 +787,8 @@ router.get('/', authMiddleware, async (req, res) => {
                     referral_partner: { select: { name: true, phone_number: true } },
                     // Owner NAME (Inventory has no owner_name column). Redacted for viewers
                     // without owner access like any other contact relation.
-                    contact: { select: { name: true } },
+                    contact: { select: { name: true, client_role: true } },
+                    key_holder_contact: { select: { name: true, client_role: true, phone_number: true } },
                     property_category: { select: { id: true, name: true, slug: true } },
                     property_sub_category: { select: { id: true, name: true, slug: true } },
                     property_type_link: { select: { id: true, name: true, slug: true } },
@@ -827,6 +828,71 @@ router.get('/', authMiddleware, async (req, res) => {
             for (const r of viewRows) { if (r.iid && stats[r.iid]) stats[r.iid].views = Number(r.c); }
         }
 
+        // Tile activity: last contact + next action per listing. Three batched queries
+        // for the whole page (never per-row): the newest genuine contact with any of the row's
+        // people, and the earliest open task/upcoming appointment pinned to the property.
+        const { attachListingActivity, phoneKey, CONTACT_EVENT_TYPES } = await import('../utils/inventory_activity');
+        const contactKeys: string[] = [];
+        {
+            const seen = new Set<string>();
+            for (const i of inventory as any[]) {
+                for (const p of [i.owner_phone, i.uploader_phone, i.key_holder_phone, i.key_holder_contact?.phone_number, i.referral_partner?.phone_number]) {
+                    const k = phoneKey(p);
+                    if (k && !seen.has(k)) { seen.add(k); contactKeys.push(k); }
+                }
+            }
+        }
+        const now = new Date();
+        const [contactedRows, actionGroups, taskGroups] = pageIds.length ? await Promise.all([
+            // Contacts are stored in mixed phone formats, so match on the trailing 10 digits —
+            // same approach as resolveStoredContactPhone. event_type is allowlisted to genuine
+            // contact so internal events (session_keepalive, lead_recycled, …) don't count.
+            contactKeys.length ? prisma.$queryRaw<Array<{ k: string; last_at: Date }>>`
+                SELECT right(regexp_replace(phone_number, '[^0-9]', '', 'g'), 10) AS k,
+                       MAX(created_at) AS last_at
+                FROM interactions
+                WHERE tenant_id = ${agent.tenant_id}
+                  AND event_type = ANY(${CONTACT_EVENT_TYPES as unknown as string[]}::text[])
+                  AND regexp_replace(phone_number, '[^0-9]', '', 'g') ~ '^(91)?[6-9][0-9]{9}$'
+                  AND right(regexp_replace(phone_number, '[^0-9]', '', 'g'), 10) = ANY(${contactKeys}::text[])
+                GROUP BY 1` : [],
+            prisma.appointment.groupBy({
+                by: ['property_id'],
+                where: {
+                    tenant_id: agent.tenant_id,
+                    property_id: { in: pageIds },
+                    status: { in: [AppointmentStatus.scheduled, AppointmentStatus.confirmed, AppointmentStatus.rescheduled] },
+                    scheduled_at: { gte: now },
+                },
+                _min: { scheduled_at: true },
+            }),
+            prisma.task.groupBy({
+                by: ['property_id'],
+                where: {
+                    property_id: { in: pageIds },
+                    property: { tenant_id: agent.tenant_id },
+                    status: { in: ['TODO', 'IN_PROGRESS', 'BLOCKED'] },
+                    completed_at: null,
+                },
+                _min: { due_date: true },
+            }),
+        ]) : [[], [], []];
+        const contactedByPhone: Record<string, string> = {};
+        for (const r of contactedRows as any[]) {
+            if (r?.k && r?.last_at) contactedByPhone[r.k] = new Date(r.last_at).toISOString();
+        }
+        const nextActionByInventory: Record<string, string> = {};
+        for (const g of actionGroups as any[]) {
+            const t = g?._min?.scheduled_at;
+            if (g?.property_id && t) nextActionByInventory[g.property_id] = new Date(t).toISOString();
+        }
+        for (const g of taskGroups) {
+            if (!g.property_id || !g._min.due_date) continue;
+            const due = g._min.due_date.toISOString();
+            const existing = nextActionByInventory[g.property_id];
+            if (!existing || due < existing) nextActionByInventory[g.property_id] = due;
+        }
+
         // PARTNER response (2026-07-12): run every row through the partner redaction — strips owner/
         // key-holder/uploader contact, source/referral fields, and the exact address (flat_no, plot_no,
         // full_address, apartment_name, lat/lng); locality/city are kept so they can still place it.
@@ -840,13 +906,13 @@ router.get('/', authMiddleware, async (req, res) => {
                 (inventory as any[]).map(i => ({ ...i, stats: stats[i.id] })),
                 viewerFromPartner(agent.id),
             ) as any[];
-            const partnerData = masked.map((r: any, idx: number) => ({
+            const partnerData = attachListingActivity(masked.map((r: any, idx: number) => ({
                 ...r,
                 source: null,
                 mine: ownFlags[idx],
                 can_edit: ownFlags[idx],
                 needs_owner_fix: false,
-            }));
+            })), contactedByPhone, nextActionByInventory);
             return res.json({ data: partnerData, total, page: pageNum, totalPages: Math.ceil(total / take) });
         }
 
@@ -872,11 +938,21 @@ router.get('/', authMiddleware, async (req, res) => {
                 : (i.owner_phone || i.uploader_phone);
             const source = {
                 type: sourceKind,
+                designation: isDealer || isAgentOwner ? 'Agent' : (i.contact?.client_role || 'Owner'),
                 name: sourceName,
                 phone: canSeeSourcePhone ? (sourcePhoneRaw || null) : null,
             };
             const redacted = sanitizationService.redactInventoryForStaff(
-                { ...i, stats: stats[i.id] },
+                {
+                    ...i,
+                    key_holder_name: i.key_holder_type === 'OWNER' ? contactName
+                        : i.key_holder_type === 'UPLOADER' ? i.uploader_name
+                            : i.key_holder_name || i.key_holder_contact?.name || null,
+                    key_holder_phone: i.key_holder_type === 'OWNER' ? i.owner_phone
+                        : i.key_holder_type === 'UPLOADER' ? i.uploader_phone
+                            : i.key_holder_phone || i.key_holder_contact?.phone_number || null,
+                    stats: stats[i.id],
+                },
                 { agentId: agent.id, isSuperBoss: isSB, teamIds },
             );
             // mine = uploaded by OR assigned to me (for the "Yours" badge);
@@ -893,11 +969,20 @@ router.get('/', authMiddleware, async (req, res) => {
             const OWNER_PENDING_PHONES = ['+910000000000', '+910000000001'];
             const needs_owner_fix = OWNER_PENDING_PHONES.includes(i.owner_phone)
                 || (!!ownerD && (ownerD === d10(i.uploaded_by_agent?.phone) || ownerD === d10(i.assigned_agent?.phone)));
-            return { ...redacted, source, owner_name: contactName, mine, can_edit, needs_owner_fix };
+            return {
+                ...redacted, source, owner_name: contactName, mine, can_edit, needs_owner_fix,
+                key_holder_designation: redacted.key_holder_phone
+                    ? (i.key_holder_type === 'OWNER' ? i.contact?.client_role || 'Owner'
+                        : i.key_holder_type === 'UPLOADER' ? 'Agent' : i.key_holder_contact?.client_role || 'External')
+                    : null,
+            };
         });
 
+        // Activity (last contact / next action) is metadata, safe for every viewer like stats.
+        const dataWithActivity = attachListingActivity(data, contactedByPhone, nextActionByInventory);
+
         res.json({
-            data,
+            data: dataWithActivity,
             total,
             page: pageNum,
             totalPages: Math.ceil(total / take),

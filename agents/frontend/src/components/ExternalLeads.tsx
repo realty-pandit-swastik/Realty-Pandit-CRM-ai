@@ -1,6 +1,8 @@
 
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import PhoneInput from './PhoneInput';
+import { ContactButton } from './ContactButton';
+import { useSendMatches } from '../hooks/useSendMatches';
 import CallerDossier from './CallerDossier';
 import client, { getPartnerAssignable, assignLeadToTeammate, shareLead, rosterForPickers, updateContactProfile, getDealMatchCounts } from '../api/client';
 import { isPlaceholderPhone, isValidPhoneInput, toDialablePhone, normalizePhoneInput } from '../lib/phone';
@@ -80,6 +82,10 @@ interface LeadDeal {
     // Temporary per-enquiry client role — overrides Contact.client_role on that row.
     client_role_override?: string | null;
     coordinator: { id: string; name: string | null } | null;
+    inventory_id?: string | null;
+    demand_intent?: string | null; demand_location?: string | null;
+    demand_budget_min?: string | number | null; demand_budget_max?: string | number | null;
+    demand_schema_values?: Record<string, any> | null; demand_taxonomy_node_id?: string | null;
 }
 
 /** A list row = one enquiry. `_deal` is set when the contact has visible deals. */
@@ -180,6 +186,7 @@ function channelIcon(ch: string) {
 export function ExternalLeads({ isMobile: isMobileProp, initialFilter, onFilterConsumed }: { isMobile?: boolean; initialFilter?: Record<string, string> | null; onFilterConsumed?: () => void } = {}) {
     const { agent, hasPermission, isPartner, isPartnerOwner } = useAuth();
     const { showToast } = useToast();
+    const { states: matchSendStates, send: sendMatches } = useSendMatches();
     const isPrivileged = PRIVILEGED_ROLES.includes(agent?.role ?? '');
     const closingViaPopState = useRef(false);
 
@@ -1334,6 +1341,7 @@ const leadCycleStartOf = (lead: any): string => {
         return d && !isNaN(d.getTime()) ? d.toISOString().slice(0, 10) : '';
     };
     const filteredLeads = recentLeads.filter(lead => {
+        if (lead.demand_transactions?.length) return true;
         const leadDate = leadCycleStartOf(lead);
         if (dateFrom && (!leadDate || leadDate < dateFrom)) return false;
         if (dateTo && (!leadDate || leadDate > dateTo)) return false;
@@ -1353,10 +1361,21 @@ const leadCycleStartOf = (lead: any): string => {
         (l.demand_transactions?.length
             ? l.demand_transactions.map(d => ({
                 ...l, _deal: d, source: d.source, lifecycle_stage: d.status,
+                intent: d.demand_intent ?? null, preferred_location: d.demand_location ?? null,
+                budget_min: d.demand_budget_min != null ? String(d.demand_budget_min) : null,
+                budget_max: d.demand_budget_max != null ? String(d.demand_budget_max) : null,
+                created_at: d.created_at, cycle_start_at: d.created_at,
+                demand_schema_values: d.demand_schema_values ?? null,
+                demand_taxonomy_node_id: d.demand_taxonomy_node_id ?? null,
                 assigned_agent: d.coordinator ?? (l as any).assigned_agent,
             } as LeadRow))
             : [l]
-        ).filter(row => stageFilters.length === 0 || stageFilters.includes(String(row.lifecycle_stage || '').toUpperCase()))
+        ).filter(row => {
+            const date = leadCycleStartOf(row);
+            return (!sourceFilter || row.source === sourceFilter)
+                && (!dateFrom || (!!date && date >= dateFrom)) && (!dateTo || (!!date && date <= dateTo))
+                && (stageFilters.length === 0 || stageFilters.includes(String(row.lifecycle_stage || '').toUpperCase()));
+        })
     );
     const allVisibleSelected = filteredLeads.length > 0 && filteredLeads.every(l => selectedLeadPhones.has(l.phone_number));
     const someVisibleSelected = filteredLeads.some(l => selectedLeadPhones.has(l.phone_number));
@@ -1417,12 +1436,11 @@ const leadCycleStartOf = (lead: any): string => {
         });
     }, []);
 
-    // Tile → Matching: the detail slide-over is contact-level (same for every enquiry
-    // row on that contact — matching runs per contact via POST /api/leads/:phone/match),
-    // so the tile label intentionally shows the row deal's count but opens shared detail.
+    // Tile → immediate matching/send for this enquiry. Legacy contact-only rows use
+    // the server's create-or-reuse path without opening a second confirmation screen.
     const handleOpenMatches = useCallback((row: LeadRow) => {
-        openDetail(row.phone_number);
-    }, [openDetail]);
+        void sendMatches(row._deal?.id, row.name, row.phone_number);
+    }, [sendMatches]);
 
 
     // editSubCategories cascade removed Phase 2 demand-side unification (2026-05-29) —
@@ -1454,7 +1472,7 @@ const leadCycleStartOf = (lead: any): string => {
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                         <h2 style={{ color: 'var(--text-primary)', margin: 0, fontSize: '17px' }}>Leads</h2>
-                        <span style={{ color: '#3b82f6', fontSize: '14px', fontWeight: 700 }}>{recentTotal.toLocaleString('en-IN')}</span>
+                        <span title="Loaded enquiries" style={{ color: '#3b82f6', fontSize: '14px', fontWeight: 700 }}>{leadRows.length.toLocaleString('en-IN')}</span>
                         {/* 99acres sync status — inline dot */}
                         {syncStatus && (
                             <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '11px', color: 'var(--text-secondary)' }}>
@@ -1795,7 +1813,7 @@ const leadCycleStartOf = (lead: any): string => {
                                     All
                                 </label>
                             )}
-                            Showing {filteredLeads.length.toLocaleString('en-IN')}{recentTotal > recentLeads.length ? ` of ${recentTotal.toLocaleString('en-IN')}` : ''} leads
+                            Showing {leadRows.length.toLocaleString('en-IN')} enquiries · {filteredLeads.length.toLocaleString('en-IN')}{recentTotal > recentLeads.length ? ` of ${recentTotal.toLocaleString('en-IN')}` : ''} contacts
                         </span>
                         {recentLeads.length < recentTotal ? (
                             <button type="button" onClick={() => setPageLimit(l => l + 500)} disabled={loading} style={{
@@ -1808,7 +1826,7 @@ const leadCycleStartOf = (lead: any): string => {
                     {/* Mobile Card View */}
                     {isMobile ? (
                         <div style={{ padding: '8px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                            {filteredLeads.length > 0 ? leadRows.map(lead => (
+                            {leadRows.length > 0 ? leadRows.map(lead => (
                                 <LeadCard
                                     key={`${lead.phone_number}::${lead._deal?.id || 'contact'}`}
                                     lead={lead}
@@ -1825,6 +1843,7 @@ const leadCycleStartOf = (lead: any): string => {
                                     matchCount={matchCountFor(lead)}
                                     onOpenPipeline={() => handleOpenPipeline(lead)}
                                     onOpenMatches={() => handleOpenMatches(lead)}
+                                    matchSendState={matchSendStates[lead._deal?.id || `contact:${lead.phone_number}`]}
                                 />
                             )) : (
                                 <div className="empty-state">
@@ -1882,8 +1901,9 @@ const leadCycleStartOf = (lead: any): string => {
                                 </tr>
                             </thead>
                             <tbody>
-                                {filteredLeads.map(lead => {
+                                {leadRows.map(lead => {
                                     const score = lead.lead_score?.total_score ?? null;
+                                    const sendState = matchSendStates[lead._deal?.id || `contact:${lead.phone_number}`];
                                     const isSelected = selectedPhone === lead.phone_number;
                                     // Shown identity: the client's own name/number, else the dealer's (placeholder
                                     // phone = "we don't know the client yet" — partner referrals). isDealer marks
@@ -1895,7 +1915,7 @@ const leadCycleStartOf = (lead: any): string => {
                                     // card is per-deal and correctly uses the override there).
                                     const rowRole = (lead as Lead).client_role || null;
                                     return (
-                                        <tr key={lead.phone_number} onClick={() => { if (leadSelectMode) toggleLeadSelect(lead.phone_number); else openDetail(lead.phone_number); }}
+                                        <tr key={`${lead.phone_number}:${lead._deal?.id || 'contact'}`} onClick={() => { if (leadSelectMode) toggleLeadSelect(lead.phone_number); else openDetail(lead.phone_number); }}
                                             style={{ borderBottom: '1px solid var(--bg-primary)', cursor: 'pointer', backgroundColor: selectedLeadPhones.has(lead.phone_number) ? 'rgba(139,92,246,0.12)' : isSelected ? 'rgba(59,130,246,0.08)' : undefined }}>
                                             {leadSelectMode && (
                                                 <td style={compactCell} onClick={e => { e.stopPropagation(); toggleLeadSelect(lead.phone_number); }}>
@@ -1907,6 +1927,8 @@ const leadCycleStartOf = (lead: any): string => {
                                             <td style={compactCell}>
                                                 <div>
                                                     <span style={{ fontWeight: 500 }}>{identity.name || <span style={{ color: 'var(--text-muted)' }}>—</span>}</span>
+                                                    <ContactButton phone={lead.phone_number} name={lead.name} />
+                                                    {lead._deal?.source_ref && <small style={{ display: 'block', color: 'var(--text-muted)' }}>{lead._deal.source_ref}</small>}
                                                     {identity.isDealer && (
                                                         <span title="Client unknown — showing the dealer who brought this lead"
                                                             style={{ backgroundColor: 'rgba(245,158,11,0.15)', color: '#d97706', padding: '1px 5px', borderRadius: '8px', fontSize: '9px', fontWeight: 700, marginLeft: '4px', whiteSpace: 'nowrap' }}>
@@ -1946,11 +1968,11 @@ const leadCycleStartOf = (lead: any): string => {
                                                 </span>
                                             </td>
                                             <td style={compactCell} onClick={e => e.stopPropagation()}>
-                                                <select title="Lead status" value={lead.lead_status} disabled={updatingPhone === lead.phone_number}
+                                                {lead._deal ? stageInfo(lead._deal.status).label : <select title="Contact temperature" value={lead.lead_status} disabled={updatingPhone === lead.phone_number}
                                                     onChange={e => handleStatusChange(lead.phone_number, e.target.value)}
                                                     style={{ padding: '2px 4px', borderRadius: '4px', fontSize: '11px', fontWeight: 500, border: '1px solid var(--border-secondary)', cursor: 'pointer', backgroundColor: lead.lead_status === 'hot' ? '#fef2f2' : lead.lead_status === 'warm' ? '#fffbeb' : 'var(--bg-primary)', color: lead.lead_status === 'hot' ? '#ef4444' : lead.lead_status === 'warm' ? '#f59e0b' : 'var(--text-primary)' }}>
                                                     {LEAD_STATUSES.map(s => <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
-                                                </select>
+                                                </select>}
                                             </td>
                                             <td style={compactCell}>
                                                 {(() => { const si = stageInfo(lead.lifecycle_stage); return (
@@ -1998,14 +2020,16 @@ const leadCycleStartOf = (lead: any): string => {
                                                         style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '14px', lineHeight: 1, padding: 0 }}
                                                         title="Open in Deal Pipeline" aria-label="Open in Deal Pipeline">📊</button>
                                                     <button type="button" onClick={() => handleOpenMatches(lead as LeadRow)}
+                                                        disabled={['sending', 'sent', 'manual_hi'].includes(sendState)}
                                                         style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '14px', lineHeight: 1, padding: 0 }}
-                                                        title="View matching properties" aria-label="View matching properties">🏠</button>
+                                                        title="Find and send matching properties" aria-label="Find and send matching properties">{['sent', 'manual_hi'].includes(sendState) ? 'Matched ✓' : sendState === 'sending' ? 'Sending…' : sendState === 'retry' ? 'Retry matches' : 'Matches'}</button>
+                                                    {sendState === 'manual_hi' && rowDialable && <a href={`https://wa.me/${rowDialable.slice(1)}?text=Hi`} target="_blank" rel="noopener noreferrer">Send Hi</a>}
                                                 </div>
                                             </td>
                                         </tr>
                                     );
                                 })}
-                                {filteredLeads.length === 0 && (
+                                {leadRows.length === 0 && (
                                     <tr><td colSpan={12} style={{ ...compactCell, textAlign: 'center', color: 'var(--text-muted)', padding: '20px 10px' }}>
                                         {error ? 'Failed to load leads' : 'No leads found'}
                                     </td></tr>
