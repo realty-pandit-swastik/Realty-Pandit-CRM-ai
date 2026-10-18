@@ -154,6 +154,9 @@ export async function resizeImageForPdf(absPath: string): Promise<Buffer | strin
 export function redactForBrandless(inv: InventoryForPdf): InventoryForPdf {
     return {
         ...inv,
+        customer_price: null,
+        price: inv.display_price ?? null,
+        description: null,
         owner_phone: null,
         owner_name: null,
         flat_no: null,        // exact unit — hidden
@@ -287,7 +290,7 @@ function renderOneProperty(doc: typeof PDFDocument.prototype, inv: InventoryForP
     cursorY = doc.y + 12;
 
     // Price band — large (₹ renders via DejaVu)
-    const price = inv.display_price || inv.customer_price || inv.price;
+    const price = inv.display_price;
     doc.fontSize(24).font(FONT_BOLD).fillColor(ACCENT).text(formatPrice(price), 40, cursorY);
     cursorY = doc.y + 18;
 

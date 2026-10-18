@@ -4,7 +4,7 @@ import express from 'express';
 
 vi.mock('../db', () => ({
     default: {
-        transaction: { findUnique: vi.fn(), update: vi.fn(), count: vi.fn() },
+        transaction: { findFirst: vi.fn(), findUnique: vi.fn(), update: vi.fn(), count: vi.fn() },
         interaction: { create: vi.fn(), count: vi.fn(), findMany: vi.fn() },
         teamAction: { create: vi.fn() },
         agent: { findUnique: vi.fn(), findFirst: vi.fn() },
@@ -68,6 +68,7 @@ const interactionMetadata = () => (prisma.interaction.create as any).mock.calls[
 beforeEach(() => {
     vi.clearAllMocks();
     (prisma.transaction.findUnique as any).mockResolvedValue({ ...NEW_DEAL });
+    vi.mocked(prisma.transaction.findFirst).mockResolvedValue({ ...NEW_DEAL } as any);
     (prisma.interaction.create as any).mockResolvedValue({ id: 'i1' });
     (prisma.teamAction.create as any).mockResolvedValue({ id: 'ta1' });
     (prisma.transaction.update as any).mockResolvedValue({});

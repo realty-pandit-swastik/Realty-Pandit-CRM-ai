@@ -21,7 +21,15 @@ vi.mock('../services/partner_auto_create', () => ({ ensurePartnerAgent }));
 import app from '../app';
 import prisma from '../db';
 
-beforeEach(() => vi.clearAllMocks());
+vi.mock('../middleware/auth', () => ({
+    authMiddleware: (req: any, _res: any, next: any) => { req.agent = { id: 'synthetic-admin', role: 'super_boss', email: 'synthetic@example.invalid', tenant_id: 'default' }; next(); },
+    checkPermission: () => (_req: any, _res: any, next: any) => next(),
+    requireRole: () => (_req: any, _res: any, next: any) => next(),
+}));
+beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(prisma.contact.findFirst).mockImplementation(() => prisma.contact.findUnique({ where: { phone_number: 'synthetic-fixture' } }));
+});
 
 // Reported 2026-08-10: staff click "Convert to Partner Agent" by accident, and clicking it AGAIN
 // re-runs the whole conversion — re-tagging deals and re-sending the customer a partner welcome.

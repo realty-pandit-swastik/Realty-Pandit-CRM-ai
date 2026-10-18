@@ -1,0 +1,30 @@
+appId: in.realtypandit.crm.mobile
+name: Synthetic staff session and daily work
+---
+# Run only against the disposable preview API. Supply synthetic credentials through Maestro -e.
+- launchApp
+- tapOn: Phone number
+- inputText: ${MOBILE_TEST_PHONE}
+- tapOn: Password
+- inputText: ${MOBILE_TEST_PASSWORD}
+- hideKeyboard
+- tapOn: Sign in
+- extendedWaitUntil:
+    visible: Follow-ups
+    timeout: 20000
+- tapOn: View my tasks
+- assertVisible: New task
+- tapOn: Follow up on requirements
+- assertVisible: Mark complete
+- tapOn: Mark complete
+- assertVisible: Reopen task
+- tapOn: Reopen task
+- back
+- tapOn: More
+- tapOn: Device sessions
+- assertVisible: .*This device.*
+- back
+- tapOn: Sign out
+- assertVisible: Sign out of this device?
+- tapOn: SIGN OUT
+- assertVisible: Sign in

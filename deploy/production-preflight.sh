@@ -34,7 +34,10 @@ fi
 curl -fsS http://127.0.0.1:7071/health
 printf '\nBackup metadata (no backup contents):\n'
 for folder in /var/backups/realty-pandit "$app_root/backups"; do
-  if [[ -d "$folder" && -r "$folder" && -x "$folder" ]]; then find "$folder" -maxdepth 2 -type f -printf '%TY-%Tm-%Td %TH:%TM %s %f\n' | sort | tail -20; else printf 'Backup metadata unavailable: %s\n' "$folder"; fi
+  if [[ -d "$folder" && -r "$folder" && -x "$folder" ]]; then
+    # Older root-owned backups are intentionally private; do not descend into them.
+    find "$folder" -maxdepth 2 \( -type d ! -readable -prune -printf 'Private backup directory: %f\n' \) -o \( -type f -printf '%TY-%Tm-%Td %TH:%TM %s %f\n' \) | sort | tail -20
+  else printf 'Backup metadata unavailable: %s\n' "$folder"; fi
 done
 cd "$current/backend"
 node <<'NODE'

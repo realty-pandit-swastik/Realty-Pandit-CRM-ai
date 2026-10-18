@@ -9,7 +9,7 @@ import Redis from 'ioredis';
 import { z } from 'zod';
 import prisma from '../db';
 import { normalizePhone, isPlaceholderPhone } from '../utils/phone';
-import { buildFullContactVisibilityFilter } from '../middleware/contact_visibility';
+import { mayShareWithRecipient } from './property_recipient_scope';
 import { getDisplayFloor } from '../utils/floor';
 import { getTeamIds } from '../utils/team_scope';
 import { generateInventoryPdfStream } from './pdf_generator';
@@ -77,7 +77,7 @@ void initializeFiles().catch(() => {});
 export function customerShareDetails(inv: any): string {
     const s = inv.specs || {};
     const human = (v: unknown) => String(v || '').replace(/[_-]+/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-    const price = Number(inv.display_price ?? inv.price);
+    const price = Number(inv.display_price);
     const formatted = !Number.isFinite(price) || price <= 0 ? 'Price on request' : price >= 1e7 ? `₹${(price / 1e7).toFixed(2)} Cr` : price >= 1e5 ? `₹${(price / 1e5).toFixed(2)} L` : `₹${price.toLocaleString('en-IN')}`;
     const room = s.bhk ?? s.rooms ?? s.bedrooms ?? s.bhk_count;
     const intent = inv.intent === 'rent' ? 'for Rent' : ['sell', 'sale'].includes(inv.intent) ? 'for Sale' : '';
@@ -160,12 +160,7 @@ export async function createHandoff(agent: Agent, raw: unknown) {
     if (Number(reserved) !== 1) fail(429, 'Two shares are already preparing or ready. Cancel one or wait for expiry.');
     const directory = path.join(ROOT, `${expires_at}-${digest(launch_token)}`);
     try {
-        const existingContact = await prisma.contact.findUnique({ where: { phone_number: recipient }, select: { phone_number: true } });
-        const stored = existingContact?.phone_number;
-        if (stored) {
-            const visible = await prisma.contact.findFirst({ where: { phone_number: stored, tenant_id: agent.tenant_id, AND: [await buildFullContactVisibilityFilter(agent.id, agent.role)] }, select: { phone_number: true } });
-            if (!visible) fail(403, 'This recipient is not accessible to your account.');
-        }
+        if (!await mayShareWithRecipient(agent, recipient)) fail(403, 'This recipient is not accessible to your account.');
         const team = await getTeamIds(agent);
         const inventories = await prisma.inventory.findMany({ where: { tenant_id: agent.tenant_id, id: { in: ids }, ...(agent.role === 'super_boss' ? {} : { OR: [{ status: 'active' }, { uploaded_by_agent_id: { in: team } }, { assigned_agent_id: { in: team } }, { reference_agent_id: { in: team } }, { shared_with_ids: { hasSome: team } }] }) }, include: { flat_property_type: { select: { name: true } } } });
         if (inventories.length !== ids.length) fail(403, 'One or more properties are missing or inaccessible.');

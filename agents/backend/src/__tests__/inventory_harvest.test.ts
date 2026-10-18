@@ -57,7 +57,7 @@ describe('staff and service harvest', () => {
         expect(res.status).toBe(404);
     });
     it('cannot clone harvested stock into active inventory', async () => {
-        vi.mocked(prisma.inventory.findFirst).mockResolvedValue({ id: 'inventory', tenant_id: 'tenant-1', upload_source: 'portal_crawl' } as any);
+        vi.mocked(prisma.inventory.findFirst).mockResolvedValue({ id: 'inventory', tenant_id: 'tenant-1', assigned_agent_id: 'staff-1', upload_source: 'portal_crawl' } as any);
         const res = await request(app).post('/api/inventory/inventory/clone').set('Authorization', 'Bearer test').send({});
         expect(res.status).toBe(409); expect(prisma.inventory.create).not.toHaveBeenCalled();
     });

@@ -66,13 +66,14 @@ const JWT_SECRET = process.env.AGENT_JWT_SECRET!;
 // then returns a partner-scoped identity). The default-deny guard locks partners to the allow-list.
 const ADMIN_JWT_SECRET = process.env.JWT_SECRET!;
 async function signPartnerAdminSession(agent: { id: string; email?: string | null; phone_number: string; partner_category?: string | null; parent_partner_id?: string | null }): Promise<string> {
-    const tenant = await prisma.tenant.findFirst({ select: { id: true } });
+    const { partnerTenantId } = await import('../utils/partner_scope');
+    const tenantId = await partnerTenantId(agent.id);
     return jwt.sign(
         {
             id: agent.id,
             email: agent.email || '',
             role: 'partner',
-            tenant_id: tenant?.id,
+            tenant_id: tenantId,
             phone: agent.phone_number,
             partner_category: agent.partner_category,
             parent_partner_id: agent.parent_partner_id,

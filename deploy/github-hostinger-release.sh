@@ -101,6 +101,7 @@ case "$command" in
     prepare_release "$release"
 
     previous=$(realpath "$current" 2>/dev/null || true)
+    (cd "$release/backend" && HOSTINGER_DEPLOY_PATH="$app_root" MIGRATION_RELEASE_ID="$release_id" RUN_MIGRATIONS="$run_migrations" node scripts/verify-migration-backup.cjs)
     if [[ "$run_migrations" == 1 ]]; then
       (cd "$release/backend" && npx prisma migrate deploy)
     fi

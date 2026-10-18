@@ -471,6 +471,7 @@ model Agent {
   // Authentication
   password_hash       String?
   refresh_token       String?
+  mobile_sessions     MobileSession[]
   last_login_at       DateTime?
   setup_token         String?   @unique
   setup_token_expires DateTime?
@@ -511,6 +512,24 @@ model Agent {
 
   @@index([role, status, last_assigned_at])
   @@map("agents")
+}
+
+// Native devices do not share or replace the browser refresh-token slot.
+model MobileSession {
+  id           String    @id @default(uuid())
+  agent_id     String
+  agent        Agent     @relation(fields: [agent_id], references: [id], onDelete: Cascade)
+  tenant_id    String
+  device_name  String
+  refresh_hash String
+  created_at   DateTime  @default(now())
+  refreshed_at DateTime  @default(now())
+  expires_at   DateTime
+  revoked_at   DateTime?
+
+  @@index([agent_id, revoked_at])
+  @@index([expires_at])
+  @@map("mobile_sessions")
 }
 
 // ---------------------------------------------------------

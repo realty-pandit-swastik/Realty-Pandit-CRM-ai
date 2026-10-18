@@ -42,3 +42,14 @@ export function formatPropertyPrice(
 function trim(n: number): string {
     return Number(n.toFixed(2)).toString();
 }
+
+/** Dual columns are raw rupees; price_unit belongs only to the legacy price column. */
+export function inventoryPriceLabels(row: Record<string, unknown>) {
+    const intent = typeof row.intent === 'string' ? row.intent : null;
+    return {
+        formatted_demand_price: row.customer_price === undefined && row.price === undefined ? undefined : formatPropertyPrice(row.customer_price ?? row.price, {
+            intent, unit: row.customer_price != null ? null : typeof row.price_unit === 'string' ? row.price_unit : null,
+        }),
+        formatted_display_price: row.display_price === undefined ? undefined : formatPropertyPrice(row.display_price, { intent }),
+    };
+}
