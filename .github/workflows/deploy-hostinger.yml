@@ -36,6 +36,11 @@ on:
         required: true
         default: false
         type: boolean
+      resume_backup:
+        description: 'Optional fresh failed-backup directory name; all restore verification is rerun'
+        required: false
+        default: ''
+        type: string
 
 permissions:
   contents: read
@@ -84,6 +89,7 @@ jobs:
       - run: npm ci
       - run: npx prisma generate
       - run: npm test
+      - run: python3 ../../deploy/test_verify_upload_restore.py
       - run: npm audit --omit=dev --audit-level=high
 
   frontend-check:
@@ -164,6 +170,7 @@ jobs:
       HOSTINGER_KNOWN_HOSTS: ${{ secrets.HOSTINGER_KNOWN_HOSTS }}
       HOSTINGER_DEPLOY_PATH: ${{ secrets.HOSTINGER_DEPLOY_PATH }}
       RUN_MIGRATIONS: ${{ inputs.run_migrations && '1' || '0' }}
+      RESUME_BACKUP: ${{ inputs.resume_backup || '' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -175,6 +182,7 @@ jobs:
           test -n "$HOSTINGER_SSH_PRIVATE_KEY"
           test -n "$HOSTINGER_KNOWN_HOSTS"
           test -n "$HOSTINGER_DEPLOY_PATH"
+          [[ -z "$RESUME_BACKUP" || "$RESUME_BACKUP" =~ ^release-[0-9]+$ ]]
 
       - name: Configure SSH
         run: |
@@ -182,6 +190,8 @@ jobs:
           printf '%s\n' "$HOSTINGER_SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
           printf '%s\n' "$HOSTINGER_KNOWN_HOSTS" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
+          printf '%s\n' 'Host *' '  StrictHostKeyChecking yes' '  ServerAliveInterval 30' '  ServerAliveCountMax 6' > ~/.ssh/config
+          chmod 600 ~/.ssh/config
 
       - name: Inspect production without deploying
         run: |
@@ -197,12 +207,12 @@ jobs:
           target="${HOSTINGER_USER}@${HOSTINGER_HOST}"
           remote="/tmp/realty-production-backup-${GITHUB_SHA}"
           ssh -p "$HOSTINGER_PORT" "$target" "umask 077; mkdir -p '$remote'"
-          scp -P "$HOSTINGER_PORT" deploy/production-backup.cjs "$target:$remote/production-backup.cjs"
+          scp -P "$HOSTINGER_PORT" deploy/production-backup.cjs deploy/verify_upload_restore.py "$target:$remote/"
           for migration in 20261008120000_lead_cycle_recycling 20261008130000_client_role 20261016010000_mobile_sessions; do
             ssh -p "$HOSTINGER_PORT" "$target" "mkdir -p '$remote/$migration'"
             scp -P "$HOSTINGER_PORT" "agents/backend/prisma/migrations/$migration/migration.sql" "$target:$remote/$migration/migration.sql"
           done
-          ssh -p "$HOSTINGER_PORT" "$target" "HOSTINGER_DEPLOY_PATH='$HOSTINGER_DEPLOY_PATH' GITHUB_SHA='$GITHUB_SHA' node '$remote/production-backup.cjs' '$remote/20261008120000_lead_cycle_recycling/migration.sql' '$remote/20261008130000_client_role/migration.sql' '$remote/20261016010000_mobile_sessions/migration.sql'"
+          ssh -p "$HOSTINGER_PORT" "$target" "HOSTINGER_DEPLOY_PATH='$HOSTINGER_DEPLOY_PATH' GITHUB_SHA='$GITHUB_SHA' RESUME_BACKUP='$RESUME_BACKUP' node '$remote/production-backup.cjs' '$remote/20261008120000_lead_cycle_recycling/migration.sql' '$remote/20261008130000_client_role/migration.sql' '$remote/20261016010000_mobile_sessions/migration.sql'"
 
       - name: Package approved revision
         if: '!inputs.preflight_only'

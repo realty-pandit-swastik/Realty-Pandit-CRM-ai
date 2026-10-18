@@ -16,7 +16,9 @@ const url = new URL(process.env.DATABASE_URL);
 const env = { ...process.env, PGHOST: url.hostname, PGPORT: url.port || '5432', PGUSER: decodeURIComponent(url.username), PGPASSWORD: decodeURIComponent(url.password), PGDATABASE: decodeURIComponent(url.pathname.slice(1)) };
 const suffix = new Date().toISOString().replace(/[^0-9]/g, '') + process.pid;
 const cloneName = 'rp_release_restore_' + suffix;
-const folder = path.join(root, 'backups', 'release-' + suffix);
+const resume = process.env.RESUME_BACKUP || '';
+if (resume && !/^release-[0-9]+$/.test(resume)) throw new Error('Invalid backup directory name');
+const folder = path.join(root, 'backups', resume || 'release-' + suffix);
 const migrations = process.argv.slice(2);
 const expected = ['20261008120000_lead_cycle_recycling', '20261008130000_client_role', '20261016010000_mobile_sessions'];
 if (migrations.length !== expected.length || migrations.some((p, i) => path.basename(path.dirname(p)) !== expected[i] || path.basename(p) !== 'migration.sql')) throw new Error('Only the three reviewed migrations may be rehearsed');
@@ -31,16 +33,28 @@ async function counts(client) {
 }
 let cloneCreated = false;
 let clone;
+const restoredUploads = path.join(folder, 'verify-uploads');
 (async () => {
+  if (resume) {
+    const owner = fs.lstatSync(folder);
+    if (!owner.isDirectory() || owner.uid !== process.getuid() || (owner.mode & 0o077)) throw new Error('Resume backup must be private and owned by the deployment account');
+    for (const name of ['database.dump', 'uploads.tgz']) {
+      const file = fs.lstatSync(path.join(folder, name));
+      if (!file.isFile() || file.uid !== process.getuid() || (file.mode & 0o077)) throw new Error('Resume files must be private regular backup files');
+    }
+    const age = Date.now() - fs.statSync(path.join(folder, 'database.dump')).mtimeMs;
+    if (age < 0 || age > 3600000) throw new Error('Resume backup is not fresh');
+    if (fs.existsSync(restoredUploads)) fs.rmSync(restoredUploads, { recursive: true });
+  }
   const size = await db.$queryRawUnsafe('SELECT pg_database_size(current_database())::text AS bytes');
   const uploads = Number(run('du', ['-sb', path.join(root, 'shared/uploads')], env, true).split(/\s/)[0]);
   const disk = fs.statfsSync(root);
-  if (disk.bavail * disk.bsize < 3 * Number(size[0].bytes) + 2 * uploads + 1024 ** 3) throw new Error('Insufficient backup and restore disk capacity');
+  if (disk.bavail * disk.bsize < 3 * Number(size[0].bytes) + (resume ? uploads : 2 * uploads) + 1024 ** 3) throw new Error('Insufficient backup and restore disk capacity');
   fs.mkdirSync(path.join(root, 'backups'), { recursive: true, mode: 0o700 });
-  fs.mkdirSync(folder, { mode: 0o700 });
-  const originalCounts = await counts(db);
+  if (!resume) fs.mkdirSync(folder, { mode: 0o700 });
+  const originalCounts = resume ? null : await counts(db);
   const dump = path.join(folder, 'database.dump');
-  run('pg_dump', ['--format=custom', '--no-owner', '--no-acl', '--file', dump]);
+  if (!resume) run('pg_dump', ['--format=custom', '--no-owner', '--no-acl', '--file', dump]);
   fs.chmodSync(dump, 0o600);
   await db.$executeRawUnsafe('CREATE DATABASE "' + cloneName + '" TEMPLATE template0');
   cloneCreated = true;
@@ -49,28 +63,33 @@ let clone;
   clone = new PrismaClient({ datasources: { db: { url: cloneUrl.toString() } }, log: [] });
   const restoredCounts = await counts(clone);
   // Counts can grow while the dump is taken; a decrease indicates an incomplete restore.
-  for (const key of Object.keys(originalCounts[0])) if (BigInt(restoredCounts[0][key]) < BigInt(originalCounts[0][key])) throw new Error('Restore count decreased: ' + key);
+  if (originalCounts) for (const key of Object.keys(originalCounts[0])) if (BigInt(restoredCounts[0][key]) < BigInt(originalCounts[0][key])) throw new Error('Restore count decreased: ' + key);
   const applied = await clone.$queryRawUnsafe('SELECT migration_name FROM "_prisma_migrations" WHERE finished_at IS NOT NULL AND rolled_back_at IS NULL');
+  if (resume) {
+    const liveMigrations = await db.$queryRawUnsafe('SELECT migration_name FROM "_prisma_migrations" WHERE finished_at IS NOT NULL AND rolled_back_at IS NULL');
+    if (JSON.stringify(applied.map(row => row.migration_name).sort()) !== JSON.stringify(liveMigrations.map(row => row.migration_name).sort())) throw new Error('Production schema changed since this backup');
+  }
   const pending = migrations.filter((file, i) => !applied.some(row => row.migration_name === expected[i]));
   for (const file of pending) run('psql', ['-X', '-v', 'ON_ERROR_STOP=1', '--single-transaction', '-f', file], { ...env, PGDATABASE: cloneName, PGOPTIONS: '-c statement_timeout=300000 -c lock_timeout=5000' });
   const validation = await clone.$queryRawUnsafe("SELECT column_name FROM information_schema.columns WHERE table_schema='public' AND table_name='mobile_sessions'");
   if (validation.length !== 9 || !validation.some(row => row.column_name === 'refresh_hash')) throw new Error('Mobile-session schema validation failed');
   const restoredAfterMigration = await counts(clone);
   if (JSON.stringify(restoredAfterMigration) !== JSON.stringify(restoredCounts)) throw new Error('Migration changed existing business record counts');
+  console.log('Database restore and exact-SQL migration rehearsal passed; verifying uploads.');
   const archive = path.join(folder, 'uploads.tgz');
-  run('tar', ['-C', path.join(root, 'shared'), '-czf', archive, 'uploads']);
+  if (!resume) run('tar', ['-C', path.join(root, 'shared'), '-czf', archive, 'uploads']);
   fs.chmodSync(archive, 0o600);
   run('tar', ['-tzf', archive]);
-  const restoredUploads = path.join(folder, 'verify-uploads');
   fs.mkdirSync(restoredUploads, { mode: 0o700 });
   run('tar', ['-xzf', archive, '-C', restoredUploads]);
-  run('tar', ['--compare', '-zf', archive, '-C', restoredUploads]);
+  const uploadsVerification = JSON.parse(run('python3', [path.join(__dirname, 'verify_upload_restore.py'), archive, restoredUploads], env, true));
   fs.rmSync(restoredUploads, { recursive: true });
-  const proof = { createdAt: new Date().toISOString(), revision: fs.readFileSync(path.join(current, 'REVISION'), 'utf8').trim(), originalCounts, restoredCounts, migrationsRehearsed: pending.map(file => path.basename(path.dirname(file))), checksums, uploadsRestoreVerified: true, databaseBytes: fs.statSync(dump).size, uploadsBytes: fs.statSync(archive).size, productionSchemaChanged: false };
+  const proof = { createdAt: fs.statSync(dump).mtime.toISOString(), verifiedAt: new Date().toISOString(), revision: fs.readFileSync(path.join(current, 'REVISION'), 'utf8').trim(), originalCounts, restoredCounts, resumedFromFreshDump: !!resume, migrationsRehearsed: pending.map(file => path.basename(path.dirname(file))), checksums, uploadsRestoreVerified: true, uploadsVerification, databaseBytes: fs.statSync(dump).size, uploadsBytes: fs.statSync(archive).size, productionSchemaChanged: false };
   fs.writeFileSync(path.join(folder, 'restore-proof.json'), JSON.stringify(proof, null, 2), { mode: 0o600 });
   if (process.env.GITHUB_SHA) fs.writeFileSync(path.join(root, 'backups', 'verified-' + process.env.GITHUB_SHA + '.json'), JSON.stringify({ folder, ...proof }), { mode: 0o600 });
   console.log(JSON.stringify({ backup: folder, proof }));
 })().catch(e => { console.error('Backup/restore rehearsal failed:', e.message); process.exitCode = 1; }).finally(async () => {
+  if (fs.existsSync(restoredUploads)) fs.rmSync(restoredUploads, { recursive: true });
   if (clone) await clone.$disconnect();
   if (cloneCreated) await db.$executeRawUnsafe('DROP DATABASE "' + cloneName + '"').catch(() => { console.error('Disposable database cleanup failed:', cloneName); process.exitCode = 1; });
   await db.$disconnect();

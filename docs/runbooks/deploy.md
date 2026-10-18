@@ -70,6 +70,14 @@ Keep `run_migrations=false` unless the approved revision contains a reviewed,
 backward-compatible migration and a fresh restore-tested backup exists. Migration
 rollback is intentionally manual.
 
+For a disconnected backup run, `resume_backup` may name its private
+`release-<digits>` folder while its database dump is less than one hour old. The
+workflow restores the dump again, checks the live migration history still matches,
+rehearses the exact pending SQL, and re-extracts/verifies every upload by type, size
+and SHA-256. Original ownership remains in the archive; comparison does not require
+the restricted account to chown restored files. Backup age is measured from the
+dump, never reset by verification. SSH keepalives protect long archive operations.
+
 ## Verify
 
 Confirm the deployed `current/REVISION` equals the approved SHA, both PM2 owners are
