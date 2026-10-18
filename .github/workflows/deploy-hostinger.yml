@@ -186,8 +186,10 @@ jobs:
       - name: Inspect production without deploying
         run: |
           target="${HOSTINGER_USER}@${HOSTINGER_HOST}"
-          scp -P "$HOSTINGER_PORT" deploy/production-preflight.sh "$target:/tmp/production-preflight-${GITHUB_SHA}.sh"
-          ssh -p "$HOSTINGER_PORT" "$target" "HOSTINGER_DEPLOY_PATH='$HOSTINGER_DEPLOY_PATH' bash /tmp/production-preflight-${GITHUB_SHA}.sh"
+          remote="/tmp/realty-production-preflight-${GITHUB_SHA}"
+          ssh -p "$HOSTINGER_PORT" "$target" "umask 077; mkdir -p '$remote'"
+          scp -P "$HOSTINGER_PORT" deploy/production-preflight.sh deploy/production-inspection.cjs "$target:$remote/"
+          ssh -p "$HOSTINGER_PORT" "$target" "HOSTINGER_DEPLOY_PATH='$HOSTINGER_DEPLOY_PATH' bash '$remote/production-preflight.sh'"
 
       - name: Back up and rehearse in isolated database
         if: (inputs.verify_backup || inputs.run_migrations) && !cancelled()

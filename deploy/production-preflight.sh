@@ -16,6 +16,14 @@ umask 077
 report=$(mktemp)
 trap 'rm -f "$report"' EXIT
 incomplete=0
+privileged_verified=0
+if [[ "$EUID" != 0 && -f "$(dirname "$0")/production-inspection.cjs" ]]; then
+  if node "$(dirname "$0")/production-inspection.cjs" verify > "$report"; then
+    cat "$report"
+    privileged_verified=1
+  fi
+fi
+if [[ "$privileged_verified" == 0 ]]; then
 for owner in root realty; do
   printf 'PM2 owner: %s\n' "$owner"
   if [[ "$owner" == root ]]; then
@@ -30,6 +38,7 @@ if sudo -n nginx -T > "$report" 2>&1; then
   awk '/syntax is ok|test is successful|server_name |root |proxy_pass / {print}' "$report"
 else
   printf 'Nginx inspection unavailable\n'; incomplete=1
+fi
 fi
 curl -fsS http://127.0.0.1:7071/health
 printf '\nBackup metadata (no backup contents):\n'
