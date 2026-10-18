@@ -35,7 +35,8 @@ import WorkflowBuilder from './components/WorkflowBuilder';
 import { MarkLostModal } from './components/MarkLostModal';
 import { DelayReasonModal } from './components/DelayReasonModal';
 import MarketingCampaign from './components/MarketingCampaign';
-import TaskBoard from './components/TaskBoard';
+import { ActivitiesPage } from './components/ActivitiesPage';
+import { ContactRelationshipHost } from './components/ContactRelationshipPage';
 import DealPipeline from './components/DealPipeline';
 import SourcingBoard from './components/SourcingBoard';
 import CallLog from './components/CallLog';
@@ -589,7 +590,7 @@ function App() {
         case 'lead-tasks':
           return <DealPipeline initialDealId={deepLinkDealId} onInitialDealConsumed={() => setDeepLinkDealId(null)} initialContactPhone={deepLinkContactPhone} initialContactName={deepLinkContactName} onInitialContactConsumed={clearDeepLinkContact} />;
         case 'tasks':
-          return <MobileScrollWrapper><TaskBoard /></MobileScrollWrapper>;
+          return <MobileScrollWrapper><ActivitiesPage /></MobileScrollWrapper>;
         case 'analytics':
           return <MobileScrollWrapper><AdvancedAnalytics /></MobileScrollWrapper>;
         case 'deals':
@@ -614,6 +615,7 @@ function App() {
             <MobileLayout activeView={safeView} onViewChange={handleMobileNav}>
               <ErrorBoundary>{renderMobileContent()}</ErrorBoundary>
             </MobileLayout>
+            <ContactRelationshipHost />
             {lostModalPhone && (
               <MarkLostModal
                 phone={lostModalPhone}
@@ -713,7 +715,7 @@ function App() {
       case 'lead-tasks':
         return <DealPipeline initialDealId={deepLinkDealId} onInitialDealConsumed={() => setDeepLinkDealId(null)} initialContactPhone={deepLinkContactPhone} initialContactName={deepLinkContactName} onInitialContactConsumed={clearDeepLinkContact} />;
       case 'tasks':
-        return <TaskBoard />;
+        return <ActivitiesPage />;
       case 'deals':
         return <DealPipeline initialDealId={deepLinkDealId} onInitialDealConsumed={() => setDeepLinkDealId(null)} initialContactPhone={deepLinkContactPhone} initialContactName={deepLinkContactName} onInitialContactConsumed={clearDeepLinkContact} />;
       case 'sourcing':
@@ -740,6 +742,7 @@ function App() {
           <DashboardLayout activeView={safeView} onViewChange={setView}>
             <ErrorBoundary>{renderContent()}</ErrorBoundary>
           </DashboardLayout>
+          <ContactRelationshipHost />
           {lostModalPhone && (
             <MarkLostModal
               phone={lostModalPhone}

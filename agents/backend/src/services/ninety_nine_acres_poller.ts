@@ -15,7 +15,7 @@ import axios from 'axios';
 import { XMLParser } from 'fast-xml-parser';
 import prisma from '../db';
 import logger from '../utils/logger';
-import { normalizePhone } from '../utils/phone';
+import { normalizePhone, resolveStoredContactPhone } from '../utils/phone';
 import { deriveBudgetMin, DEFAULT_TIMELINE } from '../utils/demand_defaults';
 import { isRealEmail } from '../utils/email';
 import { sanitizeName } from '../utils/name_sanitizer';
@@ -461,7 +461,8 @@ export class NinetyNineAcresPoller {
     }
 
     private async ingestLead(lead: ParsedLead, tenantId: string): Promise<'new' | 'updated'> {
-        const phoneNumber = normalizePhone(lead.phone);
+        const normalizedPhone = normalizePhone(lead.phone);
+        const phoneNumber = normalizedPhone ? await resolveStoredContactPhone(normalizedPhone, prisma) || normalizedPhone : '';
         if (!phoneNumber) {
             throw new Error(`Invalid phone: ${lead.phone}`);
         }
@@ -500,8 +501,9 @@ export class NinetyNineAcresPoller {
         // ── Fetch existing contact for smart merge ────────────────────────────
         const existing = await prisma.contact.findUnique({
             where: { phone_number: phoneNumber },
-            select: { phone_number: true, assigned_agent_id: true, name: true, email: true },
+            select: { phone_number: true, assigned_agent_id: true, name: true, email: true, tenant_id: true },
         });
+        if (existing && existing.tenant_id !== tenantId) throw new Error('Contact belongs to another tenant');
         const isNew = !existing;
 
         // ── Smart merge: email ────────────────────────────────────────────────
@@ -561,7 +563,7 @@ export class NinetyNineAcresPoller {
         const demandTax = await resolveDemandTaxonomy({ main_category: demandMainCat || undefined, property_type: propertyType || undefined, bhk: bhk ?? null });
 
         const contact = await prisma.contact.upsert({
-            where: { phone_number: phoneNumber },
+            where: { phone_number: phoneNumber, tenant_id: tenantId },
             update: {
                 name: mergedName,
                 email: mergedEmail,
@@ -686,6 +688,8 @@ export class NinetyNineAcresPoller {
                 phone: phoneNumber, source: '99acres', sourceRef,
                 subUser: lead.subUserName ?? null, tenantId,
                 attributedAgentId: reAttr ?? null, contactName: contact.name,
+                demand: { intent, location, budgetMin: null, budgetMax,
+                    taxonomyNodeId: demandTax.demand_taxonomy_node_id ?? null, schemaValues: bhk != null ? { bhk } : {} },
             });
         }
 
@@ -793,13 +797,13 @@ export class NinetyNineAcresPoller {
             // Auto-create NEW deal so AI qualification cadence kicks in (B1).
             // Placed outside if (finalAgentId) so deal is always created even when
             // agent resolution fails — ensureDealForLead has its own assignment fallback.
-            ensureDealForLead({
+            await ensureDealForLead({
                 contactPhone: phoneNumber,
                 source: '99acres',
                 sourceRef,
                 assignedAgentId: finalAgentId ?? undefined,
-            }).catch((err) => {
-                logger.error(`[99acres] ensureDealForLead failed for ${phoneNumber}: ${(err as Error).message}`);
+                demand: { intent, location, budgetMin: null, budgetMax,
+                    taxonomyNodeId: demandTax.demand_taxonomy_node_id ?? null, schemaValues: bhk != null ? { bhk } : {} },
             });
 
             // Step 6: Buyer confirmations (fire-and-forget)

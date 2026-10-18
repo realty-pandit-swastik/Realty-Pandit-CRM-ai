@@ -2,13 +2,16 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // ensureDealForLead pulls in assignment + qualification + google-sync; stub them so the unit test
 // stays focused on the idempotency decision.
-vi.mock('../db', () => ({
-    default: {
+vi.mock('../db', () => {
+    const db: any = {
         contact: { findUnique: vi.fn(), update: vi.fn() },
         transaction: { findFirst: vi.fn(), findMany: vi.fn().mockResolvedValue([]), create: vi.fn() },
         task: { create: vi.fn() },
-    },
-}));
+        interaction: { create: vi.fn() },
+    };
+    db.$transaction = vi.fn((fn: any) => fn(db));
+    return { default: db };
+});
 vi.mock('../services/lead_assignment', () => ({
     assignViaRoundRobin: vi.fn().mockResolvedValue('agent-1'),
     assignViaManagerRoundRobin: vi.fn().mockResolvedValue('agent-1'),

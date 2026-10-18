@@ -22,6 +22,7 @@ describe.skipIf(!URL_)('per-enquiry leads on a real database', () => {
     afterAll(async () => {
         await prisma.task.deleteMany({ where: { contact_phone: PHONE } });
         await prisma.transaction.deleteMany({ where: { demand_contact_id: PHONE } });
+        await prisma.interaction.deleteMany({ where: { phone_number: PHONE } });
         await prisma.contact.deleteMany({ where: { phone_number: PHONE } });
         await prisma.agent.deleteMany({ where: { tenant_id: 'rt' } });
         await prisma.tenant.delete({ where: { id: 'rt' } });
@@ -41,15 +42,15 @@ describe.skipIf(!URL_)('per-enquiry leads on a real database', () => {
         expect((await prisma.contact.findUnique({ where: { phone_number: PHONE } })).assigned_agent_id).toBe('rt-A');
     });
 
-    it('Test 2: same source+property repeats are deduped; window=0 disables it', async () => {
+    it('same source/property creates a new enquiry even with the legacy dedupe window configured', async () => {
+        process.env.DUPLICATE_ENQUIRY_WINDOW_DAYS = '30';
         const dup = await ensureDealForLead({ contactPhone: PHONE, source: '99acres', sourceRef: 'prop-B', assignedAgentId: 'rt-B' });
-        expect(dup.created).toBe(false);
-        expect(await leads()).toHaveLength(2);
-        process.env.DUPLICATE_ENQUIRY_WINDOW_DAYS = '0';
+        expect(dup.created).toBe(true);
+        expect(await leads()).toHaveLength(3);
         const again = await ensureDealForLead({ contactPhone: PHONE, source: '99acres', sourceRef: 'prop-B', assignedAgentId: 'rt-B' });
         delete process.env.DUPLICATE_ENQUIRY_WINDOW_DAYS;
         expect(again.created).toBe(true);
-        expect(await leads()).toHaveLength(3);
+        expect(await leads()).toHaveLength(4);
     });
 
     it('Test 4/5: visibility filter lets B see the contact via own lead, and not C', async () => {

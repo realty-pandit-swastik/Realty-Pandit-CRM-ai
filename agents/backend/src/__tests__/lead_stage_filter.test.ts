@@ -51,9 +51,12 @@ describe('GET /api/leads/recent-external — pipeline stage filter', () => {
         expect(whereOf().lead_status).toBeUndefined();
     });
 
-    it('keeps the active/archived split when no stage is selected', async () => {
+    it('keeps an active enquiry visible even when the contact was previously marked lost', async () => {
         await request(app).get('/api/leads/recent-external?active=active');
-        expect(whereOf().lead_status).toEqual({ notIn: ['lost', 'closed'] });
+        expect(whereOf().AND).toContainEqual({ OR: [
+            { lead_status: { notIn: ['lost', 'closed'] } },
+            { demand_transactions: { some: { status: { notIn: ['CLOSED_LOST', 'CLOSED_WON'] } } } },
+        ] });
     });
 
     it('adds no stage clause when the param is absent', async () => {

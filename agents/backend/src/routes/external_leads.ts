@@ -43,6 +43,9 @@ router.post('/leads', apiKeyAuth, async (req, res) => {
         // Resolve to any existing contact PK (incl. legacy bare/dash rows) so a
         // re-ingested lead updates the SAME contact instead of duplicating.
         const phone = (await resolveStoredContactPhone(normalizedPhone, prisma)) ?? normalizedPhone;
+        const prior = await prisma.contact.findUnique({ where: { phone_number: phone }, select: { tenant_id: true } });
+        if (prior && prior.tenant_id !== tenant.id) return res.status(409).json({ error: 'Contact belongs to another tenant' });
+        if (budget != null && (!Number.isFinite(Number(budget)) || Number(budget) < 0)) return res.status(400).json({ error: 'Invalid budget' });
 
         // Determine intent from property_interest
         let intent: string | null = null;
@@ -55,7 +58,7 @@ router.post('/leads', apiKeyAuth, async (req, res) => {
 
         // Upsert contact into SSOT
         const contact = await prisma.contact.upsert({
-            where: { phone_number: phone },
+            where: { phone_number: phone, tenant_id: tenant.id },
             update: {
                 name: name || undefined,
                 email: email || undefined,
@@ -143,18 +146,19 @@ router.post('/leads', apiKeyAuth, async (req, res) => {
             });
         }
 
+        const { ensureDealForLead } = await import('../services/ensure_deal');
+        const enquiry = await ensureDealForLead({ contactPhone: phone, source, newEnquiry: true,
+            sourceRef: req.body.property_id || req.body.inventory_id || req.body.enquiry_id || property_interest || null,
+            inventoryId: req.body.inventory_id || null,
+            demand: { intent, location: location || null, budgetMin: null, budgetMax: budget ? Number(budget) : null } });
         res.status(201).json({
             success: true,
             contact_id: contact.phone_number,
+            lead_id: enquiry.dealId,
             contact_type: contact.contact_type,
             lead_status: contact.lead_status,
             message: `Lead ingested from ${source}. Panditji will initiate outreach.`
         });
-
-        // Auto-create NEW deal so AI qualification cadence kicks in.
-        const { ensureDealForLead } = await import('../services/ensure_deal');
-        ensureDealForLead({ contactPhone: phone, source })
-            .catch(err => logger.error(`[ExternalLead] ensureDealForLead failed for ${phone}: ${(err as Error).message}`));
 
         // Send intro WhatsApp to buyer.
         const { sendBuyerConfirmationWhatsApp } = await import('../services/lead_notifications');
@@ -180,6 +184,9 @@ router.post('/leads/batch', apiKeyAuth, async (req, res) => {
     if (leads.length > 50) {
         return res.status(400).json({ error: 'Maximum 50 leads per batch' });
     }
+    if (!['99acres', 'magicbricks', 'housing', 'website', 'manual', 'other'].includes(source)) {
+        return res.status(400).json({ error: 'Invalid source' });
+    }
 
     const tenant = await prisma.tenant.findFirst();
     if (!tenant) {
@@ -196,8 +203,16 @@ router.post('/leads/batch', apiKeyAuth, async (req, res) => {
                 continue;
             }
 
+            const normalized = normalizePhone(String(lead.phone));
+            if (!normalized) throw new Error('Invalid phone number');
+            const phone = await resolveStoredContactPhone(normalized, prisma) || normalized;
+            const prior = await prisma.contact.findUnique({ where: { phone_number: phone }, select: { tenant_id: true } });
+            if (prior && prior.tenant_id !== tenant.id) throw new Error('Contact belongs to another tenant');
+            for (const amount of [lead.budget, lead.budget_min]) {
+                if (amount != null && (!Number.isFinite(Number(amount)) || Number(amount) < 0)) throw new Error('Invalid budget');
+            }
             await prisma.contact.upsert({
-                where: { phone_number: lead.phone },
+                where: { phone_number: phone, tenant_id: tenant.id },
                 update: {
                     name: lead.name || undefined,
                     email: lead.email || undefined,
@@ -206,7 +221,7 @@ router.post('/leads/batch', apiKeyAuth, async (req, res) => {
                     last_interaction: new Date(),
                 },
                 create: {
-                    phone_number: lead.phone,
+                    phone_number: phone,
                     name: lead.name || null,
                     email: lead.email || null,
                     source,
@@ -221,7 +236,7 @@ router.post('/leads/batch', apiKeyAuth, async (req, res) => {
             await prisma.interaction.create({
                 data: {
                     tenant_id: tenant.id,
-                    phone_number: lead.phone,
+                    phone_number: phone,
                     channel: source,
                     direction: 'inbound',
                     event_type: 'lead_capture',
@@ -230,6 +245,13 @@ router.post('/leads/batch', apiKeyAuth, async (req, res) => {
                 }
             });
 
+            const { ensureDealForLead } = await import('../services/ensure_deal');
+            await ensureDealForLead({ contactPhone: phone, source, newEnquiry: true,
+                sourceRef: lead.property_id || lead.inventory_id || lead.enquiry_id || null,
+                inventoryId: lead.inventory_id || null,
+                demand: { intent: lead.intent || null, location: lead.location || null,
+                    budgetMin: lead.budget_min != null ? Number(lead.budget_min) : null,
+                    budgetMax: lead.budget != null ? Number(lead.budget) : null } });
             results.success++;
         } catch (err) {
             results.failed++;

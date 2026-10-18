@@ -18,8 +18,9 @@ beforeEach(() => {
 });
 
 function searchGroup(where: any): any {
-    // where.AND[0] is always the contact-type visibility group for this route.
-    return where.AND[1];
+    // Candidate contact type/enquiry-state/source clauses precede search. Assert the
+    // search expression itself rather than depending on its position among those clauses.
+    return where.AND.find((clause: any) => /"name"|"email"|"phone_number"/.test(JSON.stringify(clause)));
 }
 
 describe('GET /api/leads/recent-external search', () => {
@@ -65,6 +66,7 @@ describe('GET /api/leads/recent-external search', () => {
         const res = await request(app).get('/api/leads/recent-external?search=a');
         expect(res.status).toBe(200);
         const where: any = vi.mocked(prisma.contact.findMany).mock.calls[0][0]?.where;
-        expect(where.AND).toHaveLength(1);
+        expect(searchGroup(where)).toBeUndefined();
+        expect(where.AND).toHaveLength(2); // contact type + active enquiry visibility, no search
     });
 });

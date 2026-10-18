@@ -16,6 +16,7 @@ interface ContactSearchFieldProps {
     allowCreate?: boolean;
     label?: string;
     placeholder?: string;
+    autoFocus?: boolean;
 }
 
 // Map identified contact_type to workflow user_role values
@@ -54,6 +55,7 @@ export const ContactSearchField: React.FC<ContactSearchFieldProps> = ({
     allowCreate = true,
     label = 'Search contact by name or phone',
     placeholder = 'Enter name or phone number',
+    autoFocus = true,
 }) => {
     const [query, setQuery] = useState('');
     const [searching, setSearching] = useState(false);
@@ -171,7 +173,7 @@ export const ContactSearchField: React.FC<ContactSearchFieldProps> = ({
                     onChange={e => handleInputChange(e.target.value)}
                     placeholder={placeholder}
                     style={styles.input}
-                    autoFocus
+                    autoFocus={autoFocus}
                 />
                 {searching ? (
                     <span style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', fontSize: '13px' }}>

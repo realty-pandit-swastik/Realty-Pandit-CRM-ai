@@ -18,7 +18,7 @@ import axios from 'axios';
 import * as crypto from 'crypto';
 import prisma from '../db';
 import logger from '../utils/logger';
-import { normalizePhone } from '../utils/phone';
+import { normalizePhone, resolveStoredContactPhone } from '../utils/phone';
 import { isRealEmail } from '../utils/email';
 import { sanitizeName } from '../utils/name_sanitizer';
 import { sendBuyerConfirmationWhatsApp, sendBuyerConfirmationEmail } from './lead_notifications';
@@ -205,7 +205,8 @@ export class HousingPoller {
     }
 
     private async processLead(lead: HousingLead, tenantId: string, result: PollResult) {
-        const phoneNumber = normalizePhone(lead.lead_phone);
+        const normalizedPhone = normalizePhone(lead.lead_phone || '');
+        const phoneNumber = normalizedPhone ? await resolveStoredContactPhone(normalizedPhone, prisma) || normalizedPhone : '';
         if (!phoneNumber) {
             logger.warn('[HousingPoller] Lead missing phone, skipping');
             return;
@@ -221,8 +222,9 @@ export class HousingPoller {
         // ── Smart merge: fetch existing ─────────────────────────────────────
         const existing = await prisma.contact.findUnique({
             where:  { phone_number: phoneNumber },
-            select: { name: true, email: true, assigned_agent_id: true },
+            select: { name: true, email: true, assigned_agent_id: true, tenant_id: true },
         });
+        if (existing && existing.tenant_id !== tenantId) throw new Error('Contact belongs to another tenant');
 
         // Smart merge email
         const mergedEmail: string | undefined = incomingEmail !== null
@@ -243,7 +245,7 @@ export class HousingPoller {
         const isNew = !existing;
 
         const contact = await prisma.contact.upsert({
-            where: { phone_number: phoneNumber },
+            where: { phone_number: phoneNumber, tenant_id: tenantId },
             update: {
                 name:               mergedName,
                 email:              mergedEmail,
@@ -323,18 +325,16 @@ export class HousingPoller {
                     sourceRef: propertyRef != null ? String(propertyRef) : null,
                     subUser: brokerEmail, tenantId,
                     attributedAgentId: reAttr ?? null,
-                }).catch((err) => {
-                    logger.error(`[Housing] re-enquiry failed for ${phoneNumber}: ${(err as Error).message}`);
+                    demand: { intent, location, budgetMin: null, budgetMax: null, taxonomyNodeId: null, schemaValues: {} },
                 });
                 dealAgentId = reAttr ?? null;
             } else {
-                ensureDealForLead({
+                await ensureDealForLead({
                     contactPhone: phoneNumber,
                     source: 'housing',
                     sourceRef: propertyRef != null ? String(propertyRef) : null,
                     assignedAgentId: dealAgentId,
-                }).catch((err) => {
-                    logger.error(`[Housing] ensureDealForLead failed for ${phoneNumber}: ${(err as Error).message}`);
+                    demand: { intent, location, budgetMin: null, budgetMax: null, taxonomyNodeId: null, schemaValues: {} },
                 });
             }
         }
