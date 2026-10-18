@@ -1,12 +1,15 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-vi.mock('../db', () => ({
-    default: {
+vi.mock('../db', () => {
+    const db: any = {
         contact: { findUnique: vi.fn(), update: vi.fn(), findMany: vi.fn().mockResolvedValue([]), count: vi.fn().mockResolvedValue(0) },
         transaction: { findFirst: vi.fn(), findMany: vi.fn().mockResolvedValue([]), create: vi.fn() },
         task: { create: vi.fn() },
-    },
-}));
+        interaction: { create: vi.fn() },
+    };
+    db.$transaction = vi.fn((fn: any) => fn(db));
+    return { default: db };
+});
 vi.mock('../services/lead_assignment', () => ({
     assignViaRoundRobin: vi.fn().mockResolvedValue('rr-agent'),
     assignViaManagerRoundRobin: vi.fn().mockResolvedValue('rr-agent'),
@@ -41,7 +44,7 @@ describe('one contact → many leads', () => {
         const data = (prisma.transaction.create as any).mock.calls[0][0].data;
         expect(data.coordinator_agent_id).toBe('B');
         expect(data.source_ref).toBe('prop-B');
-        expect((prisma.transaction.findFirst as any).mock.calls[0][0].where).toMatchObject({ source: '99acres', source_ref: 'prop-B' });
+        expect((prisma.transaction.findFirst as any).mock.calls[0][0].where).not.toHaveProperty('source_ref');
         expect(prisma.contact.update).not.toHaveBeenCalled(); // contact owner (A) untouched
     });
 
@@ -53,11 +56,12 @@ describe('one contact → many leads', () => {
         expect(prisma.contact.update).not.toHaveBeenCalled();
     });
 
-    it('Test 2: same source + same property inside the window is a duplicate enquiry', async () => {
+    it('a new portal enquiry for the same source/property always creates another lead', async () => {
         (prisma.transaction.findFirst as any).mockResolvedValue({ id: 'deal-1', status: 'NEW' });
+        (prisma.transaction.create as any).mockResolvedValue({ id: 'deal-2', demand_contact_id: PHONE });
         const res = await ensureDealForLead({ contactPhone: PHONE, source: 'magicbricks', sourceRef: 'prop-A', assignedAgentId: 'A' });
-        expect(res).toMatchObject({ created: false, dealId: 'deal-1' });
-        expect(prisma.transaction.create).not.toHaveBeenCalled();
+        expect(res).toMatchObject({ created: true, dealId: 'deal-2' });
+        expect(prisma.transaction.create).toHaveBeenCalledTimes(1);
     });
 
     it('Test 2: window=0 disables duplicate detection (always a new lead)', async () => {
@@ -72,6 +76,21 @@ describe('one contact → many leads', () => {
         const res = await ensureDealForLead({ contactPhone: PHONE, source: 'whatsapp' });
         expect(res.created).toBe(false);
         expect((prisma.transaction.findFirst as any).mock.calls[0][0].where.type).toBe('SALE');
+    });
+
+    it('keeps different property IDs, budgets and locations on separate enquiries of the same contact', async () => {
+        (prisma.transaction.create as any).mockResolvedValueOnce({ id: 'enquiry-1', demand_contact_id: PHONE })
+            .mockResolvedValueOnce({ id: 'enquiry-2', demand_contact_id: PHONE });
+        const first = await ensureDealForLead({ contactPhone: PHONE, source: 'magicbricks', sourceRef: '85225923', assignedAgentId: 'A',
+            demand: { location: 'Location A', budgetMax: 5000000, budgetMin: null } });
+        const second = await ensureDealForLead({ contactPhone: PHONE, source: '99acres', sourceRef: '84110871', assignedAgentId: 'A',
+            demand: { location: 'Location B', budgetMax: 9000000, budgetMin: null } });
+        expect(first.dealId).not.toBe(second.dealId);
+        const data = (prisma.transaction.create as any).mock.calls.map((call: any) => call[0].data);
+        expect(data.map((d: any) => d.demand_contact_id)).toEqual([PHONE, PHONE]);
+        expect(data.map((d: any) => [d.source_ref, d.demand_location, d.demand_budget_max])).toEqual([
+            ['85225923', 'Location A', 5000000], ['84110871', 'Location B', 9000000],
+        ]);
     });
 });
 

@@ -31,10 +31,13 @@ import { syncContactShares } from '../services/contact_shares';
 import { getTeamIds } from '../utils/team_scope';
 
 // One contact → many leads: each enquiry is a Transaction. Summary shape shown in the Leads list and
-// the contact's Lead history (no prices/notes — only what identifies the enquiry and who owns it).
+// the contact's Lead history, including each enquiry's own requirements and handler.
 const LEAD_DEAL_SUMMARY = {
     id: true, source: true, source_ref: true, status: true, type: true, created_at: true,
     coordinator_agent_id: true, executive_agent_id: true,
+    inventory_id: true, demand_intent: true, demand_location: true,
+    demand_budget_min: true, demand_budget_max: true, demand_schema_values: true,
+    demand_taxonomy_node_id: true,
     // Temporary per-enquiry client role (overrides Contact.client_role on that row).
     client_role_override: true,
     coordinator: { select: { id: true, name: true } },
@@ -204,7 +207,7 @@ router.get('/recent-external', async (req: any, res) => {
 
         // Source filter — when specified use it; when not, show all
         if (source) {
-            where.source = source;
+            where.AND = [...(where.AND || []), { OR: [{ source }, { demand_transactions: { some: { source } } }] }];
         }
 
         // Explicit status param wins over active/archived toggle
@@ -215,7 +218,10 @@ router.get('/recent-external', async (req: any, res) => {
             // split is relaxed — otherwise filtering by CLOSED_LOST in the default view returns
             // nothing at all (lost/closed leads are excluded there), which is exactly the
             // "rework my lost leads" job this filter exists for.
-            where.lead_status = { notIn: ['lost', 'closed'] };
+            where.AND = [...(where.AND || []), { OR: [
+                { lead_status: { notIn: ['lost', 'closed'] } },
+                { demand_transactions: { some: { status: { notIn: ['CLOSED_LOST', 'CLOSED_WON'] } } } },
+            ] }];
         } else if (activeFilter === 'archived' && stageFilters.length === 0) {
             where.lead_status = { in: ['lost', 'closed'] };
         }
@@ -1449,6 +1455,7 @@ router.post('/', async (req: any, res) => {
         // so same-type re-submits still dedup). The frontend surfaces this as "already registered → Add as
         // Direct Client". Replaces the old hard 409 that blocked multiple leads per partner/client.
         let attachToExistingContact = false;
+        let priorTenantId: string | null = null;
 
         if (phone) {
             const normalized = normalizePhone(phone);
@@ -1461,10 +1468,11 @@ router.post('/', async (req: any, res) => {
                         : 'Enter a valid 10-digit phone number.',
                 });
             }
-            phoneNumber = normalized;
+            phoneNumber = await resolveStoredContactPhone(normalized, prisma) || normalized;
             const existing = await prisma.contact.findUnique({ where: { phone_number: phoneNumber } });
             if (existing) {
                 attachToExistingContact = true;
+                priorTenantId = existing.tenant_id;
             }
         } else {
             // Partner referral with no client phone → unique non-dialable placeholder key.
@@ -1476,10 +1484,11 @@ router.post('/', async (req: any, res) => {
         }
 
         // Get tenant
-        const tenant = await prisma.tenant.findFirst();
+        const tenant = await prisma.tenant.findFirst({ where: { id: req.agent.tenant_id } });
         if (!tenant) {
             return res.status(500).json({ error: 'System not configured' });
         }
+        if (priorTenantId && priorTenantId !== tenant.id) return res.status(409).json({ error: 'Contact belongs to another tenant' });
 
         // Auto-assign: privileged users can specify an agent; employees are auto-assigned to themselves
         const isPrivileged = PRIVILEGED_ROLES.includes(req.agent.role);
@@ -1642,7 +1651,7 @@ router.post('/', async (req: any, res) => {
             // between our findUnique (above) and here — `upsert` closes that TOCTOU race so we attach to
             // the just-created contact instead of throwing P2002 (which previously 500'd POST /api/leads).
             : await prisma.contact.upsert({
-                where: { phone_number: phoneNumber },
+                where: { phone_number: phoneNumber, tenant_id: tenant.id },
                 create: {
                     phone_number: phoneNumber,
                     tenant_id: tenant.id,
@@ -1733,18 +1742,22 @@ router.post('/', async (req: any, res) => {
             console.error('[leads.ts] Failed to write Lead record:', leadErr);
         }
 
-        res.status(201).json(contact);
-
         // B1: auto-create QUALIFIED deal — team member touched the lead, AI skips qualification calls.
         // Captures partner referral attribution as deal_scenario=PARTNER_INTERNAL.
-        ensureDealForLead({
+        const enquiry = await ensureDealForLead({
             contactPhone: phoneNumber,
-            source: 'manual',
+            source: source || 'manual',
             createdByAgentId: req.agent?.id,
             isPartnerReferral,
-        }).catch((err) => {
-            console.error(`[leads.ts] ensureDealForLead failed for ${phoneNumber}: ${(err as Error).message}`);
+            newEnquiry: true,
+            assignedAgentId: resolvedAgentId ?? undefined,
+            sourceRef: req.body.inventory_id || req.body.source_ref || null,
+            inventoryId: req.body.inventory_id || null,
+            demand: { intent: intent || null, location: preferred_location || null,
+                budgetMin: budget_min ? Number(budget_min) : null, budgetMax: budget_max ? Number(budget_max) : null,
+                taxonomyNodeId: resolvedNodeId, schemaValues: canonicalDemand.demand_schema_values ?? null },
         });
+        res.status(201).json({ ...contact, enquiry_id: enquiry.dealId });
 
         // Auto-engage: send Template C (greeting + show properties) for manually created leads
         // This is fire-and-forget — don't block the response

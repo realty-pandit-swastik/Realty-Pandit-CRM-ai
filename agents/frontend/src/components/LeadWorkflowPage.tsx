@@ -123,7 +123,7 @@ function formatBudget(min?: number | null, max?: number | null): string {
 
 // ── Main Component ──────────────────────────────────────────────
 
-export default function LeadWorkflowPage() {
+export default function LeadWorkflowPage({ initialTaskId, onTaskCompleted }: { initialTaskId?: string; onTaskCompleted?: () => void } = {}) {
     const { agent } = useAuth();
     const isBoss = agent?.role === 'super_boss' || agent?.role === 'manager';
 
@@ -132,7 +132,7 @@ export default function LeadWorkflowPage() {
     const [stats, setStats] = useState<any>(null);
     const [teamPipeline, setTeamPipeline] = useState<any[]>([]);
     const [viewMode, setViewMode] = useState<'my-tasks' | 'team'>('my-tasks');
-    const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null);
+    const [expandedTaskId, setExpandedTaskId] = useState<string | null>(initialTaskId || null);
     const [actionLoading, setActionLoading] = useState<string | null>(null);
     const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
@@ -166,7 +166,7 @@ export default function LeadWorkflowPage() {
                 getWorkflowTaskQueue(),
                 getWorkflowStats(),
             ]);
-            setTasks(queueRes.tasks || []);
+            setTasks((queueRes.tasks || []).filter((task: WorkflowTask) => !initialTaskId || task.id === initialTaskId));
             setStats(statsRes);
             if (isBoss) {
                 const teamRes = await getTeamWorkflowPipeline();
@@ -174,10 +174,11 @@ export default function LeadWorkflowPage() {
             }
         } catch (err) {
             console.error('Failed to load workflow data:', err);
+            setMessage({ type: 'error', text: 'Could not load workflow tasks. Return to Tasks and retry.' });
         } finally {
             setLoading(false);
         }
-    }, [isBoss]);
+    }, [isBoss, initialTaskId]);
 
     useEffect(() => { fetchData(); }, [fetchData]);
 
@@ -203,6 +204,7 @@ export default function LeadWorkflowPage() {
             setExpandedTaskId(null);
             resetFormState();
             await fetchData();
+            onTaskCompleted?.();
         } catch (err: any) {
             showMessage('error', err.response?.data?.error || err.message || 'Action failed');
         } finally {
