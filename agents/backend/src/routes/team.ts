@@ -1,3 +1,4 @@
+import { normalizePhone } from '../utils/phone';
 ﻿
 import { Router } from 'express';
 import { randomUUID } from 'crypto';
@@ -28,9 +29,9 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 
 router.get('/inventory/bulk-template', (req, res) => {
     const template = [
         'type,category,intent,state,district,locality,pincode,price,price_unit,bedrooms,bathrooms,area,area_unit,owner_phone,owner_name,status,furnishing,floor_number,total_floors,facing,property_age,key_holder_type,amenities,category_slug,sub_category_slug,type_slug,configuration_slug',
-        'flat,residential,sell,Uttar Pradesh,Gautam Buddh Nagar,"Sector 18, Noida",201301,5500000,Lakh,2,2,1200,sqft,9999999999,Rahul Sharma,active,semi_furnished,3,12,north,1-3_years,UPLOADER,"parking,lift,security",residential,apartment,flat,2_bhk',
+        'flat,residential,sell,Uttar Pradesh,Gautam Buddh Nagar,"Sector 18, Noida",201301,55,Lakh,2,2,1200,sqft,9999999999,Rahul Sharma,active,semi_furnished,3,12,north,1-3_years,UPLOADER,"parking,lift,security",residential,apartment,flat,2_bhk',
         'house,residential,rent,Haryana,Gurgaon,"DLF Phase 2",122002,45000,,3,3,2500,sqft,9888888888,Priya Singh,active,fully_furnished,,,east,,OWNER,"parking,garden,security",residential,individual_housing,independent_house,',
-        'plot,commercial,sell,Uttar Pradesh,Gautam Buddh Nagar,"Noida Extension",201306,8000000,Lakh,,,2000,sqyd,9777777777,Amit Kumar,active,,,,,new_construction,EXTERNAL,"",commercial,,,',
+        'plot,commercial,sell,Uttar Pradesh,Gautam Buddh Nagar,"Noida Extension",201306,80,Lakh,,,2000,sqyd,9777777777,Amit Kumar,active,,,,,new_construction,EXTERNAL,"",commercial,,,',
     ].join('\n');
 
     res.setHeader('Content-Type', 'text/csv');
@@ -1068,7 +1069,7 @@ router.post('/inventory/bulk-upload', checkPermission('bulk_upload'), upload.sin
         return res.status(400).json({ error: 'CSV file required. Field name: file' });
     }
 
-    const results = { imported: 0, skipped: 0, errors: [] as string[] };
+    const results = { imported: 0, skipped: 0, errors: [] as string[], rows: [] as { row: number; status: string; error?: string }[] };
 
     try {
         const csvContent = req.file.buffer.toString('utf-8');
@@ -1078,7 +1079,7 @@ router.post('/inventory/bulk-upload', checkPermission('bulk_upload'), upload.sin
             trim: true,
         });
 
-        const tenant = await prisma.tenant.findFirst();
+        const tenant = await prisma.tenant.findUnique({ where: { id: req.agent!.tenant_id } });
         if (!tenant) return res.status(500).json({ error: 'Tenant configuration missing' });
 
         for (let i = 0; i < records.length; i++) {
@@ -1088,22 +1089,36 @@ router.post('/inventory/bulk-upload', checkPermission('bulk_upload'), upload.sin
             // Required fields validation
             if (!row.owner_phone) {
                 results.errors.push(`Row ${rowNum}: owner_phone is required`);
+                results.rows.push({ row: rowNum, status: 'rejected', error: 'owner_phone is required' });
                 results.skipped++;
                 continue;
             }
             if (!row.type) {
                 results.errors.push(`Row ${rowNum}: type is required (flat, house, plot, office, shop)`);
+                results.rows.push({ row: rowNum, status: 'rejected', error: 'type is required (flat, house, plot, office, shop)' });
                 results.skipped++;
                 continue;
             }
             if (!row.intent) {
                 results.errors.push(`Row ${rowNum}: intent is required (sell, rent, lease)`);
+                results.rows.push({ row: rowNum, status: 'rejected', error: 'intent is required (sell, rent, lease)' });
                 results.skipped++;
                 continue;
             }
 
             try {
-                const ownerPhone = row.owner_phone.startsWith('+') ? row.owner_phone : `+91${row.owner_phone.replace(/^0+/, '')}`;
+                let csvPrice: number | null = row.price !== undefined && row.price !== '' ? Number(row.price) : null;
+                const csvUnit = String(row.price_unit || '').toLowerCase();
+                if ((csvPrice !== null && (!Number.isFinite(csvPrice) || csvPrice < 0)) || !['', 'rupees', 'inr', 'lakh', 'crore', 'cr', 'thousand'].includes(csvUnit)) throw new Error('Enter a valid price and price unit');
+                if (csvPrice !== null) {
+                    if (csvUnit === 'lakh') csvPrice *= 100000;
+                    else if (csvUnit === 'crore' || csvUnit === 'cr') csvPrice *= 10000000;
+                    else if (csvUnit === 'thousand') csvPrice *= 1000;
+                }
+                const ownerPhone = normalizePhone(row.owner_phone);
+                if (!ownerPhone) throw new Error('Invalid owner phone');
+                const existingOwnerContact = await prisma.contact.findUnique({ where: { phone_number: ownerPhone }, select: { tenant_id: true } });
+                if (existingOwnerContact && existingOwnerContact.tenant_id !== tenant.id) throw new Error('Owner is not available to this tenant');
 
                 // SSOT: Upsert Contact
                 await prisma.contact.upsert({
@@ -1183,11 +1198,7 @@ router.post('/inventory/bulk-upload', checkPermission('bulk_upload'), upload.sin
                     .filter(Boolean).join(', ').replace(', -', ' -') || undefined;
 
                 // Compute raw price from price + price_unit
-                let csvPrice: number | null = row.price ? parseFloat(row.price) : null;
-                if (csvPrice && row.price_unit) {
-                    if (row.price_unit.toLowerCase() === 'lakh') csvPrice *= 100000;
-                    else if (row.price_unit.toLowerCase() === 'crore') csvPrice *= 10000000;
-                }
+
 
                 // Fold dropped columns (furnishing/facing/property_age/total_floors/features)
                 // into specs.* (SoT since 2026-05-28) — writing the columns would throw.
@@ -1210,7 +1221,7 @@ router.post('/inventory/bulk-upload', checkPermission('bulk_upload'), upload.sin
                         intent: row.intent,
                         location: csvLocation,
                         price: csvPrice,
-                        price_unit: row.price_unit || undefined,
+                        price_unit: null,
                         status: row.status || 'active',
                         specs: Object.keys(specs).length > 0 ? specs : null,
                         media_urls: [],
@@ -1254,8 +1265,10 @@ router.post('/inventory/bulk-upload', checkPermission('bulk_upload'), upload.sin
                 });
 
                 results.imported++;
+                results.rows.push({ row: rowNum, status: 'imported' });
             } catch (rowError: any) {
                 results.errors.push(`Row ${rowNum}: ${rowError.message}`);
+                results.rows.push({ row: rowNum, status: 'rejected', error: rowError.message });
                 results.skipped++;
             }
         }

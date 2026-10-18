@@ -14,7 +14,7 @@ import jwt from 'jsonwebtoken';
 import { WorkflowEngine } from '../workflows/workflow_engine';
 import { WORKFLOW_GROUPS, DOCUMENT_TYPES, ENRICHMENT_STEPS, ENRICHMENT_GROUPS } from '../workflows/workflow_definition';
 import { moderateImages, ModerationResult } from '../services/image_moderation';
-import { authMiddleware } from '../middleware/auth';
+import { authMiddleware, checkPermission } from '../middleware/auth';
 import logger from '../utils/logger';
 import prisma from '../db';
 import { captureRouteError } from '../utils/capture';
@@ -259,7 +259,7 @@ router.post('/summary', async (req: Request, res: Response) => {
  * Commits the workflow — creates Contact + Owner + Inventory + Interaction.
  * Optional: Bearer token for admin/agent identity.
  */
-router.post('/commit', async (req: Request, res: Response) => {
+router.post('/commit', (req, res, next) => { if (req.body?.source !== 'admin') return next(); return authMiddleware(req, res, () => checkPermission('edit_inventory')(req, res, next)); }, async (req: Request, res: Response) => {
     try {
         const { answers, source } = req.body;
 

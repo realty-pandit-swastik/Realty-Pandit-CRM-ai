@@ -1,5 +1,5 @@
 
-import { Router } from 'express';
+import { Router, type Request, type Response, type NextFunction } from 'express';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
@@ -33,8 +33,36 @@ import { bhkListFromDemand, typeNodeListFromDemand } from '../utils/demand_canon
 import { cacheDel } from '../utils/redis';
 import { HarvestError, ingestPortalListing } from '../services/portal_harvest';
 import { portalIngestionAuth } from '../middleware/portal_ingestion_auth';
+import { formatPropertyPrice, inventoryPriceLabels } from '../utils/format_price';
+import { randomUUID } from 'crypto';
+import { inventoryDocumentType } from '../utils/inventory_document';
+import { buildCustomerPropertyShareText, parseShareContent as parseContentForSelection } from '../services/property_sharing';
+import { PERMISSIONS } from '../config/permissions';
+import { mayShareWithRecipient as authorizedShareRecipient } from '../services/property_recipient_scope';
+import { AppError } from '../middleware/error_handler';
 
 const router = Router();
+
+function presentationPrice(row: Record<string, unknown>): string {
+    return formatPropertyPrice(row.customer_price ?? row.display_price ?? row.price, {
+        intent: typeof row.intent === 'string' ? row.intent : null,
+        unit: row.customer_price != null || row.display_price != null ? null : typeof row.price_unit === 'string' ? row.price_unit : null,
+    });
+}
+
+async function requireInventoryMediaOwner(req: Request, res: Response, next: NextFunction) {
+    try {
+        const actor = req.agent!;
+        const inventory = await prisma.inventory.findFirst({ where: { id: String(req.params.id), tenant_id: actor.tenant_id },
+            select: { assigned_agent_id: true, uploaded_by_agent_id: true } });
+        if (!inventory) return res.status(404).json({ error: 'Inventory not found' });
+        const team = await getTeamIds(actor);
+        if (actor.role !== 'super_boss' && !team.includes(inventory.assigned_agent_id || '') && !team.includes(inventory.uploaded_by_agent_id || '')) {
+            return res.status(403).json({ error: 'Only the listing owner’s team can change its media.' });
+        }
+        next();
+    } catch (error) { next(error); }
+}
 
 // #9 owner railguard (2026-07-25): a team member's number must NEVER be stored as the property
 // OWNER (supply contact). Matches on last-10 digits against ALL active staff (broadened from the
@@ -47,6 +75,15 @@ async function activeStaffOwnerName(phone: string | null | undefined): Promise<s
     const hit = staff.find(a => d10(a.phone) === key);
     return hit ? (hit.name || 'a team member') : null;
 }
+
+async function requireInventoryTenant(req: Request, res: Response, next: NextFunction) {
+    try {
+        const inv = await prisma.inventory.findFirst({ where: { id: String(req.params.id), tenant_id: req.agent!.tenant_id }, select: { id: true } });
+        if (!inv) return res.status(404).json({ error: 'Inventory not found' });
+        next();
+    } catch (error) { next(error); }
+}
+
 const stateMachine = new InventoryStateMachine();
 const storageService = new StorageService();
 
@@ -528,7 +565,7 @@ router.post('/:id/partner-assign', authMiddleware, async (req: any, res) => {
 router.get('/', authMiddleware, async (req, res) => {
     try {
         const agent = req.agent!;
-        const where: any = {};
+        const where: any = { tenant_id: agent.tenant_id };
 
         // Visibility (2026-06-27): manager = their team, employee = own, BY DEFAULT. super_boss sees all.
         // `?all=true` ("Browse all") returns the whole catalog so agents can still match clients to any
@@ -970,7 +1007,8 @@ router.get('/', authMiddleware, async (req, res) => {
             const needs_owner_fix = OWNER_PENDING_PHONES.includes(i.owner_phone)
                 || (!!ownerD && (ownerD === d10(i.uploaded_by_agent?.phone) || ownerD === d10(i.assigned_agent?.phone)));
             return {
-                ...redacted, source, owner_name: contactName, mine, can_edit, needs_owner_fix,
+                ...redacted, ...inventoryPriceLabels(redacted), formatted_price: presentationPrice(redacted),
+                source, owner_name: contactName, mine, can_edit, needs_owner_fix,
                 key_holder_designation: redacted.key_holder_phone
                     ? (i.key_holder_type === 'OWNER' ? i.contact?.client_role || 'Owner'
                         : i.key_holder_type === 'UPLOADER' ? 'Agent' : i.key_holder_contact?.client_role || 'External')
@@ -1048,7 +1086,7 @@ router.get('/:id', authMiddleware, async (req, res, next) => {
         }
 
         const inventory = await prisma.inventory.findUnique({
-            where: { id },
+            where: { id, tenant_id: req.agent!.tenant_id },
             include: {
                 uploaded_by_agent: {
                     select: { id: true, name: true, role: true },
@@ -1067,7 +1105,11 @@ router.get('/:id', authMiddleware, async (req, res, next) => {
                 investment_type: { select: { id: true, name: true, slug: true } },
                 flat_property_type: { select: { id: true, name: true, slug: true, main_category: true } },
                 taxonomy_node: { select: { id: true, name: true, slug: true } },
-                documents: {
+                reference_agent: { select: { id: true, name: true } },
+            referral_partner: { select: { id: true, name: true } },
+            owning_manager: { select: { id: true, name: true } },
+            _count: { select: { appointments: true, property_shares: true, saved_properties: true, shortlisted_by: true } },
+            documents: {
                     orderBy: { created_at: 'desc' as const },
                     select: {
                         id: true, doc_type: true, title: true,
@@ -1110,15 +1152,28 @@ router.get('/:id', authMiddleware, async (req, res, next) => {
         });
         // can_edit mirrors the PATCH guard: super_boss, or (manager of) the team that owns the listing.
         redactedDetail.can_edit = meDetail.role === 'super_boss'
-            || detailTeamIds.includes(inventory.assigned_agent_id)
-            || detailTeamIds.includes(inventory.uploaded_by_agent_id);
+            || detailTeamIds.includes(inventory.assigned_agent_id || '')
+            || detailTeamIds.includes(inventory.uploaded_by_agent_id || '');
         // Documents (2026-08-11, owner-set rule): visible ONLY to the listing's own agent +
         // super_boss - the same rule mayAccessDocuments() enforces on the download/write routes.
         // Note this is deliberately NARROWER than redactInventoryForStaff, which also lets a
         // shared-with teammate through: sharing a listing does NOT share its paperwork.
         // The KEY is omitted, not set to [], so the UI can tell "none uploaded" from "not yours".
         if (!redactedDetail.can_edit) delete redactedDetail.documents;
-        res.json(redactedDetail);
+        redactedDetail.customer_share_text = buildCustomerPropertyShareText(inventory);
+        redactedDetail.restricted_fields = Object.keys(inventory).filter(key => !(key in redactedDetail));
+        const permissions = PERMISSIONS[meDetail.role] || [];
+        redactedDetail.can_access_documents = redactedDetail.can_edit;
+        redactedDetail.actions = {
+            edit: redactedDetail.can_edit && permissions.includes('edit_inventory'),
+            share: permissions.includes('share_inventory') && (inventory.status === 'active' || redactedDetail.can_edit || (inventory.shared_with_ids || []).some(id => detailTeamIds.includes(id))),
+            transfer: permissions.includes('transfer_inventory') && redactedDetail.can_edit,
+            ownership: permissions.includes('manage_inventory') && redactedDetail.can_edit,
+            delete: permissions.includes('delete_inventory') && redactedDetail.can_edit,
+            approve: permissions.includes('edit_inventory') && redactedDetail.can_edit && inventory.status === 'pending_approval',
+        };
+
+        res.json({ ...redactedDetail, ...inventoryPriceLabels(redactedDetail), formatted_price: presentationPrice(redactedDetail) });
     } catch (error) {
         captureRouteError(error, req, { route: 'inventory#3' });
         logger.error(error);
@@ -1131,7 +1186,7 @@ router.get('/:id', authMiddleware, async (req, res, next) => {
 // CLEARS the caller-specified unit-level fields (the agent re-enters them in the Edit that opens next),
 // and mints a fresh display_id. Owner is always copied (required FK) but is editable in that Edit.
 // Media is NOT copied unless copy_media=true.
-router.post('/:id/clone', authMiddleware, checkPermission('edit_inventory'), async (req, res) => {
+router.post('/:id/clone', authMiddleware, checkPermission('edit_inventory'), requireInventoryMediaOwner, async (req, res) => {
     try {
         const { id } = req.params;
         const agent = req.agent!;
@@ -1149,7 +1204,7 @@ if (src.upload_source === 'portal_crawl') return res.status(409).json({ error: '
         // Spread all scalar columns; drop identity/unique/derived fields so the clone gets fresh ones.
         const { id: _id, display_id: _did, slug: _slug, created_at: _c, updated_at: _u, ...rest } = src as any;
         for (const f of clearSet) rest[f] = null;
-        if (!copy_media) { rest.media_urls = []; rest.media_score = 0; }
+        if (!copy_media) { rest.media_urls = []; rest.video_urls = []; rest.media_score = 0; }
         rest.uploaded_by_agent_id = agent.id; // the cloner becomes the new uploader
         rest.status = 'active';
         rest.completion_pct = 0;
@@ -1170,7 +1225,7 @@ if (src.upload_source === 'portal_crawl') return res.status(409).json({ error: '
 });
 
 // PATCH /inventory/:id - Update inventory (requires edit_inventory permission)
-router.patch('/:id', authMiddleware, checkPermission('edit_inventory'), async (req, res) => {
+router.patch('/:id', authMiddleware, checkPermission('edit_inventory'), requireInventoryTenant, async (req, res) => {
     try {
         const id = req.params.id as string;
         // Partner write-guard: a partner may only mutate their OWN listing.
@@ -1232,6 +1287,8 @@ router.patch('/:id', authMiddleware, checkPermission('edit_inventory'), async (r
             // Contact.name and is synced below), so it is the one name field that is written here.
             'owner_phone', 'uploader_phone', 'uploader_name',
         ];
+        const targetIds = [...new Set([req.body.assigned_agent_id, ...(Array.isArray(req.body.shared_with_ids) ? req.body.shared_with_ids : [])].filter(Boolean))];
+        if (targetIds.length && await prisma.agent.count({ where: { tenant_id: req.agent!.tenant_id, id: { in: targetIds } } }) !== targetIds.length) return res.status(400).json({ error: 'One or more team members are unavailable' });
         const updateData: any = {};
         // Handle renovated boolean explicitly (not in allowedFields loop to avoid string coercion)
         if (req.body.renovated !== undefined) {
@@ -1382,6 +1439,8 @@ router.patch('/:id', authMiddleware, checkPermission('edit_inventory'), async (r
         // Normalize and re-link owner if owner_phone changed
         if (updateData.owner_phone) {
             const normalized = normalizePhone(updateData.owner_phone);
+            if (normalized) { const ownerContact = await prisma.contact.findUnique({ where: { phone_number: normalized }, select: { tenant_id: true } });
+                if (ownerContact && ownerContact.tenant_id !== req.agent!.tenant_id) return res.status(403).json({ error: 'Owner is not available to this tenant' }); }
             if (!normalized) return res.status(400).json({ error: 'Invalid owner phone number' });
             // #9 railguard (2026-07-25): the owner must be the ACTUAL owner — never ANY active team
             // member (broadened from the self-only check of 2026-06-20; 313 rows had staff-as-owner).
@@ -1396,7 +1455,7 @@ router.patch('/:id', authMiddleware, checkPermission('edit_inventory'), async (r
             }
             updateData.owner_phone = normalized;
             // Ensure Owner record exists and update FK
-            const tenant = await prisma.tenant.findFirst();
+            const tenant = await prisma.tenant.findUnique({ where: { id: req.agent!.tenant_id } });
             if (tenant) {
                 const ownerId = await ensureOwner(normalized, tenant.id);
                 updateData.owner_id = ownerId;
@@ -1499,7 +1558,7 @@ router.patch('/:id', authMiddleware, checkPermission('edit_inventory'), async (r
 });
 
 // POST /inventory/:id/share — Share inventory with other team members
-router.post('/:id/share', authMiddleware, checkPermission('share_inventory'), async (req, res) => {
+router.post('/:id/share', authMiddleware, checkPermission('share_inventory'), requireInventoryTenant, async (req, res) => {
     try {
         const { id } = req.params;
         const { agent_ids, action } = req.body; // action: 'add' | 'remove'
@@ -1531,6 +1590,7 @@ router.post('/:id/share', authMiddleware, checkPermission('share_inventory'), as
             return res.status(403).json({ error: 'Not authorized to share this inventory' });
         }
 
+        if (await prisma.agent.count({ where: { tenant_id: agent.tenant_id, id: { in: agent_ids } } }) !== new Set(agent_ids).size) return res.status(400).json({ error: 'One or more team members are unavailable' });
         let newSharedIds = [...(existing.shared_with_ids || [])];
         if (action === 'add') {
             for (const aid of agent_ids) {
@@ -1581,7 +1641,7 @@ router.post('/share-pdf', authMiddleware, async (req: any, res) => {
         if (agent.role === 'partner_agent') effectiveVariant = 'brandless';
 
         const inventories = await prisma.inventory.findMany({
-            where: { id: { in: inventory_ids } },
+            where: { id: { in: inventory_ids }, tenant_id: agent.tenant_id },
             select: {
                 id: true, display_id: true, type: true, category: true, intent: true,
                 specs: true, floor_number: true,
@@ -1596,7 +1656,7 @@ router.post('/share-pdf', authMiddleware, async (req: any, res) => {
             },
         });
 
-        if (inventories.length === 0) return res.status(404).json({ error: 'No inventories found' });
+        if (inventories.length !== new Set(inventory_ids).size) return res.status(404).json({ error: 'One or more properties are unavailable' });
 
         // Authorization: agent must have access to every requested inventory.
         // super_boss bypasses; manager allowed only for inventories owned by their team.
@@ -1710,7 +1770,7 @@ function _roomsFromSpecs(specs: any, typeName?: string | null): number | null {
 // the canonical taxonomy join) + rooms/BHK + budget; leads with no resolvable type are dropped (they are
 // unqualified, not matches). Contact phone is REDACTED unless the viewer is super_boss OR the lead is
 // assigned to them (deal or contact) — the middleman model; the name + Share (by deal_id) still work.
-router.get('/:id/matching-clients', authMiddleware, async (req: any, res) => {
+router.get('/:id/matching-clients', authMiddleware, requireInventoryTenant, async (req: any, res) => {
     try {
         const inv = await prisma.inventory.findUnique({
             where: { id: req.params.id },
@@ -1919,6 +1979,7 @@ router.post('/:id/share-to-client', authMiddleware, async (req, res) => {
             return res.status(400).json({ error: 'No valid client phone to share to' });
         }
         const agent = req.agent!;
+        if (!await authorizedShareRecipient(agent, normalized)) return res.status(403).json({ error: 'Recipient is not accessible to your account' });
 
         // PARTNER (2026-07-12): an external partner sharing a property to THEIR client.
         // A PartnerAgent id is NOT an Agent id, and PropertyShare.agent_id / Contact.created_by are
@@ -1958,6 +2019,10 @@ router.post('/:id/share-to-client', authMiddleware, async (req, res) => {
             const { ids, phones } = await partnerIdsWithSubAgents(agent.id);
             canShare = inventory.status === 'active' || isPartnerOwnInventory(inventory as any, ids, phones);
             if (!canShare) return res.status(403).json({ error: 'Not authorized to share this property' });
+        const { selectedPropertyMedia } = await import('../services/property_sharing');
+        try { selectedPropertyMedia(inventory, parseContentForSelection(req.body.content)); }
+        catch { return res.status(400).json({ error: 'Invalid media selection for this property' }); }
+
         }
         if (!canShare) {
             const partnerOwnerIds = await getManagedPartnerOwnerIds([agent.id]);
@@ -2037,9 +2102,11 @@ router.post('/:id/share-to-client', authMiddleware, async (req, res) => {
         const content = parseShareContent(req.body.content);
         let whatsappSent = false;
         let pdfSent = false;
+        let outcome: import('../services/property_sharing').PackageOutcome | undefined;
         try {
-            ({ sent: whatsappSent, pdfSent } = await sharePropertyToRecipient(normalized, inventory, content));
+            ({ sent: whatsappSent, pdfSent, outcome } = await sharePropertyToRecipient(normalized, inventory, content));
         } catch (err) {
+            outcome = { status: 'uncertain', items: [] };
             logger.error('[ShareToClient] WhatsApp send failed:', err);
         }
 
@@ -2076,11 +2143,11 @@ router.post('/:id/share-to-client', authMiddleware, async (req, res) => {
                 channel: 'whatsapp',
                 direction: 'outbound',
                 event_type: 'property_shared',
-                content: `Property shared: ${typeName} in ${inventory.location || inventory.full_address || 'N/A'}`
+                content: `Property share submitted: ${typeName} in ${inventory.location || inventory.full_address || 'N/A'}${outcome ? ` · ${outcome.status}` : ''}`
                     + (isPartnerShare ? ' (by partner agent)' : ''),
                 metadata: {
                     inventory_id: inventory.id, share_id: share.id, property_link: propertyLink,
-                    share_content: content, pdf_sent: pdfSent,
+                    share_content: content, outcome, pdf_sent: pdfSent,
                     ...(sharedDealId ? { deal_id: sharedDealId } : {}),
                     ...(isPartnerShare ? { partner_agent_id: agent.id, recorded_under_agent_id: actingAgentId } : {}),
                 },
@@ -2093,6 +2160,7 @@ router.post('/:id/share-to-client', authMiddleware, async (req, res) => {
             share_link: propertyLink,
             whatsapp_sent: whatsappSent,
             pdf_requested: content.pdf,
+            outcome,
             pdf_sent: pdfSent,
             media_pending: await pendingPropertyMediaCount(normalized, id),
             // Non-blocking re-share notice: true if this property was shared to this client before.
@@ -2116,7 +2184,7 @@ router.post('/:id/share-to-client', authMiddleware, async (req, res) => {
 router.post('/share-batch-to-client', authMiddleware, async (req: any, res) => {
     try {
         const { inventory_ids, client_phone, client_name } = req.body || {};
-        if (!Array.isArray(inventory_ids) || inventory_ids.length === 0) {
+        if (!Array.isArray(inventory_ids) || inventory_ids.length === 0 || inventory_ids.length > 20) {
             return res.status(400).json({ error: 'inventory_ids[] required' });
         }
         if (!client_phone) return res.status(400).json({ error: 'client_phone required' });
@@ -2127,17 +2195,8 @@ router.post('/share-batch-to-client', authMiddleware, async (req: any, res) => {
         const agent = req.agent!;
 
         // Upsert contact as BUYER (mirrors /:id/share-to-client)
+        if (!await authorizedShareRecipient(agent, normalized)) return res.status(403).json({ error: 'Recipient is not accessible to your account' });
         const existingContact = await prisma.contact.findUnique({ where: { phone_number: normalized } });
-        await prisma.contact.upsert({
-            where: { phone_number: normalized },
-            update: { name: client_name || undefined, last_channel: 'whatsapp', last_interaction: new Date() },
-            create: {
-                phone_number: normalized, name: client_name || null, source: 'manual',
-                contact_type: 'BUYER', tenant_id: agent.tenant_id, last_channel: 'whatsapp',
-                last_interaction: new Date(), created_by: req.agent?.id || null,
-            },
-        });
-
         const { resolveShareMode } = await import('../services/share_recognition');
         const { mode, partner } = await resolveShareMode(normalized);
         const { sharePropertyToRecipient, buildBrochureUrl, parseShareContent, resolveActiveDealId } = await import('../services/property_sharing');
@@ -2145,7 +2204,7 @@ router.post('/share-batch-to-client', authMiddleware, async (req: any, res) => {
         const dealId = await resolveActiveDealId(normalized);
 
         const inventories = await prisma.inventory.findMany({
-            where: { id: { in: inventory_ids } },
+            where: { tenant_id: agent.tenant_id, id: { in: inventory_ids } },
             include: { flat_property_type: { select: { name: true, main_category: true } } },
         });
         if (inventories.length === 0) return res.status(404).json({ error: 'No inventories found' });
@@ -2166,7 +2225,21 @@ router.post('/share-batch-to-client', authMiddleware, async (req: any, res) => {
         const ordered = (inventory_ids as string[])
             .map((id) => inventories.find((i: any) => i.id === id))
             .filter((i): i is any => !!i && canShare(i));
-        if (ordered.length === 0) return res.status(403).json({ error: 'Not authorized to share the selected properties' });
+        if (ordered.length !== new Set(inventory_ids).size) return res.status(403).json({ error: 'Not authorized to share the selected properties' });
+
+        const { selectedPropertyMedia } = await import('../services/property_sharing');
+        const propertyContents = ordered.map(inv => parseShareContent({ ...req.body?.content, ...(req.body?.selections?.[inv.id] || {}) }));
+        try { ordered.forEach((inv, i) => selectedPropertyMedia(inv, propertyContents[i])); }
+        catch { return res.status(400).json({ error: 'Invalid property media selection' }); }
+        await prisma.contact.upsert({
+            where: { phone_number: normalized },
+            update: { name: client_name || undefined, last_channel: 'whatsapp', last_interaction: new Date() },
+            create: {
+                phone_number: normalized, name: client_name || null, source: 'manual',
+                contact_type: 'BUYER', tenant_id: agent.tenant_id, last_channel: 'whatsapp',
+                last_interaction: new Date(), created_by: req.agent?.id || null,
+            },
+        });
 
         const total = ordered.length;
         const results: any[] = [];
@@ -2174,10 +2247,12 @@ router.post('/share-batch-to-client', authMiddleware, async (req: any, res) => {
             const inv = ordered[i];
             let whatsappSent = false;
             let pdfSent = false;
+        let outcome: import('../services/property_sharing').PackageOutcome | undefined;
             let pdfUrl: string | null = null;
             try {
-                ({ sent: whatsappSent, pdfSent, pdfUrl } = await sharePropertyToRecipient(normalized, inv, content, { index: i, total }));
+                ({ sent: whatsappSent, pdfSent, pdfUrl, outcome } = await sharePropertyToRecipient(normalized, inv, propertyContents[i], { index: i, total }));
             } catch (err) {
+                outcome = { status: 'uncertain', items: [] };
                 logger.error(`[ShareBatch] send failed for ${inv.id} (${mode}):`, err);
             }
             // Partners get the brandless brochure link (forwardable, no RP trace); clients the website link.
@@ -2196,11 +2271,11 @@ router.post('/share-batch-to-client', authMiddleware, async (req: any, res) => {
                 data: {
                     tenant_id: agent.tenant_id, phone_number: normalized, channel: 'whatsapp',
                     direction: 'outbound', event_type: 'property_shared',
-                    content: `Property shared (${mode}): ${inv.flat_property_type?.name || inv.type || 'Property'} in ${inv.locality || inv.location || 'N/A'}`,
-                    metadata: { inventory_id: inv.id, share_id: share.id, property_link: propertyLink, deal_id: dealId, variant: mode, share_content: content, pdf_sent: pdfSent },
+                    content: `Property share submitted (${mode}): ${inv.flat_property_type?.name || inv.type || 'Property'} in ${inv.locality || inv.location || 'N/A'}${outcome ? ` · ${outcome.status}` : ''}`,
+                    metadata: { inventory_id: inv.id, share_id: share.id, property_link: propertyLink, deal_id: dealId, variant: mode, share_content: content, outcome, pdf_sent: pdfSent },
                 },
             });
-            results.push({ inventory_id: inv.id, whatsapp_sent: whatsappSent, pdf_sent: pdfSent, property_link: propertyLink });
+            results.push({ inventory_id: inv.id, whatsapp_sent: whatsappSent, pdf_sent: pdfSent, outcome, property_link: propertyLink });
         }
 
         logger.info(`[ShareBatch] Agent ${agent.id} shared ${results.length} props with ${normalized} as ${mode} (deal=${dealId || 'none'})`);
@@ -2326,7 +2401,7 @@ router.post('/bulk-transfer', authMiddleware, checkPermission('transfer_inventor
         if (!to_agent_id) return res.status(400).json({ error: 'to_agent_id required' });
         if (ids.length > 500) return res.status(400).json({ error: 'Too many listings (max 500 per call)' });
 
-        const targetAgent = await prisma.agent.findUnique({ where: { id: to_agent_id }, select: { id: true, name: true, phone: true, email: true } });
+        const targetAgent = await prisma.agent.findUnique({ where: { id: to_agent_id, tenant_id: agent.tenant_id }, select: { id: true, name: true, phone: true, email: true } });
         if (!targetAgent) return res.status(404).json({ error: 'Target agent not found' });
         const actorName = (await prisma.agent.findUnique({ where: { id: agent.id }, select: { name: true } }))?.name || agent.email || 'a team member';
 
@@ -2340,7 +2415,7 @@ router.post('/bulk-transfer', authMiddleware, checkPermission('transfer_inventor
         for (const rawId of ids) {
             const id = String(rawId);
             try {
-                const existing = await prisma.inventory.findUnique({ where: { id } });
+                const existing = await prisma.inventory.findUnique({ where: { id, tenant_id: agent.tenant_id } });
                 if (!existing) { results.push({ id, ok: false, error: 'Not found' }); continue; }
                 // Same authorization as the single endpoint.
                 const canTransfer = agent.role === 'super_boss'
@@ -2387,13 +2462,13 @@ router.post('/bulk-transfer', authMiddleware, checkPermission('transfer_inventor
 });
 
 // POST /inventory/:id/transfer — Transfer inventory to another team member
-router.post('/:id/transfer', authMiddleware, checkPermission('transfer_inventory'), async (req, res) => {
+router.post('/:id/transfer', authMiddleware, checkPermission('transfer_inventory'), requireInventoryTenant, async (req, res) => {
     try {
         const { id } = req.params;
         const { to_agent_id } = req.body;
         if (!to_agent_id) return res.status(400).json({ error: 'to_agent_id required' });
 
-        const existing = await prisma.inventory.findUnique({ where: { id } });
+        const existing = await prisma.inventory.findUnique({ where: { id, tenant_id: req.agent!.tenant_id } });
         if (!existing) return res.status(404).json({ error: 'Inventory not found' });
 
         // Authorization: anyone who can see this inventory can transfer it
@@ -2418,7 +2493,7 @@ router.post('/:id/transfer', authMiddleware, checkPermission('transfer_inventory
         }
 
         // Validate target agent exists
-        const targetAgent = await prisma.agent.findUnique({ where: { id: to_agent_id }, select: { id: true, name: true } });
+        const targetAgent = await prisma.agent.findUnique({ where: { id: to_agent_id, tenant_id: req.agent!.tenant_id }, select: { id: true, name: true } });
         if (!targetAgent) return res.status(404).json({ error: 'Target agent not found' });
 
         const previousAssignedId = existing.assigned_agent_id;
@@ -2461,7 +2536,7 @@ router.post('/:id/transfer', authMiddleware, checkPermission('transfer_inventory
         logger.info(`[Inventory] Transferred ${id} from ${agent.name} to ${targetAgent.name}`);
 
         // Notify new + previous handler
-        const fullTarget = await prisma.agent.findUnique({ where: { id: to_agent_id }, select: { id: true, phone: true, email: true, name: true } });
+        const fullTarget = await prisma.agent.findUnique({ where: { id: to_agent_id, tenant_id: req.agent!.tenant_id }, select: { id: true, phone: true, email: true, name: true } });
         if (fullTarget) {
             notify('inventory_transferred', [{ id: fullTarget.id, type: 'agent', phone: fullTarget.phone, email: fullTarget.email || undefined, name: fullTarget.name }], {
                 inventory_id: id, display_id: existing.display_id, from_agent: agent.name,
@@ -2496,7 +2571,7 @@ router.post('/:id/transfer', authMiddleware, checkPermission('transfer_inventory
 
 // POST /inventory/:id/transfer-ownership
 // Transfer property ownership from current owner to a new buyer contact (after deal close)
-router.post('/:id/transfer-ownership', authMiddleware, checkPermission('manage_inventory'), async (req: any, res) => {
+router.post('/:id/transfer-ownership', authMiddleware, checkPermission('manage_inventory'), requireInventoryMediaOwner, async (req: any, res) => {
     try {
         const { id } = req.params;
         const { new_owner_phone, new_owner_name, reason, transaction_id } = req.body;
@@ -2506,11 +2581,13 @@ router.post('/:id/transfer-ownership', authMiddleware, checkPermission('manage_i
         }
 
         const newPhone = normalizePhone(new_owner_phone);
+        if (newPhone) { const targetContact = await prisma.contact.findUnique({ where: { phone_number: newPhone }, select: { tenant_id: true } });
+            if (targetContact && targetContact.tenant_id !== req.agent!.tenant_id) return res.status(403).json({ error: 'Owner is not available to this tenant' }); }
         if (!newPhone) {
             return res.status(400).json({ error: 'Invalid phone number' });
         }
 
-        const tenant = await prisma.tenant.findFirst();
+        const tenant = await prisma.tenant.findUnique({ where: { id: req.agent!.tenant_id } });
         if (!tenant) return res.status(500).json({ error: 'Tenant configuration missing' });
 
         const inventory = await prisma.inventory.findUnique({
@@ -2611,7 +2688,7 @@ router.post('/:id/transfer-ownership', authMiddleware, checkPermission('manage_i
 });
 
 // POST /inventory/:id/mark-sold — mark a listing SOLD; optionally record the new owner (buyer). (#10, 2026-07-25)
-router.post('/:id/mark-sold', authMiddleware, checkPermission('edit_inventory'), async (req: any, res) => {
+router.post('/:id/mark-sold', authMiddleware, checkPermission('edit_inventory'), requireInventoryMediaOwner, async (req: any, res) => {
     try {
         const { id } = req.params;
         const { new_owner_phone, new_owner_name, final_price, reason } = req.body || {};
@@ -2620,10 +2697,12 @@ router.post('/:id/mark-sold', authMiddleware, checkPermission('edit_inventory'),
         const data: any = { status: 'sold', updated_at: new Date() };
         if (new_owner_phone) {
             const newPhone = normalizePhone(new_owner_phone);
+        if (newPhone) { const targetContact = await prisma.contact.findUnique({ where: { phone_number: newPhone }, select: { tenant_id: true } });
+            if (targetContact && targetContact.tenant_id !== req.agent!.tenant_id) return res.status(403).json({ error: 'Owner is not available to this tenant' }); }
             if (!newPhone) return res.status(400).json({ error: 'Invalid new owner phone number' });
             const staff = await activeStaffOwnerName(newPhone);
             if (staff) return res.status(400).json({ error: `${staff} is a team member and cannot be set as the new owner. Enter the buyer's number.` });
-            const tenant = await prisma.tenant.findFirst();
+            const tenant = await prisma.tenant.findUnique({ where: { id: req.agent!.tenant_id } });
             if (!tenant) return res.status(500).json({ error: 'Tenant configuration missing' });
             await prisma.contact.upsert({
                 where: { phone_number: newPhone },
@@ -2651,7 +2730,7 @@ router.post('/:id/mark-sold', authMiddleware, checkPermission('edit_inventory'),
 });
 
 // POST /inventory/:id/mark-on-hold — set status on_hold + create a follow-up task for the listing agent. (#10, 2026-07-25)
-router.post('/:id/mark-on-hold', authMiddleware, checkPermission('edit_inventory'), async (req: any, res) => {
+router.post('/:id/mark-on-hold', authMiddleware, checkPermission('edit_inventory'), requireInventoryMediaOwner, async (req: any, res) => {
     try {
         const { id } = req.params;
         const { follow_up_at, note } = req.body || {};
@@ -2684,7 +2763,7 @@ router.post('/:id/mark-on-hold', authMiddleware, checkPermission('edit_inventory
 });
 
 // POST /inventory/:id/approve — Approve a pending_approval inventory, notify partner via WhatsApp
-router.post('/:id/approve', authMiddleware, checkPermission('edit_inventory'), async (req, res) => {
+router.post('/:id/approve', authMiddleware, checkPermission('edit_inventory'), requireInventoryMediaOwner, async (req, res) => {
     try {
         const { id } = req.params;
         const existing = await prisma.inventory.findUnique({
@@ -2769,7 +2848,7 @@ router.post('/:id/approve', authMiddleware, checkPermission('edit_inventory'), a
 });
 
 // POST /inventory/:id/reject — Reject a pending_approval inventory, notify partner via WhatsApp
-router.post('/:id/reject', authMiddleware, checkPermission('edit_inventory'), async (req, res) => {
+router.post('/:id/reject', authMiddleware, checkPermission('edit_inventory'), requireInventoryMediaOwner, async (req, res) => {
     try {
         const { id } = req.params;
         const { reason } = req.body;
@@ -2825,7 +2904,7 @@ router.post('/:id/reject', authMiddleware, checkPermission('edit_inventory'), as
 // Requires delete_inventory permission. Mirrors PATCH edit guard (team ownership + partner guard).
 // - If property has visits/deals -> soft withdraw (status='withdrawn'), keep history, remove from catalog
 // - Else hard delete with cleanup of shares/saves/shortlists + catalog + uploads
-router.delete('/:id', authMiddleware, checkPermission('delete_inventory'), async (req, res) => {
+router.delete('/:id', authMiddleware, checkPermission('delete_inventory'), requireInventoryMediaOwner, async (req, res) => {
     try {
         const id = req.params.id as string;
 
@@ -3058,7 +3137,7 @@ router.post('/commit', async (req, res) => {
 });
 
 // POST /inventory/:id/upload - Upload property images and videos (max 20 files)
-router.post('/:id/upload', uploadMedia, async (req, res) => {
+router.post('/:id/upload', authMiddleware, checkPermission('edit_inventory'), requireInventoryMediaOwner, uploadMedia, async (req, res) => {
     try {
         const id = req.params.id as string;
         const files = req.files as Express.Multer.File[];
@@ -3130,7 +3209,7 @@ router.post('/:id/upload', uploadMedia, async (req, res) => {
 });
 
 // DELETE /inventory/:id/media/:filename - Remove a media file (image or video)
-router.delete('/:id/media/:filename', async (req, res) => {
+router.delete('/:id/media/:filename', authMiddleware, checkPermission('edit_inventory'), requireInventoryMediaOwner, async (req, res) => {
     try {
         const id = req.params.id as string;
         const filename = req.params.filename as string;
@@ -3218,7 +3297,8 @@ router.get('/:id/brochure.pdf', async (req: any, res) => {
         const id = req.params.id as string;
         const variant: 'branded' | 'brandless' = req.query.variant === 'branded' ? 'branded' : 'brandless';
         const { verifyPdfToken } = await import('../utils/pdf_token');
-        if (!verifyPdfToken(id, variant, String(req.query.token || ''))) {
+        const selectedMedia = req.query.media === undefined ? undefined : String(req.query.media);
+        if (!verifyPdfToken(id, selectedMedia === undefined ? variant : `brandless-media:${selectedMedia}`, String(req.query.token || ''))) {
             return res.status(403).send('Invalid or expired link');
         }
         const inv = await prisma.inventory.findUnique({
@@ -3235,6 +3315,11 @@ router.get('/:id/brochure.pdf', async (req: any, res) => {
         });
         if (!inv) return res.status(404).send('Property not found');
 
+        if (selectedMedia !== undefined) {
+            let media: unknown; try { media = JSON.parse(selectedMedia); } catch { return res.status(400).send('Invalid media selection'); }
+            if (!Array.isArray(media) || media.some(url => typeof url !== 'string' || !inv.media_urls.includes(url))) return res.status(400).send('Invalid media selection');
+            inv.media_urls = media;
+        }
         const { generateInventoryPdfStream, brochureFilename } = await import('../services/pdf_generator');
         res.setHeader('Content-Type', 'application/pdf');
         res.setHeader('Content-Disposition', `inline; filename="${brochureFilename(inv as any)}"`);
@@ -3293,7 +3378,7 @@ const enrichmentEngine = new WorkflowEngine(ENRICHMENT_STEPS);
  * Returns enrichment step definitions + current inventory values.
  */
 // ─── GET /api/inventory/:id/contacts — Owner, key holder, assigned agent ────
-router.get('/:id/contacts', authMiddleware, async (req, res) => {
+router.get('/:id/contacts', authMiddleware, requireInventoryTenant, async (req, res) => {
     try {
         const inv = await prisma.inventory.findUnique({
             where: { id: req.params.id },
@@ -3336,7 +3421,7 @@ router.get('/:id/contacts', authMiddleware, async (req, res) => {
     }
 });
 
-router.get('/:id/enrichment', authMiddleware, async (req, res) => {
+router.get('/:id/enrichment', authMiddleware, checkPermission('edit_inventory'), requireInventoryMediaOwner, async (req, res) => {
     try {
         const inventory = await prisma.inventory.findUnique({
             where: { id: req.params.id },
@@ -3395,7 +3480,7 @@ router.get('/:id/enrichment', authMiddleware, async (req, res) => {
  * PATCH /inventory/:id/enrich
  * Update specific enrichment fields on an existing inventory.
  */
-router.patch('/:id/enrich', authMiddleware, async (req, res) => {
+router.patch('/:id/enrich', authMiddleware, checkPermission('edit_inventory'), requireInventoryMediaOwner, async (req, res) => {
     try {
         const { fields } = req.body as { fields: Record<string, any> };
         if (!fields || typeof fields !== 'object') {
@@ -3564,7 +3649,7 @@ async function mayAccessDocuments(req: any, res: any, inventoryId: string | stri
     const me = req.agent!;
     const invId = Array.isArray(inventoryId) ? inventoryId[0] : inventoryId;
     const inv = await prisma.inventory.findUnique({
-        where: { id: invId },
+        where: { id: invId, tenant_id: me.tenant_id },
         select: { id: true, assigned_agent_id: true, uploaded_by_agent_id: true },
     });
     if (!inv) {
@@ -3644,9 +3729,10 @@ router.post('/:id/documents', authMiddleware, checkPermission('edit_inventory'),
         if (!file) {
             return res.status(400).json({ error: 'No document file provided' });
         }
-        if (!doc_type) {
-            return res.status(400).json({ error: 'doc_type is required' });
+        if (typeof doc_type !== 'string' || !doc_type.trim() || doc_type.length > 80 || (title !== undefined && (typeof title !== 'string' || title.length > 200))) {
+            return res.status(400).json({ error: 'Provide a document type up to 80 characters and an optional title up to 200 characters.' });
         }
+        const documentType = inventoryDocumentType(file);
 
         const inventory = await prisma.inventory.findUnique({ where: { id: inventoryId } });
         if (!inventory) {
@@ -3655,14 +3741,14 @@ router.post('/:id/documents', authMiddleware, checkPermission('edit_inventory'),
 
         // Save file to disk
         const docDir = path.join(process.cwd(), 'uploads', 'properties', inventoryId, 'documents');
-        fs.mkdirSync(docDir, { recursive: true });
-        const ext = (file.originalname.split('.').pop() || 'pdf').toLowerCase();
-        const filename = `${Date.now()}-${doc_type}.${ext}`;
-        fs.writeFileSync(path.join(docDir, filename), file.buffer);
+        await fs.promises.mkdir(docDir, { recursive: true });
+        const filename = `${randomUUID()}${documentType.extension}`;
+        const filePath = path.join(docDir, filename);
+        await fs.promises.writeFile(filePath, file.buffer);
 
         const fileUrl = `/uploads/properties/${inventoryId}/documents/${filename}`;
 
-        // Create InventoryDocument record
+        // shortcut: retain private files on ambiguous database failures; add orphan reconciliation before release.
         const doc = await prisma.inventoryDocument.create({
             data: {
                 inventory_id: inventoryId,
@@ -3670,7 +3756,7 @@ router.post('/:id/documents', authMiddleware, checkPermission('edit_inventory'),
                 title: title || file.originalname,
                 file_url: fileUrl,
                 file_name: file.originalname,
-                mime_type: file.mimetype,
+                mime_type: documentType.mimeType,
                 file_size: file.size,
                 uploaded_via: 'admin',
             },
@@ -3691,6 +3777,7 @@ router.post('/:id/documents', authMiddleware, checkPermission('edit_inventory'),
         logger.info(`[Documents] Uploaded ${doc.id} for inventory ${inventoryId}`);
         res.status(201).json(doc);
     } catch (error) {
+        if (error instanceof AppError) return res.status(error.statusCode).json({ error: error.message });
         captureRouteError(error, req, { route: 'inventory#21' });
         logger.error('[Documents POST] Error:', error);
         res.status(500).json({ error: (error as Error).message });

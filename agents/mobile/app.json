@@ -1,0 +1,52 @@
+{
+  "expo": {
+    "name": "Realty Pandit",
+    "slug": "realty-pandit-mobile",
+    "version": "0.1.0",
+    "scheme": "realtypandit-crm",
+    "platforms": [
+      "android",
+      "ios"
+    ],
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "icon": "./assets/realty-pandit.png",
+    "ios": {
+      "bundleIdentifier": "in.realtypandit.crm.mobile",
+      "supportsTablet": false
+    },
+    "android": {
+      "package": "in.realtypandit.crm.mobile",
+      "permissions": [],
+      "blockedPermissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.READ_CONTACTS",
+        "android.permission.READ_CALL_LOG"
+      ]
+    },
+    "plugins": [
+      "./plugins/withAndroidConfiguration.cjs",
+      "expo-router",
+      [
+        "expo-secure-store",
+        {
+          "configureAndroidBackup": true
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Choose property photos to attach to this listing.",
+          "cameraPermission": "Take property photos to attach to this listing.",
+          "microphonePermission": false
+        }
+      ],
+      "expo-sharing",
+      "expo-font",
+      "expo-video"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}

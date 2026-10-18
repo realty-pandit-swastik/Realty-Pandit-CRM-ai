@@ -1,0 +1,62 @@
+name: Mobile validation
+on:
+  pull_request:
+    branches: [main, develop]
+    paths: ['agents/mobile/**', 'agents/backend/**', '.github/workflows/mobile-ci.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  mobile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: agents/mobile
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: '22.23.2'
+          cache: npm
+          cache-dependency-path: agents/mobile/package-lock.json
+      - run: npm ci
+      - run: npx expo install --check
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm test
+      - run: npm run bundle:android
+      - run: npm run bundle:ios
+  api-contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: mobile_test
+          POSTGRES_PASSWORD: local_disposable
+          POSTGRES_DB: mobile_test
+        ports: ['55432:5432']
+        options: --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports: ['56379:6379']
+    env:
+      DATABASE_URL: postgresql://mobile_test:local_disposable@127.0.0.1:55432/mobile_test
+      NODE_ENV: test
+    defaults:
+      run:
+        working-directory: agents/backend
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: '22.23.2'
+          cache: npm
+          cache-dependency-path: agents/backend/package-lock.json
+      - run: npm ci
+      - run: npx prisma generate
+      - run: npx prisma db push --skip-generate
+      - run: npm test
+      - run: npx vitest run --config vitest.mobile-integration.config.ts

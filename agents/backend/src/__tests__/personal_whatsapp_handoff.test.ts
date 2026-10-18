@@ -44,7 +44,7 @@ const bytes = Buffer.from([255, 216, 255, 224, 1, 2, 3]);
 const inv = { id, tenant_id: 'tenant1', display_id: 'TEST1', media_urls: [url], status: 'active', display_price: 8000000, customer_price: 1234567, owner_phone: '+919123456789', owner_name: 'SECRET', full_address: 'SECRET UNIT', specs: { bhk: 2 }, type: 'flat', city: 'Test' };
 const input = () => ({ recipient: '+919876543210', sending_app: 'com.whatsapp', properties: [{ inventory_id: id, media_urls: [url], first_photo: url, pdf: false }] });
 beforeEach(async () => {
-    vi.clearAllMocks(); state.values.clear(); state.quotas.clear(); state.down = false;
+    vi.clearAllMocks(); prisma.partnerAgent.findFirst = vi.fn().mockResolvedValue(null); state.values.clear(); state.quotas.clear(); state.down = false;
     (prisma.contact.findUnique as any).mockResolvedValue(null);
     (prisma.inventory.findMany as any).mockResolvedValue([inv]);
     (prisma.contact.findFirst as any).mockResolvedValue(null);
@@ -90,7 +90,7 @@ describe('private My WhatsApp pilot', () => {
         (prisma.inventory.findMany as any).mockResolvedValue([]);
         await expect(createHandoff({ ...agent, role: 'super_boss' }, input())).rejects.toMatchObject({ status: 403 });
         expect((prisma.inventory.findMany as any).mock.calls[0][0].where.tenant_id).toBe('tenant1');
-        (prisma.contact.findUnique as any).mockResolvedValue({ phone_number: input().recipient });
+        (prisma.contact.findUnique as any).mockResolvedValue({ phone_number: input().recipient, tenant_id: 'tenant1' });
         await expect(createHandoff(agent, input())).rejects.toMatchObject({ status: 403 });
         expect((prisma.contact.findFirst as any).mock.calls[0][0].where.tenant_id).toBe('tenant1');
     });
@@ -170,7 +170,7 @@ describe('private My WhatsApp pilot', () => {
     it('preserves explicitly country-coded international recipients', async () => {
         const data = { ...input(), recipient: '+65 8123 4567' };
         const result = await createHandoff(agent, data); expect((await claimHandoff(result.launch_token)).manifest.recipient).toBe('+6581234567');
-        expect(vi.mocked(prisma.contact.findUnique)).toHaveBeenCalledWith({ where: { phone_number: '+6581234567' }, select: { phone_number: true } });
+        expect(vi.mocked(prisma.contact.findUnique)).toHaveBeenCalledWith({ where: { phone_number: '+6581234567' }, select: { tenant_id: true } });
         await cancelHandoff(agent, result.launch_token);
     });
     it('cleans expired abandoned snapshots while retaining unexpired directories', async () => {

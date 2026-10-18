@@ -42,6 +42,22 @@ import callingWorkRouter from './calling_work';
 const router = Router();
 router.use(authMiddleware);
 
+// Named shortage ids are not transaction ids; all per-deal actions share this boundary.
+router.param('id', async (req, res, next, id: string) => {
+    if (String(req.route.path).startsWith('/shortages/')) return next();
+    try {
+        const actor = req.agent!;
+        const team = actor.role === 'super_boss' || actor.role === 'partner' ? null : await getTeamIds(actor);
+        const deal = await prisma.transaction.findFirst({ where: {
+            id, tenant_id: actor.tenant_id,
+            ...(team ? { OR: [{ coordinator_agent_id: { in: team } }, { executive_agent_id: { in: team } }] } : {}),
+        }, select: { id: true } });
+        if (!deal) return res.status(404).json({ error: 'Deal not found' });
+        if (!await partnerOwnsDealOr403(req, res, id)) return;
+        next();
+    } catch (error) { next(error); }
+});
+
 router.get('/shortages', checkPermission('act_on_deals'), async (req: any, res) => {
     if (req.agent.role === 'partner') return res.status(403).json({ error: 'Staff only' });
     const teamIds = req.agent.role === 'super_boss' ? null : await getTeamIds(req.agent);

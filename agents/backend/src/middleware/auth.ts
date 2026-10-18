@@ -2,11 +2,10 @@
 import { Request, Response, NextFunction } from 'express';
 import { AuthService } from '../services/auth';
 import { generateCsrfToken, setCsrfCookie, CSRF_COOKIE_NAME } from './csrf';
+import { ACCESS_TOKEN_COOKIE } from './auth_cookie';
+export { ACCESS_TOKEN_COOKIE } from './auth_cookie';
 
 const authService = new AuthService();
-
-/** Name of the HttpOnly access-token cookie set on login. */
-export const ACCESS_TOKEN_COOKIE = 'rp_access_token';
 
 const IS_PROD = process.env.NODE_ENV === 'production';
 // Cross-subdomain cookie scope — admin.realtypandit.in must read cookies set by api.realtypandit.in
@@ -178,7 +177,7 @@ function isPartnerAllowed(req: Request): boolean {
     return PARTNER_ALLOWLIST.some(r => r.method === method && r.re.test(path));
 }
 
-export function authMiddleware(req: Request, res: Response, next: NextFunction) {
+export async function authMiddleware(req: Request, res: Response, next: NextFunction) {
     // Prefer HttpOnly cookie (set by /auth/login for browser clients)
     const cookieToken: string | undefined = req.cookies?.[ACCESS_TOKEN_COOKIE];
 
@@ -194,6 +193,15 @@ export function authMiddleware(req: Request, res: Response, next: NextFunction) 
 
     try {
         const decoded = authService.verifyToken(token);
+        if (decoded.mobile_session_id || decoded.token_use === 'mobile_access') {
+            const { verifyMobileAccess } = await import('../services/mobile_session');
+            await verifyMobileAccess(decoded);
+        }
+        if (decoded.role === 'partner') {
+            const { partnerTenantId } = await import('../utils/partner_scope');
+            // Resolve legacy first-tenant claims from the authenticated partner's actual account.
+            decoded.tenant_id = await partnerTenantId(decoded.id);
+        }
         req.agent = decoded;
         // Partner default-deny: partners can reach ONLY the explicit allow-list above.
         if (decoded.role === 'partner' && !isPartnerAllowed(req)) {

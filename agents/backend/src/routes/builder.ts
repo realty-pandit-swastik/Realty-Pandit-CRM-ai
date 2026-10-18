@@ -193,11 +193,10 @@ router.post('/verify-otp', async (req, res) => {
     }
 
     try {
-        // Validate OTP from Redis (falls back to '1234' for dev/demo if Redis unavailable)
+        // Missing or unavailable OTP storage must fail closed.
         const otpKey = `builder_otp:${phone}`;
         const storedOtp = await cacheGet(otpKey);
-        const validOtp = storedOtp || '1234'; // fallback for demo mode
-        if (otp !== validOtp) {
+        if (!storedOtp || otp !== storedOtp) {
             return res.status(400).json({ error: 'Invalid or expired OTP' });
         }
         // Clear OTP after successful use

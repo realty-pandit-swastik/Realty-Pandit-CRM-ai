@@ -19,6 +19,15 @@
  *   partner_assignee_id                → WHO IS WORKING it (a sub-agent inside the partner's company).
  */
 import prisma from '../db';
+import { AuthError } from '../middleware/error_handler';
+
+export async function partnerTenantId(partnerId: string): Promise<string> {
+    const partner = await prisma.partnerAgent.findUnique({ where: { id: partnerId }, select: {
+        status: true, contact: { select: { tenant_id: true, tenant: { select: { status: true } } } },
+    } });
+    if (!partner || partner.status !== 'ACTIVE' || partner.contact.tenant.status !== 'active') throw new AuthError('Partner account is not active.');
+    return partner.contact.tenant_id;
+}
 
 /** Phone variants (E.164 + bare 10-digit) — partner phones are stored inconsistently across tables. */
 export function phoneVariantsOf(phones: Array<string | null | undefined>): string[] {

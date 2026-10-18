@@ -61,6 +61,22 @@ async function resolvePhone(raw: string): Promise<string> {
     return stored ?? normalizePhone(raw);
 }
 
+// Apply the list's tenant/record boundary to every per-contact action, including new routes.
+router.param('phone', async (req, res, next, raw: string) => {
+    try {
+        const actor = req.agent!;
+        const phone = await resolvePhone(raw);
+        const visibility = actor.role === 'partner' ? {} : await buildFullContactVisibilityFilter(actor.id, actor.role);
+        const contact = await prisma.contact.findFirst({
+            where: { phone_number: phone, tenant_id: actor.tenant_id, AND: [visibility] }, select: { phone_number: true },
+        });
+        if (!contact) return res.status(404).json({ error: 'Lead not found' });
+        if (!await partnerOwnsLeadOr403(req, res, phone)) return;
+        req.params.phone = phone;
+        next();
+    } catch (error) { next(error); }
+});
+
 // GET /api/leads/by-source
 // Groups contacts by source with counts (scoped by role)
 router.get('/by-source', async (req: any, res) => {
@@ -547,7 +563,10 @@ router.patch('/:phone/status', async (req, res) => {
     try {
         if (!(await partnerOwnsLeadOr403(req as any, res, decodeURIComponent(req.params.phone)))) return;
         const phone = await resolvePhone(req.params.phone);
-        const { lead_status, lifecycle_stage, notes } = req.body;
+        const { lead_status, lifecycle_stage, notes, expected_notes } = req.body;
+        if (expected_notes !== undefined && (typeof expected_notes !== 'string' || expected_notes.length > 20000 || typeof notes !== 'string' || notes.length > 20000 || lead_status !== undefined || lifecycle_stage !== undefined)) {
+            return res.status(400).json({ error: 'Conditional note updates require notes and expected_notes strings only.' });
+        }
 
         const updateData: any = {};
         if (lead_status) updateData.lead_status = lead_status;
@@ -569,8 +588,12 @@ router.patch('/:phone/status', async (req, res) => {
         }
         if (notes !== undefined) updateData.notes = notes;
 
+        const noteScope = expected_notes === undefined ? {} : { tenant_id: req.agent!.tenant_id, AND: [
+            await buildFullContactVisibilityFilter(req.agent!.id, req.agent!.role),
+            expected_notes === '' ? { OR: [{ notes: null }, { notes: '' }] } : { notes: expected_notes },
+        ] };
         const contact = await prisma.contact.update({
-            where: { phone_number: phone },
+            where: { phone_number: phone, ...noteScope },
             data: updateData,
             select: { phone_number: true, name: true, lead_status: true, assigned_agent_id: true },
         });
@@ -587,6 +610,7 @@ router.patch('/:phone/status', async (req, res) => {
 
         res.json(contact);
     } catch (error: any) {
+        if (error?.code === 'P2025' && req.body.expected_notes !== undefined) return res.status(409).json({ error: 'Saved notes or access changed. Refresh the lead before replacing them.' });
         captureRouteError(error, req, { route: 'leads#3' });
         if (error?.code === 'P2025') {
             return res.status(404).json({ error: 'Lead not found' });
