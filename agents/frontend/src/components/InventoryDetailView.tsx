@@ -5,6 +5,7 @@ import client from '../api/client';
 import { toDialablePhone } from '../lib/phone';
 import { getDisplayFloor } from '../lib/floor';
 import { useAuth } from '../contexts/AuthContext';
+import { clientRoleLabel } from '../lib/leadDisplay';
 
 /**
  * InventoryDetailView — read-first, role-gated property view for the admin panel.
@@ -23,8 +24,8 @@ import { useAuth } from '../contexts/AuthContext';
 const isVideo = (url: string) => /\.(mp4|mov|webm|avi|mkv|m4v|3gp)(\?|#|$)/i.test(url || '');
 
 interface Contacts {
-    owner: { name: string | null; phone: string } | null;
-    key_holder: { name: string | null; phone: string | null } | null;
+    owner: { name: string | null; phone: string; designation?: string | null; designation_label?: string | null } | null;
+    key_holder: { name: string | null; phone: string | null; designation?: string | null; designation_label?: string | null } | null;
     assigned_agent: { id: string; name: string; phone: string; role: string } | null;
 }
 
@@ -243,16 +244,17 @@ export function InventoryDetailView({ inventoryId, onClose, onEdit }: Props) {
                                     {fullAccess ? 'People Connected' : 'Contact'}
                                 </div>
 
+                                {fullAccess && !contacts?.owner && <p>No contact linked</p>}
                                 {fullAccess ? (
                                     [
                                         { label: 'Owner', p: contacts?.owner },
                                         { label: 'Key Holder', p: contacts?.key_holder },
-                                        { label: 'Assigned Agent', p: contacts?.assigned_agent },
+                                        { label: 'Assigned employee', p: contacts?.assigned_agent },
                                     ].filter(x => toDialablePhone(x.p?.phone)).map(({ label, p }) => (
                                         <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: `1px solid ${C.line2}` }}>
                                             <div style={{ flex: 1, minWidth: 0 }}>
                                                 <div style={{ fontSize: 11, color: C.dim }}>{label}</div>
-                                                <div style={{ fontSize: 13, color: '#e5e7eb', fontWeight: 500 }}>{p!.name || 'Unknown'}</div>
+                                                <div style={{ fontSize: 13, color: '#e5e7eb', fontWeight: 500 }}>{p!.name || 'Unknown'} <span>{p && 'designation' in p ? p.designation_label || clientRoleLabel(p.designation) || 'Role not set' : 'Employee'}</span></div>
                                                 <div style={{ fontSize: 11, color: C.sub }}>{p!.phone}</div>
                                             </div>
                                             <button onClick={() => call(p!.phone)} style={{ background: 'rgba(34,197,94,0.15)', border: 'none', borderRadius: 8, color: '#22c55e', fontSize: 18, padding: '6px 10px', cursor: 'pointer' }}>📞</button>

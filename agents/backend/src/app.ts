@@ -396,12 +396,14 @@ app.use('/api/inventory', apiLimiter, inventoryRouter); // Also mount under /api
 import { geminiCircuit, whatsappCircuit } from './utils/circuit_breaker';
 import { isRedisHealthy } from './utils/redis';
 import { getQueueStats } from './queues/index';
+import { RELEASE_REVISION, databaseFingerprint, DATABASE_IDENTITY_SQL } from './utils/release_identity';
 
 app.get('/health', async (req, res) => {
     const checks: Record<string, any> = {
         status: 'ok',
         agent: 'Realty Pandit Backend',
         instance: process.env.NODE_APP_INSTANCE || 'single',
+        release: RELEASE_REVISION,
         uptime_seconds: Math.floor(process.uptime()),
     };
 
@@ -410,10 +412,11 @@ app.get('/health', async (req, res) => {
     // Database check
     try {
         const start = Date.now();
-        await prisma.$queryRaw`SELECT 1`;
-        checks.db = { status: 'connected', latency_ms: Date.now() - start };
-    } catch (error) {
-        checks.db = { status: 'disconnected', error: (error as Error).message };
+        const rows = await prisma.$queryRawUnsafe(DATABASE_IDENTITY_SQL) as Array<{ name: string; oid: string; started: string }>;
+        if (!rows[0]?.name || !rows[0]?.oid || !rows[0]?.started) throw new Error('Database identity unavailable');
+        checks.db = { status: 'connected', latency_ms: Date.now() - start, fingerprint: databaseFingerprint(rows[0]) };
+    } catch {
+        checks.db = { status: 'disconnected' };
         isHealthy = false;
     }
 

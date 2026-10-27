@@ -365,6 +365,20 @@ router.post('/contacts/ensure', async (req, res) => {
 
         const normalized = normalizePhone(phone);
         const tenant_id = req.agent!.tenant_id;
+        if (!normalized) return res.status(400).json({ error: 'Valid phone required' });
+        const { validateDesignation, CONTACT_ROLES } = await import('../data/contact_catalog');
+        let designation;
+        try { designation = validateDesignation(req.body.client_role, req.body.client_role_label); }
+        catch (error) { return res.status(400).json({ error: (error as Error).message }); }
+        if (designation.role === 'EMPLOYEE' && !['super_boss', 'manager', 'employee'].includes(req.agent!.role)) return res.status(403).json({ error: 'Only internal staff may link an Employee contact' });
+        if (designation.role && designation.role !== 'CLIENT') {
+            try {
+                const { validateInventoryPartyWrite } = await import('../services/inventory_parties');
+                await validateInventoryPartyWrite({ tenant_id, owner_phone: normalized, property_contact_role: designation.role });
+            } catch (error) { return res.status(400).json({ error: (error as Error).message }); }
+        }
+        const existing = await prisma.contact.findUnique({ where: { phone_number: normalized }, select: { tenant_id: true } });
+        if (existing && existing.tenant_id !== tenant_id) return res.status(409).json({ error: 'Contact is not accessible' });
 
         const contact = await prisma.contact.upsert({
             where: { phone_number: normalized },
@@ -373,10 +387,12 @@ router.post('/contacts/ensure', async (req, res) => {
                 phone_number: normalized,
                 name: name || null,
                 source: 'manual',
-                contact_type: reqContactType || 'UNKNOWN',
+                contact_type: designation.role ? CONTACT_ROLES.find(role => role.code === designation.role)!.contactType : reqContactType || 'UNKNOWN',
                 tenant_id,
                 last_interaction: new Date(),
                 created_by: req.agent?.id || null,
+                client_role: designation.role,
+                client_role_label: designation.label,
             }
         });
 

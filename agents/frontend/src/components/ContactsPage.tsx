@@ -1,6 +1,8 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import PhoneInput from './PhoneInput';
-import { getContactsDirectory, getInventory, updateContactProfile, type DirectoryContact } from '../api/client';
+import { getContactsDirectory, updateContactProfile, type DirectoryContact } from '../api/client';
+import { ContactRelationshipPage } from './ContactRelationshipPage';
+import { ContactButton } from './ContactButton';
 import { WhatsAppChatTab } from './WhatsAppChatTab';
 import { toDialablePhone } from '../lib/phone';
 
@@ -51,6 +53,9 @@ export function ContactsPage() {
     const [search, setSearch] = useState('');
     const [loading, setLoading] = useState(true);
     const [selected, setSelected] = useState<DirectoryContact | null>(null);
+    const returnFocus = useRef<HTMLElement | null>(null);
+    const openContact = (contact: DirectoryContact) => { returnFocus.current = document.activeElement as HTMLElement; setSelected(contact); };
+    const closeContact = () => { setSelected(null); requestAnimationFrame(() => returnFocus.current?.focus({ preventScroll: true })); };
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -102,12 +107,13 @@ export function ContactsPage() {
                             const m = meta(c.contact_type);
                             const tel = toDialablePhone(c.phone_number);
                             return (
-                                <div key={c.phone_number} onClick={() => setSelected(c)}
+                                <div key={c.phone_number} onClick={() => openContact(c)}
                                     style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', borderRadius: 12, backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-primary)', cursor: 'pointer' }}>
                                     <div style={{ width: 40, height: 40, borderRadius: 10, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, backgroundColor: `${m.color}22` }}>{m.icon}</div>
                                     <div style={{ flex: 1, minWidth: 0 }}>
                                         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                                            <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>{c.name || tel || c.phone_number}</span>
+                                            <button type="button" onClick={() => openContact(c)} style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)', background: 'none', border: 0, padding: 0, textAlign: 'left', cursor: 'pointer' }}>{c.name || tel || c.phone_number}</button>
+                                            <ContactButton phone={c.phone_number} name={c.name} />
                                             <span style={{ fontSize: 10.5, fontWeight: 700, color: m.color, backgroundColor: `${m.color}1e`, borderRadius: 6, padding: '1px 7px' }}>{m.label}</span>
                                         </div>
                                         <div style={{ fontSize: 11.5, color: 'var(--text-muted)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -137,14 +143,14 @@ export function ContactsPage() {
                 )}
             </div>
 
-            {selected && <ContactDetailDrawer contact={selected} isMobile={isMobile} onClose={() => setSelected(null)} onSaved={() => { setSelected(null); load(); }} />}
+            {selected && <ContactDetailDrawer contact={selected} isMobile={isMobile} onClose={closeContact} onSaved={() => { closeContact(); load(); }} />}
         </div>
     );
 }
 
 function ContactDetailDrawer({ contact, isMobile, onClose, onSaved }: { contact: DirectoryContact; isMobile: boolean; onClose: () => void; onSaved: () => void }) {
     const [tab, setTab] = useState<'overview' | 'chat'>('overview');
-    const [listings, setListings] = useState<any[] | null>(null);
+    const dialog = useRef<HTMLDialogElement>(null);
     const [editing, setEditing] = useState(false);
     const [form, setForm] = useState({ name: contact.name || '', phone: contact.phone_number || '', email: contact.email || '' });
     const [saving, setSaving] = useState(false);
@@ -165,15 +171,13 @@ function ContactDetailDrawer({ contact, isMobile, onClose, onSaved }: { contact:
     };
 
     useEffect(() => {
-        if (contact.inventory_count > 0) {
-            getInventory({ owner_phone: contact.phone_number, limit: 50 })
-                .then((res: any) => setListings(res?.data || (Array.isArray(res) ? res : [])))
-                .catch(() => setListings([]));
-        }
-    }, [contact.phone_number, contact.inventory_count]);
+        const element = dialog.current;
+        if (element && !element.open) element.showModal();
+        return () => element?.close();
+    }, []);
 
     return (
-        <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 1000, backgroundColor: 'var(--sheet-backdrop, rgba(0,0,0,0.45))', display: 'flex', justifyContent: isMobile ? 'center' : 'flex-end', alignItems: isMobile ? 'flex-end' : 'stretch' }}>
+        <dialog ref={dialog} aria-label={`Contact: ${contact.name || 'Unnamed'}`} onCancel={e => { e.preventDefault(); onClose(); }} onClick={e => { if (e.target === e.currentTarget) onClose(); }} style={{ position: 'fixed', inset: 0, margin: 0, padding: 0, border: 0, width: '100%', maxWidth: '100%', height: '100%', maxHeight: '100%', zIndex: 1000, backgroundColor: 'var(--sheet-backdrop, rgba(0,0,0,0.45))', display: 'flex', justifyContent: isMobile ? 'center' : 'flex-end', alignItems: isMobile ? 'flex-end' : 'stretch' }}>
             <div onClick={e => e.stopPropagation()} style={{ backgroundColor: 'var(--bg-secondary)', width: isMobile ? '100%' : 460, maxWidth: '100%', height: isMobile ? '88vh' : '100%', borderRadius: isMobile ? '18px 18px 0 0' : 0, display: 'flex', flexDirection: 'column', boxShadow: '-8px 0 40px rgba(0,0,0,0.3)' }}>
                 {/* Header */}
                 <div style={{ padding: '16px 18px', borderBottom: '1px solid var(--border-primary)' }}>
@@ -189,7 +193,7 @@ function ContactDetailDrawer({ contact, isMobile, onClose, onSaved }: { contact:
                             {editable && !editing && (
                                 <button onClick={() => setEditing(true)} title="Edit contact" style={{ background: 'none', border: 'none', color: 'var(--text-link)', fontSize: 17, cursor: 'pointer', padding: 4 }}>✎</button>
                             )}
-                            <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: 22, cursor: 'pointer', lineHeight: 1 }}>✕</button>
+                            <button aria-label="Close contact" onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: 22, cursor: 'pointer', lineHeight: 1 }}>✕</button>
                         </div>
                     </div>
                     {editing ? (
@@ -236,29 +240,11 @@ function ContactDetailDrawer({ contact, isMobile, onClose, onSaved }: { contact:
                                     <div style={{ fontSize: 13.5, color: 'var(--text-secondary)' }}>{demandLine(contact.demand)}</div>
                                 </div>
                             )}
-                            <div>
-                                <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-muted)', marginBottom: 6 }}>
-                                    🏠 Inventory provided ({contact.inventory_count})
-                                </div>
-                                {contact.inventory_count === 0 ? (
-                                    <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>No inventory from this contact.</div>
-                                ) : listings == null ? (
-                                    <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>Loading listings…</div>
-                                ) : (
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                                        {listings.map((inv: any) => (
-                                            <div key={inv.id} style={{ padding: '8px 10px', borderRadius: 8, backgroundColor: 'var(--bg-tertiary)', border: '1px solid var(--border-primary)' }}>
-                                                <div style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text-primary)' }}>{inv.taxonomy_node?.name || inv.flat_property_type?.name || inv.type || 'Property'} {inv.display_id ? <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>· {inv.display_id}</span> : null}</div>
-                                                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 1 }}>{[inv.locality, inv.city || inv.district].filter(Boolean).join(', ') || inv.location || ''}{inv.status && inv.status !== 'active' ? ` · ${inv.status}` : ''}</div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                )}
-                            </div>
+                            <ContactRelationshipPage key={contact.phone_number} phone={contact.phone_number} embedded onBack={onClose} />
                         </div>
                     )}
                 </div>
             </div>
-        </div>
+        </dialog>
     );
 }

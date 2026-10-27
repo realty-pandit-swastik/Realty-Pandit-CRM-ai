@@ -2,22 +2,22 @@ name: Deploy to Hostinger
 
 on:
   pull_request:
-    branches: [main]
+    branches: [main, fix-dev]
     paths:
       - 'agents/backend/**'
       - 'agents/frontend/**'
       - 'agents/website/**'
       - 'agents/whatsapp-extension/**'
-      - 'deploy/github-hostinger-release.sh'
+      - 'deploy/**'
       - '.github/workflows/deploy-hostinger.yml'
   push:
-    branches: [main]
+    branches: [main, fix-dev]
     paths:
       - 'agents/backend/**'
       - 'agents/frontend/**'
       - 'agents/website/**'
       - 'agents/whatsapp-extension/**'
-      - 'deploy/github-hostinger-release.sh'
+      - 'deploy/**'
       - '.github/workflows/deploy-hostinger.yml'
   workflow_dispatch:
     inputs:
@@ -32,10 +32,20 @@ on:
         default: false
         type: boolean
       run_migrations:
-        description: 'Run prisma migrate deploy (requires a verified backup and migration review)'
+        description: 'Deprecated: automatic migrations are blocked; use the separately reviewed migration procedure'
         required: true
         default: false
         type: boolean
+      approved_revision:
+        description: 'For deployment: paste the full reviewed main-branch Git SHA'
+        required: false
+        default: ''
+        type: string
+      production_approval:
+        description: 'For deployment: type DEPLOY_APPLICATION_ONLY'
+        required: false
+        default: ''
+        type: string
 
 permissions:
   contents: read
@@ -82,6 +92,9 @@ jobs:
           cache-dependency-path: agents/backend/package-lock.json
       - run: npm ci
       - run: npx prisma generate
+      - run: node --test ../../deploy/tests/*.test.cjs
+      - run: python3 ../../deploy/tests/test_release_safety.py
+      - run: bash -n ../../deploy/github-hostinger-release.sh
       - run: npm test
       - run: npm audit --omit=dev --audit-level=high
 
@@ -101,6 +114,7 @@ jobs:
       - run: npm ci
       - run: npm run test:personal-whatsapp
       - run: node --test tests/dashboard.test.mjs
+      - run: node --test tests/contactNavigation.test.mjs
       - run: npm run lint
       - run: npm run build
       - run: npm audit --omit=dev --audit-level=high
@@ -150,7 +164,7 @@ jobs:
 
   deploy:
     # Keep automatic delivery off until the server preflight in the handover is complete.
-    if: github.ref == 'refs/heads/main' && (vars.HOSTINGER_GITHUB_DEPLOY_ENABLED == 'true' || inputs.preflight_only)
+    if: github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && (vars.HOSTINGER_GITHUB_DEPLOY_ENABLED == 'true' || inputs.preflight_only)
     runs-on: ubuntu-latest
     timeout-minutes: 30
     needs: [backend-check, frontend-check, website-check, extension-check]
@@ -163,6 +177,9 @@ jobs:
       HOSTINGER_KNOWN_HOSTS: ${{ secrets.HOSTINGER_KNOWN_HOSTS }}
       HOSTINGER_DEPLOY_PATH: ${{ secrets.HOSTINGER_DEPLOY_PATH }}
       RUN_MIGRATIONS: ${{ inputs.run_migrations && '1' || '0' }}
+      APPROVED_REVISION: ${{ inputs.approved_revision }}
+      PRODUCTION_APPROVAL: ${{ inputs.production_approval }}
+      PREFLIGHT_ONLY: ${{ inputs.preflight_only && '1' || '0' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -174,6 +191,13 @@ jobs:
           test -n "$HOSTINGER_SSH_PRIVATE_KEY"
           test -n "$HOSTINGER_KNOWN_HOSTS"
           test -n "$HOSTINGER_DEPLOY_PATH"
+          [[ "$HOSTINGER_HOST" =~ ^[A-Za-z0-9.-]+$ && "$HOSTINGER_USER" =~ ^[a-z_][a-z0-9_-]*$ ]] || { echo 'Unsafe SSH target configuration.' >&2; exit 1; }
+          [[ "$HOSTINGER_PORT" =~ ^[0-9]{1,5}$ ]] && (( 10#$HOSTINGER_PORT >= 1 && 10#$HOSTINGER_PORT <= 65535 )) || { echo 'Invalid SSH port.' >&2; exit 1; }
+          [[ "$HOSTINGER_DEPLOY_PATH" =~ ^/[A-Za-z0-9/_-]+$ && "$HOSTINGER_DEPLOY_PATH" != / ]] || { echo 'Unsafe application root.' >&2; exit 1; }
+          test "$RUN_MIGRATIONS" = 0 || { echo 'Automatic migrations are blocked; complete the reviewed migration procedure separately.' >&2; exit 1; }
+          if [[ "$PREFLIGHT_ONLY" != 1 ]]; then
+            [[ "$APPROVED_REVISION" == "$GITHUB_SHA" && "$PRODUCTION_APPROVAL" == DEPLOY_APPLICATION_ONLY ]] || { echo 'Explicit approval of this exact application revision is required.' >&2; exit 1; }
+          fi
 
       - name: Configure SSH
         run: |
@@ -205,23 +229,22 @@ jobs:
       - name: Package approved revision
         if: '!inputs.preflight_only'
         run: |
-          tar -czf /tmp/realty-pandit-${GITHUB_SHA}.tgz \
-            --exclude='agents/backend/node_modules' --exclude='agents/backend/.env' --exclude='agents/backend/uploads' --exclude='agents/backend/logs' \
-            --exclude='agents/frontend/node_modules' --exclude='agents/frontend/dist' --exclude='agents/frontend/.env' \
-            --exclude='agents/website/node_modules' --exclude='agents/website/.next' --exclude='agents/website/.env' --exclude='agents/website/.env.local' \
-            agents/backend agents/frontend agents/website
+          python3 deploy/package-release.py "$GITHUB_SHA" "/tmp/realty-pandit-${GITHUB_SHA}.tgz"
 
       - name: Upload and deploy
         if: '!inputs.preflight_only'
         run: |
           target="${HOSTINGER_USER}@${HOSTINGER_HOST}"
           archive="/tmp/realty-pandit-${GITHUB_SHA}.tgz"
-          scp -P "$HOSTINGER_PORT" "$archive" "$target:$archive"
-          scp -P "$HOSTINGER_PORT" deploy/github-hostinger-release.sh "$target:/tmp/github-hostinger-release.sh"
+          checksum=$(sha256sum "$archive" | cut -d' ' -f1)
+          remote=$(ssh -o StrictHostKeyChecking=yes -o ConnectTimeout=10 -p "$HOSTINGER_PORT" "$target" 'umask 077; mktemp -d /tmp/rp-release-XXXXXXXX')
+          [[ "$remote" =~ ^/tmp/rp-release-[A-Za-z0-9]+$ ]]
+          scp -o StrictHostKeyChecking=yes -P "$HOSTINGER_PORT" "$archive" "$target:$archive"
+          scp -o StrictHostKeyChecking=yes -P "$HOSTINGER_PORT" deploy/github-hostinger-release.sh deploy/release-safety.py "$target:$remote/"
           ssh -p "$HOSTINGER_PORT" "$target" \
-            "HOSTINGER_DEPLOY_PATH='$HOSTINGER_DEPLOY_PATH' bash /tmp/github-hostinger-release.sh preflight"
+            "HOSTINGER_DEPLOY_PATH='$HOSTINGER_DEPLOY_PATH' bash '$remote/github-hostinger-release.sh' preflight"
           ssh -p "$HOSTINGER_PORT" "$target" \
-            "HOSTINGER_DEPLOY_PATH='$HOSTINGER_DEPLOY_PATH' bash /tmp/github-hostinger-release.sh deploy '$archive' '$GITHUB_SHA' '$RUN_MIGRATIONS'"
+            "HOSTINGER_DEPLOY_PATH='$HOSTINGER_DEPLOY_PATH' bash '$remote/github-hostinger-release.sh' deploy '$archive' '$GITHUB_SHA' 0 '$checksum'"
 
       - name: Remove runner key
         if: always()

@@ -10,6 +10,8 @@ import { PartnerSourceAutocomplete, type SourcePartnerValue } from './PartnerSou
 import { getTaxonomyTree, cloneInventory } from '../api/client';
 import { useConfirm } from '../contexts/ConfirmContext';
 import { useAuth } from '../contexts/AuthContext';
+import { INVENTORY_CONTACT_ROLES } from '../../../backend/src/data/contact_catalog';
+import { ContactDesignationField } from './ContactDesignationField';
 
 interface InventoryModalProps {
     isOpen: boolean;
@@ -21,7 +23,7 @@ interface InventoryModalProps {
 type ModalPhase = 'contact' | 'prefilling' | 'workflow' | 'confirm' | 'success' | 'enrichment';
 
 // Steps that are auto-filled from contact selection
-const PREFILL_STEPS = ['user_role', 'uploader_phone', 'uploader_name'];
+const PREFILL_STEPS = ['user_role', 'property_contact_role_label', 'uploader_phone', 'uploader_name'];
 
 /**
  * Translate the UI's SourcePartnerValue into the flat fields the workflow engine expects
@@ -54,6 +56,12 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({ isOpen, onClose,
     const { agent } = useAuth();
     const [phase, setPhase] = useState<ModalPhase>('contact');
     const [sourceContact, setSourceContact] = useState<SelectedContact | null>(null);
+    const [keyRole, setKeyRole] = useState({ role: '', label: '' });
+    const designationExtras = () => ({
+        property_contact_role: INVENTORY_CONTACT_ROLES.find(role => role.workflow === sourceContact?.role)?.code || '',
+        property_contact_role_label: sourceContact?.roleLabel || wf.answers.property_contact_role_label || '',
+        key_holder_role: keyRole.role, key_holder_role_label: keyRole.label,
+    });
     const [sourceError, setSourceError] = useState<string | null>(null);
     const [keyHolderMode, setKeyHolderMode] = useState<'search' | null>(null);
     const [keyHolderPhone, setKeyHolderPhone] = useState<string | null>(null);
@@ -100,6 +108,10 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({ isOpen, onClose,
         if (stepId === 'user_role') {
             setPrefilling(true);
             wf.answerStep(sourceContact.role).finally(() => setPrefilling(false));
+        } else if (stepId === 'property_contact_role_label') {
+            if (!sourceContact.roleLabel) { setPhase('workflow'); return; }
+            setPrefilling(true);
+            wf.answerStep(sourceContact.roleLabel).finally(() => setPrefilling(false));
         } else if (stepId === 'uploader_phone') {
             setPrefilling(true);
             wf.answerStep(sourceContact.phone).finally(() => setPrefilling(false));
@@ -137,9 +149,10 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({ isOpen, onClose,
     }, [keyHolderPhone, wf.currentStep?.id, wf.stepLoading]);
 
     const handleContactSelected = useCallback((contact: SelectedContact) => {
+        if (!contact.role) { setSourceError('Choose the contact’s role on this property before continuing.'); return; }
         // (2026-06-20) A team member may NOT list their OWN number as the owner/partner source.
         const d10 = (p?: string | null) => (p || '').replace(/\D/g, '').slice(-10);
-        if (agent?.phone && contact.phone && d10(contact.phone) === d10(agent.phone)) {
+        if (contact.role !== 'EMPLOYEE' && agent?.phone && contact.phone && d10(contact.phone) === d10(agent.phone)) {
             setSourceError('You cannot use your own number as the property owner or partner agent. Select the owner (their direct number) or the partner agent — not yourself.');
             return;
         }
@@ -155,6 +168,7 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({ isOpen, onClose,
             if (!ok) return;
         }
         wf.reset();
+        setKeyRole({ role: '', label: '' });
         setPhase('contact');
         setSourceContact(null);
         setKeyHolderMode(null);
@@ -186,6 +200,7 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({ isOpen, onClose,
 
     const handleAddNew = useCallback(() => {
         wf.reset();
+        setKeyRole({ role: '', label: '' });
         setPhase('contact');
         setSourceContact(null);
         setKeyHolderMode(null);
@@ -335,7 +350,8 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({ isOpen, onClose,
                                 />
                             ) : keyHolderMode === 'search' && wf.currentStep.id === 'key_holder_name' ? (
                                 <KeyHolderContactSearch
-                                    onContactFound={async (name, phone) => {
+                                    onContactFound={async (name, phone, role, label) => {
+                                        setKeyRole({ role, label });
                                         setKeyHolderPhone(phone);
                                         await wf.answerStep(name);
                                     }}
@@ -348,7 +364,7 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({ isOpen, onClose,
                                     loading={wf.stepLoading || wf.submitting}
                                     onSubmit={async () => {
                                         await wf.answerStep(true);
-                                        await wf.submit({ ...buildSourcePartnerExtras(sourcePartner), ...buildPreRentedExtras(preRented, wf.answers.intent) });
+                                        await wf.submit({ ...buildSourcePartnerExtras(sourcePartner), ...buildPreRentedExtras(preRented, wf.answers.intent), ...designationExtras() });
                                     }}
                                     onBack={handleBack}
                                     sourcePartner={sourcePartner}
@@ -382,12 +398,13 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({ isOpen, onClose,
                     {/* Phase: Confirmation — covers all cases: phase=confirm, wf.done=true, or no step left */}
                     {(phase === 'confirm' || wf.done || (phase === 'workflow' && !wf.currentStep)) && !wf.submitted && (
                         <div style={styles.phaseContainer}>
+                            <ContactDesignationField title="Key-holder designation (leave unset if unknown)" value={keyRole.role} label={keyRole.label} onChange={(role, label) => setKeyRole({ role, label })} />
                             <ConfirmationPanel
                                 summary={wf.summary}
                                 answers={wf.answers}
                                 error={wf.error}
                                 submitting={wf.submitting}
-                                onConfirm={() => wf.submit({ ...buildSourcePartnerExtras(sourcePartner), ...buildPreRentedExtras(preRented, wf.answers.intent) })}
+                                onConfirm={() => wf.submit({ ...buildSourcePartnerExtras(sourcePartner), ...buildPreRentedExtras(preRented, wf.answers.intent), ...designationExtras() })}
                                 onBack={handleBack}
                                 sourcePartner={sourcePartner}
                                 onSourcePartnerChange={setSourcePartner}
@@ -618,7 +635,7 @@ function KeyHolderStep({ onSelectUploader, onSelectOwner, onSelectSomeoneElse, l
 // ─── Key Holder Search (Contact Search for "Someone Else") ──────────────────
 
 function KeyHolderContactSearch({ onContactFound }: {
-    onContactFound: (name: string, phone: string) => void;
+    onContactFound: (name: string, phone: string, role: string, label: string) => void;
 }) {
     return (
         <div>
@@ -632,7 +649,7 @@ function KeyHolderContactSearch({ onContactFound }: {
                 label="Search key holder"
                 placeholder="Enter phone number or name"
                 onContactSelected={(contact) => {
-                    onContactFound(contact.name, contact.phone);
+                    onContactFound(contact.name, contact.phone, contact.roleExplicit || contact.isNew ? INVENTORY_CONTACT_ROLES.find(role => role.workflow === contact.role)?.code || '' : '', contact.roleLabel || '');
                 }}
             />
         </div>

@@ -16,13 +16,14 @@ describe('inventorySourceKind', () => {
         expect(inventorySourceKind({ ownership_type: null, referral_partner_id: 'partner-1' })).toBe('DEALER');
         expect(
             inventorySourceKind({
-                ownership_type: 'OWNER',
+                ownership_type: null,
                 referral_partner: { phone_number: '+919000000001', name: 'Dealer Dan' },
             }),
         ).toBe('DEALER');
     });
 
     it('lets an explicit classification win over the partner link', () => {
+        expect(inventorySourceKind({ ownership_type: 'OWNER', referral_partner_id: 'staff-partner' })).toBe('OWNER');
         expect(inventorySourceKind({ ownership_type: 'AGENT_OWNER', referral_partner_id: 'partner-1' })).toBe('AGENT_OWNER');
     });
 

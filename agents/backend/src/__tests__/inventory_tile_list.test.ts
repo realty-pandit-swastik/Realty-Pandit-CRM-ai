@@ -25,6 +25,8 @@ const listing = {
 beforeEach(() => {
     vi.clearAllMocks();
     role = 'super_boss';
+    vi.mocked(prisma.agent.findMany).mockResolvedValue([]);
+    vi.mocked(prisma.contact.findMany).mockResolvedValue([]);
     vi.mocked(prisma.inventory.findMany).mockResolvedValue([listing] as any);
     vi.mocked(prisma.inventory.count).mockResolvedValue(1);
     Object.assign(prisma, { propertyShare: { groupBy: vi.fn().mockResolvedValue([]) } });
@@ -118,6 +120,46 @@ describe('inventory tile list metadata', () => {
         const res = await request(app).get('/inventory');
         expect(res.status).toBe(200);
         expect(res.body.data[0]).toMatchObject({ key_holder_name: 'Owner', key_holder_phone: listing.owner_phone });
-        expect(res.body.data[1]).toMatchObject({ key_holder_name: 'Uploader', key_holder_phone: listing.uploader_phone, key_holder_designation: 'Agent' });
+        // Uploading a listing is not proof of the person's designation.
+        expect(res.body.data[1]).toMatchObject({ key_holder_name: 'Uploader', key_holder_phone: listing.uploader_phone, key_holder_designation: null });
+    });
+
+    it('regresses 21125: staff referral and assignee do not replace the linked property contact', async () => {
+        vi.mocked(prisma.agent.findMany).mockResolvedValue([{ phone: '+919000000002' }] as any);
+        vi.mocked(prisma.inventory.findMany).mockResolvedValue([{ ...listing,
+            display_id: 'RP-GZB-RES-21125', contact: { name: 'Property contact', client_role: null },
+            referral_partner_id: 'staff-partner', referral_partner: { name: 'Internal employee', phone_number: '+919000000002' },
+            assigned_agent: { id: 'staff', name: 'Internal employee', phone: '+919000000002' },
+        }] as any);
+        const res = await request(app).get('/inventory');
+        expect(res.status).toBe(200);
+        expect(res.body.data[0].source).toMatchObject({ name: 'Property contact', designation: 'OWNER' });
+        expect(res.body.data[0].assigned_agent.name).toBe('Internal employee');
+        expect(prisma.agent.findMany).toHaveBeenCalledTimes(1);
+    });
+
+    it('has no uploader fallback when a property contact is absent or is an unclassified staff identity', async () => {
+        vi.mocked(prisma.agent.findMany).mockResolvedValue([{ phone: listing.owner_phone }] as any);
+        vi.mocked(prisma.inventory.findMany).mockResolvedValue([listing, { ...listing, id: 'missing', contact: null }] as any);
+        const res = await request(app).get('/inventory');
+        expect(res.status).toBe(200);
+        for (const row of res.body.data) expect(row.source).toMatchObject({ name: null, phone: null, designation: null });
+    });
+
+    it('resolves an EXTERNAL holder who is the owner using normalized identity, without guessing a new role', async () => {
+        vi.mocked(prisma.inventory.findMany).mockResolvedValue([{ ...listing, key_holder_type: 'EXTERNAL',
+            key_holder_name: 'Property contact', key_holder_phone: '9000000001' }] as any);
+        const res = await request(app).get('/inventory');
+        expect(res.status).toBe(200);
+        expect(res.body.data[0].key_holder_designation).toBe('FINANCER');
+    });
+
+    it('uses the same designation resolver and tenant boundary for the property detail contacts', async () => {
+        vi.mocked(prisma.inventory.findUnique).mockResolvedValue({ ...listing, key_holder_type: 'EXTERNAL', key_holder_phone: '9000000001' } as any);
+        const res = await request(app).get('/inventory/property-1/contacts');
+        expect(res.status).toBe(200);
+        expect(res.body.data.owner.designation).toBe('FINANCER');
+        expect(res.body.data.key_holder.designation).toBe('FINANCER');
+        expect(prisma.inventory.findUnique).toHaveBeenCalledWith(expect.objectContaining({ where: { id: 'property-1', tenant_id: 'tenant-text-id' } }));
     });
 });

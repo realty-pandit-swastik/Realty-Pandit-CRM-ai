@@ -21,6 +21,13 @@ export function isPlaceholderPhone(phone?: string | null): boolean {
     return !!phone && (phone.startsWith('TEMP_') || phone.startsWith('PENDING-'));
 }
 
+/** Inventory's historical unresolved-owner keys are not real property contacts. */
+export function isUnresolvedPropertyContactPhone(phone?: string | null): boolean {
+    if (!phone || isPlaceholderPhone(phone)) return true;
+    const canonical = normalizePhone(phone);
+    return !canonical || ['+910000000000', '+910000000001'].some(key => normalizePhone(key) === canonical);
+}
+
 /**
  * Normalize any Indian phone number to E.164 format (+91XXXXXXXXXX).
  *

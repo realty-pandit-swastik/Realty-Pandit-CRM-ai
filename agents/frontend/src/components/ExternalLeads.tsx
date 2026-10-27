@@ -2,6 +2,7 @@
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import PhoneInput from './PhoneInput';
 import { ContactButton } from './ContactButton';
+import { LEAD_SOURCES, shortLabel } from '../../../backend/src/data/contact_catalog';
 import { useSendMatches } from '../hooks/useSendMatches';
 import CallerDossier from './CallerDossier';
 import client, { getPartnerAssignable, assignLeadToTeammate, shareLead, rosterForPickers, updateContactProfile, getDealMatchCounts } from '../api/client';
@@ -39,6 +40,7 @@ interface Lead {
     name: string | null;
     email: string | null;
     source: string;
+    source_label?: string | null;
     lead_status: string;
     contact_type: string | null;
     intent: string | null;
@@ -78,7 +80,7 @@ interface Lead {
 }
 
 interface LeadDeal {
-    id: string; source: string; source_ref: string | null; status: string; created_at: string;
+    id: string; source: string; source_label?: string | null; source_ref: string | null; status: string; created_at: string;
     // Temporary per-enquiry client role — overrides Contact.client_role on that row.
     client_role_override?: string | null;
     coordinator: { id: string; name: string | null } | null;
@@ -142,28 +144,18 @@ const sourceColors: Record<string, string> = {
     'admin_created': '#a855f7', 'inventory_workflow': '#06b6d4', 'website_popup': '#f97316',
     'agent_registration': '#ec4899',
 };
-const sourceLabels: Record<string, string> = {
-    '99acres': '99acres', 'magicbricks': 'MagicBricks', 'housing': 'Housing.com',
-    'website': 'Website', 'whatsapp': 'WhatsApp', 'voice': 'Voice Call', 'manual': 'Manual',
-    'admin_created': 'Admin Created', 'inventory_workflow': 'Inventory Flow', 'website_popup': 'Website Popup',
-    'agent_registration': 'Agent Reg.',
-};
+const sourceLabels: Record<string, string> = Object.fromEntries(LEAD_SOURCES.map(source => [source.code, source.label]));
 const LEAD_STATUSES = ['cold', 'warm', 'hot', 'closed', 'lost'];
 // Pipeline stage display lives in lib/leadDisplay (shared with LeadCard).
 // Contact.lifecycle_stage is auto-driven by the deal pipeline. Shown read-only. (2026-07-29)
 const LIFECYCLE_STAGES = ['NEW', 'QUALIFIED', 'MATCHING_APPOINTMENT', 'VISIT_SCHEDULED', 'VISITED', 'NEGOTIATION', 'CLOSED_WON', 'CLOSED_LOST', 'ON_HOLD'];
-const SOURCES = ['99acres', 'magicbricks', 'housing', 'website', 'whatsapp', 'voice', 'manual', 'admin_created', 'inventory_workflow', 'website_popup', 'agent_registration'];
+const SOURCES = LEAD_SOURCES.map(source => source.code);
 const PRIVILEGED_ROLES = ['super_boss', 'manager'];
 
 // Lead-source roles for the Add-Lead wizard (Step 2 cards). Single source of truth —
 // the rendered cards, step indicator and submit payload all derive from these keys.
 // Visuals (icon/title/subtitle/accent) are part of the config so a future role is a
 // one-row addition, not a new hardcoded card.
-type LeadSourceRole = 'DIRECT_OWNER' | 'PARTNER_REFERRAL';
-const LEAD_SOURCE_ROLES: Array<{ key: LeadSourceRole; icon: string; title: string; subtitle: string; accent: string; hoverBg: string }> = [
-    { key: 'DIRECT_OWNER', icon: '👤', title: 'Client', subtitle: 'Client contacted directly', accent: '#3b82f6', hoverBg: 'rgba(59,130,246,0.06)' },
-    { key: 'PARTNER_REFERRAL', icon: '🤝', title: 'Partner Agent', subtitle: 'Referred by a partner', accent: '#7c3aed', hoverBg: 'rgba(124,58,237,0.06)' },
-];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -396,7 +388,6 @@ const [budgetMaxFilter, setBudgetMaxFilter] = useState('');
     // PARTNER_REFERRAL: 1=source → 2=details form (with partner search at top)
     const [createStep, setCreateStep] = useState<1 | 2 | 3 | 4>(1);
     const [suggestedLeadType, setSuggestedLeadType] = useState<string | null>(null);
-    const roleCardRefs = useRef<(HTMLDivElement | null)[]>([]);
     const suggestSeq = useRef(0);
     const [identityNewPhone, setIdentityNewPhone] = useState<string | null>(null);
 
@@ -425,6 +416,7 @@ const [budgetMaxFilter, setBudgetMaxFilter] = useState('');
 
     // ── Lead Type Toggle (create modal) ──
     const [createLeadType, setCreateLeadType] = useState<'DIRECT_OWNER' | 'PARTNER_REFERRAL'>('DIRECT_OWNER');
+    const [createSourceLabel, setCreateSourceLabel] = useState('');
     const [createPartnerPhone, setCreatePartnerPhone] = useState('');
     const [createPartnerName, setCreatePartnerName] = useState('');
 
@@ -794,6 +786,7 @@ const [budgetMaxFilter, setBudgetMaxFilter] = useState('');
     const _resetCreateModal = () => {
         setCreateStep(1);
         setCreateLeadType('DIRECT_OWNER');
+        setCreateSourceLabel('');
         setCreateForm({ name: '', phone: '', email: '', source: 'manual', intent: '', notes: '', preferred_location: '' });
         setCreateAssignedAgentId('');
         setCreatePartnerPhone(''); setCreatePartnerName('');
@@ -1261,6 +1254,7 @@ const [budgetMaxFilter, setBudgetMaxFilter] = useState('');
     // with the identity fields. Partner referrals: client name + phone are OPTIONAL (the
     // partner often won't share them — backend creates a placeholder-keyed contact).
     const handleCreateLead = async (demand: DemandPayload) => {
+        if (createForm.source === 'other' && !shortLabel(createSourceLabel)) { setCreateError('Other source requires a label of 2–60 characters'); return; }
         if (createLeadType === 'PARTNER_REFERRAL') {
             if (!createPartnerPhone) { setCreateError('Please search and select a partner agent, or register a new one.'); return; }
         } else {
@@ -1281,6 +1275,7 @@ const [budgetMaxFilter, setBudgetMaxFilter] = useState('');
                 phone: createForm.phone || undefined,
                 email: createForm.email || undefined,
                 source: createForm.source,
+                source_label: createSourceLabel,
                 notes: createForm.notes || undefined,
                 lead_type: createLeadType,
                 // Canonical requirement (taxonomy node + schema_values + universal fields)
@@ -1360,7 +1355,7 @@ const leadCycleStartOf = (lead: any): string => {
     const leadRows: LeadRow[] = filteredLeads.flatMap((l): LeadRow[] =>
         (l.demand_transactions?.length
             ? l.demand_transactions.map(d => ({
-                ...l, _deal: d, source: d.source, lifecycle_stage: d.status,
+                ...l, _deal: d, source: d.source, source_label: d.source_label ?? l.source_label, lifecycle_stage: d.status,
                 intent: d.demand_intent ?? null, preferred_location: d.demand_location ?? null,
                 budget_min: d.demand_budget_min != null ? String(d.demand_budget_min) : null,
                 budget_max: d.demand_budget_max != null ? String(d.demand_budget_max) : null,
@@ -1964,7 +1959,7 @@ const leadCycleStartOf = (lead: any): string => {
                                             </td>
                                             <td style={compactCell}>
                                                 <span style={{ backgroundColor: (sourceColors[lead.source] || '#6b7280') + '20', color: sourceColors[lead.source] || '#6b7280', padding: '1px 6px', borderRadius: '10px', fontSize: '10px', fontWeight: 600 }}>
-                                                    {sourceLabels[lead.source] || lead.source}
+                                                    {lead.source_label || sourceLabels[lead.source] || lead.source}
                                                 </span>
                                             </td>
                                             <td style={compactCell} onClick={e => e.stopPropagation()}>
@@ -2527,7 +2522,7 @@ const leadCycleStartOf = (lead: any): string => {
                             })}
                         </div>
 
-                        {createError && <div style={{ marginBottom: '12px', padding: '8px 12px', borderRadius: '6px', backgroundColor: '#fef2f2', color: '#dc2626', fontSize: '13px' }}>{createError}</div>}
+                        {createError && <div id="new-lead-create-error" role="alert" style={{ marginBottom: '12px', padding: '8px 12px', borderRadius: '6px', backgroundColor: '#fef2f2', color: '#dc2626', fontSize: '13px' }}>{createError}</div>}
 
                         {/* ── STEP 1: Identity — phone first + autocomplete ──
                             An existing contact autocompletes name/phone into the form;
@@ -2628,7 +2623,7 @@ const leadCycleStartOf = (lead: any): string => {
 
                                 {suggestedLeadType && (preselectedContact || (identityNewPhone && identityNewPhone === clientSearchQuery.trim())) && (
                                     <p style={{ fontSize: '12px', color: 'var(--text-muted)', margin: '8px 0 0 4px' }}>
-                                        Suggested role: {LEAD_SOURCE_ROLES.find(r => r.key === suggestedLeadType)?.title} — preselected on the next step, changeable.
+                                        Suggested relationship: {LEAD_SOURCES.find(source => source.code === (suggestedLeadType === 'PARTNER_REFERRAL' ? 'partner' : 'manual'))?.label}. You can choose another source.
                                     </p>
                                 )}
 
@@ -2643,34 +2638,18 @@ const leadCycleStartOf = (lead: any): string => {
                         {createStep === 2 && (
                             <div>
                                 <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '16px' }}>Where is this lead coming from?</div>
-                                <div role="radiogroup" aria-label="Lead source role" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                                    {LEAD_SOURCE_ROLES.map((r, i) => {
-                                        const suggested = suggestedLeadType === r.key;
-                                        return (
-                                            <div key={r.key}
-                                                ref={el => { roleCardRefs.current[i] = el; }}
-                                                role="radio" aria-checked={suggested} tabIndex={0}
-                                                autoFocus={i === 0}
-                                                onClick={() => handleSourceTypeSelect(r.key)}
-                                                onKeyDown={e => {
-                                                    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleSourceTypeSelect(r.key); }
-                                                    else if (e.key === 'ArrowRight' || e.key === 'ArrowDown') { e.preventDefault(); roleCardRefs.current[(i + 1) % LEAD_SOURCE_ROLES.length]?.focus(); }
-                                                    else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') { e.preventDefault(); roleCardRefs.current[(i - 1 + LEAD_SOURCE_ROLES.length) % LEAD_SOURCE_ROLES.length]?.focus(); }
-                                                }}
-                                                style={{ padding: '20px 16px', borderRadius: '12px', border: `2px solid ${suggested ? r.accent : 'var(--border-secondary)'}`, backgroundColor: suggested ? r.hoverBg : 'var(--bg-secondary)', cursor: 'pointer', textAlign: 'center', transition: 'all 0.15s', outline: 'none' }}
-                                                onMouseEnter={e => { e.currentTarget.style.borderColor = r.accent; e.currentTarget.style.backgroundColor = r.hoverBg; }}
-                                                onMouseLeave={e => { e.currentTarget.style.borderColor = suggested ? r.accent : 'var(--border-secondary)'; e.currentTarget.style.backgroundColor = suggested ? r.hoverBg : 'var(--bg-secondary)'; }}
-                                                onFocus={e => { e.currentTarget.style.borderColor = r.accent; }}
-                                                onBlur={e => { if (!suggested) e.currentTarget.style.borderColor = 'var(--border-secondary)'; }}>
-                                                <div style={{ fontSize: '28px', marginBottom: '8px' }}>{r.icon}</div>
-                                                <div style={{ fontWeight: 700, fontSize: '14px', color: 'var(--text-primary)', marginBottom: '4px' }}>{r.title}{suggested ? ' ✓' : ''}</div>
-                                                <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{r.subtitle}</div>
-                                            </div>
-                                        );
-                                    })}
-                                </div>
+                                <label htmlFor="new-lead-source" style={labelStyle}>Lead source</label>
+                                <select id="new-lead-source" value={createForm.source} onChange={e => setCreateForm(p => ({ ...p, source: e.target.value }))} style={inputStyle}>
+                                    {LEAD_SOURCES.map(source => <option key={source.code} value={source.code}>{source.label}</option>)}
+                                </select>
+                                {createForm.source === 'other' && <label>Other source (2–60 characters)<input id="new-lead-source-other" required minLength={2} maxLength={60} value={createSourceLabel} onChange={e => { setCreateSourceLabel(e.target.value); setCreateError(''); }} aria-describedby={createError ? 'new-lead-create-error' : undefined} aria-invalid={!!createError && !shortLabel(createSourceLabel)} style={inputStyle} /></label>}
                                 <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '20px' }}>
                                     <button type="button" onClick={() => setCreateStep(1)} style={{ ...outlineBtn, fontSize: '12px' }}>← Back</button>
+                                    <button type="button" style={primaryBtn} onClick={() => {
+                                        if (createForm.source === 'other' && !shortLabel(createSourceLabel)) { setCreateError('Other source requires a label of 2–60 characters'); document.getElementById('new-lead-source-other')?.focus(); return; }
+                                        setCreateError('');
+                                        handleSourceTypeSelect(createForm.source === 'partner' ? 'PARTNER_REFERRAL' : 'DIRECT_OWNER');
+                                    }}>Continue →</button>
                                     <button type="button" onClick={closeCreateModal} style={outlineBtn}>Cancel</button>
                                 </div>
                             </div>
@@ -2866,11 +2845,14 @@ const leadCycleStartOf = (lead: any): string => {
                                     <div>
                                         <label style={labelStyle}>Source</label>
                                         <select title="Lead source" value={createForm.source} onChange={e => setCreateForm(p => ({ ...p, source: e.target.value }))} style={inputStyle}>
-                                            {SOURCES.map(s => <option key={s} value={s}>{sourceLabels[s] || s}</option>)}
+                                            {LEAD_SOURCES.map(s => <option key={s.code} value={s.code}>{s.label}</option>)}
                                         </select>
                                     </div>
                                 </div>
 
+                                {/* Intent / Property-Type / Budget / Timeline / Location are now
+                                    captured below. */}
+                                {createForm.source === 'other' && <label>Other source (2–60 characters)<input required minLength={2} maxLength={60} value={createSourceLabel} onChange={e => setCreateSourceLabel(e.target.value)} style={inputStyle} aria-invalid={!!createSourceLabel && !shortLabel(createSourceLabel)} /></label>}
                                 {/* Intent / Property-Type / Budget / Timeline / Location are now
                                     captured by <DemandRequirementsForm> below (the same taxonomy
                                     picker + dynamic per-type fields used in the lead-edit panel),

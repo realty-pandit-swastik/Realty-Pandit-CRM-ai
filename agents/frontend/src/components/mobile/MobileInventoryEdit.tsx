@@ -9,6 +9,8 @@ import AddressFields, { inferAddressLayout } from '../AddressFields';
 import TaxonomyCascade from '../TaxonomyCascade';
 import ParkingListField from '../ParkingListField';
 import { ContactSearchField, type SelectedContact } from '../ContactSearchField';
+import { ContactDesignationField } from '../ContactDesignationField';
+import { INVENTORY_CONTACT_ROLES } from '../../../../backend/src/data/contact_catalog';
 
 interface MobileInventoryEditProps {
     item: any;
@@ -128,12 +130,17 @@ export function MobileInventoryEdit({ item, onSaved }: MobileInventoryEditProps)
         display_price: item.display_price || '',
         owner_phone: item.owner_phone || '',
         // owner_name is derived server-side from Contact.name (no Inventory column).
-        owner_name: item.owner_name || item.contact?.name || item.source?.name || '',
+        owner_name: item.owner_name || item.contact?.name || '',
         uploader_phone: item.uploader_phone || '',
         uploader_name: item.uploader_name || '',
         key_holder_type: item.key_holder_type || '',
         key_holder_name: item.key_holder_name || '',
         key_holder_phone: item.key_holder_phone || '',
+        key_holder_contact_id: item.key_holder_contact_id || null,
+        key_holder_role: item.key_holder_role || '',
+        key_holder_role_label: item.key_holder_role_label || '',
+        property_contact_role: item.property_contact_role || '',
+        property_contact_role_label: item.property_contact_role_label || '',
         description: item.description || '',
     });
 
@@ -789,6 +796,8 @@ export function MobileInventoryEdit({ item, onSaved }: MobileInventoryEditProps)
                             setOwnerError('');
                             set('owner_phone', contact.phone);
                             set('owner_name', contact.name);
+                            set('property_contact_role', INVENTORY_CONTACT_ROLES.find(role => role.workflow === contact.role)?.code || '');
+                            set('property_contact_role_label', contact.roleLabel || '');
                         }}
                     />
                 )}
@@ -800,12 +809,14 @@ export function MobileInventoryEdit({ item, onSaved }: MobileInventoryEditProps)
                 )}
 
                 {/* Key Holder */}
+                <ContactDesignationField title="Property contact designation" value={data.property_contact_role} label={data.property_contact_role_label} onChange={(role, label) => { set('property_contact_role', role); set('property_contact_role_label', label); }} />
                 <SectionHeader title="Key Holder" sectionKey="keyholder" />
                 {expandedSections.keyholder && (
                     <div style={{ padding: '12px 0' }}>
                         <div style={{ marginBottom: '8px' }}>
                             <label style={labelStyle}>Key Holder Type</label>
-                            <select style={inputStyle} value={data.key_holder_type} onChange={e => set('key_holder_type', e.target.value)}>
+                            <ContactDesignationField title="Key-holder designation" value={data.key_holder_role} label={data.key_holder_role_label} onChange={(role, label) => { set('key_holder_role', role); set('key_holder_role_label', label); }} />
+                            <select style={inputStyle} value={data.key_holder_type} onChange={e => { set('key_holder_type', e.target.value); set('key_holder_role', ''); set('key_holder_role_label', ''); set('key_holder_contact_id', null); }}>
                                 <option value="">Not Set</option><option value="UPLOADER">Uploader</option><option value="OWNER">Owner</option><option value="EXTERNAL">External</option>
                             </select>
                         </div>
@@ -817,6 +828,9 @@ export function MobileInventoryEdit({ item, onSaved }: MobileInventoryEditProps)
                                 onContactSelected={(contact) => {
                                     set('key_holder_name', contact.name);
                                     set('key_holder_phone', contact.phone);
+                                    set('key_holder_contact_id', contact.sourceId || null);
+                                    set('key_holder_role', contact.roleExplicit || contact.isNew ? INVENTORY_CONTACT_ROLES.find(role => role.workflow === contact.role)?.code || '' : '');
+                                    set('key_holder_role_label', contact.roleLabel || '');
                                 }}
                             />
                         )}

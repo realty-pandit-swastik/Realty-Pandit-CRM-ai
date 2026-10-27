@@ -14,6 +14,9 @@
  */
 
 import { WorkflowStep } from './workflow_types';
+import { INVENTORY_CONTACT_ROLES } from '../data/contact_catalog';
+const roleOptions = (codes: string[]) => INVENTORY_CONTACT_ROLES.filter(role => codes.includes(role.code))
+    .map(role => ({ value: role.workflow, label: role.label, label_hi: role.code === 'OWNER' ? 'Malik' : role.label }));
 
 // ================================================================
 // MAIN WORKFLOW STEPS (Stages 1-12 — Mandatory for inventory creation)
@@ -34,11 +37,7 @@ export const INVENTORY_WORKFLOW_STEPS: WorkflowStep[] = [
         field: 'user_role',
         required: true,
         // Default options (used when platform_options doesn't match)
-        static_options: [
-            { value: 'PROPERTY_OWNER', label: 'Owner', label_hi: 'Malik' },
-            { value: 'AGENT_DEALER', label: 'Broker / Agent', label_hi: 'Broker / Agent' },
-            { value: 'BUILDER', label: 'Builder', label_hi: 'Builder' },
-        ],
+        static_options: roleOptions(['OWNER', 'AGENT', 'BUILDER']),
         options_source: 'static',
         // Platform-specific question text
         platform_question: {
@@ -53,22 +52,9 @@ export const INVENTORY_WORKFLOW_STEPS: WorkflowStep[] = [
         },
         // Platform-specific options
         platform_options: {
-            admin: [
-                { value: 'PROPERTY_OWNER', label: 'Direct Owner', label_hi: 'Direct Owner' },
-                { value: 'AGENT_DEALER', label: 'Agent / Dealer', label_hi: 'Agent / Dealer' },
-                { value: 'FINANCER', label: 'Financer', label_hi: 'Financer' },
-            ],
-            web: [
-                { value: 'PROPERTY_OWNER', label: 'Owner', label_hi: 'Malik' },
-                { value: 'AGENT_DEALER', label: 'Broker / Agent', label_hi: 'Broker / Agent' },
-                { value: 'BUILDER', label: 'Builder', label_hi: 'Builder' },
-            ],
-            whatsapp: [
-                { value: 'PROPERTY_OWNER', label: 'Owner', label_hi: 'Malik' },
-                { value: 'AGENT_DEALER', label: 'Dealer / Agent', label_hi: 'Dealer / Agent' },
-                { value: 'BUILDER', label: 'Builder', label_hi: 'Builder' },
-                { value: 'FINANCER', label: 'Financer', label_hi: 'Financer' },
-            ],
+            admin: INVENTORY_CONTACT_ROLES.map(role => ({ value: role.workflow, label: role.label })),
+            web: roleOptions(['OWNER', 'AGENT', 'BUILDER']),
+            whatsapp: roleOptions(['OWNER', 'AGENT', 'BUILDER', 'FINANCER']),
         },
         whatsapp_type: 'buttons',
     },
@@ -77,6 +63,11 @@ export const INVENTORY_WORKFLOW_STEPS: WorkflowStep[] = [
     // STAGE 2: CONTACT (Name + Phone — mandatory)
     // ================================================================
 
+    {
+        id: 'property_contact_role_label', group: 'contact', field: 'property_contact_role_label',
+        question: 'Describe this contact’s role (2–60 characters)', input_type: 'text', required: true,
+        show_when: [{ field: 'user_role', operator: 'equals', value: 'OTHER' }],
+    },
     {
         id: 'uploader_phone',
         group: 'contact',

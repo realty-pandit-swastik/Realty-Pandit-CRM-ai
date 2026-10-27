@@ -2,8 +2,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 vi.mock('../db', () => ({
     default: {
+        agent: { findMany: vi.fn() },
         partnerAgent: { findUnique: vi.fn(), create: vi.fn() },
-        contact: { findUnique: vi.fn(), upsert: vi.fn() },
+        contact: { findUnique: vi.fn(), findFirst: vi.fn(), upsert: vi.fn() },
         interaction: { create: vi.fn() },
     },
 }));
@@ -17,9 +18,18 @@ import prisma from '../db';
 
 beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(prisma.agent.findMany).mockResolvedValue([]);
+    vi.mocked(prisma.contact.findFirst).mockResolvedValue(null);
 });
 
 describe('ensurePartnerAgent', () => {
+    it('rejects a staff phone before returning an existing partner and preserves Contact classification', async () => {
+        vi.mocked(prisma.agent.findMany).mockResolvedValue([{ phone: '+919876543210' }] as any);
+        vi.mocked(prisma.partnerAgent.findUnique).mockResolvedValue({ id: 'old-staff-profile' } as any);
+        await expect(ensurePartnerAgent('9876543210', 'Employee', 'tenant-1', 'agent-1')).rejects.toThrow(/internal employee/);
+        expect(prisma.partnerAgent.findUnique).not.toHaveBeenCalled();
+        expect(prisma.contact.upsert).not.toHaveBeenCalled();
+    });
     it('creates a new partner with partner_type = BOTH when phone is new', async () => {
         (prisma.partnerAgent.findUnique as any).mockResolvedValue(null);
         (prisma.partnerAgent.create as any).mockResolvedValue({ id: 'p1' });

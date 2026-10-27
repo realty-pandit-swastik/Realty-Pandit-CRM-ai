@@ -33,7 +33,7 @@ import { getTeamIds } from '../utils/team_scope';
 // One contact → many leads: each enquiry is a Transaction. Summary shape shown in the Leads list and
 // the contact's Lead history, including each enquiry's own requirements and handler.
 const LEAD_DEAL_SUMMARY = {
-    id: true, source: true, source_ref: true, status: true, type: true, created_at: true,
+    id: true, source: true, source_label: true, source_ref: true, status: true, type: true, created_at: true,
     coordinator_agent_id: true, executive_agent_id: true,
     inventory_id: true, demand_intent: true, demand_location: true,
     demand_budget_min: true, demand_budget_max: true, demand_schema_values: true,
@@ -453,7 +453,7 @@ router.get('/recent-external', async (req: any, res) => {
                         phone_number: true,
                         name: true,
                         email: true,
-                        source: true,
+                        source: true, source_label: true,
                         lead_status: true,
                         contact_type: true,
                         intent: true,
@@ -1377,7 +1377,7 @@ router.get('/search', async (req: any, res) => {
                     AND: [visibilityFilter, { OR: searchCondition }],
                 },
                 select: {
-                    phone_number: true, name: true, contact_type: true,
+                    phone_number: true, name: true, contact_type: true, client_role: true, client_role_label: true,
                     lead_status: true, lead_type: true, source: true, lifecycle_stage: true,
                 },
                 orderBy: { updated_at: 'desc' },
@@ -1421,6 +1421,10 @@ router.get('/search', async (req: any, res) => {
 // Auto-assigns to the creating agent unless they are super_boss/manager
 router.post('/', async (req: any, res) => {
     try {
+        const { validateLeadSource } = await import('../data/contact_catalog');
+        let sourceInfo;
+        try { sourceInfo = validateLeadSource(req.body.source, req.body.source_label); }
+        catch (error) { return res.status(400).json({ error: (error as Error).message }); }
         const {
             name, phone, email, source, intent, property_type,
             preferred_location, preferred_lat, preferred_lng,
@@ -1658,6 +1662,7 @@ router.post('/', async (req: any, res) => {
                     name: name || null,
                     email: email || null,
                     source: source || 'manual',
+                    source_label: sourceInfo.label,
                     notes: notesWrite,
                     lead_status: isPartnerReferral ? 'warm' : 'cold',
                     lifecycle_stage: 'NEW',
@@ -1699,7 +1704,7 @@ router.post('/', async (req: any, res) => {
                     contact_phone: phoneNumber,
                     tenant_id: tenant.id,
                     intent: intent || null,
-                    source: 'manual',
+                    source: sourceInfo.source,
                     budget_min: budget_min ? parseFloat(budget_min) : null,
                     budget_max: budget_max ? parseFloat(budget_max) : null,
                     // demand_bhk + demand_type_slug dropped Phase 5 (2026-05-29).
@@ -1747,6 +1752,7 @@ router.post('/', async (req: any, res) => {
         const enquiry = await ensureDealForLead({
             contactPhone: phoneNumber,
             source: source || 'manual',
+            sourceLabel: sourceInfo.label,
             createdByAgentId: req.agent?.id,
             isPartnerReferral,
             newEnquiry: true,

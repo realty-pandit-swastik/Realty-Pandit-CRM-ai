@@ -17,7 +17,9 @@ import { CopyChip } from './CopyChip';
 import AddressFields, { inferAddressLayout } from './AddressFields';
 import { toDialablePhone } from '../lib/phone';
 import { relativeAge } from '../lib/age';
-import { clientRoleLabel } from '../lib/leadDisplay';
+import { clientRoleLabel, clientRoleColor } from '../lib/leadDisplay';
+import { ContactDesignationField } from './ContactDesignationField';
+import { INVENTORY_CONTACT_ROLES } from '../../../backend/src/data/contact_catalog';
 import { MatchClientsModal } from './inventory/MatchClientsModal';
 import { GooglePlacesInput } from './GooglePlacesInput';
 import ShareToClientModal from './ShareToClientModal';
@@ -739,13 +741,18 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
             // owner_name is derived server-side from Contact.name (Inventory has no such column),
             // so fall back to the computed `source` block the list endpoint returns.
             owner_phone: item.owner_phone || '',
-            owner_name: item.owner_name || item.contact?.name || item.source?.name || '',
+            owner_name: item.owner_name || item.contact?.name || '',
             uploader_phone: item.uploader_phone || '',
             uploader_name: item.uploader_name || '',
             // Key Holder
             key_holder_type: item.key_holder_type || '',
             key_holder_name: item.key_holder_name || '',
             key_holder_phone: item.key_holder_phone || '',
+            key_holder_contact_id: item.key_holder_contact_id || null,
+            key_holder_role: item.key_holder_role || '',
+            key_holder_role_label: item.key_holder_role_label || '',
+            property_contact_role: item.property_contact_role || '',
+            property_contact_role_label: item.property_contact_role_label || '',
             // Description
             description: item.description || '',
             // Assignment & Sharing
@@ -1622,6 +1629,8 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
                                                 ...editData,
                                                 owner_phone: contact.phone,
                                                 owner_name: contact.name,
+                                                property_contact_role: INVENTORY_CONTACT_ROLES.find(role => role.workflow === contact.role)?.code || '',
+                                                property_contact_role_label: contact.roleLabel || '',
                                             });
                                         }}
                                     />
@@ -1631,7 +1640,7 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
                                         <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-link)', marginBottom: '8px', borderBottom: '1px solid var(--border-secondary)', paddingBottom: '4px' }}>Key Holder</div>
                                         <div style={{ marginBottom: '8px' }}>
                                             <label style={s.editLabel}>Key Holder Type</label>
-                                            <select style={s.editInput} value={editData.key_holder_type} onChange={e => setEditData({ ...editData, key_holder_type: e.target.value })}>
+                                            <select style={s.editInput} value={editData.key_holder_type} onChange={e => setEditData({ ...editData, key_holder_type: e.target.value, key_holder_role: '', key_holder_role_label: '', key_holder_contact_id: null })}>
                                                 <option value="">Not Set</option>
                                                 <option value="UPLOADER">Uploader</option>
                                                 <option value="OWNER">Owner</option>
@@ -1648,11 +1657,16 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
                                                     ...editData,
                                                     key_holder_name: contact.name,
                                                     key_holder_phone: contact.phone,
+                                                    key_holder_contact_id: contact.sourceId || null,
+                                                    key_holder_role: contact.roleExplicit || contact.isNew ? INVENTORY_CONTACT_ROLES.find(role => role.workflow === contact.role)?.code || '' : '',
+                                                    key_holder_role_label: contact.roleLabel || '',
                                                 })}
                                             />
                                         )}
                                     </div>
 
+                                    <ContactDesignationField title="Property contact designation" value={editData.property_contact_role || ''} label={editData.property_contact_role_label} onChange={(role, label) => setEditData(p => ({ ...p, property_contact_role: role, property_contact_role_label: label }))} />
+                                    <ContactDesignationField title="Key-holder designation" value={editData.key_holder_role || ''} label={editData.key_holder_role_label} onChange={(role, label) => setEditData(p => ({ ...p, key_holder_role: role, key_holder_role_label: label }))} />
                                     {/* ── Section: Description ── */}
                                     <div style={{ marginBottom: '12px' }}>
                                         <label style={s.editLabel}>Description</label>
@@ -1809,16 +1823,17 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
                                                 )}
                                                 {item.source && (
                                                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                                                        {item.source.type === 'DEALER' ? '🤝' : '👤'} {item.source.name || (item.source.type === 'DEALER' ? 'Dealer' : 'Owner')}
+                                                        {item.source.type === 'DEALER' ? '🤝' : '👤'} {item.source.name || item.source.phone || (item.source.linked ? 'Unnamed contact' : 'No contact linked')}
                                                         <ContactButton phone={item.source.phone} name={item.source.name} />
                                                         <span
                                                             title="Source designation"
                                                             style={{
-                                                                backgroundColor: item.source.type === 'DEALER' ? 'rgba(245,158,11,0.15)' : item.source.type === 'AGENT_OWNER' ? 'rgba(167,139,250,0.15)' : 'rgba(34,197,94,0.12)',
+                                                                backgroundColor: `${clientRoleColor(item.source.designation)}18`,
+                                                                border: `1px solid ${clientRoleColor(item.source.designation)}66`,
                                                                 color: 'var(--text-primary)',
                                                                 padding: '1px 6px', borderRadius: '8px', fontSize: '10px', fontWeight: 700,
                                                             }}
-                                                        >{clientRoleLabel(item.source.designation) || (item.source.type === 'DEALER' ? 'Dealer' : item.source.type === 'AGENT_OWNER' ? 'Agent' : 'Owner')}</span>
+                                                        >{item.source.designation_label || clientRoleLabel(item.source.designation) || 'Role not set'}</span>
                                                         {toDialablePhone(item.source.phone) && (
                                                             <>
                                                                 <a style={tileContactActionStyle} href={`tel:${toDialablePhone(item.source.phone)}`} onClick={e => e.stopPropagation()} aria-label={`Call ${item.source.name || 'main contact'}`}>Call</a>
@@ -1830,10 +1845,11 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
                                                 {/* Key holder + designation (2026-10-09). Name/phone redacted server-side for viewers without access. */}
                                                 {item.key_holder_type && (
                                                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                                                        🔑 Key holder: {item.key_holder_name || (item.key_holder_type === 'EXTERNAL' ? 'External' : item.key_holder_type === 'OWNER' ? 'Owner' : 'Uploader')}
-                                                        <span title="Key holder designation" style={{ backgroundColor: 'rgba(59,130,246,0.12)', color: 'var(--text-primary)', padding: '1px 6px', borderRadius: '8px', fontSize: '10px', fontWeight: 700 }}>
-                                                            {clientRoleLabel(item.key_holder_designation) || (item.key_holder_type === 'EXTERNAL' ? 'External' : item.key_holder_type === 'OWNER' ? 'Owner' : 'Uploader')}
+                                                        🔑 Key holder: {item.key_holder_name || 'Name not set'}
+                                                        <span title="Key holder designation" style={{ backgroundColor: `${clientRoleColor(item.key_holder_designation)}18`, border: `1px solid ${clientRoleColor(item.key_holder_designation)}66`, color: 'var(--text-primary)', padding: '1px 6px', borderRadius: '8px', fontSize: '10px', fontWeight: 700 }}>
+                                                            {item.key_holder_designation_label || clientRoleLabel(item.key_holder_designation) || 'Role not set'}
                                                         </span>
+                                                        {!item.key_holder_designation && item.can_edit && <button type="button" onClick={e => { e.stopPropagation(); void handleEdit(item); }} aria-label="Set key-holder designation">Set role</button>}
                                                         {toDialablePhone(item.key_holder_phone) && (
                                                             <>
                                                                 <a style={tileContactActionStyle} href={`tel:${toDialablePhone(item.key_holder_phone)}`} onClick={e => e.stopPropagation()} aria-label={`Call key holder ${item.key_holder_name || ''}`}>Call</a>
@@ -2791,14 +2807,17 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
                                         error={editOwnerError}
                                         onContactSelected={(contact) => {
                                             setEditOwnerError('');
-                                            setEditData({ ...editData, owner_phone: contact.phone, owner_name: contact.name });
+                                            setEditData({ ...editData, owner_phone: contact.phone, owner_name: contact.name,
+                                                property_contact_role: INVENTORY_CONTACT_ROLES.find(role => role.workflow === contact.role)?.code || '', property_contact_role_label: contact.roleLabel || '' });
                                         }}
                                     />
+                                    <ContactDesignationField title="Property contact designation" value={editData.property_contact_role || ''} label={editData.property_contact_role_label} onChange={(role, label) => setEditData(p => ({ ...p, property_contact_role: role, property_contact_role_label: label }))} />
+                                    <ContactDesignationField title="Key-holder designation" value={editData.key_holder_role || ''} label={editData.key_holder_role_label} onChange={(role, label) => setEditData(p => ({ ...p, key_holder_role: role, key_holder_role_label: label }))} />
                                     <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-link)', marginBottom: '12px', borderBottom: '1px solid var(--border-secondary)', paddingBottom: '4px' }}>Key Holder</div>
                                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px', marginBottom: '20px' }}>
                                         <div>
                                             <label style={s.editLabel}>Key Holder</label>
-                                            <select style={s.editInput} value={editData.key_holder_type} onChange={e => setEditData({ ...editData, key_holder_type: e.target.value })}>
+                                            <select style={s.editInput} value={editData.key_holder_type} onChange={e => setEditData({ ...editData, key_holder_type: e.target.value, key_holder_role: '', key_holder_role_label: '', key_holder_contact_id: null })}>
                                                 <option value="">Not Set</option>
                                                 <option value="UPLOADER">Uploader</option>
                                                 <option value="OWNER">Owner</option>
@@ -2813,7 +2832,7 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
                                                 </div>
                                                 <div>
                                                     <label style={s.editLabel}>Key Holder Phone</label>
-                                                    <input style={s.editInput} value={editData.key_holder_phone} onChange={e => setEditData({ ...editData, key_holder_phone: e.target.value })} />
+                                                    <input style={s.editInput} value={editData.key_holder_phone} onChange={e => setEditData({ ...editData, key_holder_phone: e.target.value, key_holder_contact_id: null, key_holder_role: '', key_holder_role_label: '' })} />
                                                 </div>
                                             </>
                                         )}
