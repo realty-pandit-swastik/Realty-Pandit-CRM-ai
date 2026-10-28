@@ -42,20 +42,20 @@ interface SystemHealth {
 const FUNNEL_STAGES = [
     { key: 'NEW', label: 'New', color: 'var(--text-secondary)' },
     { key: 'QUALIFIED', label: 'Qualified', color: 'var(--text-link)' },
-    { key: 'MATCHING_APPOINTMENT', label: 'Matching Appt.', color: '#ec4899' },
-    { key: 'VISIT_SCHEDULED', label: 'Visit Scheduled', color: '#fbbf24' },
-    { key: 'VISITED', label: 'Visited', color: '#f97316' },
-    { key: 'NEGOTIATION', label: 'Negotiation', color: '#fb923c' },
-    { key: 'CLOSED_WON', label: 'Closed Won', color: '#22c55e' },
-    { key: 'CLOSED_LOST', label: 'Closed Lost', color: '#ef4444' },
-    { key: 'ON_HOLD', label: 'On Hold', color: '#6b7280' },
+    { key: 'MATCHING_APPOINTMENT', label: 'Matching Appt.', color: 'var(--chart-7)' },
+    { key: 'VISIT_SCHEDULED', label: 'Visit Scheduled', color: 'var(--rp-warn-text)' },
+    { key: 'VISITED', label: 'Visited', color: 'var(--rp-warn-text)' },
+    { key: 'NEGOTIATION', label: 'Negotiation', color: 'var(--rp-warn-text)' },
+    { key: 'CLOSED_WON', label: 'Closed Won', color: 'var(--rp-success-text)' },
+    { key: 'CLOSED_LOST', label: 'Closed Lost', color: 'var(--rp-danger-text)' },
+    { key: 'ON_HOLD', label: 'On Hold', color: 'var(--text-muted)' },
 ];
 
 const SENTIMENT_COLORS: Record<string, string> = {
-    positive: '#22c55e',
-    neutral: '#f59e0b',
-    negative: '#ef4444',
-    frustrated: '#dc2626',
+    positive: 'var(--rp-success-text)',
+    neutral: 'var(--rp-warn-text)',
+    negative: 'var(--rp-danger-text)',
+    frustrated: 'var(--rp-danger-text)',
 };
 
 function formatUptime(seconds: number): string {
@@ -130,12 +130,12 @@ export function QADashboard() {
             {/* System Overview Cards */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: '12px', marginBottom: '24px' }}>
                 {[
-                    { label: 'Uptime', value: formatUptime(health.uptime_seconds), color: '#22c55e' },
-                    { label: 'Total Contacts', value: health.total_contacts, color: '#3b82f6' },
-                    { label: 'Interactions Today', value: health.total_interactions_today, color: '#f59e0b' },
-                    { label: 'Active Properties', value: health.active_properties, color: '#8b5cf6' },
-                    { label: 'Active Sessions', value: health.active_sessions, color: '#06b6d4' },
-                    { label: 'QA Avg Score', value: health.quality_summary.avg_score ? `${health.quality_summary.avg_score}/10` : 'N/A', color: health.quality_summary.avg_score && health.quality_summary.avg_score >= 7 ? '#22c55e' : '#f59e0b' },
+                    { label: 'Uptime', value: formatUptime(health.uptime_seconds), color: 'var(--rp-success-text)' },
+                    { label: 'Total Contacts', value: health.total_contacts, color: 'var(--blue-500)' },
+                    { label: 'Interactions Today', value: health.total_interactions_today, color: 'var(--rp-warn-text)' },
+                    { label: 'Active Properties', value: health.active_properties, color: 'var(--chart-5)' },
+                    { label: 'Active Sessions', value: health.active_sessions, color: 'var(--chart-3)' },
+                    { label: 'QA Avg Score', value: health.quality_summary.avg_score ? `${health.quality_summary.avg_score}/10` : 'N/A', color: health.quality_summary.avg_score && health.quality_summary.avg_score >= 7 ? 'var(--rp-success-text)' : 'var(--rp-warn-text)' },
                 ].map(card => (
                     <div key={card.label} style={{
                         backgroundColor: 'var(--bg-secondary)', borderRadius: '12px', padding: '16px',
@@ -172,12 +172,12 @@ export function QADashboard() {
                                             {agent.agent_name}
                                         </td>
                                         <td style={{ padding: '10px 12px', color: 'var(--text-bright)', fontSize: '13px' }}>{agent.total_actions}</td>
-                                        <td style={{ padding: '10px 12px', color: '#22c55e', fontSize: '13px' }}>{agent.successful}</td>
-                                        <td style={{ padding: '10px 12px', color: agent.failed > 0 ? '#ef4444' : 'var(--text-muted)', fontSize: '13px' }}>{agent.failed}</td>
-                                        <td style={{ padding: '10px 12px', color: agent.escalated > 0 ? '#f59e0b' : 'var(--text-muted)', fontSize: '13px' }}>{agent.escalated}</td>
+                                        <td style={{ padding: '10px 12px', color: 'var(--rp-success-text)', fontSize: '13px' }}>{agent.successful}</td>
+                                        <td style={{ padding: '10px 12px', color: agent.failed > 0 ? 'var(--rp-danger-text)' : 'var(--text-muted)', fontSize: '13px' }}>{agent.failed}</td>
+                                        <td style={{ padding: '10px 12px', color: agent.escalated > 0 ? 'var(--rp-warn-text)' : 'var(--text-muted)', fontSize: '13px' }}>{agent.escalated}</td>
                                         <td style={{ padding: '10px 12px', fontSize: '13px' }}>
                                             <span style={{
-                                                color: agent.error_rate > 10 ? '#ef4444' : agent.error_rate > 5 ? '#f59e0b' : '#22c55e',
+                                                color: agent.error_rate > 10 ? 'var(--rp-danger-text)' : agent.error_rate > 5 ? 'var(--rp-warn-text)' : 'var(--rp-success-text)',
                                                 fontWeight: 600,
                                             }}>
                                                 {agent.error_rate}%
@@ -187,7 +187,7 @@ export function QADashboard() {
                                         <td style={{ padding: '10px 12px', fontSize: '13px' }}>
                                             {agent.avg_quality_score !== null ? (
                                                 <span style={{
-                                                    color: agent.avg_quality_score >= 7 ? '#22c55e' : agent.avg_quality_score >= 5 ? '#f59e0b' : '#ef4444',
+                                                    color: agent.avg_quality_score >= 7 ? 'var(--rp-success-text)' : agent.avg_quality_score >= 5 ? 'var(--rp-warn-text)' : 'var(--rp-danger-text)',
                                                     fontWeight: 600,
                                                 }}>
                                                     {agent.avg_quality_score}/10
@@ -247,7 +247,7 @@ export function QADashboard() {
                         </div>
                         <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                             <span style={{ color: 'var(--text-secondary)', fontSize: '13px' }}>Flagged</span>
-                            <span style={{ color: health.quality_summary.flagged > 0 ? '#ef4444' : '#22c55e', fontSize: '13px', fontWeight: 600 }}>
+                            <span style={{ color: health.quality_summary.flagged > 0 ? 'var(--rp-danger-text)' : 'var(--rp-success-text)', fontSize: '13px', fontWeight: 600 }}>
                                 {health.quality_summary.flagged}
                             </span>
                         </div>
@@ -278,13 +278,13 @@ export function QADashboard() {
                         </div>
                         <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                             <span style={{ color: 'var(--text-secondary)', fontSize: '13px' }}>High Severity</span>
-                            <span style={{ color: health.security_summary.high_severity > 0 ? '#f59e0b' : '#22c55e', fontSize: '13px', fontWeight: 600 }}>
+                            <span style={{ color: health.security_summary.high_severity > 0 ? 'var(--rp-warn-text)' : 'var(--rp-success-text)', fontSize: '13px', fontWeight: 600 }}>
                                 {health.security_summary.high_severity}
                             </span>
                         </div>
                         <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                             <span style={{ color: 'var(--text-secondary)', fontSize: '13px' }}>Critical</span>
-                            <span style={{ color: health.security_summary.critical_severity > 0 ? '#ef4444' : '#22c55e', fontSize: '13px', fontWeight: 600 }}>
+                            <span style={{ color: health.security_summary.critical_severity > 0 ? 'var(--rp-danger-text)' : 'var(--rp-success-text)', fontSize: '13px', fontWeight: 600 }}>
                                 {health.security_summary.critical_severity}
                             </span>
                         </div>
@@ -304,11 +304,11 @@ export function QADashboard() {
                         </div>
                         <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                             <span style={{ color: 'var(--text-secondary)', fontSize: '13px' }}>Messages Sent</span>
-                            <span style={{ color: '#3b82f6', fontSize: '13px', fontWeight: 600 }}>{health.campaign_summary.total_sent}</span>
+                            <span style={{ color: 'var(--blue-500)', fontSize: '13px', fontWeight: 600 }}>{health.campaign_summary.total_sent}</span>
                         </div>
                         <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                             <span style={{ color: 'var(--text-secondary)', fontSize: '13px' }}>Active</span>
-                            <span style={{ color: '#22c55e', fontSize: '13px', fontWeight: 600 }}>{health.campaign_summary.active_campaigns}</span>
+                            <span style={{ color: 'var(--rp-success-text)', fontSize: '13px', fontWeight: 600 }}>{health.campaign_summary.active_campaigns}</span>
                         </div>
                     </div>
                 </div>

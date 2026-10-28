@@ -62,7 +62,7 @@ export function ReassignModal({ deal, onClose, onReassigned }: Props) {
         <>
             {/* Backdrop */}
             <div onClick={onClose} style={{
-                position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.4)', zIndex: 200,
+                position: 'fixed', inset: 0, backgroundColor: 'var(--rp-overlay-soft)', zIndex: 200,
             }} />
 
             {/* Modal — fixed header + footer, scrollable middle so action
@@ -72,7 +72,7 @@ export function ReassignModal({ deal, onClose, onReassigned }: Props) {
                 backgroundColor: 'var(--bg-primary)', borderRadius: 14,
                 width: 420, maxWidth: '92vw', maxHeight: '88vh', overflow: 'hidden',
                 display: 'flex', flexDirection: 'column',
-                boxShadow: '0 20px 50px rgba(0,0,0,0.3)', zIndex: 201,
+                boxShadow: '0 20px 50px var(--rp-shadow-tint)', zIndex: 201,
             }}>
                 {/* Header (pinned) */}
                 <div style={{
@@ -106,8 +106,8 @@ export function ReassignModal({ deal, onClose, onReassigned }: Props) {
                 <div style={{
                     fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.5,
                     padding: '6px 10px', borderRadius: 6,
-                    backgroundColor: 'rgba(59,130,246,0.06)',
-                    border: '1px solid rgba(59,130,246,0.2)',
+                    backgroundColor: 'var(--rp-info-wash)',
+                    border: '1px solid var(--rp-info-wash)',
                 }}>
                     This will reassign both the deal coordinator and the lead contact to the selected employee.
                 </div>
@@ -143,10 +143,10 @@ export function ReassignModal({ deal, onClose, onReassigned }: Props) {
                                         padding: '8px 10px', borderRadius: 8, marginBottom: 4,
                                         cursor: isCurrent ? 'not-allowed' : 'pointer',
                                         backgroundColor: isSelected
-                                            ? 'rgba(59,130,246,0.12)'
+                                            ? 'var(--rp-info-wash)'
                                             : 'transparent',
                                         border: isSelected
-                                            ? '1.5px solid rgba(59,130,246,0.4)'
+                                            ? '1.5px solid var(--rp-info-line)'
                                             : '1.5px solid transparent',
                                         opacity: isCurrent ? 0.5 : 1,
                                     }}
@@ -204,7 +204,7 @@ export function ReassignModal({ deal, onClose, onReassigned }: Props) {
                         disabled={saving || !selected}
                         style={{
                             flex: 1, padding: '10px 16px', borderRadius: 8, fontSize: 13, fontWeight: 700,
-                            backgroundColor: 'var(--accent-primary)', color: '#fff', border: 'none',
+                            backgroundColor: 'var(--accent-primary)', color: 'var(--surface-white)', border: 'none',
                             cursor: saving || !selected ? 'not-allowed' : 'pointer',
                             opacity: saving || !selected ? 0.6 : 1,
                         }}

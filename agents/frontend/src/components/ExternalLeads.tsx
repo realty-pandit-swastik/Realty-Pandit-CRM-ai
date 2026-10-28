@@ -1,11 +1,14 @@
 
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import PhoneInput from './PhoneInput';
+import { Badge } from './ui/Badge';
+import { IconText, PresentationIcon } from './ui/PresentationIcon';
+import { EmptyState as ListEmptyState, ErrorState as ListErrorState } from './ui/States';
 import CallerDossier from './CallerDossier';
 import client, { getPartnerAssignable, assignLeadToTeammate, shareLead, rosterForPickers, updateContactProfile, getDealMatchCounts } from '../api/client';
 import { isPlaceholderPhone, isValidPhoneInput, toDialablePhone, normalizePhoneInput } from '../lib/phone';
 import { drillTo } from '../lib/drill';
-import { bhkLabel as bhkLabelFor, stageInfo, dealerFallback, clientRoleLabel, clientRoleColor } from '../lib/leadDisplay';
+import { bhkLabel as bhkLabelFor, stageInfo, dealerFallback, clientRoleLabel } from '../lib/leadDisplay';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
 import LeadCard from './leads/LeadCard';
@@ -131,10 +134,10 @@ interface TeamMember { id: string; name: string; role: string; }
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const sourceColors: Record<string, string> = {
-    '99acres': '#ef4444', 'magicbricks': '#f59e0b', 'housing': '#3b82f6',
-    'website': '#22c55e', 'whatsapp': '#25d366', 'voice': '#8b5cf6', 'manual': '#6b7280',
-    'admin_created': '#a855f7', 'inventory_workflow': '#06b6d4', 'website_popup': '#f97316',
-    'agent_registration': '#ec4899',
+    '99acres': 'var(--rp-info-text)', 'magicbricks': 'var(--rp-info-text)', 'housing': 'var(--rp-info-text)',
+    'website': 'var(--rp-info-text)', 'whatsapp': 'var(--rp-info-text)', 'voice': 'var(--rp-info-text)', 'manual': 'var(--text-secondary)',
+    'admin_created': 'var(--rp-info-text)', 'inventory_workflow': 'var(--rp-info-text)', 'website_popup': 'var(--rp-info-text)',
+    'agent_registration': 'var(--rp-info-text)',
 };
 const sourceLabels: Record<string, string> = {
     '99acres': '99acres', 'magicbricks': 'MagicBricks', 'housing': 'Housing.com',
@@ -155,13 +158,13 @@ const PRIVILEGED_ROLES = ['super_boss', 'manager'];
 // one-row addition, not a new hardcoded card.
 type LeadSourceRole = 'DIRECT_OWNER' | 'PARTNER_REFERRAL';
 const LEAD_SOURCE_ROLES: Array<{ key: LeadSourceRole; icon: string; title: string; subtitle: string; accent: string; hoverBg: string }> = [
-    { key: 'DIRECT_OWNER', icon: '👤', title: 'Client', subtitle: 'Client contacted directly', accent: '#3b82f6', hoverBg: 'rgba(59,130,246,0.06)' },
-    { key: 'PARTNER_REFERRAL', icon: '🤝', title: 'Partner Agent', subtitle: 'Referred by a partner', accent: '#7c3aed', hoverBg: 'rgba(124,58,237,0.06)' },
+    { key: 'DIRECT_OWNER', icon: 'user-round', title: 'Client', subtitle: 'Client contacted directly', accent: 'var(--blue-600)', hoverBg: 'var(--blue-50)' },
+    { key: 'PARTNER_REFERRAL', icon: 'handshake', title: 'Partner Agent', subtitle: 'Referred by a partner', accent: 'var(--blue-600)', hoverBg: 'var(--blue-50)' },
 ];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function scoreColor(s: number) { return s >= 80 ? '#ef4444' : s >= 60 ? '#f59e0b' : '#6b7280'; }
+function scoreColor(s: number) { return s >= 80 ? 'var(--rp-danger-text)' : s >= 60 ? 'var(--rp-warn-text)' : 'var(--text-secondary)'; }
 
 function formatBudget(val: string | null): string {
     if (!val) return '-';
@@ -172,7 +175,7 @@ function formatBudget(val: string | null): string {
 }
 
 function channelIcon(ch: string) {
-    return ({ whatsapp: '💬', voice: '📞', email: '📧', website: '🌐' } as any)[ch] || '📌';
+    return ({ whatsapp: 'message-circle', voice: 'phone', email: 'mail', website: 'globe' } as any)[ch] || 'map-pin';
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -1451,20 +1454,20 @@ const leadCycleStartOf = (lead: any): string => {
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                         <h2 style={{ color: 'var(--text-primary)', margin: 0, fontSize: '17px' }}>Leads</h2>
-                        <span style={{ color: '#3b82f6', fontSize: '14px', fontWeight: 700 }}>{recentTotal.toLocaleString('en-IN')}</span>
+                        <span style={{ color: 'var(--blue-500)', fontSize: '14px', fontWeight: 700 }}>{recentTotal.toLocaleString('en-IN')}</span>
                         {/* 99acres sync status — inline dot */}
                         {syncStatus && (
                             <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '11px', color: 'var(--text-secondary)' }}>
                                 <div style={{
                                     width: '7px', height: '7px', borderRadius: '50%',
-                                    backgroundColor: syncStatus.sync?.status === 'success' ? '#22c55e'
-                                        : syncStatus.sync?.status === 'failed' ? '#ef4444'
-                                        : syncStatus.sync?.status === 'running' ? '#f59e0b' : '#6b7280',
+                                    backgroundColor: syncStatus.sync?.status === 'success' ? 'var(--rp-success-text)'
+                                        : syncStatus.sync?.status === 'failed' ? 'var(--rp-danger-text)'
+                                        : syncStatus.sync?.status === 'running' ? 'var(--rp-warn-text)' : 'var(--text-muted)',
                                 }} />
                                 <span>99acres</span>
                                 {isPrivileged && syncStatus.configured && (
                                     <button type="button" onClick={handleManualSync} disabled={syncLoading || syncStatus.sync?.status === 'running'}
-                                        style={{ background: 'none', border: 'none', color: '#3b82f6', cursor: 'pointer', fontSize: '11px', padding: 0 }}>
+                                        style={{ background: 'none', border: 'none', color: 'var(--blue-500)', cursor: 'pointer', fontSize: '11px', padding: 0 }}>
                                         {syncLoading ? '...' : 'Sync'}
                                     </button>
                                 )}
@@ -1480,9 +1483,9 @@ const leadCycleStartOf = (lead: any): string => {
 
                 {/* Error Banner */}
                 {error && (
-                    <div style={{ marginBottom: '8px', padding: '6px 12px', borderRadius: '6px', backgroundColor: '#fef2f2', border: '1px solid #fecaca', color: '#dc2626', fontSize: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div style={{ marginBottom: '8px', padding: '6px 12px', borderRadius: '6px', backgroundColor: 'var(--rp-danger-bg)', border: '1px solid var(--rp-danger-line)', color: 'var(--rp-danger-text)', fontSize: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <span>{error}</span>
-                        <button type="button" onClick={loadData} style={{ padding: '2px 8px', borderRadius: '4px', border: '1px solid #dc2626', backgroundColor: 'transparent', color: '#dc2626', cursor: 'pointer', fontSize: '11px' }}>Retry</button>
+                        <button type="button" onClick={loadData} style={{ padding: '2px 8px', borderRadius: '4px', border: '1px solid var(--rp-danger-text)', backgroundColor: 'transparent', color: 'var(--rp-danger-text)', cursor: 'pointer', fontSize: '11px' }}>Retry</button>
                     </div>
                 )}
 
@@ -1502,8 +1505,8 @@ const leadCycleStartOf = (lead: any): string => {
                                     onClick={() => setActiveFilter(opt)}
                                     style={{
                                         padding: '6px 14px', fontSize: 12, fontWeight: 600, border: 'none', cursor: 'pointer',
-                                        backgroundColor: activeFilter === opt ? 'var(--accent-primary, #3b82f6)' : 'var(--bg-secondary)',
-                                        color: activeFilter === opt ? '#fff' : 'var(--text-secondary)',
+                                        backgroundColor: activeFilter === opt ? 'var(--rp-button-primary)' : 'var(--bg-secondary)',
+                                        color: activeFilter === opt ? 'var(--surface-white)' : 'var(--text-secondary)',
                                     }}
                                 >{opt === 'active' ? 'Active' : opt === 'archived' ? 'Closed/Lost' : 'All'}</button>
                             ))}
@@ -1523,11 +1526,11 @@ const leadCycleStartOf = (lead: any): string => {
                             })}
                             style={{
                                 padding: '6px 14px', fontSize: 12, fontWeight: 600, cursor: 'pointer', borderRadius: 10,
-                                border: '1px solid ' + (sharedWithMe ? '#7c3aed' : 'var(--border-secondary)'),
-                                backgroundColor: sharedWithMe ? '#7c3aed' : 'var(--bg-secondary)',
-                                color: sharedWithMe ? '#fff' : 'var(--text-secondary)', whiteSpace: 'nowrap',
+                                border: '1px solid ' + (sharedWithMe ? 'var(--blue-700)' : 'var(--border-secondary)'),
+                                backgroundColor: sharedWithMe ? 'var(--blue-700)' : 'var(--bg-secondary)',
+                                color: sharedWithMe ? 'var(--surface-white)' : 'var(--text-secondary)', whiteSpace: 'nowrap',
                             }}
-                        >🤝 Shared with me</button>
+                        >Shared with me</button>
                         {sharedWithMe && (
                             <button
                                 type="button"
@@ -1535,9 +1538,9 @@ const leadCycleStartOf = (lead: any): string => {
                                 onClick={() => { setLeadSortDir(leadSortKey === 'shared_at' && leadSortDir === 'desc' ? 'asc' : 'desc'); setLeadSortKey('shared_at'); }}
                                 style={{
                                     padding: '6px 12px', fontSize: 12, fontWeight: 600, cursor: 'pointer', borderRadius: 10,
-                                    border: '1px solid ' + (leadSortKey === 'shared_at' ? '#7c3aed' : 'var(--border-secondary)'),
+                                    border: '1px solid ' + (leadSortKey === 'shared_at' ? 'var(--blue-700)' : 'var(--border-secondary)'),
                                     backgroundColor: 'var(--bg-secondary)',
-                                    color: leadSortKey === 'shared_at' ? '#7c3aed' : 'var(--text-secondary)', whiteSpace: 'nowrap',
+                                    color: leadSortKey === 'shared_at' ? 'var(--blue-700)' : 'var(--text-secondary)', whiteSpace: 'nowrap',
                                 }}
                             >{leadSortKey === 'shared_at' && leadSortDir === 'asc' ? '▲ Oldest share' : '▼ Newest share'}</button>
                         )}
@@ -1562,17 +1565,17 @@ const leadCycleStartOf = (lead: any): string => {
                                     padding: '10px 14px', borderRadius: '12px', cursor: 'pointer',
                                     border: activeFilterCount > 0 ? '1.5px solid var(--text-link)' : '1px solid var(--border-secondary)',
                                     backgroundColor: activeFilterCount > 0 ? 'var(--text-link)' : 'var(--bg-secondary)',
-                                    color: activeFilterCount > 0 ? '#fff' : 'var(--text-secondary)',
+                                    color: activeFilterCount > 0 ? 'var(--surface-white)' : 'var(--text-secondary)',
                                     fontWeight: 600, fontSize: '13px', flexShrink: 0,
                                     display: 'flex', alignItems: 'center', gap: '6px',
                                 }}
                             >
-                                <span>⚙</span>
+                                <PresentationIcon value="settings" />
                                 <span>Filters{activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}</span>
                                 {activeFilterCount > 0 && (
                                     <span style={{
                                         marginLeft: 2, padding: '1px 7px', borderRadius: 999,
-                                        backgroundColor: 'rgba(255,255,255,0.25)', fontWeight: 700, fontSize: '12px',
+                                        backgroundColor: 'var(--rp-surface-wash)', fontWeight: 700, fontSize: '12px',
                                     }}>
                                         {recentTotal.toLocaleString('en-IN')} result{recentTotal !== 1 ? 's' : ''}
                                     </span>
@@ -1583,12 +1586,12 @@ const leadCycleStartOf = (lead: any): string => {
                                 onClick={() => { setLeadSelectMode(m => !m); setSelectedLeadPhones(new Set()); }}
                                 style={{
                                     padding: '10px 14px', borderRadius: '12px', cursor: 'pointer', flexShrink: 0,
-                                    border: leadSelectMode ? '1.5px solid #8b5cf6' : '1px solid var(--border-secondary)',
-                                    backgroundColor: leadSelectMode ? 'rgba(139,92,246,0.12)' : 'var(--bg-secondary)',
-                                    color: leadSelectMode ? '#8b5cf6' : 'var(--text-secondary)',
+                                    border: leadSelectMode ? '1.5px solid var(--chart-5)' : '1px solid var(--border-secondary)',
+                                    backgroundColor: leadSelectMode ? 'var(--rp-info-wash)' : 'var(--bg-secondary)',
+                                    color: leadSelectMode ? 'var(--chart-5)' : 'var(--text-secondary)',
                                     fontWeight: 600, fontSize: '13px',
                                 }}
-                            >{leadSelectMode ? `✓ ${selectedLeadPhones.size} Selected` : '☐ Select'}</button>}
+                            >{leadSelectMode ? `✓ ${selectedLeadPhones.size} Selected` : 'Select'}</button>}
                         </div>
 
                         {/* Row 2: Active filter chips (dismissible) */}
@@ -1631,7 +1634,7 @@ const leadCycleStartOf = (lead: any): string => {
                                 )}
                                 {locationSelection.lat !== null && (
                                     <button type="button" onClick={() => setLocationSelection({ label: '', lat: null, lng: null, radiusKm: 2 })} className="chip chip-active" style={{ fontSize: '12px', padding: '4px 10px' }}>
-                                        📍 {locationSelection.label.substring(0, 20)}{locationSelection.label.length > 20 ? '…' : ''}{locationSelection.radiusKm > 0 ? ` (${locationSelection.radiusKm}km)` : ''} ×
+                                        <PresentationIcon value="map-pin" /> {locationSelection.label.substring(0, 20)}{locationSelection.label.length > 20 ? '…' : ''}{locationSelection.radiusKm > 0 ? ` (${locationSelection.radiusKm}km)` : ''} ×
                                     </button>
                                 )}
                                 {notContactedDays > 0 && (
@@ -1668,8 +1671,8 @@ const leadCycleStartOf = (lead: any): string => {
                                         onClick={() => setActiveFilter(opt)}
                                         style={{
                                             padding: '6px 14px', fontSize: 12, fontWeight: 600, border: 'none', cursor: 'pointer',
-                                            backgroundColor: activeFilter === opt ? 'var(--accent-primary, #3b82f6)' : 'var(--bg-secondary)',
-                                            color: activeFilter === opt ? '#fff' : 'var(--text-secondary)',
+                                            backgroundColor: activeFilter === opt ? 'var(--rp-button-primary)' : 'var(--bg-secondary)',
+                                            color: activeFilter === opt ? 'var(--surface-white)' : 'var(--text-secondary)',
                                             textTransform: 'capitalize',
                                         }}
                                     >{opt === 'active' ? 'Active' : opt === 'archived' ? 'Closed/Lost' : 'All'}</button>
@@ -1690,11 +1693,11 @@ const leadCycleStartOf = (lead: any): string => {
                                 })}
                                 style={{
                                     padding: '6px 14px', fontSize: 12, fontWeight: 600, cursor: 'pointer', borderRadius: 8,
-                                    border: '1px solid ' + (sharedWithMe ? '#7c3aed' : 'var(--border-secondary)'),
-                                    backgroundColor: sharedWithMe ? '#7c3aed' : 'var(--bg-secondary)',
-                                    color: sharedWithMe ? '#fff' : 'var(--text-secondary)', whiteSpace: 'nowrap',
+                                    border: '1px solid ' + (sharedWithMe ? 'var(--blue-700)' : 'var(--border-secondary)'),
+                                    backgroundColor: sharedWithMe ? 'var(--blue-700)' : 'var(--bg-secondary)',
+                                    color: sharedWithMe ? 'var(--surface-white)' : 'var(--text-secondary)', whiteSpace: 'nowrap',
                                 }}
-                            >🤝 Shared with me</button>
+                            >Shared with me</button>
                             {sharedWithMe && (
                                 <button
                                     type="button"
@@ -1702,9 +1705,9 @@ const leadCycleStartOf = (lead: any): string => {
                                     onClick={() => { setLeadSortDir(leadSortKey === 'shared_at' && leadSortDir === 'desc' ? 'asc' : 'desc'); setLeadSortKey('shared_at'); }}
                                     style={{
                                         padding: '6px 12px', fontSize: 12, fontWeight: 600, cursor: 'pointer', borderRadius: 8,
-                                        border: '1px solid ' + (leadSortKey === 'shared_at' ? '#7c3aed' : 'var(--border-secondary)'),
+                                        border: '1px solid ' + (leadSortKey === 'shared_at' ? 'var(--blue-700)' : 'var(--border-secondary)'),
                                         backgroundColor: 'var(--bg-secondary)',
-                                        color: leadSortKey === 'shared_at' ? '#7c3aed' : 'var(--text-secondary)', whiteSpace: 'nowrap',
+                                        color: leadSortKey === 'shared_at' ? 'var(--blue-700)' : 'var(--text-secondary)', whiteSpace: 'nowrap',
                                     }}
                                 >{leadSortKey === 'shared_at' && leadSortDir === 'asc' ? '▲ Oldest share' : '▼ Newest share'}</button>
                             )}
@@ -1718,25 +1721,25 @@ const leadCycleStartOf = (lead: any): string => {
                                     padding: '7px 14px', borderRadius: 8, cursor: 'pointer', flexShrink: 0,
                                     border: activeFilterCount > 0 ? '1.5px solid var(--text-link)' : '1px solid var(--border-secondary)',
                                     backgroundColor: activeFilterCount > 0 ? 'var(--text-link)' : 'var(--bg-secondary)',
-                                    color: activeFilterCount > 0 ? '#fff' : 'var(--text-secondary)',
+                                    color: activeFilterCount > 0 ? 'var(--surface-white)' : 'var(--text-secondary)',
                                     fontWeight: 600, fontSize: 13, display: 'flex', alignItems: 'center', gap: 6,
                                 }}
                             >
-                                <span>⚙</span><span>Filters{activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}</span>
+                                <PresentationIcon value="settings" /><span>Filters{activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}</span>
                             </button>
                             {!isPartner && <button
                                 type="button"
                                 onClick={() => { setLeadSelectMode(m => !m); setSelectedLeadPhones(new Set()); }}
                                 style={{
                                     padding: '7px 14px', borderRadius: 8, cursor: 'pointer', flexShrink: 0, fontWeight: 600, fontSize: 13,
-                                    border: leadSelectMode ? '1.5px solid #8b5cf6' : '1px solid var(--border-secondary)',
-                                    backgroundColor: leadSelectMode ? 'rgba(139,92,246,0.12)' : 'var(--bg-secondary)',
-                                    color: leadSelectMode ? '#8b5cf6' : 'var(--text-secondary)',
+                                    border: leadSelectMode ? '1.5px solid var(--chart-5)' : '1px solid var(--border-secondary)',
+                                    backgroundColor: leadSelectMode ? 'var(--rp-info-wash)' : 'var(--bg-secondary)',
+                                    color: leadSelectMode ? 'var(--chart-5)' : 'var(--text-secondary)',
                                 }}
-                            >{leadSelectMode ? `✓ ${selectedLeadPhones.size} Selected` : '☐ Select'}</button>}
+                            >{leadSelectMode ? `✓ ${selectedLeadPhones.size} Selected` : 'Select'}</button>}
                             {(searchQuery || activeFilterCount > 0) && (
                                 <button type="button" onClick={() => { setSearchQuery(''); setStatusFilter(''); setSourceFilter(''); setAgentFilter(''); setDateFrom(''); setDateTo(''); setIntentFilter(''); setFilterTaxonomy({ nodeIds: [], bhk: [] }); setLocationSelection({ label: '', lat: null, lng: null, radiusKm: 2 }); setNotContactedDays(0); setNoShowcaseDays(0); setBudgetMinFilter(''); setBudgetMaxFilter(''); setSharedWithMe(false); if (leadSortKey === 'shared_at') { setLeadSortKey('date'); setLeadSortDir('desc'); } }}
-                                    style={{ padding: '6px 12px', borderRadius: 8, border: '1px solid var(--border-secondary)', backgroundColor: 'transparent', color: '#ef4444', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>
+                                    style={{ padding: '6px 12px', borderRadius: 8, border: '1px solid var(--border-secondary)', backgroundColor: 'transparent', color: 'var(--rp-danger-text)', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>
                                     Clear
                                 </button>
                             )}
@@ -1745,14 +1748,33 @@ const leadCycleStartOf = (lead: any): string => {
                     </>
                 )}
 
+                {!effectiveIsMobile && activeFilterCount > 0 && <div className="rp-applied-filters" aria-label="Applied lead filters">
+                    {([
+                        { text: statusFilter, clear: () => setStatusFilter('') },
+                        { text: sourceFilter ? sourceLabels[sourceFilter] || sourceFilter : '', clear: () => setSourceFilter('') },
+                        { text: agentFilter ? teamMembers.find(m => m.id === agentFilter)?.name || 'Agent' : '', clear: () => setAgentFilter('') },
+                        { text: dateFrom ? `From ${dateFrom}` : '', clear: () => setDateFrom('') },
+                        { text: dateTo ? `To ${dateTo}` : '', clear: () => setDateTo('') },
+                        { text: intentFilter ? (intentFilter === 'BUYER' ? 'Buy' : 'Rent') : '', clear: () => setIntentFilter('') },
+                        { text: filterTaxonomy.nodeIds.length || filterTaxonomy.bhk.length ? 'Property type / BHK' : '', clear: () => setFilterTaxonomy({ nodeIds: [], bhk: [] }) },
+                        { text: locationSelection.lat !== null ? locationSelection.label || 'Location' : '', clear: () => setLocationSelection({ label: '', lat: null, lng: null, radiusKm: 2 }) },
+                        { text: notContactedDays > 0 ? `No contact ${notContactedDays}d+` : '', clear: () => setNotContactedDays(0) },
+                        { text: noShowcaseDays > 0 ? `No showcase ${noShowcaseDays}d+` : '', clear: () => setNoShowcaseDays(0) },
+                        { text: budgetMinFilter ? `Min ₹${budgetMinFilter}` : '', clear: () => setBudgetMinFilter('') },
+                        { text: budgetMaxFilter ? `Max ₹${budgetMaxFilter}` : '', clear: () => setBudgetMaxFilter('') },
+                        { text: stageFilters.length ? `Stages: ${stageFilters.join(', ')}` : '', clear: () => setStageFilters([]) },
+                    ]).filter(filter => filter.text).map(filter => <button type="button" key={filter.text} className="chip chip-inactive"
+                        aria-label={`Remove filter: ${filter.text}`} onClick={filter.clear}>{filter.text} <span aria-hidden="true">×</span></button>)}
+                </div>}
+
                 {/* Partner-claim approvals — a partner submitted a lead for one of our existing direct clients */}
                 {canApproveClaims && pendingClaims.length > 0 && (
-                    <div style={{ marginBottom: '12px', backgroundColor: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.4)', borderRadius: '8px', overflow: 'hidden' }}>
-                        <div style={{ padding: '8px 12px', fontSize: '13px', fontWeight: 700, color: '#b45309', borderBottom: '1px solid rgba(245,158,11,0.25)' }}>
-                            🤝 Partner Approvals ({pendingClaims.length}) — a partner referred an existing direct client
+                    <div style={{ marginBottom: '12px', backgroundColor: 'var(--rp-danger-wash)', border: '1px solid var(--rp-danger-line)', borderRadius: '8px', overflow: 'hidden' }}>
+                        <div style={{ padding: '8px 12px', fontSize: '13px', fontWeight: 700, color: 'var(--rp-warn-text)', borderBottom: '1px solid var(--rp-danger-line)' }}>
+                            Partner Approvals ({pendingClaims.length}) — a partner referred an existing direct client
                         </div>
                         {pendingClaims.map((c: any) => (
-                            <div key={c.phone_number} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 12px', borderBottom: '1px solid rgba(245,158,11,0.15)', flexWrap: 'wrap' }}>
+                            <div key={c.phone_number} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 12px', borderBottom: '1px solid var(--rp-danger-wash)', flexWrap: 'wrap' }}>
                                 <div style={{ flex: 1, minWidth: 180 }}>
                                     <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>{c.name || 'Client'} · {isPlaceholderPhone(c.phone_number) ? 'No phone' : c.phone_number}</div>
                                     <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
@@ -1762,11 +1784,11 @@ const leadCycleStartOf = (lead: any): string => {
                                     </div>
                                 </div>
                                 <button type="button" disabled={claimBusy === c.phone_number} onClick={() => handleApproveClaim(c.phone_number)} style={{
-                                    fontSize: '12px', fontWeight: 700, color: '#fff', backgroundColor: '#16a34a', border: 'none',
+                                    fontSize: '12px', fontWeight: 700, color: 'var(--surface-white)', backgroundColor: 'var(--rp-success-text)', border: 'none',
                                     borderRadius: '6px', padding: '5px 12px', cursor: claimBusy === c.phone_number ? 'wait' : 'pointer', opacity: claimBusy === c.phone_number ? 0.6 : 1,
                                 }}>✓ Approve (credit partner)</button>
                                 <button type="button" disabled={claimBusy === c.phone_number} onClick={() => handleRejectClaim(c.phone_number)} style={{
-                                    fontSize: '12px', fontWeight: 700, color: '#dc2626', backgroundColor: 'transparent', border: '1px solid #dc2626',
+                                    fontSize: '12px', fontWeight: 700, color: 'var(--rp-danger-text)', backgroundColor: 'transparent', border: '1px solid var(--rp-danger-text)',
                                     borderRadius: '6px', padding: '5px 12px', cursor: claimBusy === c.phone_number ? 'wait' : 'pointer', opacity: claimBusy === c.phone_number ? 0.6 : 1,
                                 }}>✕ Reject (keep direct)</button>
                             </div>
@@ -1787,7 +1809,7 @@ const leadCycleStartOf = (lead: any): string => {
                                         onChange={toggleSelectAllVisible}
                                         disabled={filteredLeads.length === 0}
                                         aria-label={allVisibleSelected ? 'Deselect all leads' : 'Select all leads'}
-                                        style={{ width: 16, height: 16, cursor: filteredLeads.length === 0 ? 'not-allowed' : 'pointer', accentColor: '#8b5cf6' }}
+                                        style={{ width: 16, height: 16, cursor: filteredLeads.length === 0 ? 'not-allowed' : 'pointer', accentColor: 'var(--chart-5)' }}
                                     />
                                     All
                                 </label>
@@ -1796,10 +1818,10 @@ const leadCycleStartOf = (lead: any): string => {
                         </span>
                         {recentLeads.length < recentTotal ? (
                             <button type="button" onClick={() => setPageLimit(l => l + 500)} disabled={loading} style={{
-                                fontSize: '11px', fontWeight: 700, color: '#3b82f6', background: 'none',
-                                border: '1px solid #3b82f6', borderRadius: '6px', padding: '3px 10px', cursor: loading ? 'wait' : 'pointer',
+                                fontSize: '11px', fontWeight: 700, color: 'var(--blue-500)', background: 'none',
+                                border: '1px solid var(--blue-500)', borderRadius: '6px', padding: '3px 10px', cursor: loading ? 'wait' : 'pointer',
                             }}>{loading ? 'Loading…' : `Load more (+${Math.min(500, recentTotal - recentLeads.length).toLocaleString('en-IN')})`}</button>
-                        ) : (!isMobile && selectedPhone && <span style={{ fontSize: '11px', color: '#3b82f6' }}>Click row for details</span>)}
+                        ) : (!isMobile && selectedPhone && <span style={{ fontSize: '11px', color: 'var(--blue-500)' }}>Click row for details</span>)}
                     </div>
 
                     {/* Mobile Card View */}
@@ -1824,21 +1846,21 @@ const leadCycleStartOf = (lead: any): string => {
                                     onOpenMatches={() => handleOpenMatches(lead)}
                                 />
                             )) : (
-                                <div className="empty-state">
-                                    <span className="empty-state__icon">{error ? '⚠️' : '📥'}</span>
-                                    <p className="empty-state__title">{error ? 'Failed to load leads' : 'No leads yet'}</p>
-                                    <p className="empty-state__body">{error ? 'Please try refreshing the page.' : 'Leads from portals will appear here.'}</p>
-                                </div>
+                                error ? <ListErrorState title="Couldn't load leads" onRetry={loadData} />
+                                    : <ListEmptyState firstUse={!searchQuery && activeFilterCount === 0}
+                                        title={searchQuery ? `No leads match “${searchQuery}”` : 'No leads in this view'}
+                                        hint={activeFilterCount > 0 ? 'Adjust or clear your filters to broaden the list.' : 'New enquiries from your connected sources will appear here.'} />
                             )}
                         </div>
                     ) : (
 
-                    <div style={{ overflowX: 'auto' }}>
+                    <div className={`rp-table-scroll rp-leads-ledger${leadSelectMode ? ' rp-leads-selecting' : ''}`} tabIndex={0} role="region" aria-label="External leads table, scroll for all columns">
                         <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '700px' }}>
+                            <caption className="sr-only">External leads. All existing columns and actions are available; select a lead name to open its details.</caption>
                             <thead>
                                 <tr style={{ borderBottom: '1px solid var(--border-secondary)' }}>
                                     {leadSelectMode && (
-                                        <th style={{ padding: '6px 10px', width: '34px' }}>
+                                        <th scope="col" style={{ padding: '6px 10px', width: '34px' }}>
                                             <label title={allVisibleSelected ? 'Deselect all (visible)' : 'Select all (visible)'} style={{ display: 'flex', alignItems: 'center', gap: '4px', cursor: filteredLeads.length === 0 ? 'not-allowed' : 'pointer', fontSize: '10px', fontWeight: 600, textTransform: 'uppercase', color: 'var(--text-secondary)' }}>
                                                 <input
                                                     type="checkbox"
@@ -1848,7 +1870,7 @@ const leadCycleStartOf = (lead: any): string => {
                                                     onClick={e => e.stopPropagation()}
                                                     disabled={filteredLeads.length === 0}
                                                     aria-label={allVisibleSelected ? 'Deselect all leads' : 'Select all leads'}
-                                                    style={{ width: 16, height: 16, cursor: filteredLeads.length === 0 ? 'not-allowed' : 'pointer', accentColor: '#8b5cf6', margin: 0 }}
+                                                    style={{ width: 16, height: 16, cursor: filteredLeads.length === 0 ? 'not-allowed' : 'pointer', accentColor: 'var(--chart-5)', margin: 0 }}
                                                 />
                                                 All
                                             </label>
@@ -1859,13 +1881,22 @@ const leadCycleStartOf = (lead: any): string => {
                                         return (
                                             <th
                                                 key={h || '__actions'}
+                                                scope="col"
+                                                tabIndex={key ? 0 : undefined}
+                                                aria-sort={active ? (leadSortDir === 'asc' ? 'ascending' : 'descending') : key ? 'none' : undefined}
+                                                onKeyDown={key ? e => {
+                                                    if (e.key === 'Enter' || e.key === ' ') {
+                                                        e.preventDefault();
+                                                        e.currentTarget.click();
+                                                    }
+                                                } : undefined}
                                                 onClick={key ? () => {
                                                     if (leadSortKey === key) setLeadSortDir(d => (d === 'asc' ? 'desc' : 'asc'));
                                                     else { setLeadSortKey(key); setLeadSortDir(key === 'date' || key === 'score' || key === 'budget' ? 'desc' : 'asc'); }
                                                 } : undefined}
                                                 title={key ? `Sort by ${h}` : undefined}
                                                 style={{
-                                                    textAlign: 'left', padding: '6px 10px', fontSize: '10px', fontWeight: 600,
+                                                    textAlign: key === 'budget' || key === 'score' ? 'right' : 'left', padding: '12px', fontSize: '11px', fontWeight: 600,
                                                     textTransform: 'uppercase', whiteSpace: 'nowrap', userSelect: 'none',
                                                     color: active ? 'var(--text-link)' : 'var(--text-secondary)',
                                                     cursor: key ? 'pointer' : 'default',
@@ -1893,65 +1924,68 @@ const leadCycleStartOf = (lead: any): string => {
                                     const rowRole = (lead as Lead).client_role || null;
                                     return (
                                         <tr key={lead.phone_number} onClick={() => { if (leadSelectMode) toggleLeadSelect(lead.phone_number); else openDetail(lead.phone_number); }}
-                                            style={{ borderBottom: '1px solid var(--bg-primary)', cursor: 'pointer', backgroundColor: selectedLeadPhones.has(lead.phone_number) ? 'rgba(139,92,246,0.12)' : isSelected ? 'rgba(59,130,246,0.08)' : undefined }}>
+                                            style={{ borderBottom: '1px solid var(--border-primary)', cursor: 'pointer', backgroundColor: selectedLeadPhones.has(lead.phone_number) ? 'var(--bg-active)' : isSelected ? 'var(--rp-info-bg)' : undefined }}>
                                             {leadSelectMode && (
                                                 <td style={compactCell} onClick={e => { e.stopPropagation(); toggleLeadSelect(lead.phone_number); }}>
-                                                    <div style={{ width: 18, height: 18, borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', border: selectedLeadPhones.has(lead.phone_number) ? '2px solid #8b5cf6' : '2px solid var(--border-secondary)', backgroundColor: selectedLeadPhones.has(lead.phone_number) ? '#8b5cf6' : 'transparent' }}>
-                                                        {selectedLeadPhones.has(lead.phone_number) && <span style={{ color: '#fff', fontSize: 11, lineHeight: 1 }}>✓</span>}
+                                                    <div style={{ width: 18, height: 18, borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', border: selectedLeadPhones.has(lead.phone_number) ? '2px solid var(--blue-600)' : '2px solid var(--control-line)', backgroundColor: selectedLeadPhones.has(lead.phone_number) ? 'var(--blue-600)' : 'transparent' }}>
+                                                        {selectedLeadPhones.has(lead.phone_number) && <span style={{ color: 'var(--surface-white)', fontSize: 11, lineHeight: 1 }}>✓</span>}
                                                     </div>
                                                 </td>
                                             )}
                                             <td style={compactCell}>
                                                 <div>
-                                                    <span style={{ fontWeight: 500 }}>{identity.name || <span style={{ color: 'var(--text-muted)' }}>—</span>}</span>
+                                                    <button type="button" className="rp-lead-name" onClick={e => {
+                                                        e.stopPropagation();
+                                                        if (leadSelectMode) toggleLeadSelect(lead.phone_number); else openDetail(lead.phone_number);
+                                                    }}>{identity.name || <span style={{ color: 'var(--text-muted)' }}>—</span>}</button>
                                                     {identity.isDealer && (
                                                         <span title="Client unknown — showing the dealer who brought this lead"
-                                                            style={{ backgroundColor: 'rgba(245,158,11,0.15)', color: '#d97706', padding: '1px 5px', borderRadius: '8px', fontSize: '9px', fontWeight: 700, marginLeft: '4px', whiteSpace: 'nowrap' }}>
+                                                            style={{ backgroundColor: 'var(--rp-info-bg)', color: 'var(--rp-info-text)', padding: '4px 8px', borderRadius: 'var(--radius-control)', fontSize: '12px', fontWeight: 500, marginLeft: '4px', whiteSpace: 'nowrap' }}>
                                                             Dealer
                                                         </span>
                                                     )}
                                                     {lead.lead_type === 'PARTNER_REFERRAL' && (
-                                                        <span style={{ backgroundColor: '#ede9fe', color: '#7c3aed', padding: '1px 5px', borderRadius: '8px', fontSize: '9px', fontWeight: 700, marginLeft: '4px', whiteSpace: 'nowrap' }}>
+                                                        <span style={{ backgroundColor: 'var(--rp-info-bg)', color: 'var(--rp-info-text)', padding: '4px 8px', borderRadius: 'var(--radius-control)', fontSize: '12px', fontWeight: 500, marginLeft: '4px', whiteSpace: 'nowrap' }}>
                                                             {lead.referral_partner_name || 'Partner'}
                                                         </span>
                                                     )}
                                                     {!!agent?.id && lead.shared_with_ids?.includes(agent.id) && (
                                                         <span title="Shared with you by a teammate — the owner is unchanged"
-                                                            style={{ backgroundColor: '#ede9fe', color: '#7c3aed', padding: '1px 5px', borderRadius: '8px', fontSize: '9px', fontWeight: 700, marginLeft: '4px', whiteSpace: 'nowrap' }}>
-                                                            🤝 Shared
+                                                            style={{ backgroundColor: 'var(--rp-info-bg)', color: 'var(--rp-info-text)', padding: '4px 8px', borderRadius: 'var(--radius-control)', fontSize: '12px', fontWeight: 500, marginLeft: '4px', whiteSpace: 'nowrap' }}>
+                                                            Shared
                                                         </span>
                                                     )}
                                                     {bhkLabelFor(lead) ? <span style={{ color: 'var(--text-muted)', fontSize: '10px', marginLeft: '4px' }}>{bhkLabelFor(lead)}</span> : null}
                                                     {subtypeLabelFor(lead) ? (
-                                                        <span title="Property subtype" style={{ backgroundColor: 'rgba(139,92,246,0.15)', color: '#a78bfa', padding: '1px 5px', borderRadius: '8px', fontSize: '9px', fontWeight: 600, marginLeft: '4px', whiteSpace: 'nowrap', textTransform: 'capitalize' }}>
+                                                        <span title="Property subtype" style={{ backgroundColor: 'var(--rp-info-bg)', color: 'var(--rp-info-text)', padding: '4px 8px', borderRadius: 'var(--radius-control)', fontSize: '12px', fontWeight: 500, marginLeft: '4px', whiteSpace: 'nowrap', textTransform: 'capitalize' }}>
                                                             {subtypeLabelFor(lead)}
                                                         </span>
                                                     ) : null}
                                                 </div>
                                             </td>
-                                            <td style={{ ...compactCell, color: 'var(--text-secondary)', fontSize: '11px' }}>{rowDialable || <span style={{ color: '#d97706', fontSize: '10px' }}>No phone</span>}</td>
+                                            <td style={{ ...compactCell, color: 'var(--text-secondary)', fontSize: '12px' }}>{rowDialable || <span style={{ color: 'var(--rp-warn-text)', fontSize: '12px' }}>No phone</span>}</td>
                                             <td style={compactCell}>
                                                 {rowRole ? (
-                                                    <span title="Primary role" style={{ backgroundColor: (clientRoleColor(rowRole)) + '20', color: clientRoleColor(rowRole), padding: '1px 6px', borderRadius: '8px', fontSize: '10px', fontWeight: 600, whiteSpace: 'nowrap', textTransform: 'capitalize' }}>
+                                                    <Badge title="Primary role" style={{ textTransform: 'capitalize' }}>
                                                         {clientRoleLabel(rowRole)}
-                                                    </span>
+                                                    </Badge>
                                                 ) : <span style={{ color: 'var(--text-muted)' }}>—</span>}
                                             </td>
                                             <td style={compactCell}>
-                                                <span style={{ backgroundColor: (sourceColors[lead.source] || '#6b7280') + '20', color: sourceColors[lead.source] || '#6b7280', padding: '1px 6px', borderRadius: '10px', fontSize: '10px', fontWeight: 600 }}>
+                                                <Badge>
                                                     {sourceLabels[lead.source] || lead.source}
-                                                </span>
+                                                </Badge>
                                             </td>
                                             <td style={compactCell} onClick={e => e.stopPropagation()}>
                                                 <select title="Lead status" value={lead.lead_status} disabled={updatingPhone === lead.phone_number}
                                                     onChange={e => handleStatusChange(lead.phone_number, e.target.value)}
-                                                    style={{ padding: '2px 4px', borderRadius: '4px', fontSize: '11px', fontWeight: 500, border: '1px solid var(--border-secondary)', cursor: 'pointer', backgroundColor: lead.lead_status === 'hot' ? '#fef2f2' : lead.lead_status === 'warm' ? '#fffbeb' : 'var(--bg-primary)', color: lead.lead_status === 'hot' ? '#ef4444' : lead.lead_status === 'warm' ? '#f59e0b' : 'var(--text-primary)' }}>
+                                                    style={{ padding: '4px 8px', borderRadius: '8px', fontSize: '12px', fontWeight: 500, border: '1px solid var(--border-secondary)', cursor: 'pointer', backgroundColor: lead.lead_status === 'hot' ? 'var(--rp-danger-bg)' : lead.lead_status === 'warm' ? 'var(--rp-warn-bg)' : 'var(--bg-primary)', color: lead.lead_status === 'hot' ? 'var(--rp-danger-text)' : lead.lead_status === 'warm' ? 'var(--rp-warn-text)' : 'var(--text-primary)' }}>
                                                     {LEAD_STATUSES.map(s => <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
                                                 </select>
                                             </td>
                                             <td style={compactCell}>
                                                 {(() => { const si = stageInfo(lead.lifecycle_stage); return (
-                                                    <span title="Pipeline stage" style={{ backgroundColor: si.color + '18', color: si.color, padding: '1px 6px', borderRadius: '8px', fontSize: '10px', fontWeight: 600, whiteSpace: 'nowrap' }}>{si.label}</span>
+                                                    <Badge title="Pipeline stage" tone="info">{si.label}</Badge>
                                                 ); })()}
                                             </td>
                                             <td style={{ ...compactCell, fontSize: '11px' }}>
@@ -1959,14 +1993,14 @@ const leadCycleStartOf = (lead: any): string => {
                                                     ? <span style={{ color: 'var(--text-primary)' }}>{(lead as any).assigned_agent.name}</span>
                                                     : <span style={{ color: 'var(--text-muted)' }}>—</span>}
                                             </td>
-                                            <td style={{ ...compactCell, fontSize: '11px', whiteSpace: 'nowrap' }}>
+                                            <td data-numeric style={{ ...compactCell, fontSize: '12px', whiteSpace: 'nowrap', textAlign: 'right' }}>
                                                 {lead.budget_min || lead.budget_max ? `${formatBudget(lead.budget_min)}–${formatBudget(lead.budget_max)}` : <span style={{ color: 'var(--text-muted)' }}>—</span>}
                                             </td>
-                                            <td style={compactCell}>
+                                            <td data-numeric style={{ ...compactCell, textAlign: 'right' }}>
                                                 {score !== null ? (
-                                                    <span style={{ backgroundColor: scoreColor(score) + '18', color: scoreColor(score), padding: '1px 6px', borderRadius: '8px', fontSize: '10px', fontWeight: 700 }}>
+                                                    <Badge tone={score >= 80 ? 'danger' : score >= 60 ? 'warn' : 'neutral'}>
                                                         {score}
-                                                    </span>
+                                                    </Badge>
                                                 ) : <span style={{ color: 'var(--text-muted)', fontSize: '11px' }}>—</span>}
                                             </td>
                                             <td style={{ ...compactCell, fontSize: '11px', textTransform: 'capitalize' }}>{lead.intent || <span style={{ color: 'var(--text-muted)' }}>—</span>}</td>
@@ -1978,33 +2012,36 @@ const leadCycleStartOf = (lead: any): string => {
                                                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                                     {rowDialable && (
                                                         <a href={`tel:${rowDialable}`}
-                                                            style={{ color: '#22c55e', fontSize: '15px', textDecoration: 'none', lineHeight: 1 }}
-                                                            title={`Call client ${rowDialable}`} aria-label={`Call client ${rowDialable}`}>📞</a>
+                                                            style={{ color: 'var(--rp-success-text)', fontSize: '15px', textDecoration: 'none', lineHeight: 1 }}
+                                                            title={`Call client ${rowDialable}`} aria-label={`Call client ${rowDialable}`}><PresentationIcon value="phone" /></a>
                                                     )}
                                                     {rowDialable && (
                                                         <a href={`https://wa.me/${rowDialable.slice(1)}`} target="_blank" rel="noopener noreferrer"
-                                                            style={{ color: '#25d366', fontSize: '15px', textDecoration: 'none', lineHeight: 1 }}
-                                                            title="Chat on WhatsApp" aria-label="Chat on WhatsApp">💬</a>
+                                                            style={{ color: 'var(--rp-success-text)', fontSize: '15px', textDecoration: 'none', lineHeight: 1 }}
+                                                            title="Chat on WhatsApp" aria-label="Chat on WhatsApp"><PresentationIcon value="message-circle" /></a>
                                                     )}
                                                     {!identity.isDealer && toDialablePhone(lead.referral_partner_phone) && (
                                                         <a href={`tel:${toDialablePhone(lead.referral_partner_phone)}`}
-                                                            style={{ color: '#7c3aed', fontSize: '13px', textDecoration: 'none', lineHeight: 1, whiteSpace: 'nowrap' }}
-                                                            title={`Call partner ${lead.referral_partner_name || ''} ${toDialablePhone(lead.referral_partner_phone)}`}>🤝📞</a>
+                                                            style={{ color: 'var(--blue-700)', fontSize: '13px', textDecoration: 'none', lineHeight: 1, whiteSpace: 'nowrap' }}
+                                                            title={`Call partner ${lead.referral_partner_name || ''} ${toDialablePhone(lead.referral_partner_phone)}`}><PresentationIcon value="phone" /></a>
                                                     )}
                                                     <button type="button" onClick={() => handleOpenPipeline(lead as LeadRow)}
                                                         style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '14px', lineHeight: 1, padding: 0 }}
-                                                        title="Open in Deal Pipeline" aria-label="Open in Deal Pipeline">📊</button>
+                                                        title="Open in Deal Pipeline" aria-label="Open in Deal Pipeline"><PresentationIcon value="chart-no-axes-combined" /></button>
                                                     <button type="button" onClick={() => handleOpenMatches(lead as LeadRow)}
                                                         style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '14px', lineHeight: 1, padding: 0 }}
-                                                        title="View matching properties" aria-label="View matching properties">🏠</button>
+                                                        title="View matching properties" aria-label="View matching properties"><PresentationIcon value="house" /></button>
                                                 </div>
                                             </td>
                                         </tr>
                                     );
                                 })}
                                 {filteredLeads.length === 0 && (
-                                    <tr><td colSpan={12} style={{ ...compactCell, textAlign: 'center', color: 'var(--text-muted)', padding: '20px 10px' }}>
-                                        {error ? 'Failed to load leads' : 'No leads found'}
+                                    <tr><td colSpan={leadSelectMode ? 14 : 13} style={{ ...compactCell, textAlign: 'center', color: 'var(--text-muted)', padding: '32px 16px' }}>
+                                        {error ? <ListErrorState title="Couldn't load leads" onRetry={loadData} />
+                                            : <ListEmptyState firstUse={!searchQuery && activeFilterCount === 0}
+                                                title={searchQuery ? `No leads match “${searchQuery}”` : 'No leads in this view'}
+                                                hint={activeFilterCount > 0 ? 'Adjust or clear your filters to broaden the list.' : 'New enquiries from your connected sources will appear here.'} />}
                                     </td></tr>
                                 )}
                             </tbody>
@@ -2017,15 +2054,15 @@ const leadCycleStartOf = (lead: any): string => {
             {/* ── Lead Detail Slide-Over ── */}
             {selectedPhone && (
                 <>
-                    <div onClick={closeDetail} style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.4)', zIndex: 90 }} />
-                    <div style={{ position: 'fixed', top: 0, right: 0, bottom: 0, width: isMobile ? '100%' : '480px', maxWidth: isMobile ? '100%' : '95vw', backgroundColor: 'var(--bg-primary)', overflowY: 'auto', display: 'flex', flexDirection: 'column', zIndex: 91, boxShadow: '-4px 0 24px rgba(0,0,0,0.25)', borderLeft: isMobile ? 'none' : '1px solid var(--border-secondary)' }}>
+                    <div onClick={closeDetail} style={{ position: 'fixed', inset: 0, backgroundColor: 'var(--rp-overlay-soft)', zIndex: 90 }} />
+                    <div style={{ position: 'fixed', top: 0, right: 0, bottom: 0, width: isMobile ? '100%' : '480px', maxWidth: isMobile ? '100%' : '95vw', backgroundColor: 'var(--bg-primary)', overflowY: 'auto', display: 'flex', flexDirection: 'column', zIndex: 91, boxShadow: '-4px 0 24px var(--rp-shadow-tint)', borderLeft: isMobile ? 'none' : '1px solid var(--border-secondary)' }}>
                         {detailLoading ? (
                             <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)' }}>Loading...</div>
                         ) : detailError ? (
                             <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px' }}>
-                                <div style={{ maxWidth: '300px', textAlign: 'center', padding: '24px', borderRadius: '12px', backgroundColor: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.18)' }}>
-                                    <div style={{ fontSize: '28px', marginBottom: '10px' }}>⚠️</div>
-                                    <div style={{ fontSize: '14px', fontWeight: 700, color: '#ef4444', marginBottom: '6px' }}>Could Not Load Lead</div>
+                                <div style={{ maxWidth: '300px', textAlign: 'center', padding: '24px', borderRadius: '12px', backgroundColor: 'var(--rp-danger-wash)', border: '1px solid var(--rp-danger-wash)' }}>
+                                    <div style={{ marginBottom: '12px', color: 'var(--rp-warn-text)' }}><PresentationIcon value="circle-alert" size={24} /></div>
+                                    <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--rp-danger-text)', marginBottom: '6px' }}>Could Not Load Lead</div>
                                     <div style={{ fontSize: '12px', color: 'var(--text-muted)', lineHeight: '1.5' }}>{detailError}</div>
                                     <button onClick={closeDetail} style={{ marginTop: '16px', padding: '8px 20px', borderRadius: '8px', fontSize: '12px', fontWeight: 600, border: '1px solid var(--border-secondary)', backgroundColor: 'var(--bg-secondary)', color: 'var(--text-secondary)', cursor: 'pointer' }}>Close</button>
                                 </div>
@@ -2040,17 +2077,17 @@ const leadCycleStartOf = (lead: any): string => {
                                             {leadDetail.phone_number}{leadDetail.email ? ` · ${leadDetail.email}` : ''}
                                         </div>
                                         <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                                            <span style={{ backgroundColor: (sourceColors[leadDetail.source] || '#6b7280') + '20', color: sourceColors[leadDetail.source] || '#6b7280', padding: '2px 8px', borderRadius: '10px', fontSize: '11px', fontWeight: 600 }}>{sourceLabels[leadDetail.source] || leadDetail.source}</span>
-                                            <span style={{ backgroundColor: leadDetail.lead_status === 'hot' ? '#fef2f2' : leadDetail.lead_status === 'warm' ? '#fffbeb' : 'var(--bg-secondary)', color: leadDetail.lead_status === 'hot' ? '#ef4444' : leadDetail.lead_status === 'warm' ? '#f59e0b' : 'var(--text-secondary)', padding: '2px 8px', borderRadius: '10px', fontSize: '11px', fontWeight: 600 }}>{leadDetail.lead_status.toUpperCase()}</span>
+                                            <span style={{ backgroundColor: 'var(--rp-info-bg)', color: sourceColors[leadDetail.source] || 'var(--text-secondary)', padding: '4px 8px', borderRadius: 'var(--radius-control)', fontSize: '12px', fontWeight: 500 }}>{sourceLabels[leadDetail.source] || leadDetail.source}</span>
+                                            <span style={{ backgroundColor: leadDetail.lead_status === 'hot' ? 'var(--rp-danger-bg)' : leadDetail.lead_status === 'warm' ? 'var(--rp-warn-bg)' : 'var(--bg-secondary)', color: leadDetail.lead_status === 'hot' ? 'var(--rp-danger-text)' : leadDetail.lead_status === 'warm' ? 'var(--rp-warn-text)' : 'var(--text-secondary)', padding: '2px 8px', borderRadius: '10px', fontSize: '11px', fontWeight: 600 }}>{leadDetail.lead_status.toUpperCase()}</span>
                                             {leadDetail.lead_score && (
-                                                <span style={{ backgroundColor: scoreColor(leadDetail.lead_score.total_score) + '18', color: scoreColor(leadDetail.lead_score.total_score), padding: '2px 8px', borderRadius: '10px', fontSize: '11px', fontWeight: 700 }}>Score: {leadDetail.lead_score.total_score}</span>
+                                                <span style={{ backgroundColor: 'var(--bg-secondary)', color: scoreColor(leadDetail.lead_score.total_score), padding: '4px 8px', borderRadius: 'var(--radius-control)', fontSize: '12px', fontWeight: 500 }}>Score: {leadDetail.lead_score.total_score}</span>
                                             )}
                                             {(leadDetail.referral_partner_name || toDialablePhone(leadDetail.referral_partner_phone)) && (
-                                                <span style={{ backgroundColor: '#ede9fe', color: '#7c3aed', padding: '2px 8px', borderRadius: '10px', fontSize: '11px', fontWeight: 700 }}>🤝 {leadDetail.referral_partner_name || 'Partner'}</span>
+                                                <span style={{ backgroundColor: 'var(--rp-info-bg)', color: 'var(--rp-info-text)', padding: '4px 8px', borderRadius: 'var(--radius-control)', fontSize: '12px', fontWeight: 500 }}>{leadDetail.referral_partner_name || 'Partner'}</span>
                                             )}
                                             {toDialablePhone(leadDetail.referral_partner_phone) && (
                                                 <a href={`tel:${toDialablePhone(leadDetail.referral_partner_phone)}`} title={`Call partner ${toDialablePhone(leadDetail.referral_partner_phone)}`}
-                                                    style={{ backgroundColor: '#7c3aed', color: '#fff', padding: '2px 8px', borderRadius: '10px', fontSize: '11px', fontWeight: 700, textDecoration: 'none' }}>📞 Call partner</a>
+                                                    style={{ backgroundColor: 'var(--blue-600)', color: 'var(--surface-white)', padding: '4px 8px', borderRadius: 'var(--radius-control)', fontSize: '12px', fontWeight: 500, textDecoration: 'none' }}>Call partner</a>
                                             )}
                                         </div>
                                     </div>
@@ -2074,7 +2111,7 @@ const leadCycleStartOf = (lead: any): string => {
                                             <label style={soLabel}>Phone number</label>
                                             <PhoneInput value={editPhone} onChange={v => setEditPhone(v)} style={soInput} />
                                             {isPlaceholderPhone(leadDetail.phone_number) && (
-                                                <div style={{ fontSize: '11px', color: '#f59e0b', marginTop: '4px' }}>
+                                                <div style={{ fontSize: '11px', color: 'var(--rp-warn-text)', marginTop: '4px' }}>
                                                     This lead has a placeholder number — enter the client's real mobile number.
                                                 </div>
                                             )}
@@ -2141,8 +2178,8 @@ const leadCycleStartOf = (lead: any): string => {
 
                                     {/* WhatsApp Conversation Answers */}
                                     {sessionAnswers && (
-                                        <div style={{ padding: '10px 12px', backgroundColor: 'rgba(37,211,102,0.06)', borderRadius: '8px', border: '1px solid rgba(37,211,102,0.2)', marginBottom: '12px' }}>
-                                            <div style={{ fontSize: '11px', fontWeight: 700, color: '#25d366', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>WhatsApp Conversation Answers</div>
+                                        <div style={{ padding: '10px 12px', backgroundColor: 'var(--rp-success-wash)', borderRadius: '8px', border: '1px solid var(--rp-success-wash)', marginBottom: '12px' }}>
+                                            <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--rp-success-text)', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>WhatsApp Conversation Answers</div>
                                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px' }}>
                                                 {Object.entries(sessionAnswers).filter(([k]) => !k.startsWith('_') && k !== 'buyer_phone').map(([key, val]) => (
                                                     <div key={key} style={{ fontSize: '11px' }}>
@@ -2212,11 +2249,11 @@ const leadCycleStartOf = (lead: any): string => {
                                                     </div>
                                                 </div>
                                                 <button onClick={handleConvertToDeal} disabled={convertingDeal || !leadDetail.intent || (!leadDetail.budget_min && !leadDetail.budget_max) || !leadDetail.preferred_location}
-                                                    style={{ ...primaryBtn, backgroundColor: '#10b981', opacity: (!leadDetail.intent || (!leadDetail.budget_min && !leadDetail.budget_max) || !leadDetail.preferred_location) ? 0.5 : 1 }}>
+                                                    style={{ ...primaryBtn, backgroundColor: 'var(--rp-success-text)', opacity: (!leadDetail.intent || (!leadDetail.budget_min && !leadDetail.budget_max) || !leadDetail.preferred_location) ? 0.5 : 1 }}>
                                                     {convertingDeal ? 'Converting...' : 'Convert'}
                                                 </button>
                                             </div>
-                                            {dealError && <div style={{ color: '#ef4444', fontSize: '12px', marginTop: '6px' }}>{dealError}</div>}
+                                            {dealError && <div style={{ color: 'var(--rp-danger-text)', fontSize: '12px', marginTop: '6px' }}>{dealError}</div>}
                                         </div>
                                     )}
 
@@ -2232,8 +2269,8 @@ const leadCycleStartOf = (lead: any): string => {
                                         <div>
                                             <button type="button" onClick={() => setShowConvert(true)} style={{
                                                 padding: '7px 12px', fontSize: '12px', fontWeight: 700, borderRadius: 8, cursor: 'pointer',
-                                                border: 'none', backgroundColor: '#10b981', color: '#fff',
-                                            }}>🤝 Convert to Partner Agent</button>
+                                                border: 'none', backgroundColor: 'var(--rp-success-text)', color: 'var(--surface-white)',
+                                            }}>Convert to Partner Agent</button>
                                         </div>
                                     )}
 
@@ -2289,12 +2326,12 @@ const leadCycleStartOf = (lead: any): string => {
                                                                 style={{
                                                                     display: 'inline-flex', alignItems: 'center', gap: '6px',
                                                                     padding: '5px 12px', borderRadius: '8px',
-                                                                    backgroundColor: 'rgba(220,38,38,0.1)', color: '#dc2626',
-                                                                    border: '1px solid rgba(220,38,38,0.3)',
+                                                                    backgroundColor: 'var(--rp-danger-wash)', color: 'var(--rp-danger-text)',
+                                                                    border: '1px solid var(--rp-danger-line)',
                                                                     fontSize: '12px', fontWeight: 600, fontFamily: 'monospace',
                                                                     textDecoration: 'none',
                                                                 }}
-                                                            >🔗 Listing #{listingId}</a>
+                                                            >Listing #{listingId}</a>
                                                         </div>
                                                     )}
                                                 </div>
@@ -2308,7 +2345,7 @@ const leadCycleStartOf = (lead: any): string => {
                                         if (!meta) return null;
                                         const resComLabel = meta.res_com === 'R' ? 'Residential' : meta.res_com === 'C' ? 'Commercial' : meta.res_com;
                                         const verifiedBadge = (val: string | undefined) => val?.toUpperCase() === 'VERIFIED'
-                                            ? <span style={{ color: '#22c55e', fontWeight: 700, fontSize: '12px' }}>✓ VERIFIED</span>
+                                            ? <span style={{ color: 'var(--rp-success-text)', fontWeight: 700, fontSize: '12px' }}>✓ VERIFIED</span>
                                             : <span style={{ color: 'var(--text-muted)', fontSize: '12px' }}>{val || 'UNVALIDATED'}</span>;
                                         const priceFormatted = meta.price ? `₹${Number(meta.price).toLocaleString('en-IN')}` : null;
                                         return (
@@ -2319,7 +2356,7 @@ const leadCycleStartOf = (lead: any): string => {
                                                     {meta.city_name && <div><div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '2px' }}>City</div><div style={{ fontSize: '13px', color: 'var(--text-primary)' }}>{meta.city_name}</div></div>}
                                                     {priceFormatted && <div><div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '2px' }}>Listed Price</div><div style={{ fontSize: '13px', color: 'var(--text-primary)' }}>{priceFormatted}</div></div>}
                                                     {meta.res_com && <div><div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '2px' }}>Property Type</div><div style={{ fontSize: '13px', color: 'var(--text-primary)' }}>{resComLabel}</div></div>}
-                                                    {meta.identity && <div><div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '2px' }}>Buyer Type</div><div style={{ fontSize: '12px', fontWeight: 600, padding: '2px 8px', borderRadius: '12px', display: 'inline-block', backgroundColor: meta.identity === 'Dealer' ? '#fef3c7' : '#dbeafe', color: meta.identity === 'Dealer' ? '#92400e' : '#1e40af' }}>{meta.identity}</div></div>}
+                                                    {meta.identity && <div><div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '2px' }}>Buyer Type</div><div style={{ fontSize: '12px', fontWeight: 600, padding: '2px 8px', borderRadius: '12px', display: 'inline-block', backgroundColor: meta.identity === 'Dealer' ? 'var(--rp-warn-bg)' : 'var(--blue-100)', color: meta.identity === 'Dealer' ? 'var(--rp-warn-text)' : 'var(--blue-800)' }}>{meta.identity}</div></div>}
                                                     {meta.sub_user_name && <div><div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '2px' }}>Agent's 99acres Email</div><div style={{ fontSize: '12px', color: 'var(--text-secondary)', wordBreak: 'break-all' }}>{meta.sub_user_name}</div></div>}
                                                     {meta.property_code && (
                                                         <div style={{ gridColumn: '1 / -1' }}>
@@ -2331,15 +2368,15 @@ const leadCycleStartOf = (lead: any): string => {
                                                                 style={{
                                                                     display: 'inline-flex', alignItems: 'center', gap: '6px',
                                                                     padding: '5px 12px', borderRadius: '8px',
-                                                                    backgroundColor: 'rgba(234,88,12,0.1)', color: '#ea580c',
-                                                                    border: '1px solid rgba(234,88,12,0.3)',
+                                                                    backgroundColor: 'var(--rp-danger-wash)', color: 'var(--rp-warn-text)',
+                                                                    border: '1px solid var(--rp-danger-line)',
                                                                     fontSize: '12px', fontWeight: 600, fontFamily: 'monospace',
                                                                     textDecoration: 'none', transition: 'background 0.15s',
                                                                 }}
-                                                                onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'rgba(234,88,12,0.18)')}
-                                                                onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'rgba(234,88,12,0.1)')}
+                                                                onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--rp-danger-wash)')}
+                                                                onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'var(--rp-danger-wash)')}
                                                             >
-                                                                <span>🔗</span>
+                                                                <PresentationIcon value="link" />
                                                                 <span>{meta.property_code}</span>
                                                                 <span style={{ fontSize: '10px', fontFamily: 'sans-serif', fontWeight: 400, opacity: 0.8 }}>View on 99acres ↗</span>
                                                             </a>
@@ -2377,8 +2414,8 @@ const leadCycleStartOf = (lead: any): string => {
                                             {(['activity', 'chat', 'visits'] as const).map(tab => (
                                                 <button key={tab} type="button"
                                                     onClick={() => setSliderTab(tab)}
-                                                    style={{ flex: 1, padding: '7px 12px', fontSize: '12px', fontWeight: 600, border: 'none', cursor: 'pointer', backgroundColor: sliderTab === tab ? '#3b82f6' : 'var(--bg-secondary)', color: sliderTab === tab ? '#fff' : 'var(--text-secondary)', transition: 'all 0.15s' }}>
-                                                    {tab === 'activity' ? '📋 Activity' : tab === 'chat' ? '💬 WhatsApp' : '🏠 Visits & Views'}
+                                                    style={{ flex: 1, padding: '7px 12px', fontSize: '12px', fontWeight: 600, border: 'none', cursor: 'pointer', backgroundColor: sliderTab === tab ? 'var(--blue-500)' : 'var(--bg-secondary)', color: sliderTab === tab ? 'var(--surface-white)' : 'var(--text-secondary)', transition: 'all 0.15s' }}>
+                                                    {tab === 'activity' ? 'Activity' : tab === 'chat' ? 'WhatsApp' : 'Visits & Views'}
                                                 </button>
                                             ))}
                                         </div>
@@ -2391,7 +2428,7 @@ const leadCycleStartOf = (lead: any): string => {
                                                 )}
                                                 {leadDetail.recent_interactions.map(i => (
                                                     <div key={i.id} style={{ display: 'flex', gap: '10px', padding: '8px 12px', backgroundColor: 'var(--bg-secondary)', borderRadius: '8px', border: '1px solid var(--border-secondary)' }}>
-                                                        <span style={{ fontSize: '16px', flexShrink: 0 }}>{channelIcon(i.channel)}</span>
+                                                        <PresentationIcon value={channelIcon(i.channel)} />
                                                         <div style={{ flex: 1, minWidth: 0 }}>
                                                             <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginBottom: '2px' }}>
                                                                 <span style={{ textTransform: 'capitalize' }}>{i.channel} · {i.direction} · {i.event_type}</span>
@@ -2419,9 +2456,9 @@ const leadCycleStartOf = (lead: any): string => {
                                                     <div key={appt.id} style={{ padding: '10px 14px', backgroundColor: 'var(--bg-secondary)', borderRadius: '8px', border: '1px solid var(--border-secondary)' }}>
                                                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                                             <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>
-                                                                📅 {appt.type.replace(/_/g, ' ')}
+                                                                <PresentationIcon value="calendar-days" /> {appt.type.replace(/_/g, ' ')}
                                                             </span>
-                                                            <span style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '10px', fontWeight: 600, backgroundColor: appt.status === 'completed' ? '#d1fae5' : appt.status === 'cancelled' ? '#fee2e2' : '#eff6ff', color: appt.status === 'completed' ? '#065f46' : appt.status === 'cancelled' ? '#dc2626' : '#1d4ed8' }}>
+                                                            <span style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '10px', fontWeight: 600, backgroundColor: appt.status === 'completed' ? 'var(--rp-success-bg)' : appt.status === 'cancelled' ? 'var(--rp-danger-bg)' : 'var(--blue-50)', color: appt.status === 'completed' ? 'var(--rp-success-text)' : appt.status === 'cancelled' ? 'var(--rp-danger-text)' : 'var(--blue-700)' }}>
                                                                 {appt.status}
                                                             </span>
                                                         </div>
@@ -2430,7 +2467,7 @@ const leadCycleStartOf = (lead: any): string => {
                                                         </div>
                                                         {appt.property && (
                                                             <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>
-                                                                🏠 {appt.property.type} {appt.property.location ? `· ${appt.property.location}` : ''}
+                                                                <PresentationIcon value="house" /> {appt.property.type} {appt.property.location ? `· ${appt.property.location}` : ''}
                                                             </div>
                                                         )}
                                                     </div>
@@ -2440,9 +2477,9 @@ const leadCycleStartOf = (lead: any): string => {
                                                 {leadDetail.recent_interactions
                                                     .filter(i => i.event_type === 'property_view')
                                                     .map(i => (
-                                                        <div key={i.id} style={{ padding: '8px 14px', backgroundColor: '#f0fdf4', borderRadius: '8px', border: '1px solid #bbf7d0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                                            <span style={{ fontSize: '12px', color: '#065f46' }}>👁 {i.content || 'Viewed property'}</span>
-                                                            <span style={{ fontSize: '11px', color: '#6b7280' }}>{new Date(i.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}</span>
+                                                        <div key={i.id} style={{ padding: '8px 14px', backgroundColor: 'var(--rp-success-bg)', borderRadius: '8px', border: '1px solid var(--rp-success-line)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                            <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}><PresentationIcon value="eye" /> {i.content || 'Viewed property'}</span>
+                                                            <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{new Date(i.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}</span>
                                                         </div>
                                                     ))
                                                 }
@@ -2455,10 +2492,10 @@ const leadCycleStartOf = (lead: any): string => {
                                     </div>
                                 </div>
                                 {/* 2026-08-01: single sticky Save-changes footer (replaces the per-field save buttons) */}
-                                <div style={{ position: 'sticky', bottom: 0, marginTop: 'auto', padding: '12px 20px', borderTop: '1px solid var(--border-secondary)', backgroundColor: 'var(--bg-primary)', display: 'flex', flexDirection: 'column', gap: '6px', zIndex: 6, boxShadow: '0 -4px 12px rgba(0,0,0,0.06)' }}>
-                                    {saveError && <div style={{ fontSize: '12px', color: '#ef4444' }}>{saveError}</div>}
+                                <div style={{ position: 'sticky', bottom: 0, marginTop: 'auto', padding: '12px 20px', borderTop: '1px solid var(--border-secondary)', backgroundColor: 'var(--bg-primary)', display: 'flex', flexDirection: 'column', gap: '6px', zIndex: 6, boxShadow: '0 -4px 12px var(--rp-shadow-tint)' }}>
+                                    {saveError && <div style={{ fontSize: '12px', color: 'var(--rp-danger-text)' }}>{saveError}</div>}
                                     <button onClick={handleSaveAll} disabled={savingAll || savingName || savingNotes || savingPhone} style={{ ...primaryBtn, width: '100%', opacity: savingAll ? 0.7 : 1 }}>
-                                        {savingAll ? 'Saving…' : '💾 Save changes'}
+                                        {savingAll ? 'Saving…' : 'Save changes'}
                                     </button>
                                 </div>
                             </>
@@ -2475,8 +2512,8 @@ const leadCycleStartOf = (lead: any): string => {
             {/* ── Create Lead Modal ── */}
             {showCreateModal && (
                 <>
-                    <div onClick={closeCreateModal} style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 100 }} />
-                    <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', backgroundColor: 'var(--bg-primary)', borderRadius: '12px', padding: '24px', width: '520px', maxWidth: '90vw', maxHeight: '90vh', overflowY: 'auto', zIndex: 101, boxShadow: '0 20px 60px rgba(0,0,0,0.3)' }}>
+                    <div onClick={closeCreateModal} style={{ position: 'fixed', inset: 0, backgroundColor: 'var(--rp-overlay-soft)', zIndex: 100 }} />
+                    <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', backgroundColor: 'var(--bg-primary)', borderRadius: '12px', padding: '24px', width: '520px', maxWidth: '90vw', maxHeight: '90vh', overflowY: 'auto', zIndex: 101, boxShadow: '0 20px 60px var(--rp-shadow-tint)' }}>
                         <h3 style={{ margin: '0 0 16px', color: 'var(--text-primary)', fontSize: '18px' }}>Add New Lead</h3>
 
                         {/* Step Indicator */}
@@ -2491,8 +2528,8 @@ const leadCycleStartOf = (lead: any): string => {
                                 return (
                                     <div key={label} style={{ display: 'flex', alignItems: 'center', flex: idx < totalSteps - 1 ? 1 : 0 }}>
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
-                                            <div style={{ width: '22px', height: '22px', borderRadius: '50%', backgroundColor: active ? '#3b82f6' : 'var(--border-secondary)', color: active ? '#fff' : 'var(--text-muted)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: 700 }}>{stepNum}</div>
-                                            <span style={{ fontSize: '12px', color: active ? '#3b82f6' : 'var(--text-muted)', fontWeight: active ? 600 : 400 }}>{label}</span>
+                                            <div style={{ width: '22px', height: '22px', borderRadius: '50%', backgroundColor: active ? 'var(--blue-500)' : 'var(--border-secondary)', color: active ? 'var(--surface-white)' : 'var(--text-muted)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11px', fontWeight: 700 }}>{stepNum}</div>
+                                            <span style={{ fontSize: '12px', color: active ? 'var(--blue-500)' : 'var(--text-muted)', fontWeight: active ? 600 : 400 }}>{label}</span>
                                         </div>
                                         {idx < totalSteps - 1 && <div style={{ flex: 1, height: '1px', backgroundColor: 'var(--border-secondary)', margin: '0 8px' }} />}
                                     </div>
@@ -2500,7 +2537,7 @@ const leadCycleStartOf = (lead: any): string => {
                             })}
                         </div>
 
-                        {createError && <div style={{ marginBottom: '12px', padding: '8px 12px', borderRadius: '6px', backgroundColor: '#fef2f2', color: '#dc2626', fontSize: '13px' }}>{createError}</div>}
+                        {createError && <div style={{ marginBottom: '12px', padding: '8px 12px', borderRadius: '6px', backgroundColor: 'var(--rp-danger-bg)', color: 'var(--rp-danger-text)', fontSize: '13px' }}>{createError}</div>}
 
                         {/* ── STEP 1: Identity — phone first + autocomplete ──
                             An existing contact autocompletes name/phone into the form;
@@ -2520,7 +2557,7 @@ const leadCycleStartOf = (lead: any): string => {
                                     {/^\d*$/.test(clientSearchQuery) && <span style={{
                                         position: 'absolute', right: '14px', top: '50%', transform: 'translateY(-50%)',
                                         fontSize: '12px', fontWeight: 600,
-                                        color: clientSearchQuery.length === 10 ? '#22c55e' : 'var(--text-muted)',
+                                        color: clientSearchQuery.length === 10 ? 'var(--rp-success-text)' : 'var(--text-muted)',
                                         pointerEvents: 'none',
                                     }}>
                                         {clientSearchQuery.length}/10
@@ -2535,7 +2572,7 @@ const leadCycleStartOf = (lead: any): string => {
 
                                 {/* Confirmed: existing contact picked */}
                                 {preselectedContact && (
-                                    <div style={{ marginTop: '10px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', backgroundColor: 'rgba(59,130,246,0.08)', borderRadius: '8px', padding: '10px 14px', border: '1px solid rgba(59,130,246,0.3)' }}>
+                                    <div style={{ marginTop: '10px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', backgroundColor: 'var(--rp-info-wash)', borderRadius: '8px', padding: '10px 14px', border: '1px solid var(--rp-info-line)' }}>
                                         <div>
                                             <div style={{ fontWeight: 600, fontSize: '13px', color: 'var(--text-primary)' }}>{preselectedContact.name || 'Unknown'}</div>
                                             <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{isPlaceholderPhone(preselectedContact.phone_number) ? 'No phone on file — you will add it in Details' : preselectedContact.phone_number}</div>
@@ -2546,7 +2583,7 @@ const leadCycleStartOf = (lead: any): string => {
 
                                 {/* Confirmed: new number (nothing written yet — added at submit) */}
                                 {!preselectedContact && identityNewPhone && identityNewPhone === clientSearchQuery.trim() && (
-                                    <div style={{ marginTop: '10px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', backgroundColor: 'rgba(34,197,94,0.08)', borderRadius: '8px', padding: '10px 14px', border: '1px solid rgba(34,197,94,0.3)' }}>
+                                    <div style={{ marginTop: '10px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', backgroundColor: 'var(--rp-success-wash)', borderRadius: '8px', padding: '10px 14px', border: '1px solid var(--rp-success-line)' }}>
                                         <div>
                                             <div style={{ fontWeight: 600, fontSize: '13px', color: 'var(--text-primary)' }}>✓ New number ready</div>
                                             <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{identityNewPhone} — will be added when you create the lead</div>
@@ -2560,14 +2597,14 @@ const leadCycleStartOf = (lead: any): string => {
                                     <div style={{ marginTop: '8px', border: '1px solid var(--border-secondary)', borderRadius: '8px', overflow: 'hidden' }}>
                                         {clientSearchResults.map(r => {
                                             const isTemp = isPlaceholderPhone(r.phone_number);
-                                            const statusColors: Record<string, string> = { cold: '#94a3b8', warm: '#f59e0b', hot: '#ef4444', closed: '#22c55e', lost: '#6b7280' };
-                                            const sc = statusColors[r.lead_status || ''] || '#94a3b8';
+                                            const statusColors: Record<string, string> = { cold: 'var(--text-muted)', warm: 'var(--rp-warn-text)', hot: 'var(--rp-danger-text)', closed: 'var(--rp-success-text)', lost: 'var(--text-muted)' };
+                                            const sc = statusColors[r.lead_status || ''] || 'var(--text-muted)';
                                             return (
                                                 <div key={r.phone_number} onClick={() => handleIdentitySelectExisting(r)}
                                                     style={{ padding: '10px 14px', cursor: 'pointer', borderBottom: '1px solid var(--border-secondary)', display: 'flex', alignItems: 'center', gap: '10px', transition: 'background 0.1s' }}
-                                                    onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'rgba(59,130,246,0.06)')}
+                                                    onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--rp-info-wash)')}
                                                     onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}>
-                                                    <div style={{ width: '34px', height: '34px', borderRadius: '50%', backgroundColor: 'rgba(59,130,246,0.12)', color: '#3b82f6', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '14px', flexShrink: 0 }}>
+                                                    <div style={{ width: '34px', height: '34px', borderRadius: '50%', backgroundColor: 'var(--rp-info-wash)', color: 'var(--blue-500)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '14px', flexShrink: 0 }}>
                                                         {(r.name || '?')[0].toUpperCase()}
                                                     </div>
                                                     <div style={{ flex: 1, minWidth: 0 }}>
@@ -2635,7 +2672,7 @@ const leadCycleStartOf = (lead: any): string => {
                                                 onMouseLeave={e => { e.currentTarget.style.borderColor = suggested ? r.accent : 'var(--border-secondary)'; e.currentTarget.style.backgroundColor = suggested ? r.hoverBg : 'var(--bg-secondary)'; }}
                                                 onFocus={e => { e.currentTarget.style.borderColor = r.accent; }}
                                                 onBlur={e => { if (!suggested) e.currentTarget.style.borderColor = 'var(--border-secondary)'; }}>
-                                                <div style={{ fontSize: '28px', marginBottom: '8px' }}>{r.icon}</div>
+                                                <div style={{ marginBottom: '8px', color: 'var(--text-secondary)' }}><PresentationIcon value={r.icon} size={24} /></div>
                                                 <div style={{ fontWeight: 700, fontSize: '14px', color: 'var(--text-primary)', marginBottom: '4px' }}>{r.title}{suggested ? ' ✓' : ''}</div>
                                                 <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{r.subtitle}</div>
                                             </div>
@@ -2664,7 +2701,7 @@ const leadCycleStartOf = (lead: any): string => {
                                     {/^\d*$/.test(clientSearchQuery) && <span style={{
                                         position: 'absolute', right: '14px', top: '50%', transform: 'translateY(-50%)',
                                         fontSize: '12px', fontWeight: 600,
-                                        color: clientSearchQuery.length === 10 ? '#22c55e' : 'var(--text-muted)',
+                                        color: clientSearchQuery.length === 10 ? 'var(--rp-success-text)' : 'var(--text-muted)',
                                         pointerEvents: 'none',
                                     }}>
                                         {clientSearchQuery.length}/10
@@ -2682,14 +2719,14 @@ const leadCycleStartOf = (lead: any): string => {
                                     <div style={{ marginTop: '8px', border: '1px solid var(--border-secondary)', borderRadius: '8px', overflow: 'hidden' }}>
                                         {clientSearchResults.map(r => {
                                             const isTemp = isPlaceholderPhone(r.phone_number);
-                                            const statusColors: Record<string, string> = { cold: '#94a3b8', warm: '#f59e0b', hot: '#ef4444', closed: '#22c55e', lost: '#6b7280' };
-                                            const sc = statusColors[r.lead_status || ''] || '#94a3b8';
+                                            const statusColors: Record<string, string> = { cold: 'var(--text-muted)', warm: 'var(--rp-warn-text)', hot: 'var(--rp-danger-text)', closed: 'var(--rp-success-text)', lost: 'var(--text-muted)' };
+                                            const sc = statusColors[r.lead_status || ''] || 'var(--text-muted)';
                                             return (
                                                 <div key={r.phone_number} onClick={() => handleSelectExistingClient(r)}
                                                     style={{ padding: '10px 14px', cursor: 'pointer', borderBottom: '1px solid var(--border-secondary)', display: 'flex', alignItems: 'center', gap: '10px', transition: 'background 0.1s' }}
-                                                    onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'rgba(59,130,246,0.06)')}
+                                                    onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--rp-info-wash)')}
                                                     onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}>
-                                                    <div style={{ width: '34px', height: '34px', borderRadius: '50%', backgroundColor: 'rgba(59,130,246,0.12)', color: '#3b82f6', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '14px', flexShrink: 0 }}>
+                                                    <div style={{ width: '34px', height: '34px', borderRadius: '50%', backgroundColor: 'var(--rp-info-wash)', color: 'var(--blue-500)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '14px', flexShrink: 0 }}>
                                                         {(r.name || '?')[0].toUpperCase()}
                                                     </div>
                                                     <div style={{ flex: 1, minWidth: 0 }}>
@@ -2738,53 +2775,53 @@ const leadCycleStartOf = (lead: any): string => {
 
                                 {/* Partner Agent Search — only for PARTNER_REFERRAL */}
                                 {createLeadType === 'PARTNER_REFERRAL' && (
-                                    <div style={{ backgroundColor: '#f5f3ff', borderRadius: '8px', padding: '12px', border: '1px solid #ede9fe' }}>
+                                    <div style={{ backgroundColor: 'var(--blue-50)', borderRadius: '8px', padding: '12px', border: '1px solid var(--blue-50)' }}>
                                         <label style={labelStyle}>Partner Agent *</label>
                                         {partnerSelected ? (
-                                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#ede9fe', borderRadius: '8px', padding: '10px 14px' }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', backgroundColor: 'var(--blue-50)', borderRadius: '8px', padding: '10px 14px' }}>
                                                 <div>
-                                                    <div style={{ fontWeight: 600, fontSize: '14px', color: '#5b21b6' }}>{partnerSelected.name}</div>
-                                                    <div style={{ fontSize: '12px', color: '#7c3aed' }}>{partnerSelected.phone_number}{partnerSelected.city ? ` | ${partnerSelected.city}` : ''}</div>
-                                                    <div style={{ fontSize: '11px', color: partnerSelected.verified ? '#059669' : '#d97706', marginTop: '2px' }}>{partnerSelected.verified ? 'Verified' : `Status: ${partnerSelected.status}`}</div>
+                                                    <div style={{ fontWeight: 600, fontSize: '14px', color: 'var(--blue-800)' }}>{partnerSelected.name}</div>
+                                                    <div style={{ fontSize: '12px', color: 'var(--blue-700)' }}>{partnerSelected.phone_number}{partnerSelected.city ? ` | ${partnerSelected.city}` : ''}</div>
+                                                    <div style={{ fontSize: '11px', color: partnerSelected.verified ? 'var(--rp-success-text)' : 'var(--rp-warn-text)', marginTop: '2px' }}>{partnerSelected.verified ? 'Verified' : `Status: ${partnerSelected.status}`}</div>
                                                 </div>
                                                 <button type="button" onClick={clearPartnerSelection} style={{ ...outlineBtn, padding: '4px 10px', fontSize: '12px' }}>Change</button>
                                             </div>
                                         ) : createPartnerPhone && !showPartnerRegister ? (
-                                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#fef3c7', borderRadius: '8px', padding: '10px 14px' }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', backgroundColor: 'var(--rp-warn-bg)', borderRadius: '8px', padding: '10px 14px' }}>
                                                 <div>
-                                                    <div style={{ fontWeight: 600, fontSize: '14px', color: '#92400e' }}>{createPartnerName || 'New Partner'}</div>
-                                                    <div style={{ fontSize: '12px', color: '#b45309' }}>{createPartnerPhone}</div>
-                                                    <div style={{ fontSize: '11px', color: '#d97706', marginTop: '2px' }}>Will be auto-registered on submit</div>
+                                                    <div style={{ fontWeight: 600, fontSize: '14px', color: 'var(--rp-warn-text)' }}>{createPartnerName || 'New Partner'}</div>
+                                                    <div style={{ fontSize: '12px', color: 'var(--rp-warn-text)' }}>{createPartnerPhone}</div>
+                                                    <div style={{ fontSize: '11px', color: 'var(--rp-warn-text)', marginTop: '2px' }}>Will be auto-registered on submit</div>
                                                 </div>
                                                 <button type="button" onClick={clearPartnerSelection} style={{ ...outlineBtn, padding: '4px 10px', fontSize: '12px' }}>Change</button>
                                             </div>
                                         ) : (
                                             <div style={{ position: 'relative' }}>
                                                 <input type="text" value={partnerSearchQuery} autoFocus onChange={e => { setPartnerSearchQuery(e.target.value); setShowPartnerRegister(false); }} placeholder="Search partner by name or phone..." style={inputStyle} />
-                                                {partnerSearching && <div style={{ fontSize: '11px', color: '#7c3aed', marginTop: '4px' }}>Searching...</div>}
+                                                {partnerSearching && <div style={{ fontSize: '11px', color: 'var(--blue-700)', marginTop: '4px' }}>Searching...</div>}
                                                 {partnerSearchResults.length > 0 && (
-                                                    <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-secondary)', borderRadius: '8px', marginTop: '4px', maxHeight: '200px', overflowY: 'auto', zIndex: 10, boxShadow: '0 8px 24px rgba(0,0,0,0.15)' }}>
+                                                    <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-secondary)', borderRadius: '8px', marginTop: '4px', maxHeight: '200px', overflowY: 'auto', zIndex: 10, boxShadow: '0 8px 24px var(--rp-shadow-tint)' }}>
                                                         {partnerSearchResults.map(p => (
                                                             <div key={p.id} onClick={() => selectPartner(p)} style={{ padding: '10px 14px', cursor: 'pointer', borderBottom: '1px solid var(--border-secondary)' }}
-                                                                onMouseEnter={e => (e.currentTarget.style.backgroundColor = '#f5f3ff')}
+                                                                onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--blue-50)')}
                                                                 onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}>
                                                                 <div style={{ fontWeight: 600, fontSize: '13px', color: 'var(--text-primary)' }}>{p.name}</div>
                                                                 <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{p.phone_number}{p.company_name ? ` | ${p.company_name}` : ''}{p.city ? ` | ${p.city}` : ''}</div>
-                                                                <div style={{ fontSize: '11px', color: p.verified ? '#059669' : '#d97706', marginTop: '2px' }}>{p.verified ? 'Verified' : p.status} | {p.package_type}</div>
+                                                                <div style={{ fontSize: '11px', color: p.verified ? 'var(--rp-success-text)' : 'var(--rp-warn-text)', marginTop: '2px' }}>{p.verified ? 'Verified' : p.status} | {p.package_type}</div>
                                                             </div>
                                                         ))}
                                                     </div>
                                                 )}
                                                 {partnerSearchDone && partnerSearchResults.length === 0 && partnerSearchQuery.trim().length >= 2 && !partnerSearching && (
-                                                    <div style={{ marginTop: '8px', padding: '10px 14px', backgroundColor: '#fef2f2', borderRadius: '8px', border: '1px solid #fecaca' }}>
-                                                        <div style={{ fontSize: '13px', color: '#dc2626', fontWeight: 600 }}>Partner not registered</div>
-                                                        <p style={{ margin: '4px 0 8px', fontSize: '12px', color: '#b91c1c' }}>No partner found matching "{partnerSearchQuery}". Register them now:</p>
-                                                        <button type="button" onClick={() => { const isPhone = /\d{3,}/.test(partnerSearchQuery); setNewPartnerForm({ phone: isPhone ? partnerSearchQuery : '', name: isPhone ? '' : partnerSearchQuery, email: '', city: '' }); setShowPartnerRegister(true); }} style={{ ...primaryBtn, padding: '6px 14px', fontSize: '12px', backgroundColor: '#7c3aed' }}>+ Register New Partner</button>
+                                                    <div style={{ marginTop: '8px', padding: '10px 14px', backgroundColor: 'var(--rp-danger-bg)', borderRadius: '8px', border: '1px solid var(--rp-danger-line)' }}>
+                                                        <div style={{ fontSize: '13px', color: 'var(--rp-danger-text)', fontWeight: 600 }}>Partner not registered</div>
+                                                        <p style={{ margin: '4px 0 8px', fontSize: '12px', color: 'var(--rp-danger-text)' }}>No partner found matching "{partnerSearchQuery}". Register them now:</p>
+                                                        <button type="button" onClick={() => { const isPhone = /\d{3,}/.test(partnerSearchQuery); setNewPartnerForm({ phone: isPhone ? partnerSearchQuery : '', name: isPhone ? '' : partnerSearchQuery, email: '', city: '' }); setShowPartnerRegister(true); }} style={{ ...primaryBtn, padding: '6px 14px', fontSize: '12px', backgroundColor: 'var(--blue-700)' }}>+ Register New Partner</button>
                                                     </div>
                                                 )}
                                                 {showPartnerRegister && (
-                                                    <div style={{ marginTop: '8px', padding: '12px', backgroundColor: '#fefce8', borderRadius: '8px', border: '1px solid #fde68a' }}>
-                                                        <div style={{ fontSize: '13px', fontWeight: 600, color: '#92400e', marginBottom: '10px' }}>Register New Partner Agent</div>
+                                                    <div style={{ marginTop: '8px', padding: '12px', backgroundColor: 'var(--rp-warn-bg)', borderRadius: '8px', border: '1px solid var(--rp-warn-line)' }}>
+                                                        <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--rp-warn-text)', marginBottom: '10px' }}>Register New Partner Agent</div>
                                                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
                                                             <div><label style={{ ...labelStyle, fontSize: '11px' }}>Phone *</label><PhoneInput value={newPartnerForm.phone} onChange={v => setNewPartnerForm(p => ({ ...p, phone: v }))} placeholder="+91 98765 43210" style={inputStyle} /></div>
                                                             <div><label style={{ ...labelStyle, fontSize: '11px' }}>Name *</label><input type="text" value={newPartnerForm.name} onChange={e => setNewPartnerForm(p => ({ ...p, name: e.target.value }))} placeholder="Partner name" style={inputStyle} /></div>
@@ -2792,10 +2829,10 @@ const leadCycleStartOf = (lead: any): string => {
                                                             <div><label style={{ ...labelStyle, fontSize: '11px' }}>City</label><input type="text" value={newPartnerForm.city} onChange={e => setNewPartnerForm(p => ({ ...p, city: e.target.value }))} placeholder="City" style={inputStyle} /></div>
                                                         </div>
                                                         <div style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
-                                                            <button type="button" onClick={confirmNewPartner} disabled={!newPartnerForm.phone.trim()} style={{ ...primaryBtn, padding: '6px 14px', fontSize: '12px', backgroundColor: '#059669', opacity: newPartnerForm.phone.trim() ? 1 : 0.5 }}>Confirm Partner</button>
+                                                            <button type="button" onClick={confirmNewPartner} disabled={!newPartnerForm.phone.trim()} style={{ ...primaryBtn, padding: '6px 14px', fontSize: '12px', backgroundColor: 'var(--rp-success-text)', opacity: newPartnerForm.phone.trim() ? 1 : 0.5 }}>Confirm Partner</button>
                                                             <button type="button" onClick={() => setShowPartnerRegister(false)} style={{ ...outlineBtn, padding: '6px 14px', fontSize: '12px' }}>Cancel</button>
                                                         </div>
-                                                        <p style={{ margin: '8px 0 0', fontSize: '11px', color: '#92400e' }}>Partner will be auto-created with Pending status and notified via WhatsApp + Email.</p>
+                                                        <p style={{ margin: '8px 0 0', fontSize: '11px', color: 'var(--rp-warn-text)' }}>Partner will be auto-created with Pending status and notified via WhatsApp + Email.</p>
                                                     </div>
                                                 )}
                                             </div>
@@ -2805,9 +2842,9 @@ const leadCycleStartOf = (lead: any): string => {
 
                                 {/* Preselected contact banner */}
                                 {preselectedContact && (
-                                    <div style={{ padding: '10px 14px', borderRadius: '8px', backgroundColor: 'rgba(59,130,246,0.08)', border: '1px solid rgba(59,130,246,0.3)', fontSize: '13px', color: 'var(--text-primary)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <div style={{ padding: '10px 14px', borderRadius: '8px', backgroundColor: 'var(--rp-info-wash)', border: '1px solid var(--rp-info-line)', fontSize: '13px', color: 'var(--text-primary)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                         <span>Adding requirements for: <strong>{preselectedContact.name || 'Contact'}</strong> &nbsp;|&nbsp; {isPlaceholderPhone(preselectedContact.phone_number) ? 'No phone' : preselectedContact.phone_number}</span>
-                                        <button type="button" onClick={() => { setPreselectedContact(null); setCreateForm(p => ({ ...p, name: '', phone: '' })); }} style={{ fontSize: '11px', color: '#3b82f6', background: 'none', border: 'none', cursor: 'pointer' }}>Change</button>
+                                        <button type="button" onClick={() => { setPreselectedContact(null); setCreateForm(p => ({ ...p, name: '', phone: '' })); }} style={{ fontSize: '11px', color: 'var(--blue-500)', background: 'none', border: 'none', cursor: 'pointer' }}>Change</button>
                                     </div>
                                 )}
 
@@ -2825,7 +2862,7 @@ const leadCycleStartOf = (lead: any): string => {
 
                                 {/* Existing-client notice (partner referral) — backend attaches this as a new requirement */}
                                 {createLeadType === 'PARTNER_REFERRAL' && partnerClientMatch && (
-                                    <div style={{ padding: '8px 12px', borderRadius: '8px', backgroundColor: 'rgba(245,158,11,0.10)', border: '1px solid rgba(245,158,11,0.35)', fontSize: '12px', color: '#b45309' }}>
+                                    <div style={{ padding: '8px 12px', borderRadius: '8px', backgroundColor: 'var(--rp-danger-wash)', border: '1px solid var(--rp-danger-line)', fontSize: '12px', color: 'var(--rp-warn-text)' }}>
                                         ✓ <strong>{partnerClientMatch.name || 'This client'}</strong> is already registered with us — this requirement will be <strong>added to their profile</strong> (Add as Direct Client).
                                     </div>
                                 )}
@@ -2903,12 +2940,12 @@ const leadCycleStartOf = (lead: any): string => {
             {/* ── Filter Bottom Sheet ── */}
             {/* Bulk reassign action bar (#4) */}
             {leadSelectMode && selectedLeadPhones.size > 0 && (
-                <div style={{ position: 'fixed', bottom: '24px', left: '50%', transform: 'translateX(-50%)', backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-secondary)', borderRadius: '12px', padding: '12px 20px', display: 'flex', alignItems: 'center', gap: '12px', boxShadow: '0 8px 32px rgba(0,0,0,0.2)', zIndex: 1000 }}>
+                <div className="rp-selection-dock" role="region" aria-label="Selected lead actions">
                     <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>{selectedLeadPhones.size} lead{selectedLeadPhones.size === 1 ? '' : 's'} selected</span>
                     <button onClick={() => { setShowLeadReassign(true); setLeadReassignTarget(''); setLeadReassignMsg(''); }}
-                        style={{ padding: '8px 18px', borderRadius: '8px', fontSize: '13px', fontWeight: 700, cursor: 'pointer', backgroundColor: '#8b5cf6', border: 'none', color: '#fff' }}>🔄 Reassign</button>
+                        style={{ padding: '8px 16px', borderRadius: 'var(--radius-control)', fontSize: '13px', fontWeight: 600, cursor: 'pointer', backgroundColor: 'var(--blue-600)', border: 'none', color: 'var(--surface-white)' }}>Reassign</button>
                     <button onClick={() => { setShowLeadStage(true); setLeadStageMode('normal'); setLeadStageTarget('NEW'); setLeadStageAssignee(''); setLeadStageMsg(''); setLeadStageError(''); }}
-                        style={{ padding: '8px 18px', borderRadius: '8px', fontSize: '13px', fontWeight: 700, cursor: 'pointer', backgroundColor: '#0ea5e9', border: 'none', color: '#fff' }}>🗂️ Stage</button>
+                        style={{ padding: '8px 16px', borderRadius: 'var(--radius-control)', fontSize: '13px', fontWeight: 600, cursor: 'pointer', backgroundColor: 'var(--blue-600)', border: 'none', color: 'var(--surface-white)' }}>Stage</button>
                     <button onClick={() => { setSelectedLeadPhones(new Set()); setLeadSelectMode(false); }}
                         style={{ padding: '8px 14px', borderRadius: '8px', fontSize: '12px', cursor: 'pointer', border: '1px solid var(--border-secondary)', backgroundColor: 'transparent', color: 'var(--text-muted)' }}>Cancel</button>
                 </div>
@@ -2916,11 +2953,11 @@ const leadCycleStartOf = (lead: any): string => {
 
             {/* Bulk stage change / recycle (2026-10-08) — the "rework my lost leads" action. */}
             {showLeadStage && (
-                <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 2100, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                <div style={{ position: 'fixed', inset: 0, backgroundColor: 'var(--rp-overlay-soft)', zIndex: 2100, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                     onMouseDown={e => { if (e.target === e.currentTarget && !leadStageBusy) setShowLeadStage(false); }}>
                     <div style={{ backgroundColor: 'var(--bg-primary)', borderRadius: '14px', padding: '24px', width: '440px', maxWidth: '92vw', maxHeight: '88vh', overflowY: 'auto' }}>
                         <div style={{ fontSize: '16px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '8px' }}>
-                            🗂️ Stage {selectedLeadPhones.size} lead{selectedLeadPhones.size === 1 ? '' : 's'}
+                            Stage {selectedLeadPhones.size} lead{selectedLeadPhones.size === 1 ? '' : 's'}
                         </div>
 
                         {/* Mode */}
@@ -2928,14 +2965,14 @@ const leadCycleStartOf = (lead: any): string => {
                             <button type="button" onClick={() => { setLeadStageMode('normal'); setLeadStageError(''); }}
                                 style={{ flex: 1, padding: '10px', borderRadius: '8px', cursor: 'pointer', fontWeight: 600, fontSize: '13px',
                                     border: leadStageMode === 'normal' ? '1.5px solid var(--accent-primary)' : '1px solid var(--border-secondary)',
-                                    backgroundColor: leadStageMode === 'normal' ? 'rgba(59,130,246,0.10)' : 'var(--bg-secondary)', color: 'var(--text-primary)' }}>
+                                    backgroundColor: leadStageMode === 'normal' ? 'var(--rp-info-wash)' : 'var(--bg-secondary)', color: 'var(--text-primary)' }}>
                                 Change stage
                             </button>
                             <button type="button" onClick={() => { setLeadStageMode('recycle'); setLeadStageTarget('NEW'); setLeadStageError(''); }}
                                 style={{ flex: 1, padding: '10px', borderRadius: '8px', cursor: 'pointer', fontWeight: 600, fontSize: '13px',
-                                    border: leadStageMode === 'recycle' ? '1.5px solid #22c55e' : '1px solid var(--border-secondary)',
-                                    backgroundColor: leadStageMode === 'recycle' ? 'rgba(34,197,94,0.10)' : 'var(--bg-secondary)', color: 'var(--text-primary)' }}>
-                                ♻️ Recycle lost leads
+                                    border: leadStageMode === 'recycle' ? '1.5px solid var(--rp-success-text)' : '1px solid var(--border-secondary)',
+                                    backgroundColor: leadStageMode === 'recycle' ? 'var(--rp-success-wash)' : 'var(--bg-secondary)', color: 'var(--text-primary)' }}>
+                                Recycle lost leads
                             </button>
                         </div>
 
@@ -2961,8 +2998,8 @@ const leadCycleStartOf = (lead: any): string => {
                             ))}
                         </select>
 
-                        {leadStageError && <div role="alert" style={{ fontSize: '12px', color: '#fca5a5', marginBottom: '12px' }}>{leadStageError}</div>}
-                        {leadStageMsg && <div style={{ fontSize: '12px', color: leadStageMsgOk ? '#22c55e' : '#ef4444', marginBottom: '12px', whiteSpace: 'pre-wrap' }}>{leadStageMsg}</div>}
+                        {leadStageError && <div role="alert" style={{ fontSize: '12px', color: 'var(--rp-danger-text)', marginBottom: '12px' }}>{leadStageError}</div>}
+                        {leadStageMsg && <div style={{ fontSize: '12px', color: leadStageMsgOk ? 'var(--rp-success-text)' : 'var(--rp-danger-text)', marginBottom: '12px', whiteSpace: 'pre-wrap' }}>{leadStageMsg}</div>}
 
                         <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
                             <button disabled={leadStageBusy} onClick={() => setShowLeadStage(false)}
@@ -2989,7 +3026,7 @@ const leadCycleStartOf = (lead: any): string => {
                                     setLeadStageError(err?.response?.data?.error || 'Bulk stage change failed');
                                 } finally { setLeadStageBusy(false); }
                             }}
-                                style={{ padding: '8px 18px', borderRadius: '8px', fontSize: '13px', fontWeight: 700, cursor: leadStageBusy ? 'not-allowed' : 'pointer', backgroundColor: leadStageMode === 'recycle' ? '#16a34a' : 'var(--accent-primary)', border: 'none', color: '#fff', opacity: leadStageBusy ? 0.6 : 1 }}>
+                                style={{ padding: '8px 18px', borderRadius: '8px', fontSize: '13px', fontWeight: 700, cursor: leadStageBusy ? 'not-allowed' : 'pointer', backgroundColor: leadStageMode === 'recycle' ? 'var(--rp-success-text)' : 'var(--accent-primary)', border: 'none', color: 'var(--surface-white)', opacity: leadStageBusy ? 0.6 : 1 }}>
                                 {leadStageBusy ? 'Working…' : leadStageMode === 'recycle' ? 'Recycle leads' : 'Apply stage'}
                             </button>
                         </div>
@@ -2999,10 +3036,10 @@ const leadCycleStartOf = (lead: any): string => {
 
             {/* Bulk reassign modal (#4) → POST /api/leads/bulk-reassign */}
             {showLeadReassign && (
-                <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 2100, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                <div style={{ position: 'fixed', inset: 0, backgroundColor: 'var(--rp-overlay-soft)', zIndex: 2100, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                     onMouseDown={e => { if (e.target === e.currentTarget && !leadReassigning) setShowLeadReassign(false); }}>
                     <div style={{ backgroundColor: 'var(--bg-primary)', borderRadius: '14px', padding: '24px', width: '400px', maxWidth: '90vw' }}>
-                        <div style={{ fontSize: '16px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '8px' }}>🔄 Reassign {selectedLeadPhones.size} lead{selectedLeadPhones.size === 1 ? '' : 's'}</div>
+                        <div style={{ fontSize: '16px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '8px' }}>Reassign {selectedLeadPhones.size} lead{selectedLeadPhones.size === 1 ? '' : 's'}</div>
                         <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '16px' }}>Transfer the selected lead{selectedLeadPhones.size === 1 ? '' : 's'} to another team member — they become the lead owner (and deal coordinator).</div>
                         <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)' }}>Assign to</label>
                         <select value={leadReassignTarget} onChange={e => setLeadReassignTarget(e.target.value)} disabled={leadReassigning}
@@ -3010,7 +3047,7 @@ const leadCycleStartOf = (lead: any): string => {
                             <option value="">Select an agent…</option>
                             {teamMembers.map(m => <option key={m.id} value={m.id}>{m.name}{(m as any).role ? ` (${(m as any).role})` : ''}</option>)}
                         </select>
-                        {leadReassignMsg && <div style={{ fontSize: '12px', color: leadReassignMsg.startsWith('✅') ? '#22c55e' : '#ef4444', marginBottom: '12px' }}>{leadReassignMsg}</div>}
+                        {leadReassignMsg && <div style={{ fontSize: '12px', color: leadReassignMsg.startsWith('✅') ? 'var(--rp-success-text)' : 'var(--rp-danger-text)', marginBottom: '12px' }}><IconText>{leadReassignMsg}</IconText></div>}
                         <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
                             <button disabled={leadReassigning} onClick={() => setShowLeadReassign(false)}
                                 style={{ padding: '8px 16px', borderRadius: '8px', fontSize: '13px', cursor: 'pointer', border: '1px solid var(--border-secondary)', backgroundColor: 'transparent', color: 'var(--text-muted)' }}>Cancel</button>
@@ -3027,7 +3064,7 @@ const leadCycleStartOf = (lead: any): string => {
                                     setLeadReassignMsg(`❌ ${err?.response?.data?.error || 'Reassign failed'}`);
                                 } finally { setLeadReassigning(false); }
                             }}
-                                style={{ padding: '8px 18px', borderRadius: '8px', fontSize: '13px', fontWeight: 700, cursor: leadReassignTarget ? 'pointer' : 'not-allowed', backgroundColor: '#8b5cf6', border: 'none', color: '#fff', opacity: leadReassignTarget && !leadReassigning ? 1 : 0.5 }}>
+                                style={{ padding: '8px 18px', borderRadius: '8px', fontSize: '13px', fontWeight: 700, cursor: leadReassignTarget ? 'pointer' : 'not-allowed', backgroundColor: 'var(--chart-5)', border: 'none', color: 'var(--surface-white)', opacity: leadReassignTarget && !leadReassigning ? 1 : 0.5 }}>
                                 {leadReassigning ? 'Reassigning…' : 'Confirm reassign'}
                             </button>
                         </div>
@@ -3049,7 +3086,7 @@ const leadCycleStartOf = (lead: any): string => {
                             overflowY: 'auto',
                             WebkitOverflowScrolling: 'touch',
                             padding: '0 0 32px',
-                            boxShadow: '0 -8px 40px rgba(0,0,0,0.25)',
+                            boxShadow: '0 -8px 40px var(--rp-shadow-tint)',
                             animation: 'slide-up-in 250ms cubic-bezier(0.34,1.2,0.64,1) forwards',
                         }}
                         onClick={e => e.stopPropagation()}
@@ -3193,7 +3230,7 @@ const leadCycleStartOf = (lead: any): string => {
                         <div style={{ padding: '16px 20px 0' }}>
                             <button type="button"
                                 onClick={() => setShowFilterSheet(false)}
-                                style={{ width: '100%', padding: '14px', borderRadius: '12px', border: 'none', backgroundColor: 'var(--text-link)', color: '#fff', fontWeight: 700, fontSize: '15px', cursor: 'pointer' }}
+                                style={{ width: '100%', padding: '14px', borderRadius: '12px', border: 'none', backgroundColor: 'var(--text-link)', color: 'var(--surface-white)', fontWeight: 700, fontSize: '15px', cursor: 'pointer' }}
                             >
                                 Apply Filters{activeFilterCount > 0 ? ` (${activeFilterCount} active)` : ''}
                             </button>
@@ -3208,7 +3245,7 @@ const leadCycleStartOf = (lead: any): string => {
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
 const compactCell: React.CSSProperties = {
-    padding: '6px 10px', color: 'var(--text-bright)', fontSize: '12px',
+    padding: '12px', color: 'var(--text-bright)', fontSize: '12px', lineHeight: 1.5,
 };
 // filterSelectStyle removed 2026-05-13 when desktop inline filter dropdowns
 // were replaced by the unified Filters sheet button.
@@ -3227,7 +3264,7 @@ const outlineBtn: React.CSSProperties = {
 };
 const primaryBtn: React.CSSProperties = {
     padding: '8px 18px', borderRadius: '8px', border: 'none',
-    backgroundColor: '#3b82f6', color: '#fff', cursor: 'pointer', fontSize: '13px', fontWeight: 600,
+    backgroundColor: 'var(--rp-button-primary)', color: 'var(--surface-white)', cursor: 'pointer', fontSize: '13px', fontWeight: 600,
 };
 const soLabel: React.CSSProperties = {
     display: 'block', fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)',

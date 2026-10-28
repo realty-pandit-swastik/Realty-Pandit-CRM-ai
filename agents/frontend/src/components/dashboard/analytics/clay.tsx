@@ -1,5 +1,8 @@
 import React from 'react';
 import { useTheme } from '../../../contexts/ThemeContext';
+import { formatCount, formatCurrency } from '../../../lib/format';
+import { PresentationIcon as MetricIcon } from '../../ui/PresentationIcon';
+export { PresentationIcon as MetricIcon } from '../../ui/PresentationIcon';
 
 /**
  * Clay analytics kit — shared visual primitives for the redesigned dashboards.
@@ -9,10 +12,10 @@ import { useTheme } from '../../../contexts/ThemeContext';
  * which switches axis/grid hues by the active theme.
  */
 
-// Vivid series palette — legible on both light and dark backgrounds.
+// One blue family plus neutrals. Labels and legend order carry series identity.
 export const SERIES = [
-  '#3b82f6', '#8b5cf6', '#10b981', '#f59e0b', '#ef4444',
-  '#06b6d4', '#ec4899', '#14b8a6', '#f97316', '#6366f1',
+  'var(--chart-1)', 'var(--chart-2)', 'var(--chart-3)', 'var(--chart-4)', 'var(--chart-5)',
+  'var(--chart-6)', 'var(--chart-7)', 'var(--chart-8)', 'var(--chart-9)', 'var(--chart-10)',
 ];
 
 export interface ChartColors {
@@ -31,30 +34,27 @@ export function useChartColors(): ChartColors {
   const isDark = theme === 'dark';
   return {
     isDark,
-    grid: isDark ? '#1e293b' : '#e2e8f0',
-    axis: isDark ? '#94a3b8' : '#64748b',
-    tooltipBg: isDark ? '#0f172a' : '#ffffff',
-    tooltipBorder: isDark ? '#334155' : '#cbd5e1',
-    up: '#22c55e',
-    down: '#ef4444',
+    grid: 'var(--border-primary)',
+    axis: 'var(--text-muted)',
+    tooltipBg: 'var(--bg-primary)',
+    tooltipBorder: 'var(--border-secondary)',
+    up: 'var(--rp-success-text)',
+    down: 'var(--rp-danger-text)',
     series: SERIES,
   };
 }
 
 // ── Formatting helpers ─────────────────────────────────────────────────────
+// These delegate to lib/format.ts (the single formatting owner) with options
+// pinned to preserve the exact output this dashboard has always rendered.
 
 export function formatNum(n: number): string {
-  if (!isFinite(n)) return '0';
-  return Math.round(n).toLocaleString('en-IN');
+  return formatCount(n);
 }
 
-/** Indian-style money: ₹4.2 Cr / ₹5.3 L / ₹8,400. */
+/** Dashboard money: ₹4.2 Cr / ₹5.3 L / ₹8,400 — unchanged from before. */
 export function formatINR(n: number): string {
-  if (!n || !isFinite(n)) return '₹0';
-  const abs = Math.abs(n);
-  if (abs >= 1e7) return `₹${(n / 1e7).toFixed(2)} Cr`;
-  if (abs >= 1e5) return `₹${(n / 1e5).toFixed(1)} L`;
-  return `₹${Math.round(n).toLocaleString('en-IN')}`;
+  return formatCurrency(n, { crDecimals: 2, spaced: true });
 }
 
 export function pct(part: number, whole: number): number {
@@ -87,11 +87,11 @@ interface ClayCardProps {
 
 export const ClayCard: React.FC<ClayCardProps> = ({ title, subtitle, right, accent, padding = 20, style, children }) => (
   <div
+    className="rp-dashboard-card"
     style={{
-      backgroundColor: 'var(--bg-secondary)',
-      borderRadius: 'var(--radius-clay)',
-      boxShadow: 'var(--shadow-clay)',
-      border: `1px solid ${accent ? accent + '40' : 'var(--border-primary)'}`,
+      backgroundColor: 'var(--bg-primary)',
+      borderRadius: 'var(--rp-radius)',
+      border: `1px solid ${accent ? 'var(--blue-200)' : 'var(--border-primary)'}`,
       padding,
       display: 'flex',
       flexDirection: 'column',
@@ -102,7 +102,7 @@ export const ClayCard: React.FC<ClayCardProps> = ({ title, subtitle, right, acce
     {(title || right) && (
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, marginBottom: subtitle ? 2 : 14 }}>
         <div style={{ minWidth: 0 }}>
-          {title && <h3 style={{ fontSize: 15, fontWeight: 700, margin: 0, color: 'var(--text-primary)' }}>{title}</h3>}
+          {title && <h3 style={{ fontSize: 16, fontWeight: 600, margin: 0, color: 'var(--text-primary)', textWrap: 'balance', letterSpacing: '-0.01em' }}>{title}</h3>}
           {subtitle && <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '4px 0 14px' }}>{subtitle}</p>}
         </div>
         {right && <div style={{ flexShrink: 0 }}>{right}</div>}
@@ -113,8 +113,8 @@ export const ClayCard: React.FC<ClayCardProps> = ({ title, subtitle, right, acce
 );
 
 export const SectionLabel: React.FC<{ children: React.ReactNode; icon?: string }> = ({ children, icon }) => (
-  <p style={{ color: 'var(--text-muted)', fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', margin: '0 0 12px', display: 'flex', alignItems: 'center', gap: 6 }}>
-    {icon && <span>{icon}</span>}
+  <p style={{ color: 'var(--text-secondary)', fontSize: 14, fontWeight: 600, margin: '0 0 12px', display: 'flex', alignItems: 'center', gap: 8 }}>
+    {icon && <MetricIcon value={icon} />}
     {children}
   </p>
 );
@@ -126,14 +126,21 @@ export const DeltaBadge: React.FC<{ delta: number | null; suffix?: string }> = (
     return <span style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 600 }}>—</span>;
   }
   const up = delta >= 0;
-  const color = up ? '#22c55e' : '#ef4444';
+  const color = up ? 'var(--rp-success-text)' : 'var(--rp-danger-text)';
+  const label = `${up ? 'Up' : 'Down'} ${Math.abs(delta).toFixed(1)}${suffix} versus previous period`;
   return (
-    <span style={{
-      display: 'inline-flex', alignItems: 'center', gap: 2,
-      fontSize: 11, fontWeight: 800, color,
-      backgroundColor: color + '1a', borderRadius: 8, padding: '2px 7px',
-    }}>
-      <span style={{ fontSize: 9 }}>{up ? '▲' : '▼'}</span>
+    <span
+      role="img"
+      aria-label={label}
+      title={label}
+      style={{
+        display: 'inline-flex', alignItems: 'center', gap: 4,
+        fontSize: 11, fontWeight: 800, color,
+        backgroundColor: up ? 'var(--rp-success-bg)' : 'var(--rp-danger-bg)', borderRadius: 8, padding: '2px 7px',
+        fontVariantNumeric: 'tabular-nums',
+      }}
+    >
+      <span aria-hidden="true" style={{ fontSize: 9 }}>{up ? '▲' : '▼'}</span>
       {Math.abs(delta).toFixed(1)}{suffix}
     </span>
   );
@@ -142,7 +149,7 @@ export const DeltaBadge: React.FC<{ delta: number | null; suffix?: string }> = (
 // ── Sparkline (tiny inline SVG) ──────────────────────────────────────────────
 
 export const Sparkline: React.FC<{ data: number[]; color?: string; width?: number; height?: number }> = ({
-  data, color = '#3b82f6', width = 96, height = 30,
+  data, color = 'var(--blue-600)', width = 96, height = 30,
 }) => {
   if (!data || data.length < 2) return <div style={{ width, height }} />;
   const max = Math.max(...data, 1);
@@ -155,13 +162,7 @@ export const Sparkline: React.FC<{ data: number[]; color?: string; width?: numbe
   const gid = `spark-${color.replace('#', '')}`;
   return (
     <svg width={width} height={height} style={{ display: 'block', overflow: 'visible' }}>
-      <defs>
-        <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor={color} stopOpacity={0.28} />
-          <stop offset="100%" stopColor={color} stopOpacity={0} />
-        </linearGradient>
-      </defs>
-      <path d={area} fill={`url(#${gid})`} />
+      <g id={gid}><path d={area} fill={color} fillOpacity={0.08} /></g>
       <path d={line} fill="none" stroke={color} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
     </svg>
   );
@@ -180,13 +181,12 @@ interface KpiCardProps {
   icon?: string;
 }
 
-export const KpiCard: React.FC<KpiCardProps> = ({ label, value, sub, delta, deltaSuffix, spark, accent = '#3b82f6', icon }) => (
+export const KpiCard: React.FC<KpiCardProps> = ({ label, value, sub, delta, deltaSuffix, spark, accent = 'var(--blue-600)', icon }) => (
   <div style={{
-    backgroundColor: 'var(--bg-secondary)',
-    borderRadius: 'var(--radius-clay)',
-    boxShadow: 'var(--shadow-clay)',
-    border: `1px solid ${accent}33`,
-    padding: 16,
+    backgroundColor: 'var(--bg-primary)',
+    borderRadius: 'var(--rp-radius)',
+    border: '1px solid var(--border-primary)',
+    padding: 'var(--rp-s-5)',
     display: 'flex',
     flexDirection: 'column',
     gap: 6,
@@ -194,17 +194,16 @@ export const KpiCard: React.FC<KpiCardProps> = ({ label, value, sub, delta, delt
     overflow: 'hidden',
     minWidth: 0,
   }}>
-    <div style={{ position: 'absolute', top: 0, left: 0, width: 3, height: '100%', backgroundColor: accent, opacity: 0.85 }} />
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-      <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-        {icon && <span style={{ marginRight: 5 }}>{icon}</span>}{label}
+      <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-secondary)' }}>
+        {icon && <span style={{ marginRight: 8 }}><MetricIcon value={icon} /></span>}{label}
       </span>
       {delta !== undefined && <DeltaBadge delta={delta ?? null} suffix={deltaSuffix} />}
     </div>
     <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 8 }}>
       <div style={{ minWidth: 0 }}>
-        <div style={{ fontSize: 28, fontWeight: 800, color: 'var(--text-primary)', lineHeight: 1.05, letterSpacing: '-0.02em' }}>{value}</div>
-        {sub && <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>{sub}</div>}
+        <div style={{ fontSize: 28, fontWeight: 600, color: 'var(--text-primary)', lineHeight: 1.15, letterSpacing: '-0.02em', fontVariantNumeric: 'tabular-nums' }}>{value}</div>
+        {sub && <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 2 }}>{sub}</div>}
       </div>
       {spark && spark.length > 1 && <Sparkline data={spark} color={accent} />}
     </div>

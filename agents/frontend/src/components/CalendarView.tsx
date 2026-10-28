@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { getAppointments, getCalendarSummary, updateAppointment, cancelAppointment } from '../api/client';
 import { useToast } from '../contexts/ToastContext';
 import { useConfirm } from '../contexts/ConfirmContext';
+import { PresentationIcon } from './ui/PresentationIcon';
 
 interface Appointment {
     id: string;
@@ -119,12 +120,12 @@ export function CalendarView() {
 
     const getStatusColor = (status: string) => {
         switch (status) {
-            case 'scheduled': return '#3b82f6';
-            case 'confirmed': return '#22c55e';
-            case 'completed': return '#6b7280';
-            case 'cancelled': return '#ef4444';
-            case 'rescheduled': return '#f59e0b';
-            case 'no_show': return '#dc2626';
+            case 'scheduled': return 'var(--blue-500)';
+            case 'confirmed': return 'var(--rp-success-text)';
+            case 'completed': return 'var(--text-muted)';
+            case 'cancelled': return 'var(--rp-danger-text)';
+            case 'rescheduled': return 'var(--rp-warn-text)';
+            case 'no_show': return 'var(--rp-danger-text)';
             default: return 'var(--text-muted)';
         }
     };
@@ -148,7 +149,7 @@ export function CalendarView() {
             {/* Header */}
             <div style={{ marginBottom: '24px' }}>
                 <h1 style={{ margin: 0, fontSize: '28px', color: 'var(--text-primary)', fontWeight: 700 }}>
-                    📅 Calendar & Appointments
+                    Calendar & Appointments
                 </h1>
                 <p style={{ margin: '8px 0 0', color: 'var(--text-muted)', fontSize: '14px' }}>
                     Manage all property visits, meetings, and appointments
@@ -159,24 +160,24 @@ export function CalendarView() {
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px', marginBottom: '24px' }}>
                 <div style={{
                     backgroundColor: 'var(--bg-secondary)', padding: '20px', borderRadius: '12px',
-                    border: '1px solid var(--border-secondary)', boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
+                    border: '1px solid var(--border-secondary)', boxShadow: '0 1px 3px var(--rp-shadow-tint)'
                 }}>
                     <div style={{ fontSize: '14px', color: 'var(--text-muted)', marginBottom: '8px' }}>Today's Appointments</div>
-                    <div style={{ fontSize: '32px', fontWeight: 700, color: '#3b82f6' }}>{summary.today}</div>
+                    <div style={{ fontSize: '32px', fontWeight: 700, color: 'var(--blue-500)' }}>{summary.today}</div>
                 </div>
                 <div style={{
                     backgroundColor: 'var(--bg-secondary)', padding: '20px', borderRadius: '12px',
-                    border: '1px solid var(--border-secondary)', boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
+                    border: '1px solid var(--border-secondary)', boxShadow: '0 1px 3px var(--rp-shadow-tint)'
                 }}>
                     <div style={{ fontSize: '14px', color: 'var(--text-muted)', marginBottom: '8px' }}>This Week</div>
-                    <div style={{ fontSize: '32px', fontWeight: 700, color: '#22c55e' }}>{summary.this_week}</div>
+                    <div style={{ fontSize: '32px', fontWeight: 700, color: 'var(--rp-success-text)' }}>{summary.this_week}</div>
                 </div>
                 <div style={{
                     backgroundColor: 'var(--bg-secondary)', padding: '20px', borderRadius: '12px',
-                    border: '1px solid var(--border-secondary)', boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
+                    border: '1px solid var(--border-secondary)', boxShadow: '0 1px 3px var(--rp-shadow-tint)'
                 }}>
                     <div style={{ fontSize: '14px', color: 'var(--text-muted)', marginBottom: '8px' }}>Pending</div>
-                    <div style={{ fontSize: '32px', fontWeight: 700, color: '#f59e0b' }}>{summary.pending}</div>
+                    <div style={{ fontSize: '32px', fontWeight: 700, color: 'var(--rp-warn-text)' }}>{summary.pending}</div>
                 </div>
             </div>
 
@@ -188,6 +189,7 @@ export function CalendarView() {
             }}>
                 <span style={{ fontSize: '14px', color: 'var(--text-muted)', fontWeight: 500 }}>Filters:</span>
                 <select
+                    aria-label="Appointment status"
                     value={filter.status}
                     onChange={(e) => setFilter({ ...filter, status: e.target.value })}
                     style={{
@@ -202,6 +204,7 @@ export function CalendarView() {
                     <option value="cancelled">Cancelled</option>
                 </select>
                 <select
+                    aria-label="Appointment type"
                     value={filter.type}
                     onChange={(e) => setFilter({ ...filter, type: e.target.value })}
                     style={{
@@ -219,18 +222,18 @@ export function CalendarView() {
                     onClick={loadData}
                     style={{
                         padding: '8px 16px', borderRadius: '8px', border: 'none',
-                        backgroundColor: '#3b82f6', color: '#fff', fontSize: '14px',
+                        backgroundColor: 'var(--blue-600)', color: 'var(--surface-white)', fontSize: '14px',
                         cursor: 'pointer', fontWeight: 500, marginLeft: 'auto'
                     }}
                 >
-                    🔄 Refresh
+                    Refresh
                 </button>
             </div>
 
             {/* Appointments List */}
-            <div style={{
+            <div className="rp-table-scroll" style={{
                 backgroundColor: 'var(--bg-secondary)', borderRadius: '12px',
-                border: '1px solid var(--border-secondary)', overflow: 'hidden'
+                border: '1px solid var(--border-secondary)', overflowX: 'auto'
             }}>
                 {loading ? (
                     <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)' }}>
@@ -256,7 +259,7 @@ export function CalendarView() {
                             {appointments.map((apt) => (
                                 <tr key={apt.id} style={{ borderBottom: '1px solid var(--border-secondary)' }}>
                                     <td style={{ padding: '16px' }}>
-                                        <span style={{ fontSize: '24px' }}>{getTypeIcon(apt.type)}</span>
+                                        <PresentationIcon value={getTypeIcon(apt.type)} size={24} />
                                     </td>
                                     <td style={{ padding: '16px' }}>
                                         <div style={{ fontWeight: 600, color: 'var(--text-primary)', marginBottom: '4px' }}>
@@ -300,7 +303,7 @@ export function CalendarView() {
                                             style={{
                                                 padding: '6px 12px', borderRadius: '6px',
                                                 border: '1px solid var(--border-secondary)', backgroundColor: 'var(--bg-secondary)',
-                                                fontSize: '13px', cursor: 'pointer', color: '#3b82f6',
+                                                fontSize: '13px', cursor: 'pointer', color: 'var(--blue-500)',
                                                 fontWeight: 500
                                             }}
                                         >
@@ -318,7 +321,7 @@ export function CalendarView() {
             {selectedAppointment && (
                 <div style={{
                     position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-                    backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex',
+                    backgroundColor: 'var(--rp-overlay-soft)', display: 'flex',
                     alignItems: 'center', justifyContent: 'center', zIndex: 1000
                 }} onClick={() => setSelectedAppointment(null)}>
                     <div style={{
@@ -328,7 +331,7 @@ export function CalendarView() {
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: '20px' }}>
                             <div>
                                 <h2 style={{ margin: 0, fontSize: '20px', color: 'var(--text-primary)' }}>
-                                    {getTypeIcon(selectedAppointment.type)} {selectedAppointment.title}
+                                    <PresentationIcon value={getTypeIcon(selectedAppointment.type)} /> {selectedAppointment.title}
                                 </h2>
                                 <span style={{
                                     display: 'inline-block', marginTop: '8px',
@@ -413,7 +416,7 @@ export function CalendarView() {
                                             onClick={() => handleStatusChange(selectedAppointment.id, 'confirmed')}
                                             style={{
                                                 flex: 1, padding: '10px', borderRadius: '8px',
-                                                border: 'none', backgroundColor: '#22c55e', color: '#fff',
+                                                border: 'none', backgroundColor: 'var(--rp-success-text)', color: 'var(--surface-white)',
                                                 fontSize: '14px', fontWeight: 600, cursor: 'pointer'
                                             }}
                                         >
@@ -425,7 +428,7 @@ export function CalendarView() {
                                             onClick={() => handleStatusChange(selectedAppointment.id, 'completed')}
                                             style={{
                                                 flex: 1, padding: '10px', borderRadius: '8px',
-                                                border: 'none', backgroundColor: '#3b82f6', color: '#fff',
+                                                border: 'none', backgroundColor: 'var(--blue-500)', color: 'var(--surface-white)',
                                                 fontSize: '14px', fontWeight: 600, cursor: 'pointer'
                                             }}
                                         >
@@ -436,7 +439,7 @@ export function CalendarView() {
                                         onClick={() => handleCancel(selectedAppointment.id)}
                                         style={{
                                             flex: 1, padding: '10px', borderRadius: '8px',
-                                            border: '1px solid #ef4444', backgroundColor: 'var(--bg-secondary)', color: '#ef4444',
+                                            border: '1px solid var(--rp-danger-text)', backgroundColor: 'var(--bg-secondary)', color: 'var(--rp-danger-text)',
                                             fontSize: '14px', fontWeight: 600, cursor: 'pointer'
                                         }}
                                     >

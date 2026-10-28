@@ -27,10 +27,10 @@ interface WinningTemplate {
 }
 
 const SENTIMENT_COLORS: Record<string, string> = {
-    positive: '#22c55e',
-    neutral: '#f59e0b',
-    negative: '#ef4444',
-    frustrated: '#dc2626',
+    positive: 'var(--rp-success-text)',
+    neutral: 'var(--rp-warn-text)',
+    negative: 'var(--rp-danger-text)',
+    frustrated: 'var(--rp-danger-text)',
 };
 
 export function AgentOverride() {
@@ -178,7 +178,7 @@ export function AgentOverride() {
                             padding: '48px', textAlign: 'center',
                         }}>
                             <div style={{ fontSize: '32px', marginBottom: '12px' }}>+</div>
-                            <div style={{ color: '#22c55e', fontSize: '16px', fontWeight: 600 }}>All Clear!</div>
+                            <div style={{ color: 'var(--rp-success-text)', fontSize: '16px', fontWeight: 600 }}>All Clear!</div>
                             <div style={{ color: 'var(--text-muted)', fontSize: '13px', marginTop: '4px' }}>No flagged conversations need review.</div>
                         </div>
                     ) : (
@@ -186,7 +186,7 @@ export function AgentOverride() {
                             {flaggedLogs.map(log => (
                                 <div key={log.id} style={{
                                     backgroundColor: 'var(--bg-secondary)', borderRadius: '12px',
-                                    border: `1px solid ${log.quality_score < 3 ? '#ef444440' : 'var(--border-secondary)'}`,
+                                    border: `1px solid ${log.quality_score < 3 ? 'var(--rp-danger-line)' : 'var(--border-secondary)'}`,
                                     overflow: 'hidden',
                                 }}>
                                     {/* Header row */}
@@ -202,7 +202,7 @@ export function AgentOverride() {
                                             width: '44px', height: '44px', borderRadius: '50%', display: 'flex',
                                             alignItems: 'center', justifyContent: 'center', flexShrink: 0,
                                             backgroundColor: log.quality_score < 3 ? 'var(--error-bg)' : log.quality_score < 5 ? 'var(--warning-bg)' : 'var(--bg-active)',
-                                            color: log.quality_score < 3 ? 'var(--error-text)' : log.quality_score < 5 ? '#fbbf24' : 'var(--text-link)',
+                                            color: log.quality_score < 3 ? 'var(--error-text)' : log.quality_score < 5 ? 'var(--rp-warn-text)' : 'var(--text-link)',
                                             fontSize: '16px', fontWeight: 700,
                                         }}>
                                             {log.quality_score}
@@ -233,7 +233,7 @@ export function AgentOverride() {
                                             <button
                                                 onClick={(e) => { e.stopPropagation(); handleReview(log.id); }}
                                                 disabled={actionLoading === log.id}
-                                                style={btnStyle('#22c55e')}
+                                                style={btnStyle('var(--rp-success-text)')}
                                             >
                                                 {actionLoading === log.id ? '...' : 'Reviewed'}
                                             </button>
@@ -262,7 +262,7 @@ export function AgentOverride() {
                                                             backgroundColor: 'var(--bg-primary)', borderRadius: '8px', padding: '8px 12px',
                                                             marginBottom: '6px',
                                                         }}>
-                                                            <span style={{ color: '#ef4444', fontSize: '12px', fontWeight: 600, marginRight: '8px' }}>
+                                                            <span style={{ color: 'var(--rp-danger-text)', fontSize: '12px', fontWeight: 600, marginRight: '8px' }}>
                                                                 {issue.type}
                                                             </span>
                                                             <span style={{ color: 'var(--text-secondary)', fontSize: '13px' }}>{issue.detail}</span>
@@ -323,7 +323,7 @@ export function AgentOverride() {
                                 }}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px' }}>
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                            <span style={{ color: '#22c55e', fontSize: '16px', fontWeight: 700 }}>{t.quality_score}/10</span>
+                                            <span style={{ color: 'var(--rp-success-text)', fontSize: '16px', fontWeight: 700 }}>{t.quality_score}/10</span>
                                             <span style={{ color: 'var(--text-secondary)', fontSize: '12px' }}>{formatTime(t.created_at)}</span>
                                         </div>
                                     </div>

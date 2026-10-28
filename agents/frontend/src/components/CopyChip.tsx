@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { PresentationIcon } from './ui/PresentationIcon';
 
 /**
  * CopyChip — a compact, click-to-copy code pill (#1, 2026-07-01).
@@ -24,12 +25,12 @@ export function CopyChip({ text, size = 'sm' }: { text?: string | null; size?: '
             style={{
                 display: 'inline-flex', alignItems: 'center', gap: 4, cursor: 'pointer',
                 border: '1px solid var(--border-secondary)', borderRadius: 6, padding: '1px 7px',
-                backgroundColor: copied ? '#16a34a22' : 'var(--bg-secondary)',
-                color: copied ? '#16a34a' : 'var(--text-secondary)',
+                backgroundColor: copied ? 'var(--rp-success-bg)' : 'var(--bg-secondary)',
+                color: copied ? 'var(--rp-success-text)' : 'var(--text-secondary)',
                 fontSize: fs, fontWeight: 700, fontFamily: 'monospace', lineHeight: 1.7, letterSpacing: '0.2px',
             }}
         >
-            {copied ? '✓ Copied' : <>{text}&nbsp;📋</>}
+            {copied ? '✓ Copied' : <>{text}&nbsp;<PresentationIcon value="clipboard-list" /></>}
         </button>
     );
 }

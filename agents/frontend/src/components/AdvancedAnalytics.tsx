@@ -4,6 +4,7 @@
  */
 
 import { useState, useEffect } from 'react';
+import './AdvancedAnalytics.css';
 import { TrendingUp, Download, RefreshCw, BarChart3, PieChart, Activity, Target } from 'lucide-react';
 import { API_BASE_URL, authedFetch } from '../lib/api';
 import {
@@ -34,7 +35,7 @@ interface AnalyticsData {
   };
 }
 
-const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16'];
+const COLORS = ['var(--blue-500)', 'var(--rp-success-text)', 'var(--rp-warn-text)', 'var(--rp-danger-text)', 'var(--chart-5)', 'var(--chart-7)', 'var(--chart-3)', 'var(--chart-9)'];
 
 const DATE_RANGES = [
   { value: '7d', label: 'Last 7 Days' },
@@ -233,7 +234,7 @@ export default function AdvancedAnalytics() {
 
   if (loading) {
     return (
-      <div className="p-6 max-w-7xl mx-auto">
+      <div className="rp-analytics" role="status" aria-busy="true">
         <h1 className="text-3xl font-bold text-gray-900 mb-6">Advanced Analytics</h1>
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
           {[1, 2, 3, 4].map(i => (
@@ -253,7 +254,7 @@ export default function AdvancedAnalytics() {
 
   if (!data) {
     return (
-      <div className="p-6 max-w-7xl mx-auto text-center">
+      <div className="rp-analytics text-center">
         <h1 className="text-3xl font-bold text-gray-900 mb-4">Advanced Analytics</h1>
         <p className="text-gray-500 mb-4">No analytics data available yet.</p>
         <button onClick={fetchAnalytics} className="px-4 py-2 bg-blue-600 text-white rounded-lg">
@@ -264,7 +265,7 @@ export default function AdvancedAnalytics() {
   }
 
   return (
-    <div className="p-6 max-w-7xl mx-auto">
+    <div className="rp-analytics">
       {/* Header */}
       <div className="mb-6">
         <h1 className="text-3xl font-bold text-gray-900">📊 Advanced Analytics</h1>
@@ -415,7 +416,7 @@ export default function AdvancedAnalytics() {
                 <XAxis dataKey="date" tickFormatter={(value) => new Date(value).toLocaleDateString('en-IN', { month: 'short', day: 'numeric' })} />
                 <YAxis />
                 <Tooltip />
-                <Area type="monotone" dataKey="count" stroke="#3b82f6" fill="#3b82f6" fillOpacity={0.3} />
+                <Area type="monotone" dataKey="count" stroke="var(--blue-500)" fill="var(--blue-500)" fillOpacity={0.3} />
               </AreaChart>
             </ResponsiveContainer>
           </div>
@@ -429,9 +430,9 @@ export default function AdvancedAnalytics() {
                 <XAxis dataKey="hour" tickFormatter={(h) => `${h}:00`} />
                 <YAxis />
                 <Tooltip />
-                <Bar dataKey="activity" fill="#10b981">
+                <Bar dataKey="activity" fill="var(--rp-success-text)">
                   {data.timeAnalysis.hourly.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.activity > 100 ? '#10b981' : '#94a3b8'} />
+                    <Cell key={`cell-${index}`} fill={entry.activity > 100 ? 'var(--rp-success-text)' : 'var(--text-muted)'} />
                   ))}
                 </Bar>
               </BarChart>
@@ -453,7 +454,7 @@ export default function AdvancedAnalytics() {
                 <YAxis tickFormatter={(value) => formatCurrency(value)} />
                 <Tooltip formatter={(value: any) => formatCurrency(value)} />
                 <Legend />
-                <Line type="monotone" dataKey="amount" stroke="#8b5cf6" strokeWidth={2} name="Revenue" />
+                <Line type="monotone" dataKey="amount" stroke="var(--chart-5)" strokeWidth={2} name="Revenue" />
               </LineChart>
             </ResponsiveContainer>
           </div>
@@ -489,7 +490,7 @@ export default function AdvancedAnalytics() {
                 <XAxis dataKey="date" tickFormatter={(value) => new Date(value).toLocaleDateString('en-IN', { month: 'short', day: 'numeric' })} />
                 <YAxis tickFormatter={(value) => `${value}%`} />
                 <Tooltip formatter={(value: any) => `${value.toFixed(2)}%`} />
-                <Area type="monotone" dataKey="rate" stroke="#f59e0b" fill="#f59e0b" fillOpacity={0.3} />
+                <Area type="monotone" dataKey="rate" stroke="var(--rp-warn-text)" fill="var(--rp-warn-text)" fillOpacity={0.3} />
               </AreaChart>
             </ResponsiveContainer>
           </div>
@@ -537,7 +538,7 @@ export default function AdvancedAnalytics() {
                 <XAxis type="number" />
                 <YAxis dataKey="stage" type="category" width={150} />
                 <Tooltip />
-                <Bar dataKey="count" fill="#3b82f6" />
+                <Bar dataKey="count" fill="var(--blue-500)" />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -546,32 +547,32 @@ export default function AdvancedAnalytics() {
 
       {/* Sources Tab */}
       {activeTab === 'sources' && (
-        <div className="space-y-6">
-          <div className="bg-white p-6 rounded-lg shadow">
-            <h3 className="text-lg font-semibold mb-4">Lead Sources Performance</h3>
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-gray-50">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+          <div style={{ backgroundColor: 'var(--bg-secondary)', padding: 24, borderRadius: 'var(--radius-clay)', boxShadow: 'var(--shadow-clay)', border: '1px solid var(--border-primary)' }}>
+            <h3 style={{ fontSize: 18, fontWeight: 600, margin: '0 0 16px', color: 'var(--text-primary)', textWrap: 'balance' }}>Lead Sources Performance</h3>
+            <div className="rp-table-scroll">
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead>
                   <tr>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Source</th>
-                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Leads</th>
-                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Revenue</th>
-                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">ROI</th>
-                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Avg Deal Size</th>
+                    <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Source</th>
+                    <th data-numeric style={{ padding: '12px 16px', textAlign: 'right', fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Leads</th>
+                    <th data-numeric style={{ padding: '12px 16px', textAlign: 'right', fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Revenue</th>
+                    <th data-numeric style={{ padding: '12px 16px', textAlign: 'right', fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>ROI</th>
+                    <th data-numeric style={{ padding: '12px 16px', textAlign: 'right', fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Avg Deal Size</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y">
+                <tbody>
                   {data.sources.map((source) => (
-                    <tr key={source.source} className="hover:bg-gray-50">
-                      <td className="px-4 py-3 font-medium">{source.source}</td>
-                      <td className="px-4 py-3 text-right">{formatNumber(source.leads)}</td>
-                      <td className="px-4 py-3 text-right">{formatCurrency(source.revenue)}</td>
-                      <td className="px-4 py-3 text-right">
-                        <span className={`font-semibold ${source.roi >= 5 ? 'text-green-600' : 'text-orange-600'}`}>
+                    <tr key={source.source}>
+                      <td style={{ padding: '12px 16px', fontWeight: 500, color: 'var(--text-primary)' }}>{source.source}</td>
+                      <td data-numeric style={{ padding: '12px 16px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: 'var(--text-primary)' }}>{formatNumber(source.leads)}</td>
+                      <td data-numeric style={{ padding: '12px 16px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: 'var(--text-primary)' }}>{formatCurrency(source.revenue)}</td>
+                      <td data-numeric style={{ padding: '12px 16px', textAlign: 'right' }}>
+                        <span style={{ fontWeight: 600, color: source.roi >= 5 ? 'var(--success-text)' : 'var(--warning-text)' }}>
                           {source.roi.toFixed(1)}x
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-right">{formatCurrency(source.revenue / source.leads)}</td>
+                      <td data-numeric style={{ padding: '12px 16px', textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: 'var(--text-primary)' }}>{formatCurrency(source.revenue / source.leads)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -640,9 +641,9 @@ export default function AdvancedAnalytics() {
                 <YAxis yAxisId="right" orientation="right" tickFormatter={(value) => formatCurrency(value)} />
                 <Tooltip />
                 <Legend />
-                <Bar yAxisId="left" dataKey="leads" fill="#3b82f6" name="Leads" />
-                <Bar yAxisId="left" dataKey="conversions" fill="#10b981" name="Conversions" />
-                <Bar yAxisId="right" dataKey="revenue" fill="#f59e0b" name="Revenue" />
+                <Bar yAxisId="left" dataKey="leads" fill="var(--blue-500)" name="Leads" />
+                <Bar yAxisId="left" dataKey="conversions" fill="var(--rp-success-text)" name="Conversions" />
+                <Bar yAxisId="right" dataKey="revenue" fill="var(--rp-warn-text)" name="Revenue" />
               </BarChart>
             </ResponsiveContainer>
           </div>

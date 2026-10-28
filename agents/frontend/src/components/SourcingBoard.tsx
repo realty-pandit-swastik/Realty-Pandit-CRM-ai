@@ -143,8 +143,8 @@ export default function SourcingBoard() {
               padding: '9px 16px',
               borderRadius: '8px',
               border: 'none',
-              backgroundColor: '#2563eb',
-              color: '#fff',
+              backgroundColor: 'var(--blue-600)',
+              color: 'var(--surface-white)',
               fontSize: '13px',
               fontWeight: 600,
               cursor: busyAction ? 'not-allowed' : 'pointer',
@@ -182,7 +182,7 @@ export default function SourcingBoard() {
       )}
 
       {successMsg && (
-        <div style={{ backgroundColor: 'rgba(52,211,153,0.15)', color: '#34d399', padding: '12px 16px', borderRadius: '8px', fontSize: '13px', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <div style={{ backgroundColor: 'var(--rp-success-wash)', color: 'var(--rp-success-text)', padding: '12px 16px', borderRadius: '8px', fontSize: '13px', marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '8px' }}>
           <CheckCircle size={16} />
           <span>{successMsg}</span>
         </div>
@@ -203,10 +203,10 @@ export default function SourcingBoard() {
         </div>
 
         <div style={{ backgroundColor: 'var(--card-bg)', border: '1px solid var(--border-secondary)', borderRadius: '12px', padding: '18px', boxShadow: 'var(--card-shadow)' }}>
-          <div style={{ fontSize: '12px', fontWeight: 600, color: '#f87171', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+          <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--rp-danger-text)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
             Critical (0 Matches)
           </div>
-          <div style={{ fontSize: '28px', fontWeight: 800, color: '#ef4444', marginTop: '6px' }}>
+          <div style={{ fontSize: '28px', fontWeight: 800, color: 'var(--rp-danger-text)', marginTop: '6px' }}>
             {criticalShortages.length}
           </div>
           <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>
@@ -215,10 +215,10 @@ export default function SourcingBoard() {
         </div>
 
         <div style={{ backgroundColor: 'var(--card-bg)', border: '1px solid var(--border-secondary)', borderRadius: '12px', padding: '18px', boxShadow: 'var(--card-shadow)' }}>
-          <div style={{ fontSize: '12px', fontWeight: 600, color: '#fbbf24', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+          <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--rp-warn-text)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
             Low Stock (&lt; {threshold} Matches)
           </div>
-          <div style={{ fontSize: '28px', fontWeight: 800, color: '#f59e0b', marginTop: '6px' }}>
+          <div style={{ fontSize: '28px', fontWeight: 800, color: 'var(--rp-warn-text)', marginTop: '6px' }}>
             {lowStockShortages.length}
           </div>
           <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>
@@ -227,10 +227,10 @@ export default function SourcingBoard() {
         </div>
 
         <div style={{ backgroundColor: 'var(--card-bg)', border: '1px solid var(--border-secondary)', borderRadius: '12px', padding: '18px', boxShadow: 'var(--card-shadow)' }}>
-          <div style={{ fontSize: '12px', fontWeight: 600, color: '#60a5fa', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+          <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--blue-400)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
             Active Calling Queue
           </div>
-          <div style={{ fontSize: '28px', fontWeight: 800, color: '#3b82f6', marginTop: '6px' }}>
+          <div style={{ fontSize: '28px', fontWeight: 800, color: 'var(--blue-500)', marginTop: '6px' }}>
             Paginated
           </div>
           <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>
@@ -254,7 +254,7 @@ export default function SourcingBoard() {
 
         {shortages.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '36px', color: 'var(--text-muted)', fontSize: '14px' }}>
-            <CheckCircle size={32} color="#34d399" style={{ margin: '0 auto 10px auto' }} />
+            <CheckCircle size={32} color="var(--rp-success-text)" style={{ margin: '0 auto 10px auto' }} />
             <div>No open inventory shortages for your team.</div>
           </div>
         ) : (
@@ -278,7 +278,7 @@ export default function SourcingBoard() {
                     {/* Top Row: Area & Status Badge */}
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 700, fontSize: '14px', color: 'var(--text-primary)' }}>
-                        <MapPin size={15} color="#ef4444" />
+                        <MapPin size={15} color="var(--rp-danger-text)" />
                         <span>{item.area || 'Area Unspecified'}</span>
                       </div>
                       <span style={{
@@ -286,8 +286,8 @@ export default function SourcingBoard() {
                         padding: '2px 8px',
                         borderRadius: '12px',
                         fontWeight: 700,
-                        backgroundColor: isCritical ? '#450a0a' : '#451a03',
-                        color: isCritical ? '#f87171' : '#fbbf24',
+                        backgroundColor: isCritical ? 'var(--rp-danger-bg)' : 'var(--rp-warn-bg)',
+                        color: isCritical ? 'var(--rp-danger-text)' : 'var(--rp-warn-text)',
                         display: 'flex',
                         alignItems: 'center',
                         gap: '4px',

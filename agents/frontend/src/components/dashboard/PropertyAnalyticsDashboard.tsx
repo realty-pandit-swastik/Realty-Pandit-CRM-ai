@@ -35,7 +35,7 @@ interface PropertyTrends {
 
 // Supply vs demand per sub-category — supply bar (blue) over demand bar (amber) + a gap chip.
 const SupplyDemand: React.FC<{ rows: GapRow[] }> = ({ rows }) => {
-  if (!rows.length) return <div style={{ padding: 24, textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>📊 No supply/demand data in scope</div>;
+  if (!rows.length) return <div style={{ padding: 24, textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>No supply/demand data in scope</div>;
   const max = Math.max(...rows.flatMap((r) => [r.supply, r.demand]), 1);
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -43,21 +43,21 @@ const SupplyDemand: React.FC<{ rows: GapRow[] }> = ({ rows }) => {
         <div key={r.sub_category}>
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, marginBottom: 5 }}>
             <span style={{ fontSize: 12.5, color: 'var(--text-primary)', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.sub_category}</span>
-            <span style={{ fontSize: 11.5, fontWeight: 800, flexShrink: 0, color: r.gap > 0 ? '#ef4444' : r.gap < 0 ? '#3b82f6' : 'var(--text-muted)' }}>
+            <span style={{ fontSize: 12, fontWeight: 600, flexShrink: 0, color: r.gap > 0 ? 'var(--rp-danger-text)' : r.gap < 0 ? 'var(--blue-700)' : 'var(--text-muted)' }}>
               {r.gap > 0 ? `▲ ${formatNum(r.gap)} short` : r.gap < 0 ? `▼ ${formatNum(-r.gap)} surplus` : 'balanced'}
             </span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3 }}>
             <span style={{ width: 52, fontSize: 10.5, color: 'var(--text-muted)', flexShrink: 0 }}>supply</span>
             <div style={{ flex: 1, height: 12, borderRadius: 4, backgroundColor: 'var(--bg-tertiary)', overflow: 'hidden' }}>
-              <div style={{ width: `${(r.supply / max) * 100}%`, height: '100%', backgroundColor: '#3b82f6', borderRadius: 4, transition: 'width 600ms ease' }} />
+              <div style={{ width: `${(r.supply / max) * 100}%`, height: '100%', backgroundColor: 'var(--blue-700)', borderRadius: 4, transition: 'width 600ms ease' }} />
             </div>
             <span style={{ width: 46, fontSize: 11.5, fontWeight: 700, color: 'var(--text-primary)', textAlign: 'right', flexShrink: 0 }}>{formatNum(r.supply)}</span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <span style={{ width: 52, fontSize: 10.5, color: 'var(--text-muted)', flexShrink: 0 }}>demand</span>
             <div style={{ flex: 1, height: 12, borderRadius: 4, backgroundColor: 'var(--bg-tertiary)', overflow: 'hidden' }}>
-              <div style={{ width: `${(r.demand / max) * 100}%`, height: '100%', backgroundColor: '#f59e0b', borderRadius: 4, transition: 'width 600ms ease' }} />
+              <div style={{ width: `${(r.demand / max) * 100}%`, height: '100%', backgroundColor: 'var(--blue-400)', borderRadius: 4, transition: 'width 600ms ease' }} />
             </div>
             <span style={{ width: 46, fontSize: 11.5, fontWeight: 700, color: 'var(--text-primary)', textAlign: 'right', flexShrink: 0 }}>{formatNum(r.demand)}</span>
           </div>
@@ -112,15 +112,14 @@ export const PropertyAnalyticsDashboard: React.FC = () => {
   const supplyDemand = d.supply_demand ?? [];
 
   const pad = isMobile ? 16 : '24px 32px';
-  const colTwo: React.CSSProperties = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 14 };
-  const kpiGrid: React.CSSProperties = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 'var(--bento-gap)' };
+  const colTwo: React.CSSProperties = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 320px), 1fr))', gap: 'var(--rp-s-4)' };
   const th: React.CSSProperties = { padding: '9px 12px', textAlign: 'right', fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', whiteSpace: 'nowrap' };
   const td: React.CSSProperties = { padding: '10px 12px', fontSize: 13, color: 'var(--text-primary)', textAlign: 'right', whiteSpace: 'nowrap' };
 
   return (
-    <div style={{ flex: 1, overflowY: 'auto', padding: pad, backgroundColor: 'var(--bg-primary)' }}>
+    <div className="rp-dashboard" style={{ flex: 1, minWidth: 0, overflowY: 'auto', padding: pad, backgroundColor: 'var(--bg-secondary)' }}>
       <div>
-        <h1 style={{ fontSize: isMobile ? 20 : 24, fontWeight: 800, margin: 0, color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>🏠 Property Analytics</h1>
+        <h1 style={{ fontSize: isMobile ? 20 : 24, fontWeight: 600, margin: 0, color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>Property Analytics</h1>
         <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: '4px 0 0' }}>Inventory health, demand, pricing & performance</p>
       </div>
 
@@ -130,25 +129,25 @@ export const PropertyAnalyticsDashboard: React.FC = () => {
         {/* Needs action */}
         <div>
           <SectionLabel icon="⚡">Needs Action</SectionLabel>
-          <div style={kpiGrid}>
-            <KpiCard label="Missing Photos" value={formatNum(needs.missing_photos)} accent="#ef4444" icon="📷" />
-            <Drill filter={{ days: '60' }}><KpiCard label="Stale 60d+" value={formatNum(needs.stale_60d)} accent="#f59e0b" icon="🕰️" /></Drill>
-            <Drill filter={{ status: 'pending_approval' }}><KpiCard label="Pending Approval" value={formatNum(needs.pending_approval)} accent="#3b82f6" icon="⏳" /></Drill>
-            <KpiCard label="Overpriced" value={formatNum(needs.overpriced)} accent="#ec4899" icon="💰" />
-            <KpiCard label="No Matched Buyer" value={formatNum(needs.no_matched_buyer)} accent="#8b5cf6" icon="🔍" />
+          <div className="rp-metric-grid">
+            <KpiCard label="Missing Photos" value={formatNum(needs.missing_photos)} icon="📷" />
+            <Drill filter={{ days: '60' }}><KpiCard label="Stale 60d+" value={formatNum(needs.stale_60d)} icon="🕰️" /></Drill>
+            <Drill filter={{ status: 'pending_approval' }}><KpiCard label="Pending Approval" value={formatNum(needs.pending_approval)} icon="⏳" /></Drill>
+            <KpiCard label="Overpriced" value={formatNum(needs.overpriced)} icon="💰" />
+            <KpiCard label="No Matched Buyer" value={formatNum(needs.no_matched_buyer)} icon="🔍" />
           </div>
         </div>
 
         {/* Pulse */}
         <div>
           <SectionLabel icon="📊">Inventory Pulse</SectionLabel>
-          <div style={kpiGrid}>
-            <Drill><KpiCard label="Total Properties" value={formatNum(pulse.total)} accent="#3b82f6" icon="🏢" /></Drill>
-            <Drill filter={{ status: 'active' }}><KpiCard label="Active Listings" value={formatNum(pulse.active)} accent="#22c55e" icon="✅" /></Drill>
-            <KpiCard label="Added (period)" value={formatNum(pulse.added)} accent="#8b5cf6" icon="🆕" />
-            <KpiCard label="With Photos" value={`${pulse.pct_with_photos}%`} accent="#06b6d4" icon="📸" />
-            <KpiCard label="Avg Days on Market" value={formatNum(pulse.avg_days_on_market)} accent="#f59e0b" icon="📅" />
-            <KpiCard label="Shareable" value={`${pulse.pct_shareable}%`} accent="#14b8a6" icon="📤" />
+          <div className="rp-metric-grid">
+            <Drill><KpiCard label="Total Properties" value={formatNum(pulse.total)} icon="🏢" /></Drill>
+            <Drill filter={{ status: 'active' }}><KpiCard label="Active Listings" value={formatNum(pulse.active)} icon="✅" /></Drill>
+            <KpiCard label="Added (period)" value={formatNum(pulse.added)} icon="🆕" />
+            <KpiCard label="With Photos" value={`${pulse.pct_with_photos}%`} icon="📸" />
+            <KpiCard label="Avg Days on Market" value={formatNum(pulse.avg_days_on_market)} icon="📅" />
+            <KpiCard label="Shareable" value={`${pulse.pct_shareable}%`} icon="📤" />
           </div>
         </div>
 
@@ -168,7 +167,7 @@ export const PropertyAnalyticsDashboard: React.FC = () => {
             <SupplyDemand rows={supplyDemand} />
           </ClayCard>
           <ClayCard title="Inventory Ageing" subtitle="How long active listings have been on the market">
-            <ValueBars rows={ageingBars} color="#f59e0b" emptyIcon="🕰️" emptyText="No active listings" />
+            <ValueBars rows={ageingBars} color="var(--blue-700)" emptyIcon="🕰️" emptyText="No active listings" />
           </ClayCard>
         </div>
 
@@ -176,9 +175,9 @@ export const PropertyAnalyticsDashboard: React.FC = () => {
         <ClayCard title="Price Positioning" subtitle={`vs local median · ${formatNum(pp.sample)} judged, ${formatNum(pp.unpriced)} unpriced`}>
           <ValueBars
             rows={[
-              { label: 'Below market', value: pp.under, color: '#22c55e' },
-              { label: 'At market', value: pp.at, color: '#3b82f6' },
-              { label: 'Above market', value: pp.over, color: '#ef4444' },
+              { label: 'Below market', value: pp.under, color: 'var(--blue-400)' },
+              { label: 'At market', value: pp.at, color: 'var(--blue-600)' },
+              { label: 'Above market', value: pp.over, color: 'var(--blue-900)' },
             ]}
             emptyIcon="💰"
             emptyText="Not enough priced listings to judge"
@@ -187,17 +186,17 @@ export const PropertyAnalyticsDashboard: React.FC = () => {
 
         {/* Type distribution (kept) */}
         <ClayCard title="Property Type Distribution" subtitle="Active listings by type">
-          <ValueBars rows={typeBars} color="#10b981" emptyIcon="🏠" emptyText="No property type data" />
+          <ValueBars rows={typeBars} color="var(--blue-600)" emptyIcon="🏠" emptyText="No property type data" />
         </ClayCard>
 
         {/* By location + top listings */}
         <div style={colTwo}>
           <ClayCard title="By Location" subtitle="Active listings by locality">
-            <RankedBars rows={locationBars} color="#14b8a6" emptyIcon="📍" emptyText="No location data" />
+            <RankedBars rows={locationBars} color="var(--blue-600)" emptyIcon="📍" emptyText="No location data" />
           </ClayCard>
           <ClayCard title="Top-Performing Listings" subtitle="By shares · visits · enquiries (views not tracked yet)">
             {topListings.length === 0 ? (
-              <div style={{ padding: 24, textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>🏆 No engagement yet in scope</div>
+              <div style={{ padding: 24, textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>No engagement yet in scope</div>
             ) : (
               <div style={{ overflowX: 'auto' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 420 }}>

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { shareToClient } from '../../api/client';
 import { toDialablePhone } from '../../lib/phone';
+import { IconText, PresentationIcon } from '../ui/PresentationIcon';
 
 interface MatchedProperty {
     id: string;
@@ -113,7 +114,7 @@ export default function MatchedPropertiesSection({
         <div style={{ marginBottom: '16px' }}>
             {/* Header */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-                <span style={{ fontWeight: 600, fontSize: '13px', color: 'var(--text-primary, #f1f5f9)' }}>
+                <span style={{ fontWeight: 600, fontSize: '13px', color: 'var(--text-primary, var(--bg-secondary))' }}>
                     Property Matches
                 </span>
                 <button
@@ -121,18 +122,18 @@ export default function MatchedPropertiesSection({
                     disabled={matchLoading}
                     style={{
                         padding: '5px 12px', borderRadius: '8px', border: 'none',
-                        backgroundColor: '#3b82f6', color: '#fff', fontSize: '12px',
+                        backgroundColor: 'var(--blue-600)', color: 'var(--surface-white)', fontSize: '12px',
                         fontWeight: 600, cursor: matchLoading ? 'wait' : 'pointer',
                         opacity: matchLoading ? 0.6 : 1,
                     }}
                 >
-                    {matchLoading ? 'Matching...' : '🔍 Find Matches'}
+                    {matchLoading ? 'Matching...' : 'Find Matches'}
                 </button>
             </div>
 
             {/* Error */}
             {matchError && (
-                <div style={{ backgroundColor: 'rgba(239,68,68,0.1)', color: '#ef4444', padding: '8px 12px', borderRadius: '8px', fontSize: '12px', marginBottom: '8px' }}>
+                <div style={{ backgroundColor: 'var(--rp-danger-bg)', color: 'var(--rp-danger-text)', padding: '8px 12px', borderRadius: 'var(--radius-control)', fontSize: '12px', marginBottom: '8px' }}>
                     {matchError}
                 </div>
             )}
@@ -144,15 +145,15 @@ export default function MatchedPropertiesSection({
                         onClick={toggleAll}
                         style={{
                             padding: '4px 10px', borderRadius: '6px', fontSize: '11px',
-                            backgroundColor: 'var(--bg-tertiary, #334155)', color: 'var(--text-secondary, #cbd5e1)',
-                            border: '1px solid var(--border-secondary, #475569)', cursor: 'pointer',
+                            backgroundColor: 'var(--bg-tertiary, var(--text-secondary))', color: 'var(--text-secondary, var(--border-secondary))',
+                            border: '1px solid var(--border-secondary, var(--text-secondary))', cursor: 'pointer',
                         }}
                     >
                         {selectedIds.size === matches.length ? 'Deselect All' : 'Select All'}
                     </button>
 
                     {selectedIds.size > 0 && !canShare && (
-                        <span style={{ fontSize: '11px', color: 'var(--text-muted, #94a3b8)', fontStyle: 'italic' }}>
+                        <span style={{ fontSize: '11px', color: 'var(--text-muted, var(--text-muted))', fontStyle: 'italic' }}>
                             No phone on file — can't share
                         </span>
                     )}
@@ -164,24 +165,24 @@ export default function MatchedPropertiesSection({
                                 title={recipientIsPartner ? 'Lead has no client phone — sends to the referring partner' : undefined}
                                 style={{
                                     padding: '4px 12px', borderRadius: '6px', fontSize: '11px', fontWeight: 600,
-                                    backgroundColor: '#25d366', color: '#fff', border: 'none',
+                                    backgroundColor: 'var(--blue-600)', color: 'var(--surface-white)', border: 'none',
                                     cursor: sharing ? 'wait' : 'pointer', opacity: sharing ? 0.6 : 1,
                                     display: 'flex', alignItems: 'center', gap: '4px',
                                 }}
                             >
-                                💬 {recipientIsPartner ? 'Share with partner' : 'Send WhatsApp'} ({selectedIds.size})
+                                <PresentationIcon value="message-circle" /> {recipientIsPartner ? 'Share with partner' : 'Send WhatsApp'} ({selectedIds.size})
                             </button>
                             <button
                                 onClick={handleShareLink}
                                 title={recipientIsPartner ? 'Lead has no client phone — sends to the referring partner' : undefined}
                                 style={{
                                     padding: '4px 12px', borderRadius: '6px', fontSize: '11px', fontWeight: 600,
-                                    backgroundColor: 'rgba(59,130,246,0.15)', color: '#3b82f6',
-                                    border: '1px solid #3b82f6', cursor: 'pointer',
+                                    backgroundColor: 'var(--rp-info-bg)', color: 'var(--rp-info-text)',
+                                    border: '1px solid var(--control-line)', cursor: 'pointer',
                                     display: 'flex', alignItems: 'center', gap: '4px',
                                 }}
                             >
-                                🔗 Share Link ({selectedIds.size})
+                                Share Link ({selectedIds.size})
                             </button>
                         </>
                     )}
@@ -200,9 +201,9 @@ export default function MatchedPropertiesSection({
                         <div
                             key={m.id}
                             style={{
-                                backgroundColor: isSelected ? 'rgba(59,130,246,0.08)' : 'var(--bg-tertiary, #1e293b)',
-                                border: isSelected ? '1px solid #3b82f6' : '1px solid var(--border-secondary, #334155)',
-                                borderRadius: '10px', padding: '10px 12px',
+                                backgroundColor: isSelected ? 'var(--bg-active)' : 'var(--bg-primary)',
+                                border: isSelected ? '1px solid var(--blue-600)' : '1px solid var(--border-primary)',
+                                borderRadius: 'var(--radius-card)', padding: '12px',
                                 position: 'relative', transition: 'border-color 0.15s',
                             }}
                         >
@@ -212,7 +213,7 @@ export default function MatchedPropertiesSection({
                                     type="checkbox"
                                     checked={isSelected}
                                     onChange={() => toggleSelect(m.id)}
-                                    style={{ marginTop: '4px', accentColor: '#3b82f6', cursor: 'pointer', flexShrink: 0 }}
+                                    style={{ marginTop: '4px', accentColor: 'var(--blue-600)', cursor: 'pointer', flexShrink: 0 }}
                                 />
 
                                 {/* Thumbnail */}
@@ -227,12 +228,12 @@ export default function MatchedPropertiesSection({
                                 {/* Content */}
                                 <div style={{ flex: 1, minWidth: 0 }}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-                                        <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-primary, #f1f5f9)', textTransform: 'capitalize' }}>
+                                        <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-primary, var(--bg-secondary))', textTransform: 'capitalize' }}>
                                             {m.type} · {m.category}
                                             {specs.bedrooms ? ` · ${specs.bedrooms} BHK` : ''}
                                         </span>
                                         <span style={{
-                                            backgroundColor: `${scoreColor(m.match_score)}22`,
+                                            backgroundColor: 'var(--bg-secondary)',
                                             color: scoreColor(m.match_score),
                                             padding: '1px 6px', borderRadius: '8px',
                                             fontSize: '10px', fontWeight: 700,
@@ -241,15 +242,15 @@ export default function MatchedPropertiesSection({
                                         </span>
                                     </div>
 
-                                    <div style={{ fontSize: '11px', color: 'var(--text-muted, #94a3b8)', marginBottom: '3px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                    <div style={{ fontSize: '11px', color: 'var(--text-muted, var(--text-muted))', marginBottom: '3px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                         {m.location || 'Location N/A'}
                                     </div>
 
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                        <span style={{ fontSize: '12px', fontWeight: 600, color: '#60a5fa' }}>
+                                        <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-primary)' }}>
                                             {formatPrice(m.price, m.price_unit)}
                                         </span>
-                                        <span style={{ fontSize: '9px', color: 'var(--text-muted, #64748b)', textTransform: 'uppercase', fontWeight: 600 }}>
+                                        <span style={{ fontSize: '9px', color: 'var(--text-muted, var(--control-line))', textTransform: 'uppercase', fontWeight: 600 }}>
                                             {m.priority_tier}
                                         </span>
                                     </div>
@@ -262,7 +263,7 @@ export default function MatchedPropertiesSection({
                                     position: 'absolute', top: '6px', right: '6px',
                                     fontSize: '14px',
                                 }}>
-                                    {result === 'success' ? '✅' : result === 'failed' ? '❌' : '⏳'}
+                                    <IconText>{result === 'success' ? '✅' : result === 'failed' ? '❌' : '⏳'}</IconText>
                                 </div>
                             )}
                         </div>

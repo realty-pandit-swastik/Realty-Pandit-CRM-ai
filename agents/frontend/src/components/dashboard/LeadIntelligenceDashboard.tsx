@@ -108,13 +108,13 @@ export const LeadIntelligenceDashboard: React.FC = () => {
   if (status === 'empty') return <EmptyState icon="🎯" title="No leads in your view yet" hint="Once leads are assigned to you, their sources, funnel, health and ageing show up here." />;
 
   const pad = isMobile ? 16 : '24px 32px';
-  const colTwo: React.CSSProperties = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 14 };
+  const colTwo: React.CSSProperties = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 320px), 1fr))', gap: 'var(--rp-s-4)' };
   return (
-    <div style={{ flex: 1, overflowY: 'auto', padding: pad, backgroundColor: 'var(--bg-primary)' }}>
+    <div className="rp-dashboard" style={{ flex: 1, minWidth: 0, overflowY: 'auto', padding: pad, backgroundColor: 'var(--bg-secondary)' }}>
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
         <div>
-          <h1 style={{ fontSize: isMobile ? 20 : 24, fontWeight: 800, margin: 0, color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>🎯 Lead Intelligence</h1>
+          <h1 style={{ fontSize: isMobile ? 20 : 24, fontWeight: 600, margin: 0, color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>Lead Intelligence</h1>
           <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: '4px 0 0' }}>
             {scopeNote} · {fmtDate(range.from)} – {fmtDate(range.to)}
           </p>
@@ -141,10 +141,10 @@ export const LeadIntelligenceDashboard: React.FC = () => {
         <div>
           <SectionLabel icon="⚡">Lead Action</SectionLabel>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 'var(--bento-gap)' }}>
-            <Drill filter={{ not_contacted_days: '14' }}><KpiCard label="Neglected" value={formatNum(c.actions.neglected)} accent="#ef4444" icon="😴" /></Drill>
-            <Drill filter={{ status: 'hot', not_contacted_days: '3' }}><KpiCard label="Hot, Uncontacted" value={formatNum(c.actions.hotUncontacted)} accent="#f43f5e" icon="🔥" /></Drill>
-            <Drill><KpiCard label="Stagnant" value={formatNum(c.actions.stagnant)} accent="#f59e0b" icon="🧊" /></Drill>
-            <Drill><KpiCard label="Unqualified New" value={formatNum(c.actions.unqualifiedNew)} accent="#8b5cf6" icon="❓" /></Drill>
+            <Drill filter={{ not_contacted_days: '14' }}><KpiCard label="Neglected" value={formatNum(c.actions.neglected)} icon="😴" /></Drill>
+            <Drill filter={{ status: 'hot', not_contacted_days: '3' }}><KpiCard label="Hot, Uncontacted" value={formatNum(c.actions.hotUncontacted)} icon="🔥" /></Drill>
+            <Drill><KpiCard label="Stagnant" value={formatNum(c.actions.stagnant)} icon="🧊" /></Drill>
+            <Drill><KpiCard label="Unqualified New" value={formatNum(c.actions.unqualifiedNew)} icon="❓" /></Drill>
           </div>
         </div>
 
@@ -152,13 +152,13 @@ export const LeadIntelligenceDashboard: React.FC = () => {
         <div>
           <SectionLabel icon="📊">Key Metrics</SectionLabel>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 'var(--bento-gap)' }}>
-            <KpiCard label="Total Leads" value={formatNum(c.totalLeads)} delta={c.d_total} spark={c.dailyLeads} accent="#3b82f6" icon="👥" />
-            <KpiCard label="Active" value={formatNum(c.activeLeads)} delta={c.d_active} accent="#06b6d4" icon="⚡" />
-            <KpiCard label="Converted" value={formatNum(c.convertedLeads)} delta={c.d_converted} accent="#22c55e" icon="✅" />
-            <KpiCard label="Lost" value={formatNum(c.lostLeads)} delta={c.d_lost != null ? -c.d_lost : null} accent="#ef4444" icon="❌" />
-            <KpiCard label="Conversion" value={`${c.conversionRate.toFixed(1)}%`} delta={c.d_conv} deltaSuffix="pp" accent="#8b5cf6" icon="🎯" />
-            <KpiCard label="Revenue" value={formatINR(revenue || 0)} delta={revenueDelta} accent="#f59e0b" icon="₹" />
-            <KpiCard label="Speed-to-Lead" value={formatMins(stlMedian)} sub="median 1st reply" accent="#ef4444" icon="⚡" />
+            <KpiCard label="Total Leads" value={formatNum(c.totalLeads)} delta={c.d_total} spark={c.dailyLeads} icon="👥" />
+            <KpiCard label="Active" value={formatNum(c.activeLeads)} delta={c.d_active} icon="⚡" />
+            <KpiCard label="Converted" value={formatNum(c.convertedLeads)} delta={c.d_converted} icon="✅" />
+            <KpiCard label="Lost" value={formatNum(c.lostLeads)} delta={c.d_lost != null ? -c.d_lost : null} icon="❌" />
+            <KpiCard label="Conversion" value={`${c.conversionRate.toFixed(1)}%`} delta={c.d_conv} deltaSuffix="pp" icon="🎯" />
+            <KpiCard label="Revenue" value={formatINR(revenue || 0)} delta={revenueDelta} icon="₹" />
+            <KpiCard label="Speed-to-Lead" value={formatMins(stlMedian)} sub="median 1st reply" icon="⚡" />
           </div>
         </div>
 
@@ -185,26 +185,26 @@ export const LeadIntelligenceDashboard: React.FC = () => {
         {/* Lost reasons + Delay reasons */}
         <div style={colTwo}>
           <ClayCard title="Lost Lead Reasons" subtitle="Why deals are slipping away">
-            <RankedBars rows={c.lostReasons} color="#ef4444" emptyIcon="📝"
+            <RankedBars rows={c.lostReasons} color="var(--blue-700)" emptyIcon="📝"
               emptyText="No lost-reason data yet — pick a reason when marking a lead lost" />
           </ClayCard>
           <ClayCard title="Active Lead Delay Reasons" subtitle="Why open leads aren't converting">
-            <RankedBars rows={c.delayReasons} color="#f59e0b" emptyIcon="⏳"
+            <RankedBars rows={c.delayReasons} color="var(--blue-600)" emptyIcon="⏳"
               emptyText="No delay-reason data yet — set one from a lead's actions" />
           </ClayCard>
         </div>
 
         {/* Top areas */}
         <ClayCard title="Top Demand Areas" subtitle="Where leads want to buy">
-          <RankedBars rows={c.areas} color="#14b8a6" emptyIcon="📍" emptyText="No location data on leads in this period" />
+          <RankedBars rows={c.areas} color="var(--blue-600)" emptyIcon="📍" emptyText="No location data on leads in this period" />
         </ClayCard>
 
         {/* Demand profile */}
         <ClayCard title="What Buyers Want" subtitle="Demand profile of your open leads">
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            <div><MiniLabel>Preferred BHK</MiniLabel><RankedBars rows={c.demandProfile.bhk} color="#3b82f6" emptyIcon="🛏️" emptyText="No BHK preferences captured" /></div>
-            <div><MiniLabel>Budget bands</MiniLabel><RankedBars rows={c.demandProfile.budget} color="#22c55e" emptyIcon="💰" emptyText="No budgets captured on open leads" /></div>
-            <div><MiniLabel>Intent</MiniLabel><RankedBars rows={c.demandProfile.intent} color="#8b5cf6" emptyIcon="🎯" emptyText="No intent captured" /></div>
+            <div><MiniLabel>Preferred BHK</MiniLabel><RankedBars rows={c.demandProfile.bhk} color="var(--blue-600)" emptyIcon="🛏️" emptyText="No BHK preferences captured" /></div>
+            <div><MiniLabel>Budget bands</MiniLabel><RankedBars rows={c.demandProfile.budget} color="var(--blue-700)" emptyIcon="💰" emptyText="No budgets captured on open leads" /></div>
+            <div><MiniLabel>Intent</MiniLabel><RankedBars rows={c.demandProfile.intent} color="var(--blue-800)" emptyIcon="🎯" emptyText="No intent captured" /></div>
           </div>
         </ClayCard>
 

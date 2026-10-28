@@ -144,7 +144,7 @@ export function PartnerProfile({ partnerId, onBack }: { partnerId: string; onBac
     if (error || !partner) return (
         <div style={{ padding: 24 }}>
             <button onClick={onBack} style={backBtn}>← Back to Partner Agents</button>
-            <div style={{ color: '#ef4444', marginTop: 16 }}>{error || 'Partner not found'}</div>
+            <div style={{ color: 'var(--rp-danger-text)', marginTop: 16 }}>{error || 'Partner not found'}</div>
         </div>
     );
 
@@ -159,9 +159,9 @@ export function PartnerProfile({ partnerId, onBack }: { partnerId: string; onBac
                 <div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
                         <h2 style={{ margin: 0, color: 'var(--text-primary)', fontSize: 20 }}>{partner.name || 'Unnamed'}</h2>
-                        <span style={{ backgroundColor: partner.partner_category === 'COMPANY' ? '#8b5cf6' : '#06b6d4', padding: '2px 8px', borderRadius: 4, fontSize: 11, color: '#fff' }}>{partner.partner_category || 'INDIVIDUAL'}</span>
-                        <span style={{ color: isActive(partner.status) ? '#22c55e' : '#ef4444', fontWeight: 600, fontSize: 13 }}>{partner.status}</span>
-                        {!partner.verified && <span style={{ fontSize: 11, backgroundColor: '#fef3c7', color: '#92400e', padding: '1px 8px', borderRadius: 4 }}>Unverified</span>}
+                        <span style={{ backgroundColor: partner.partner_category === 'COMPANY' ? 'var(--chart-5)' : 'var(--chart-3)', padding: '2px 8px', borderRadius: 4, fontSize: 11, color: 'var(--surface-white)' }}>{partner.partner_category || 'INDIVIDUAL'}</span>
+                        <span style={{ color: isActive(partner.status) ? 'var(--rp-success-text)' : 'var(--rp-danger-text)', fontWeight: 600, fontSize: 13 }}>{partner.status}</span>
+                        {!partner.verified && <span style={{ fontSize: 11, backgroundColor: 'var(--rp-warn-bg)', color: 'var(--rp-warn-text)', padding: '1px 8px', borderRadius: 4 }}>Unverified</span>}
                     </div>
                     <div style={{ color: 'var(--text-secondary)', fontSize: 13, marginTop: 6 }}>
                         {partner.phone_number}{partner.email ? ` · ${partner.email}` : ''} · Plan: {PLAN_LABELS[partner.package_type] || partner.package_type}
@@ -171,11 +171,11 @@ export function PartnerProfile({ partnerId, onBack }: { partnerId: string; onBac
                     </div>
                 </div>
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                    {!partner.verified && <button onClick={doVerify} style={{ ...actBtn, backgroundColor: '#22c55e' }}>Verify</button>}
+                    {!partner.verified && <button onClick={doVerify} style={{ ...actBtn, backgroundColor: 'var(--rp-success-text)' }}>Verify</button>}
                     {isActive(partner.status)
-                        ? <button onClick={() => doStatus('SUSPENDED')} style={{ ...actBtn, backgroundColor: '#ef4444' }}>Suspend</button>
-                        : <button onClick={() => doStatus('ACTIVE')} style={{ ...actBtn, backgroundColor: '#3b82f6' }}>Activate</button>}
-                    {isSuperBoss && <button onClick={() => setReassign(true)} style={{ ...actBtn, backgroundColor: '#8b5cf6' }}>Reassign Manager</button>}
+                        ? <button onClick={() => doStatus('SUSPENDED')} style={{ ...actBtn, backgroundColor: 'var(--rp-danger-text)' }}>Suspend</button>
+                        : <button onClick={() => doStatus('ACTIVE')} style={{ ...actBtn, backgroundColor: 'var(--blue-500)' }}>Activate</button>}
+                    {isSuperBoss && <button onClick={() => setReassign(true)} style={{ ...actBtn, backgroundColor: 'var(--chart-5)' }}>Reassign Manager</button>}
                 </div>
             </div>
 
@@ -186,7 +186,7 @@ export function PartnerProfile({ partnerId, onBack }: { partnerId: string; onBac
                     {editMode
                         ? <div style={{ display: 'flex', gap: 8 }}>
                             <button onClick={() => { setEditMode(false); load(); }} style={ghostBtn}>Cancel</button>
-                            <button onClick={saveProfile} disabled={saving} style={{ ...actBtn, backgroundColor: '#22c55e' }}>{saving ? 'Saving…' : 'Save'}</button>
+                            <button onClick={saveProfile} disabled={saving} style={{ ...actBtn, backgroundColor: 'var(--rp-success-text)' }}>{saving ? 'Saving…' : 'Save'}</button>
                           </div>
                         : <button onClick={() => setEditMode(true)} style={ghostBtn}>✎ Edit</button>}
                 </div>
@@ -250,7 +250,7 @@ export function PartnerProfile({ partnerId, onBack }: { partnerId: string; onBac
                 <h3 style={sectionTitle}>Account — Portal Password</h3>
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginTop: 8 }}>
                     <input style={{ ...inp, maxWidth: 260 }} type="text" placeholder="Set a new portal password (min 6)" value={pwd} onChange={e => setPwd(e.target.value)} />
-                    <button onClick={savePassword} disabled={pwdSaving} style={{ ...actBtn, backgroundColor: '#3b82f6' }}>{pwdSaving ? 'Saving…' : 'Set Password'}</button>
+                    <button onClick={savePassword} disabled={pwdSaving} style={{ ...actBtn, backgroundColor: 'var(--blue-500)' }}>{pwdSaving ? 'Saving…' : 'Set Password'}</button>
                 </div>
             </div>
 
@@ -291,10 +291,10 @@ function Table({ head, rows }: { head: string[]; rows: any[][] }) {
 const card: React.CSSProperties = { backgroundColor: 'var(--bg-secondary)', borderRadius: 12, padding: 20, border: '1px solid var(--border-secondary)' };
 const sectionTitle: React.CSSProperties = { margin: 0, color: 'var(--text-primary)', fontSize: 15 };
 const inp: React.CSSProperties = { width: '100%', boxSizing: 'border-box', padding: '9px 12px', backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-secondary)', borderRadius: 8, color: 'var(--text-primary)', fontSize: 14, outline: 'none' };
-const actBtn: React.CSSProperties = { border: 'none', padding: '7px 14px', borderRadius: 8, color: '#fff', cursor: 'pointer', fontSize: 13, fontWeight: 600 };
+const actBtn: React.CSSProperties = { border: 'none', padding: '7px 14px', borderRadius: 8, color: 'var(--surface-white)', cursor: 'pointer', fontSize: 13, fontWeight: 600 };
 const ghostBtn: React.CSSProperties = { border: '1px solid var(--border-secondary)', padding: '6px 12px', borderRadius: 8, background: 'transparent', color: 'var(--text-primary)', cursor: 'pointer', fontSize: 13 };
-const backBtn: React.CSSProperties = { border: 'none', background: 'transparent', color: '#3b82f6', cursor: 'pointer', fontSize: 14, fontWeight: 600, padding: 0 };
+const backBtn: React.CSSProperties = { border: 'none', background: 'transparent', color: 'var(--blue-500)', cursor: 'pointer', fontSize: 14, fontWeight: 600, padding: 0 };
 const tabBtn: React.CSSProperties = { border: '1px solid var(--border-secondary)', padding: '6px 12px', borderRadius: 8, background: 'transparent', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: 13 };
-const tabActive: React.CSSProperties = { backgroundColor: '#1e3a5f', color: '#60a5fa', border: '1px solid #3b82f6' };
+const tabActive: React.CSSProperties = { backgroundColor: 'var(--blue-900)', color: 'var(--blue-400)', border: '1px solid var(--blue-500)' };
 
 export default PartnerProfile;

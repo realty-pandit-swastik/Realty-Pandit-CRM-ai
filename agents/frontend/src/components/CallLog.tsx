@@ -68,7 +68,7 @@ const s = {
   row: { padding: '16px', borderBottom: '1px solid var(--border-secondary)' } as React.CSSProperties,
   iconBtn: {
     display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '34px', height: '34px',
-    borderRadius: '999px', border: 'none', backgroundColor: 'var(--accent-primary)', color: '#fff',
+    borderRadius: 'var(--radius-control)', border: 'none', backgroundColor: 'var(--blue-600)', color: 'var(--surface-white)',
     cursor: 'pointer', flexShrink: 0,
   } as React.CSSProperties,
   ghostBtn: {
@@ -501,7 +501,7 @@ export default function CallLog() {
                             style={s.iconBtn}
                             title={playingCallId === call.id ? 'Pause' : 'Play recording'}
                           >
-                            {playingCallId === call.id ? <Pause size={16} color="#fff" /> : <Play size={16} color="#fff" />}
+                            {playingCallId === call.id ? <Pause size={16} color="var(--surface-white)" /> : <Play size={16} color="var(--surface-white)" />}
                           </button>
 
                           {playingCallId === call.id ? (

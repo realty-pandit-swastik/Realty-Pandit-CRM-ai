@@ -358,7 +358,7 @@ export default function AddressFields({
                                                 return (
                                                     <button type="button" key={p.label}
                                                         onClick={() => set(active ? { floor_label: '', floor_number: '' } : { floor_label: p.label, floor_number: p.sort })}
-                                                        style={{ padding: '6px 12px', borderRadius: '8px', fontSize: '12px', fontWeight: 600, cursor: 'pointer', border: active ? '1px solid var(--accent-primary)' : '1px solid var(--border-secondary)', background: active ? 'var(--accent-primary)' : 'var(--bg-primary)', color: active ? '#fff' : 'var(--text-primary)' }}>
+                                                        style={{ padding: '8px 12px', borderRadius: 'var(--radius-control)', fontSize: '12px', fontWeight: 600, cursor: 'pointer', border: active ? '1px solid var(--blue-600)' : '1px solid var(--border-secondary)', background: active ? 'var(--blue-600)' : 'var(--bg-primary)', color: active ? 'var(--surface-white)' : 'var(--text-primary)' }}>
                                                         {p.label}
                                                     </button>
                                                 );

@@ -4,6 +4,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
+import { Bell, House, Inbox, Target, CalendarDays, CheckCircle2, Users, Settings, X, type LucideIcon } from 'lucide-react';
 import { getUnreadNotificationCount, getNotificationHistory, markAllNotificationsRead, markNotificationClicked } from '../api/client';
 
 interface Notification {
@@ -19,15 +20,20 @@ interface Notification {
     created_at: string;
 }
 
-const CATEGORY_ICONS: Record<string, string> = {
-    inventory: '\u{1F3E0}',
-    lead: '\u{1F4E5}',
-    deal: '\u{1F3AF}',
-    appointment: '\u{1F4C5}',
-    task: '\u2705',
-    team: '\u{1F465}',
-    system: '\u2699\uFE0F',
+const CATEGORY_ICONS: Record<string, LucideIcon> = {
+    inventory: House,
+    lead: Inbox,
+    deal: Target,
+    appointment: CalendarDays,
+    task: CheckCircle2,
+    team: Users,
+    system: Settings,
 };
+
+function CategoryIcon({ category }: { category: string }) {
+    const Icon = CATEGORY_ICONS[category] || Bell;
+    return <Icon size={18} strokeWidth={1.7} aria-hidden="true" />;
+}
 
 function timeAgo(dateStr: string): string {
     const diff = Date.now() - new Date(dateStr).getTime();
@@ -120,14 +126,15 @@ export function NotificationBell({ onNavigate }: { onNavigate?: (url: string) =>
                 style={{
                     position: 'relative', background: 'none', border: 'none',
                     cursor: 'pointer', fontSize: '20px', padding: '6px', lineHeight: 1,
+                    minWidth: 44, minHeight: 44, color: 'var(--text-secondary)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
                 }}
                 title="Notifications"
             >
-                {'\u{1F514}'}
+                <Bell size={20} strokeWidth={1.7} aria-hidden="true" />
                 {unreadCount > 0 && (
                     <span style={{
                         position: 'absolute', top: '0', right: '0',
-                        backgroundColor: '#ef4444', color: '#fff',
+                        backgroundColor: 'var(--rp-danger-text)', color: 'var(--surface-white)',
                         fontSize: '10px', fontWeight: 700,
                         minWidth: '16px', height: '16px',
                         borderRadius: '8px', display: 'flex',
@@ -146,7 +153,7 @@ export function NotificationBell({ onNavigate }: { onNavigate?: (url: string) =>
                     onClick={handleClose}
                 >
                     {/* Backdrop */}
-                    <div style={{ position: 'absolute', inset: 0, backgroundColor: 'rgba(0,0,0,0.4)' }} />
+                    <div style={{ position: 'absolute', inset: 0, backgroundColor: 'var(--sheet-backdrop)' }} />
 
                     {/* Drawer Panel */}
                     <div
@@ -154,7 +161,7 @@ export function NotificationBell({ onNavigate }: { onNavigate?: (url: string) =>
                             position: 'relative', width: '380px', maxWidth: '90vw', height: '100%',
                             backgroundColor: 'var(--bg-secondary)', borderLeft: '1px solid var(--border-primary)',
                             display: 'flex', flexDirection: 'column', overflow: 'hidden',
-                            boxShadow: '-4px 0 20px rgba(0,0,0,0.3)',
+                            boxShadow: 'var(--rp-shadow-far)',
                         }}
                         onClick={e => e.stopPropagation()}
                     >
@@ -171,7 +178,7 @@ export function NotificationBell({ onNavigate }: { onNavigate?: (url: string) =>
                                     <button
                                         onClick={handleMarkAllRead}
                                         style={{
-                                            background: 'none', border: 'none', color: '#60a5fa',
+                                            background: 'none', border: 'none', color: 'var(--text-link)',
                                             cursor: 'pointer', fontSize: '12px', fontWeight: 600,
                                         }}
                                     >Mark all read</button>
@@ -179,7 +186,7 @@ export function NotificationBell({ onNavigate }: { onNavigate?: (url: string) =>
                                 <button
                                     onClick={handleClose}
                                     style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '20px' }}
-                                >{'\u2715'}</button>
+                                ><X size={20} strokeWidth={1.7}><title>Close notifications</title></X></button>
                             </div>
                         </div>
 
@@ -187,7 +194,7 @@ export function NotificationBell({ onNavigate }: { onNavigate?: (url: string) =>
                         <div style={{ flex: 1, overflowY: 'auto', padding: '8px 0' }}>
                             {notifications.length === 0 && !loading && (
                                 <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--text-muted)' }}>
-                                    <div style={{ fontSize: '32px', marginBottom: '8px' }}>{'\u{1F514}'}</div>
+                                    <div style={{ marginBottom: '8px' }}><Bell size={24} strokeWidth={1.7} aria-hidden="true" /></div>
                                     <div style={{ fontSize: '14px' }}>No notifications yet</div>
                                 </div>
                             )}
@@ -199,16 +206,16 @@ export function NotificationBell({ onNavigate }: { onNavigate?: (url: string) =>
                                     style={{
                                         display: 'flex', gap: '10px', padding: '12px 16px',
                                         cursor: notif.action_url ? 'pointer' : 'default',
-                                        backgroundColor: notif.read ? 'transparent' : 'rgba(59,130,246,0.06)',
+                                        backgroundColor: notif.read ? 'transparent' : 'var(--rp-info-bg)',
                                         borderBottom: '1px solid var(--border-secondary)',
                                         transition: 'background-color 0.15s',
                                     }}
-                                    onMouseEnter={e => { if (!notif.read) (e.currentTarget.style.backgroundColor = 'rgba(59,130,246,0.1)'); }}
-                                    onMouseLeave={e => { e.currentTarget.style.backgroundColor = notif.read ? 'transparent' : 'rgba(59,130,246,0.06)'; }}
+                                    onMouseEnter={e => { if (!notif.read) (e.currentTarget.style.backgroundColor = 'var(--bg-active)'); }}
+                                    onMouseLeave={e => { e.currentTarget.style.backgroundColor = notif.read ? 'transparent' : 'var(--rp-info-bg)'; }}
                                 >
                                     {/* Category Icon */}
                                     <div style={{ fontSize: '18px', flexShrink: 0, paddingTop: '2px' }}>
-                                        {CATEGORY_ICONS[notif.category] || '\u{1F514}'}
+                                        <CategoryIcon category={notif.category} />
                                     </div>
 
                                     {/* Content */}
@@ -241,7 +248,7 @@ export function NotificationBell({ onNavigate }: { onNavigate?: (url: string) =>
                                     {!notif.read && (
                                         <div style={{
                                             width: '8px', height: '8px', borderRadius: '50%',
-                                            backgroundColor: '#3b82f6', flexShrink: 0, marginTop: '6px',
+                                            backgroundColor: 'var(--accent-primary)', flexShrink: 0, marginTop: '6px',
                                         }} />
                                     )}
                                 </div>

@@ -1,4 +1,6 @@
 import React from 'react';
+import { CircleAlert } from 'lucide-react';
+import { MetricIcon } from './clay';
 
 /**
  * Honest async states for the analytics dashboards.
@@ -70,8 +72,9 @@ const wrap: React.CSSProperties = {
 };
 
 export const LoadingState: React.FC<{ label?: string }> = ({ label = 'Loading…' }) => (
-  <div style={wrap}>
-    <div style={{ fontSize: 26 }}>⏳</div>
+  <div style={wrap} role="status" aria-live="polite" aria-busy="true">
+    <div aria-hidden="true" className="rp-skeleton" style={{ width: 180, height: 12 }} />
+    <div aria-hidden="true" className="rp-skeleton" style={{ width: 260, height: 12, opacity: 0.7 }} />
     <div>{label}</div>
   </div>
 );
@@ -80,25 +83,17 @@ export const ErrorState: React.FC<{ onRetry: () => void; label?: string }> = ({
   onRetry,
   label = "Couldn't load this dashboard.",
 }) => (
-  <div style={wrap}>
-    <div style={{ fontSize: 26 }}>⚠️</div>
+  <div style={wrap} role="alert">
+    <CircleAlert size={24} strokeWidth={1.7} aria-hidden="true" style={{ color: 'var(--rp-danger-text)' }} />
     <div style={{ color: 'var(--text-primary)', fontWeight: 700, fontSize: 15 }}>{label}</div>
     <div style={{ fontSize: 13, maxWidth: 360 }}>
-      It's a connection or session hiccup — your data is safe. Try again.
+      It&apos;s a connection or session hiccup — your data is safe. Try again.
     </div>
     <button
+      type="button"
       onClick={onRetry}
-      style={{
-        marginTop: 6,
-        padding: '9px 20px',
-        borderRadius: 10,
-        border: 'none',
-        background: '#3b82f6',
-        color: '#fff',
-        fontWeight: 700,
-        fontSize: 13,
-        cursor: 'pointer',
-      }}
+      className="rp-btn rp-btn--primary"
+      style={{ marginTop: 6 }}
     >
       Retry
     </button>
@@ -110,8 +105,8 @@ export const EmptyState: React.FC<{ icon?: string; title?: string; hint?: string
   title = 'Nothing here yet',
   hint,
 }) => (
-  <div style={wrap}>
-    <div style={{ fontSize: 26 }}>{icon}</div>
+  <div style={wrap} role="status">
+    <div aria-hidden="true"><MetricIcon value={icon} /></div>
     <div style={{ color: 'var(--text-primary)', fontWeight: 700, fontSize: 15 }}>{title}</div>
     {hint && <div style={{ fontSize: 13, maxWidth: 380 }}>{hint}</div>}
   </div>

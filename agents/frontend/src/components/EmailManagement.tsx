@@ -166,11 +166,11 @@ export function EmailManagement() {
 
     const getStatusColor = (status: string) => {
         switch (status) {
-            case 'sent': return '#22c55e';
-            case 'delivered': return '#3b82f6';
-            case 'failed': return '#ef4444';
-            case 'pending': return '#f59e0b';
-            default: return '#6b7280';
+            case 'sent': return 'var(--rp-success-text)';
+            case 'delivered': return 'var(--rp-info-text)';
+            case 'failed': return 'var(--rp-danger-text)';
+            case 'pending': return 'var(--rp-warn-text)';
+            default: return 'var(--text-secondary)';
         }
     };
 
@@ -180,7 +180,7 @@ export function EmailManagement() {
             <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--bg-secondary)', backgroundColor: 'var(--bg-primary)' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
                     <div>
-                        <h2 style={{ color: 'var(--text-primary)', margin: 0, fontSize: '24px', fontWeight: 600 }}>📧 Email Management</h2>
+                        <h2 style={{ color: 'var(--text-primary)', margin: 0, fontSize: '24px', fontWeight: 600 }}>Email Management</h2>
                         <p style={{ color: 'var(--text-muted)', margin: '4px 0 0', fontSize: '14px' }}>
                             Powered by Panditji AI • Total: {total} emails
                         </p>
@@ -193,7 +193,7 @@ export function EmailManagement() {
                                     key={tab}
                                     onClick={() => { setActiveTab(tab); setPage(1); }}
                                     style={{
-                                        backgroundColor: activeTab === tab ? '#3b82f6' : 'transparent',
+                                        backgroundColor: activeTab === tab ? 'var(--blue-600)' : 'transparent',
                                         color: activeTab === tab ? 'white' : 'var(--text-secondary)',
                                         border: 'none',
                                         padding: '8px 16px',
@@ -211,7 +211,7 @@ export function EmailManagement() {
                         <button
                             onClick={() => setShowComposeModal(true)}
                             style={{
-                                backgroundColor: '#3b82f6',
+                                backgroundColor: 'var(--blue-600)',
                                 color: 'white',
                                 border: 'none',
                                 padding: '10px 20px',
@@ -221,13 +221,13 @@ export function EmailManagement() {
                                 fontWeight: 500
                             }}
                         >
-                            ✉️ Compose Email
+                            Compose Email
                         </button>
                         {hasPermission('manage_agents') && (
                             <button
                                 onClick={() => setShowBulkModal(true)}
                                 style={{
-                                    backgroundColor: '#8b5cf6',
+                                    backgroundColor: 'var(--blue-600)',
                                     color: 'white',
                                     border: 'none',
                                     padding: '10px 20px',
@@ -237,7 +237,7 @@ export function EmailManagement() {
                                     fontWeight: 500
                                 }}
                             >
-                                📨 Bulk Send
+                                Bulk Send
                             </button>
                         )}
                     </div>
@@ -264,7 +264,7 @@ export function EmailManagement() {
                     <button
                         onClick={searchEmails}
                         style={{
-                            backgroundColor: '#3b82f6',
+                            backgroundColor: 'var(--blue-600)',
                             color: 'white',
                             border: 'none',
                             padding: '10px 24px',
@@ -273,7 +273,7 @@ export function EmailManagement() {
                             fontSize: '14px'
                         }}
                     >
-                        🔍 Search
+                        Search
                     </button>
                     <button
                         onClick={() => { setSearchQuery(''); loadEmails(); }}
@@ -321,18 +321,18 @@ export function EmailManagement() {
                                     <div style={{ flex: 1 }}>
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '4px' }}>
                                             <span style={{
-                                                backgroundColor: email.direction === 'inbound' ? '#3b82f6' : '#8b5cf6',
+                                                backgroundColor: 'var(--blue-600)',
                                                 color: 'white',
                                                 padding: '2px 8px',
                                                 borderRadius: '4px',
                                                 fontSize: '11px',
                                                 fontWeight: 600
                                             }}>
-                                                {email.direction === 'inbound' ? '📥 IN' : '📤 OUT'}
+                                                {email.direction === 'inbound' ? 'IN' : 'OUT'}
                                             </span>
                                             <span style={{
-                                                backgroundColor: getStatusColor(email.status),
-                                                color: 'white',
+                                                backgroundColor: 'var(--bg-secondary)',
+                                                color: getStatusColor(email.status),
                                                 padding: '2px 8px',
                                                 borderRadius: '4px',
                                                 fontSize: '11px',
@@ -342,14 +342,14 @@ export function EmailManagement() {
                                             </span>
                                             {email.ai_processed && (
                                                 <span style={{
-                                                    backgroundColor: '#10b981',
-                                                    color: 'white',
+                                                    backgroundColor: 'var(--rp-info-bg)',
+                                                    color: 'var(--rp-info-text)',
                                                     padding: '2px 8px',
                                                     borderRadius: '4px',
                                                     fontSize: '11px',
                                                     fontWeight: 600
                                                 }}>
-                                                    🤖 AI
+                                                    AI
                                                 </span>
                                             )}
                                         </div>
@@ -378,7 +378,7 @@ export function EmailManagement() {
                                                     deleteEmail(email.id);
                                                 }}
                                                 style={{
-                                                    backgroundColor: '#ef4444',
+                                                    backgroundColor: 'var(--danger)',
                                                     color: 'white',
                                                     border: 'none',
                                                     padding: '4px 12px',
@@ -387,7 +387,7 @@ export function EmailManagement() {
                                                     fontSize: '12px'
                                                 }}
                                             >
-                                                🗑️ Delete
+                                                Delete
                                             </button>
                                         )}
                                     </div>
@@ -416,7 +416,7 @@ export function EmailManagement() {
                         onClick={() => setPage(p => Math.max(1, p - 1))}
                         disabled={page === 1}
                         style={{
-                            backgroundColor: page === 1 ? 'var(--bg-secondary)' : '#3b82f6',
+                            backgroundColor: page === 1 ? 'var(--bg-secondary)' : 'var(--blue-600)',
                             color: page === 1 ? 'var(--text-muted)' : 'white',
                             border: 'none',
                             padding: '8px 16px',
@@ -434,7 +434,7 @@ export function EmailManagement() {
                         onClick={() => setPage(p => p + 1)}
                         disabled={page >= Math.ceil(total / 20)}
                         style={{
-                            backgroundColor: page >= Math.ceil(total / 20) ? 'var(--bg-secondary)' : '#3b82f6',
+                            backgroundColor: page >= Math.ceil(total / 20) ? 'var(--bg-secondary)' : 'var(--blue-600)',
                             color: page >= Math.ceil(total / 20) ? 'var(--text-muted)' : 'white',
                             border: 'none',
                             padding: '8px 16px',
@@ -456,7 +456,7 @@ export function EmailManagement() {
                     left: 0,
                     right: 0,
                     bottom: 0,
-                    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                    backgroundColor: 'var(--media-overlay)',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
@@ -470,7 +470,7 @@ export function EmailManagement() {
                         maxHeight: '80vh',
                         overflowY: 'auto'
                     }}>
-                        <h3 style={{ color: 'var(--text-primary)', margin: '0 0 20px 0', fontSize: '20px' }}>✉️ Compose Email</h3>
+                        <h3 style={{ color: 'var(--text-primary)', margin: '0 0 20px 0', fontSize: '20px' }}>Compose Email</h3>
 
                         <div style={{ marginBottom: '16px' }}>
                             <label style={{ color: 'var(--text-secondary)', fontSize: '14px', display: 'block', marginBottom: '8px' }}>
@@ -543,7 +543,7 @@ export function EmailManagement() {
                                     checked={composeForm.generateWithAI}
                                     onChange={(e) => setComposeForm({ ...composeForm, generateWithAI: e.target.checked })}
                                 />
-                                🤖 Generate content with Panditji AI
+                                Generate content with Panditji AI
                             </label>
                         </div>
 
@@ -552,7 +552,7 @@ export function EmailManagement() {
                                 onClick={sendEmail}
                                 style={{
                                     flex: 1,
-                                    backgroundColor: '#3b82f6',
+                                    backgroundColor: 'var(--blue-600)',
                                     color: 'white',
                                     border: 'none',
                                     padding: '12px',
@@ -562,7 +562,7 @@ export function EmailManagement() {
                                     fontWeight: 500
                                 }}
                             >
-                                📤 Send Email
+                                Send Email
                             </button>
                             <button
                                 onClick={() => {
@@ -594,7 +594,7 @@ export function EmailManagement() {
                     left: 0,
                     right: 0,
                     bottom: 0,
-                    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                    backgroundColor: 'var(--media-overlay)',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
@@ -608,7 +608,7 @@ export function EmailManagement() {
                         maxHeight: '80vh',
                         overflowY: 'auto'
                     }}>
-                        <h3 style={{ color: 'var(--text-primary)', margin: '0 0 20px 0', fontSize: '20px' }}>📨 Bulk Email Send</h3>
+                        <h3 style={{ color: 'var(--text-primary)', margin: '0 0 20px 0', fontSize: '20px' }}>Bulk Email Send</h3>
 
                         <div style={{ marginBottom: '16px' }}>
                             <label style={{ color: 'var(--text-secondary)', fontSize: '14px', display: 'block', marginBottom: '8px' }}>
@@ -682,7 +682,7 @@ export function EmailManagement() {
                                     checked={bulkForm.generateWithAI}
                                     onChange={(e) => setBulkForm({ ...bulkForm, generateWithAI: e.target.checked })}
                                 />
-                                🤖 Generate content with Panditji AI
+                                Generate content with Panditji AI
                             </label>
                         </div>
 
@@ -691,7 +691,7 @@ export function EmailManagement() {
                                 onClick={sendBulkEmail}
                                 style={{
                                     flex: 1,
-                                    backgroundColor: '#8b5cf6',
+                                    backgroundColor: 'var(--blue-600)',
                                     color: 'white',
                                     border: 'none',
                                     padding: '12px',
@@ -701,7 +701,7 @@ export function EmailManagement() {
                                     fontWeight: 500
                                 }}
                             >
-                                📨 Send to All
+                                Send to All
                             </button>
                             <button
                                 onClick={() => {
@@ -733,7 +733,7 @@ export function EmailManagement() {
                     left: 0,
                     right: 0,
                     bottom: 0,
-                    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                    backgroundColor: 'var(--media-overlay)',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
@@ -791,13 +791,13 @@ export function EmailManagement() {
                         {selectedEmail.ai_processed && selectedEmail.ai_response && (
                             <div style={{
                                 backgroundColor: 'var(--bg-primary)',
-                                border: '2px solid #10b981',
+                                border: '1px solid var(--rp-info-line)',
                                 borderRadius: '8px',
                                 padding: '16px',
                                 marginTop: '16px'
                             }}>
-                                <div style={{ color: '#10b981', fontSize: '14px', fontWeight: 600, marginBottom: '8px' }}>
-                                    🤖 Panditji AI Analysis:
+                                <div style={{ color: 'var(--rp-info-text)', fontSize: '14px', fontWeight: 600, marginBottom: '8px' }}>
+                                    Panditji AI Analysis:
                                 </div>
                                 <div style={{ color: 'var(--text-secondary)', fontSize: '14px', lineHeight: '1.6', whiteSpace: 'pre-wrap' }}>
                                     {selectedEmail.ai_response}

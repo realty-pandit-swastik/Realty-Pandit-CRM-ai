@@ -286,7 +286,7 @@ export default function BuyerRequirementsForm({
                                     borderRadius: '16px',
                                     fontSize: '12px',
                                     border: `1px solid ${on ? 'var(--accent-primary)' : 'var(--border-secondary)'}`,
-                                    backgroundColor: on ? 'rgba(59,130,246,0.15)' : 'transparent',
+                                    backgroundColor: on ? 'var(--rp-info-wash)' : 'transparent',
                                     color: on ? 'var(--accent-primary)' : 'var(--text-secondary)',
                                     cursor: 'pointer',
                                 }}
@@ -348,9 +348,9 @@ export default function BuyerRequirementsForm({
             {requireAll && missingRequired.length > 0 && (
                 <div style={{
                     padding: '8px 12px', borderRadius: '6px',
-                    backgroundColor: 'rgba(245,158,11,0.1)',
-                    border: '1px solid rgba(245,158,11,0.3)',
-                    color: '#f59e0b', fontSize: '12px',
+                    backgroundColor: 'var(--rp-danger-wash)',
+                    border: '1px solid var(--rp-danger-line)',
+                    color: 'var(--rp-warn-text)', fontSize: '12px',
                 }}>
                     Required: {missingRequired.map((f) => REQUIRED_LABELS[f] || f).join(', ')}
                 </div>
@@ -376,8 +376,8 @@ export default function BuyerRequirementsForm({
                     style={{
                         padding: '10px 16px', borderRadius: '8px', fontSize: '13px', fontWeight: 700,
                         border: 'none',
-                        backgroundColor: canSubmit ? 'var(--accent-primary)' : '#94a3b8',
-                        color: '#fff',
+                        backgroundColor: canSubmit ? 'var(--accent-primary)' : 'var(--text-muted)',
+                        color: 'var(--surface-white)',
                         cursor: canSubmit ? 'pointer' : 'not-allowed',
                     }}
                 >

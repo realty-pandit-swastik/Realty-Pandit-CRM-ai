@@ -260,14 +260,14 @@ export function computeLead(all: RawContact[], f: LeadFilters): LeadCompute {
   // AI insights
   const insights: Insight[] = [];
   const bestSource = [...sources].filter((s) => s.count >= 3).sort((a, b) => b.conversionRate - a.conversionRate)[0];
-  if (bestSource) insights.push({ kind: 'best_source', icon: '🎯', tone: 'good', title: 'Best converting source', detail: `${bestSource.source} — ${bestSource.conversionRate.toFixed(0)}% conversion (${bestSource.count} leads)` });
+  if (bestSource) insights.push({ kind: 'best_source', icon: 'target', tone: 'good', title: 'Best converting source', detail: `${bestSource.source} — ${bestSource.conversionRate.toFixed(0)}% conversion (${bestSource.count} leads)` });
   const topVolume = sources[0];
-  if (topVolume) insights.push({ kind: 'top_source', icon: '📈', tone: 'info', title: 'Highest volume source', detail: `${topVolume.source} brought ${topVolume.count} leads this period` });
+  if (topVolume) insights.push({ kind: 'top_source', icon: 'chart-no-axes-combined', tone: 'info', title: 'Highest volume source', detail: `${topVolume.source} brought ${topVolume.count} leads this period` });
   const stale = ageing.find((a) => a.label === '90d+');
-  if (stale && stale.count > 0) insights.push({ kind: 'stale', icon: '⏳', tone: 'warn', title: 'Ageing pipeline', detail: `${stale.count} active leads are older than 90 days — at risk of going cold` });
+  if (stale && stale.count > 0) insights.push({ kind: 'stale', icon: 'clock', tone: 'warn', title: 'Ageing pipeline', detail: `${stale.count} active leads are older than 90 days — at risk of going cold` });
   if (topVolume) {
     const topArea = areas[0];
-    if (topArea) insights.push({ kind: 'area', icon: '📍', tone: 'info', title: 'Top demand area', detail: `${topArea.label} — ${topArea.count} leads` });
+    if (topArea) insights.push({ kind: 'area', icon: 'map-pin', tone: 'info', title: 'Top demand area', detail: `${topArea.label} — ${topArea.count} leads` });
   }
 
   // ── Lead actions (current open pipeline) ──

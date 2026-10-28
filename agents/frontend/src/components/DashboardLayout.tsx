@@ -4,6 +4,11 @@ import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { useIsMobile } from '../hooks/useIsMobile';
 import { NotificationBell } from './NotificationBell';
+import { CommandPalette } from './ui/CommandPalette';
+import { Breadcrumbs } from './ui/Breadcrumbs';
+import { NavigationIcon } from './ui/NavigationIcon';
+import { useDialogFocus } from '../hooks/useDialogFocus';
+import { Sun, Moon, UserRound, Download, Menu, ChevronLeft, ChevronRight, LogOut } from 'lucide-react';
 
 interface DashboardLayoutProps {
     activeView: string;
@@ -17,6 +22,7 @@ export function DashboardLayout({ activeView, onViewChange, children }: Dashboar
     const isMobile = useIsMobile();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+    const mobileDrawer = useDialogFocus(() => setMobileMenuOpen(false), isMobile && mobileMenuOpen);
   const [isStandalone] = useState(() =>
     window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone === true,
   );
@@ -105,10 +111,10 @@ export function DashboardLayout({ activeView, onViewChange, children }: Dashboar
 
     const getRoleBadgeColor = (role: string) => {
         switch (role) {
-            case 'super_boss': return '#ef4444';
-            case 'manager': return '#f59e0b';
-            case 'employee': return '#22c55e';
-            default: return '#6b7280';
+            case 'super_boss': return 'var(--blue-800)';
+            case 'manager': return 'var(--blue-700)';
+            case 'employee': return 'var(--blue-600)';
+            default: return 'var(--text-secondary)';
         }
     };
 
@@ -133,6 +139,15 @@ export function DashboardLayout({ activeView, onViewChange, children }: Dashboar
         void items;
     };
 
+    // Reuse the exact existing navigation gates: search cannot expose extra views.
+    const commandItems = navSections.flatMap(section => section.items.filter(item =>
+        agent?.role === 'partner' ? PARTNER_NAV_ITEMS.has(item.id)
+            : !(item as { partnerOnly?: boolean }).partnerOnly
+              && (item.permission === null || hasPermission(item.permission))
+              && (!(item as { superBossOnly?: boolean }).superBossOnly || agent?.role === 'super_boss')
+    ).map(item => ({ id: item.id, label: item.label, section: section.label })));
+    const activeItem = commandItems.find(item => item.id === activeView);
+
     const sidebarContent = (
         <>
             {/* Brand */}
@@ -154,6 +169,8 @@ export function DashboardLayout({ activeView, onViewChange, children }: Dashboar
                 ) : (
                     <button
                         onClick={() => setCollapsed(!collapsed)}
+                        aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+                        aria-expanded={!collapsed}
                         title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
                         style={{
                             background: 'none', border: '1px solid var(--border-secondary)', borderRadius: '6px',
@@ -161,7 +178,7 @@ export function DashboardLayout({ activeView, onViewChange, children }: Dashboar
                             padding: '4px 7px', lineHeight: 1, flexShrink: 0
                         }}
                     >
-                        {collapsed ? '\u25B6' : '\u25C0'}
+                        {collapsed ? <ChevronRight size={16} aria-hidden="true" /> : <ChevronLeft size={16} aria-hidden="true" />}
                     </button>
                 )}
             </div>
@@ -186,19 +203,22 @@ export function DashboardLayout({ activeView, onViewChange, children }: Dashboar
                         <div key={section.label} style={{ marginBottom: '4px' }}>
                             {(!collapsed || isMobile) && (
                                 <div style={{
-                                    fontSize: '12px', fontWeight: 700, letterSpacing: '0.08em',
-                                    textTransform: 'uppercase', color: 'var(--text-muted)',
+                                    fontSize: '12px', fontWeight: 500,
+                                    color: 'var(--text-muted)',
                                     padding: '8px 12px 4px',
                                 }}>
                                     {section.label}
                                 </div>
                             )}
-                            {sectionItems.map(item => (
+                            {sectionItems.map(item => {
+                                return (
                                 <button
+                                    className="rp-nav-item"
                                     key={item.id}
                                     onClick={() => handleNavClick(item.id)}
                                     title={(collapsed && !isMobile) ? item.label : undefined}
                                     aria-current={activeView === item.id ? 'page' : undefined}
+                                    aria-label={item.label}
                                     style={{
                                         display: 'flex', alignItems: 'center',
                                         gap: (collapsed && !isMobile) ? '0' : '10px',
@@ -215,10 +235,10 @@ export function DashboardLayout({ activeView, onViewChange, children }: Dashboar
                                         fontWeight: activeView === item.id ? 600 : 400,
                                     }}
                                 >
-                                    <span style={{ fontSize: '17px', flexShrink: 0 }}>{item.icon}</span>
+                                    <NavigationIcon view={item.id} />
                                     {(!collapsed || isMobile) && item.label}
                                 </button>
-                            ))}
+                            ); })}
                         </div>
                     );
                 })}
@@ -243,7 +263,7 @@ export function DashboardLayout({ activeView, onViewChange, children }: Dashboar
                         minWidth: '44px', minHeight: '44px'
                     }}
                 >
-                    {theme === 'dark' ? '\u2600\uFE0F' : '\u{1F319}'}
+                    {theme === 'dark' ? <Sun size={18} strokeWidth={1.7} aria-hidden="true" /> : <Moon size={18} strokeWidth={1.7} aria-hidden="true" />}
                     {(!collapsed || isMobile) && (theme === 'dark' ? 'Light Mode' : 'Dark Mode')}
                 </button>
 
@@ -255,7 +275,7 @@ export function DashboardLayout({ activeView, onViewChange, children }: Dashboar
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '4px' }}>
                             <span style={{
                                 backgroundColor: getRoleBadgeColor(agent?.role || ''),
-                                color: '#fff', padding: '2px 8px', borderRadius: '10px',
+                                color: 'var(--surface-white)', padding: '2px 8px', borderRadius: 'var(--radius-control)',
                                 fontSize: '12px', fontWeight: 600, textTransform: 'uppercase', whiteSpace: 'nowrap'
                             }}>
                                 {agent?.role?.replace('_', ' ')}
@@ -269,7 +289,7 @@ export function DashboardLayout({ activeView, onViewChange, children }: Dashboar
                     </div>
                 )}
                 {(collapsed && !isMobile) && (
-                    <div title={agent?.name || ''} style={{ fontSize: '18px', textAlign: 'center' }}>{'\u{1F464}'}</div>
+                    <div title={agent?.name || ''} style={{ fontSize: '18px', textAlign: 'center' }}><UserRound size={18} strokeWidth={1.7} aria-hidden="true" /></div>
                 )}
                 {!isStandalone && (
                     <button
@@ -284,15 +304,15 @@ export function DashboardLayout({ activeView, onViewChange, children }: Dashboar
                         }}
                         title={(collapsed && !isMobile) ? 'Install App' : undefined}
                         style={{
-                            backgroundColor: '#3b82f6', border: 'none',
-                            color: '#ffffff', padding: '6px 12px', borderRadius: '6px',
+                            backgroundColor: 'var(--rp-button-primary)', border: 'none',
+                            color: 'var(--surface-white)', padding: '6px 12px', borderRadius: '6px',
                             cursor: 'pointer', fontSize: (collapsed && !isMobile) ? '16px' : '13px',
                             textAlign: 'center', minWidth: '44px', minHeight: '44px',
                             fontWeight: 600, display: 'flex', alignItems: 'center',
                             justifyContent: 'center', gap: '6px',
                         }}
                     >
-                        {(collapsed && !isMobile) ? '\u{1F4F2}' : '\u{1F4F2} Install App'}
+                        <Download size={16} strokeWidth={1.7} aria-hidden="true" />{(!collapsed || isMobile) && 'Install App'}
                     </button>
                 )}
                 <button
@@ -305,14 +325,14 @@ export function DashboardLayout({ activeView, onViewChange, children }: Dashboar
                         textAlign: 'center', minWidth: '44px', minHeight: '44px'
                     }}
                 >
-                    {(collapsed && !isMobile) ? '\u23FB' : 'Logout'}
+                    {(collapsed && !isMobile) ? <LogOut size={16} strokeWidth={1.7} aria-hidden="true" /> : 'Logout'}
                 </button>
             </div>
         </>
     );
 
     return (
-        <div style={{ display: 'flex', height: '100vh', fontFamily: 'Inter, sans-serif' }}>
+        <div className="rp-workspace" style={{ display: 'flex', height: '100dvh', fontFamily: 'inherit' }}>
             {/* Skip-to-content: visible on focus, hidden otherwise (WCAG 2.4.1) */}
             <a href="#main-content" className="skip-to-content">
                 Skip to main content
@@ -336,7 +356,7 @@ export function DashboardLayout({ activeView, onViewChange, children }: Dashboar
                         aria-label="Open navigation menu"
                         aria-expanded={mobileMenuOpen ? 'true' : 'false'}
                         style={{ background: 'none', border: 'none', color: 'var(--text-primary)', cursor: 'pointer', fontSize: '22px', padding: '6px', minWidth: '44px', minHeight: '44px' }}
-                    >{'\u2630'}</button>
+                    ><Menu size={20} strokeWidth={1.7} aria-hidden="true" /></button>
                     <h2 style={{ color: 'var(--text-primary)', margin: 0, fontSize: '16px' }}>Realty Pandit</h2>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                         {agent?.role !== 'partner' && <NotificationBell onNavigate={(url) => { if (url.startsWith('#/')) onViewChange(url.replace('#/', '').split('?')[0]); }} />}
@@ -344,7 +364,7 @@ export function DashboardLayout({ activeView, onViewChange, children }: Dashboar
                             onClick={toggleTheme}
                             aria-label="Toggle dark mode"
                             style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '18px', padding: '6px', minWidth: '44px', minHeight: '44px' }}
-                        >{theme === 'dark' ? '\u2600\uFE0F' : '\u{1F319}'}</button>
+                        >{theme === 'dark' ? <Sun size={18} strokeWidth={1.7} aria-hidden="true" /> : <Moon size={18} strokeWidth={1.7} aria-hidden="true" />}</button>
                     </div>
                 </div>
             )}
@@ -352,11 +372,12 @@ export function DashboardLayout({ activeView, onViewChange, children }: Dashboar
             {/* Mobile Overlay Sidebar */}
             {isMobile && mobileMenuOpen && (
                 <div
-                    style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1000 }}
+                    style={{ position: 'fixed', inset: 0, backgroundColor: 'var(--rp-overlay-soft)', zIndex: 1000 }}
                     onClick={() => setMobileMenuOpen(false)}
                 >
                     <div
                         role="dialog"
+                        ref={mobileDrawer} tabIndex={-1}
                         aria-modal="true"
                         aria-label="Navigation menu"
                         style={{
@@ -383,17 +404,22 @@ export function DashboardLayout({ activeView, onViewChange, children }: Dashboar
             )}
 
             {/* Main Content */}
-            <div
+            <main
                 id="main-content"
                 role="main"
+                tabIndex={-1}
                 style={{
-                    flex: 1, display: 'flex', backgroundColor: 'var(--bg-primary)',
+                    flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', backgroundColor: 'var(--bg-primary)',
                     marginTop: isMobile ? 'calc(52px + env(safe-area-inset-top, 0px))' : 0,
                     width: isMobile ? '100%' : undefined,
                 }}
             >
-                {children}
-            </div>
+                <header className="rp-workspace-bar">
+                    <Breadcrumbs items={activeItem ? [{ label: activeItem.section }, { label: activeItem.label }] : [{ label: 'Workspace' }]} />
+                    <CommandPalette items={commandItems} onNavigate={handleNavClick} />
+                </header>
+                <div className="rp-workspace-content">{children}</div>
+            </main>
         </div>
     );
 }

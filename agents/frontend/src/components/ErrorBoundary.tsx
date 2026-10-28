@@ -35,16 +35,16 @@ export class ErrorBoundary extends Component<Props, State> {
     if (this.state.hasError) {
       return (
         <div style={{ padding: '2rem', textAlign: 'center' }}>
-          <h2 style={{ color: '#dc2626', marginBottom: '1rem' }}>Something went wrong</h2>
-          <p style={{ color: '#6b7280', marginBottom: '1rem' }}>
+          <h2 style={{ color: 'var(--rp-danger-text)', marginBottom: '1rem' }}>Something went wrong</h2>
+          <p style={{ color: 'var(--text-muted)', marginBottom: '1rem' }}>
             {this.state.error?.message || 'An unexpected error occurred'}
           </p>
           <button
             onClick={() => this.setState({ hasError: false, error: null })}
             style={{
               padding: '0.5rem 1.5rem',
-              backgroundColor: '#2563eb',
-              color: '#fff',
+              backgroundColor: 'var(--blue-600)',
+              color: 'var(--surface-white)',
               border: 'none',
               borderRadius: '0.375rem',
               cursor: 'pointer',

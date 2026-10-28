@@ -4,6 +4,10 @@ import client from '../api/client';
 import { toDialablePhone } from '../lib/phone';
 import { getDisplayFloor } from '../lib/floor';
 import { useAuth } from '../contexts/AuthContext';
+import { X, Pencil, Phone, MessageCircle, MapPin, House, LockKeyhole, Play } from 'lucide-react';
+import { useDialogFocus } from '../hooks/useDialogFocus';
+import { Skeleton } from './ui/States';
+import { Badge } from './ui/Badge';
 
 /**
  * InventoryDetailView — read-first, role-gated property view for the admin panel.
@@ -35,6 +39,7 @@ interface Props {
 }
 
 export function InventoryDetailView({ inventoryId, onClose, onEdit }: Props) {
+    const dialogRef = useDialogFocus(onClose);
     const { agent, hasPermission } = useAuth();
     const fullAccess = agent?.role === 'super_boss' || agent?.role === 'manager';
     const canEdit = hasPermission('edit_inventory');
@@ -118,30 +123,30 @@ export function InventoryDetailView({ inventoryId, onClose, onEdit }: Props) {
     // The fullAccess gate stays: this view is fed by a different endpoint.
     const unitLine = fullAccess ? formatUnitLabel(inv) : '';
 
-    const C = { panel: '#1e2536', line: '#374151', line2: '#2d3748', text: '#f3f4f6', sub: '#9ca3af', dim: '#6b7280', body: '#d1d5db' };
+    const C = { panel: 'var(--bg-primary)', line: 'var(--border-secondary)', line2: 'var(--border-primary)', text: 'var(--text-primary)', sub: 'var(--text-secondary)', dim: 'var(--text-muted)', body: 'var(--text-secondary)' };
 
     return (
         <div onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
-            style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 1200, display: 'flex', justifyContent: 'flex-end' }}>
-            <div style={{ width: 'min(560px, 100%)', height: '100%', background: C.panel, overflowY: 'auto', boxShadow: '-8px 0 30px rgba(0,0,0,0.4)' }}>
+            style={{ position: 'fixed', inset: 0, background: 'var(--sheet-backdrop)', zIndex: 1200, display: 'flex', justifyContent: 'flex-end' }}>
+            <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="rp-property-title" tabIndex={-1} className="rp-property-detail" style={{ width: 'min(640px, 100%)', height: '100%', background: C.panel, overflowY: 'auto', boxShadow: 'var(--rp-shadow-far)' }}>
                 {/* Header */}
                 <div style={{ position: 'sticky', top: 0, zIndex: 2, background: C.panel, display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 18px', borderBottom: `1px solid ${C.line}` }}>
-                    <h3 style={{ margin: 0, fontSize: 16, color: C.text }}>Property Details</h3>
+                    <h2 id="rp-property-title" style={{ margin: 0, fontSize: 16, color: C.text }}>Property Details</h2>
                     <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                         {canEdit && inv?.can_edit && onEdit && (
-                            <button onClick={onEdit} style={{ background: 'rgba(96,165,250,0.15)', border: '1px solid #60a5fa', color: '#60a5fa', borderRadius: 8, padding: '6px 14px', fontSize: 13, cursor: 'pointer', fontWeight: 600 }}>✏️ Edit</button>
+                            <button onClick={onEdit} className="rp-btn rp-btn--primary"><Pencil size={15} aria-hidden="true" />Edit</button>
                         )}
-                        <button onClick={onClose} style={{ background: 'none', border: 'none', color: C.sub, fontSize: 22, cursor: 'pointer', lineHeight: 1 }}>✕</button>
+                        <button onClick={onClose} className="rp-btn rp-btn--ghost" aria-label="Close property details"><X size={18} aria-hidden="true" /></button>
                     </div>
                 </div>
 
-                {loading && <div style={{ textAlign: 'center', padding: 48, color: C.dim }}>Loading…</div>}
+                {loading && <div role="status" aria-busy="true" style={{ padding: 24, display: 'grid', gap: 16 }}><Skeleton height={240} /><Skeleton width="60%" height={24} /><Skeleton width="85%" /><span>Loading property details…</span></div>}
 
                 {!loading && inv && (
                     <div style={{ paddingBottom: 40 }}>
                         {/* ── Media viewer ── */}
                         {media.length > 0 ? (
-                            <div style={{ background: '#0f1420' }}>
+                            <div style={{ background: 'var(--ink)' }}>
                                 <div
                                     onTouchStart={(e) => { touchStartX.current = e.touches[0].clientX; }}
                                     onTouchEnd={(e) => {
@@ -150,27 +155,27 @@ export function InventoryDetailView({ inventoryId, onClose, onEdit }: Props) {
                                         touchStartX.current = null;
                                         if (media.length > 1 && Math.abs(dx) > 40) go(dx < 0 ? 1 : -1);
                                     }}
-                                    style={{ position: 'relative', width: '100%', aspectRatio: '4 / 3', background: '#000', display: 'flex', alignItems: 'center', justifyContent: 'center', touchAction: 'pan-y', userSelect: 'none' }}>
+                                    style={{ position: 'relative', width: '100%', aspectRatio: '4 / 3', background: 'var(--ink)', display: 'flex', alignItems: 'center', justifyContent: 'center', touchAction: 'pan-y', userSelect: 'none' }}>
                                     {current?.type === 'video'
                                         ? <video key={current.url} src={current.url} controls playsInline style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
-                                        : <img src={current?.url} alt="" draggable={false} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />}
+                                        : <img src={current?.url} alt={`${title} — photo ${activeIdx + 1}`} draggable={false} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />}
                                     {media.length > 1 && (
                                         <>
-                                            <button aria-label="Previous photo" onClick={() => go(-1)} style={{ position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)', width: 38, height: 38, borderRadius: '50%', border: 'none', background: 'rgba(0,0,0,0.45)', color: '#fff', fontSize: 22, lineHeight: 1, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>‹</button>
-                                            <button aria-label="Next photo" onClick={() => go(1)} style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', width: 38, height: 38, borderRadius: '50%', border: 'none', background: 'rgba(0,0,0,0.45)', color: '#fff', fontSize: 22, lineHeight: 1, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>›</button>
-                                            <div style={{ position: 'absolute', bottom: 8, right: 10, background: 'rgba(0,0,0,0.55)', color: '#fff', fontSize: 11, padding: '2px 8px', borderRadius: 10 }}>{activeIdx + 1} / {media.length}</div>
+                                            <button aria-label="Previous photo" onClick={() => go(-1)} style={{ position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)', width: 44, height: 44, borderRadius: 'var(--radius-control)', border: 'none', background: 'var(--media-overlay)', color: 'var(--surface-white)', fontSize: 22, lineHeight: 1, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>‹</button>
+                                            <button aria-label="Next photo" onClick={() => go(1)} style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', width: 44, height: 44, borderRadius: 'var(--radius-control)', border: 'none', background: 'var(--media-overlay)', color: 'var(--surface-white)', fontSize: 22, lineHeight: 1, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>›</button>
+                                            <div style={{ position: 'absolute', bottom: 8, right: 12, background: 'var(--media-overlay)', color: 'var(--surface-white)', fontSize: 12, padding: '4px 8px', borderRadius: 'var(--radius-control)' }}>{activeIdx + 1} / {media.length}</div>
                                         </>
                                     )}
                                 </div>
                                 {media.length > 1 && (
                                     <div style={{ display: 'flex', gap: 6, overflowX: 'auto', padding: '8px 12px' }}>
                                         {media.map((m, i) => (
-                                            <button key={i} onClick={() => setActiveIdx(i)} style={{
+                                            <button key={i} aria-label={`View ${m.type} ${i + 1}`} aria-pressed={i === activeIdx} onClick={() => setActiveIdx(i)} style={{
                                                 position: 'relative', flexShrink: 0, width: 64, height: 48, borderRadius: 6, overflow: 'hidden',
-                                                border: i === activeIdx ? '2px solid #60a5fa' : '2px solid transparent', cursor: 'pointer', padding: 0, background: '#000',
+                                                border: i === activeIdx ? '2px solid var(--blue-400)' : '2px solid transparent', cursor: 'pointer', padding: 0, background: 'var(--ink)',
                                             }}>
                                                 {m.type === 'video'
-                                                    ? <><video src={m.url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /><span style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 16, background: 'rgba(0,0,0,0.3)' }}>▶</span></>
+                                                    ? <><video src={m.url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /><span style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--surface-white)', background: 'var(--media-overlay)' }}><Play size={16} strokeWidth={1.7} aria-hidden="true" /></span></>
                                                     : <img src={m.url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />}
                                             </button>
                                         ))}
@@ -178,29 +183,29 @@ export function InventoryDetailView({ inventoryId, onClose, onEdit }: Props) {
                                 )}
                             </div>
                         ) : (
-                            <div style={{ textAlign: 'center', padding: 32, color: C.dim, background: '#0f1420' }}>No photos or videos uploaded</div>
+                            <div style={{ textAlign: 'center', padding: 32, color: C.dim, background: 'var(--bg-secondary)' }}>No photos or videos uploaded</div>
                         )}
 
                         <div style={{ padding: '16px 18px' }}>
                             {/* Title + badges */}
                             <div style={{ fontSize: 19, fontWeight: 700, color: C.text }}>{title}</div>
                             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', margin: '6px 0 10px' }}>
-                                {inv.intent && <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 10, fontWeight: 600, background: inv.intent === 'rent' ? '#064e3b' : '#312e81', color: inv.intent === 'rent' ? '#34d399' : '#818cf8' }}>{inv.intent.toUpperCase()}</span>}
-                                {inv.status && <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 10, fontWeight: 600, background: '#1f2937', color: inv.status === 'active' ? '#34d399' : '#9ca3af' }}>{String(inv.status).toUpperCase()}</span>}
-                                {inv.display_id && <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 10, background: '#1f2937', color: C.sub }}>{inv.display_id}</span>}
+                                {inv.intent && <Badge tone={inv.intent === 'rent' ? 'success' : 'info'}>{inv.intent.toUpperCase()}</Badge>}
+                                {inv.status && <Badge tone={inv.status === 'active' ? 'success' : 'neutral'}>{String(inv.status).toUpperCase()}</Badge>}
+                                {inv.display_id && <Badge>{inv.display_id}</Badge>}
                             </div>
 
                             {/* Location */}
-                            <div style={{ color: C.sub, fontSize: 13, marginBottom: 4 }}>📍 {generalLoc || 'Location N/A'}</div>
-                            {unitLine && <div style={{ color: C.body, fontSize: 12, marginBottom: 4 }}>🏠 {unitLine}</div>}
+                            <div style={{ color: C.sub, fontSize: 13, marginBottom: 4 }}><MapPin size={14} aria-hidden="true" /> {generalLoc || 'Location N/A'}</div>
+                            {unitLine && <div style={{ color: C.body, fontSize: 12, marginBottom: 4 }}><House size={14} aria-hidden="true" /> {unitLine}</div>}
 
                             {/* Price */}
-                            <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', margin: '12px 0' }}>
+                            <div className="rp-property-prices" style={{ display: 'flex', gap: 16, flexWrap: 'wrap', margin: '16px 0 24px' }}>
                                 {(inv.customer_price || inv.price) && fullAccess && (
                                     <div><div style={{ fontSize: 11, color: C.dim }}>Demand price</div><div style={{ fontSize: 16, fontWeight: 700, color: C.text }}>{formatPrice(inv.customer_price || inv.price, inv.intent)}</div></div>
                                 )}
                                 {(inv.display_price || inv.price) && (
-                                    <div><div style={{ fontSize: 11, color: C.dim }}>{fullAccess ? 'Display price' : 'Price'}</div><div style={{ fontSize: 16, fontWeight: 700, color: '#60a5fa' }}>{formatPrice(inv.display_price || inv.price, inv.intent)}</div></div>
+                                    <div><div style={{ fontSize: 11, color: C.dim }}>{fullAccess ? 'Display price' : 'Price'}</div><div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-link)' }}>{formatPrice(inv.display_price || inv.price, inv.intent)}</div></div>
                                 )}
                             </div>
 
@@ -221,7 +226,7 @@ export function InventoryDetailView({ inventoryId, onClose, onEdit }: Props) {
                                 <div style={{ borderTop: `1px solid ${C.line}`, paddingTop: 12, marginTop: 14 }}>
                                     <div style={{ fontSize: 12, color: C.dim, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>Amenities</div>
                                     <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                                        {amenities.map((a) => <span key={a} style={{ fontSize: 12, padding: '3px 10px', borderRadius: 12, background: '#1f2937', color: C.body }}>{a}</span>)}
+                                        {amenities.map((a) => <span key={a} style={{ fontSize: 12, padding: '4px 8px', borderRadius: 'var(--radius-control)', background: 'var(--bg-tertiary)', color: C.body }}>{a}</span>)}
                                     </div>
                                 </div>
                             )}
@@ -249,28 +254,28 @@ export function InventoryDetailView({ inventoryId, onClose, onEdit }: Props) {
                                         <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: `1px solid ${C.line2}` }}>
                                             <div style={{ flex: 1, minWidth: 0 }}>
                                                 <div style={{ fontSize: 11, color: C.dim }}>{label}</div>
-                                                <div style={{ fontSize: 13, color: '#e5e7eb', fontWeight: 500 }}>{p!.name || 'Unknown'}</div>
+                                                <div style={{ fontSize: 13, color: C.text, fontWeight: 500 }}>{p!.name || 'Unknown'}</div>
                                                 <div style={{ fontSize: 11, color: C.sub }}>{p!.phone}</div>
                                             </div>
-                                            <button onClick={() => call(p!.phone)} style={{ background: 'rgba(34,197,94,0.15)', border: 'none', borderRadius: 8, color: '#22c55e', fontSize: 18, padding: '6px 10px', cursor: 'pointer' }}>📞</button>
-                                            <button onClick={() => wa(p!.phone)} style={{ background: 'rgba(37,211,102,0.12)', border: 'none', borderRadius: 8, color: '#25d366', fontSize: 18, padding: '6px 10px', cursor: 'pointer' }}>💬</button>
+                                            <button onClick={() => call(p!.phone)} className="rp-btn rp-btn--ghost" aria-label={`Call ${label}`}><Phone size={17} aria-hidden="true" /></button>
+                                            <button onClick={() => wa(p!.phone)} className="rp-btn rp-btn--ghost" aria-label={`WhatsApp ${label}`}><MessageCircle size={17} aria-hidden="true" /></button>
                                         </div>
                                     ))
                                 ) : (
                                     <>
                                         {/* Restricted: owner/key-holder hidden — route via the manager */}
-                                        <div style={{ background: 'rgba(251,191,36,0.08)', border: '1px solid rgba(251,191,36,0.3)', borderRadius: 8, padding: '10px 12px', marginBottom: 10 }}>
-                                            <div style={{ fontSize: 13, color: '#fbbf24', fontWeight: 600, marginBottom: 2 }}>🔒 Owner contact is private</div>
+                                        <div style={{ background: 'var(--rp-warn-bg)', border: '1px solid var(--rp-warn-line)', borderRadius: 'var(--radius-card)', padding: '12px', marginBottom: 12 }}>
+                                            <div style={{ fontSize: 13, color: 'var(--rp-warn-text)', fontWeight: 600, marginBottom: 4 }}><LockKeyhole size={16} strokeWidth={1.7} aria-hidden="true" /> Owner contact is private</div>
                                             <div style={{ fontSize: 12, color: C.body, lineHeight: 1.5 }}>To arrange a visit or speak with the owner, please coordinate through your inventory manager.</div>
                                         </div>
                                         {toDialablePhone(contacts?.assigned_agent?.phone) && (
                                             <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0' }}>
                                                 <div style={{ flex: 1, minWidth: 0 }}>
                                                     <div style={{ fontSize: 11, color: C.dim }}>Your point of contact</div>
-                                                    <div style={{ fontSize: 13, color: '#e5e7eb', fontWeight: 500 }}>{contacts!.assigned_agent!.name}</div>
+                                                    <div style={{ fontSize: 13, color: C.text, fontWeight: 500 }}>{contacts!.assigned_agent!.name}</div>
                                                 </div>
-                                                <button onClick={() => call(contacts!.assigned_agent!.phone)} style={{ background: 'rgba(34,197,94,0.15)', border: 'none', borderRadius: 8, color: '#22c55e', fontSize: 18, padding: '6px 10px', cursor: 'pointer' }}>📞</button>
-                                                <button onClick={() => wa(contacts!.assigned_agent!.phone)} style={{ background: 'rgba(37,211,102,0.12)', border: 'none', borderRadius: 8, color: '#25d366', fontSize: 18, padding: '6px 10px', cursor: 'pointer' }}>💬</button>
+                                                <button onClick={() => call(contacts!.assigned_agent!.phone)} className="rp-btn rp-btn--ghost" aria-label="Call your inventory manager"><Phone size={17} aria-hidden="true" /></button>
+                                                <button onClick={() => wa(contacts!.assigned_agent!.phone)} className="rp-btn rp-btn--ghost" aria-label="WhatsApp your inventory manager"><MessageCircle size={17} aria-hidden="true" /></button>
                                             </div>
                                         )}
                                     </>

@@ -46,9 +46,9 @@ const chip = (on: boolean): React.CSSProperties => ({
     borderRadius: '999px',
     fontSize: '12px',
     cursor: 'pointer',
-    border: on ? '1px solid #059669' : '1px solid var(--border-secondary)',
-    backgroundColor: on ? '#059669' : 'var(--bg-primary)',
-    color: on ? '#fff' : 'var(--text-primary)',
+    border: on ? '1px solid var(--blue-600)' : '1px solid var(--border-secondary)',
+    backgroundColor: on ? 'var(--blue-600)' : 'var(--bg-primary)',
+    color: on ? 'var(--surface-white)' : 'var(--text-primary)',
 });
 
 export default function ParkingListField({

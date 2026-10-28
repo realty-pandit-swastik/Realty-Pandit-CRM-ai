@@ -23,7 +23,7 @@ export function MobileChatView({ contact, interactions, onReportNoShow, onMarkLe
     }, [interactions]);
 
     const score = contact.lead_score?.total_score;
-    const scoreColor = score >= 70 ? '#f87171' : score >= 40 ? '#4ade80' : '#94a3b8';
+    const scoreColor = score >= 70 ? 'var(--rp-danger-text)' : score >= 40 ? 'var(--rp-success-text)' : 'var(--text-muted)';
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
@@ -62,19 +62,19 @@ export function MobileChatView({ contact, interactions, onReportNoShow, onMarkLe
                     borderRadius: '8px', margin: '4px 16px', padding: '8px', display: 'flex', flexDirection: 'column', gap: '4px',
                 }}>
                     <button onClick={() => { onReportNoShow(); setShowActions(false); }}
-                        style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '8px 12px', textAlign: 'left', color: '#f87171', fontSize: '13px', borderRadius: '6px' }}>
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '8px 12px', textAlign: 'left', color: 'var(--rp-danger-text)', fontSize: '13px', borderRadius: '6px' }}>
                         Report No-Show
                     </button>
                     {onSetDelayReason && contact.lead_status !== 'lost' && (
                         <button onClick={() => { onSetDelayReason(); setShowActions(false); }}
-                            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '8px 12px', textAlign: 'left', color: '#fbbf24', fontSize: '13px', borderRadius: '6px', fontWeight: 600 }}>
-                            ⏳ Set Delay Reason
+                            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '8px 12px', textAlign: 'left', color: 'var(--rp-warn-text)', fontSize: '13px', borderRadius: '6px', fontWeight: 600 }}>
+                            Set Delay Reason
                         </button>
                     )}
                     {onMarkLeadLost && contact.lead_status !== 'lost' && (
                         <button onClick={() => { onMarkLeadLost(); setShowActions(false); }}
-                            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '8px 12px', textAlign: 'left', color: '#fca5a5', fontSize: '13px', borderRadius: '6px', fontWeight: 600 }}>
-                            ❌ Mark Lead Lost
+                            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '8px 12px', textAlign: 'left', color: 'var(--rp-danger-text)', fontSize: '13px', borderRadius: '6px', fontWeight: 600 }}>
+                            Mark Lead Lost
                         </button>
                     )}
                     {['BUYER', 'TENANT', 'LANDLORD', 'PARTNER_AGENT', 'MANAGEMENT'].map(type => (
@@ -105,8 +105,8 @@ export function MobileChatView({ contact, interactions, onReportNoShow, onMarkLe
                             }}>
                                 <div style={{
                                     maxWidth: '85%', padding: '10px 14px', borderRadius: '12px',
-                                    backgroundColor: isIncoming ? 'var(--bg-secondary)' : '#4F46E5',
-                                    color: isIncoming ? 'var(--text-primary)' : '#fff',
+                                    backgroundColor: isIncoming ? 'var(--bg-secondary)' : 'var(--blue-600)',
+                                    color: isIncoming ? 'var(--text-primary)' : 'var(--surface-white)',
                                     border: isIncoming ? '1px solid var(--border-secondary)' : 'none',
                                 }}>
                                     <div style={{ fontSize: '14px', lineHeight: 1.5, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
@@ -114,7 +114,7 @@ export function MobileChatView({ contact, interactions, onReportNoShow, onMarkLe
                                     </div>
                                     <div style={{
                                         fontSize: '10px', marginTop: '4px', textAlign: 'right',
-                                        color: isIncoming ? 'var(--text-muted)' : 'rgba(255,255,255,0.7)',
+                                        color: isIncoming ? 'var(--text-muted)' : 'var(--surface-white)',
                                     }}>
                                         {msg.channel && <span>{msg.channel} · </span>}
                                         {new Date(msg.created_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}

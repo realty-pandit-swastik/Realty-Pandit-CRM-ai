@@ -6,6 +6,7 @@ import { useConfirm } from '../../contexts/ConfirmContext';
 import { toDialablePhone } from '../../lib/phone';
 import { getDisplayFloor } from '../../lib/floor';
 import { CopyChip } from '../CopyChip';
+import { PresentationIcon } from '../ui/PresentationIcon';
 import { InventoryFilterCommandBar } from './InventoryFilterCommandBar';
 import { bhkOf, societyOf, propertyTypeLabel } from '../../lib/specChips';
 
@@ -130,12 +131,12 @@ export function InventoryPreviewModal({ inventoryId, onClose }: { inventoryId: s
 
     return (
         <>
-            <div onClick={onClose} style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.55)', zIndex: 300, backdropFilter: 'blur(2px)' }} />
+            <div onClick={onClose} style={{ position: 'fixed', inset: 0, backgroundColor: 'var(--sheet-backdrop)', zIndex: 300 }} />
             <div style={{
                 position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)',
                 backgroundColor: 'var(--bg-primary)', borderRadius: 14, width: 480, maxWidth: '95vw',
                 maxHeight: '85vh', overflow: 'auto', zIndex: 301,
-                boxShadow: '0 20px 60px rgba(0,0,0,0.35)',
+                boxShadow: '0 20px 60px var(--rp-overlay-soft)',
             }}>
                 {/* Header */}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 18px', borderBottom: '1px solid var(--border-secondary)' }}>
@@ -161,7 +162,7 @@ export function InventoryPreviewModal({ inventoryId, onClose }: { inventoryId: s
                                 {/* #1 (2026-07-01): click-to-copy inventory code so it's easy to paste into the inventory search. */}
                                 {inv.display_id && <div style={{ marginTop: 4 }}><CopyChip text={inv.display_id} size="xs" /></div>}
                                 {society && <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>{society}</div>}
-                                <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>📍 {[inv.locality, inv.city, inv.state].filter(Boolean).join(', ')}</div>
+                                <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 4 }}><PresentationIcon value="map-pin" /> {[inv.locality, inv.city, inv.state].filter(Boolean).join(', ')}</div>
                             </div>
                             <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--accent-primary)', flexShrink: 0, marginLeft: 12 }}>{price}</div>
                         </div>
@@ -605,7 +606,7 @@ export function MatchShareTab({ deal, onShared }: Props) {
                 <button onClick={broaden} disabled={loading} style={{
                     padding: '6px 12px', borderRadius: 7, fontSize: 12, fontWeight: 700, cursor: 'pointer',
                     backgroundColor: 'var(--bg-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border-secondary)',
-                }}>➕ Broaden</button>
+                }}>Broaden</button>
                 {loading && <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Searching…</span>}
                 {broadenNote && <span style={{ fontSize: 11, color: 'var(--accent-primary)', fontWeight: 600 }}>↔ {broadenNote}</span>}
                 <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -632,21 +633,21 @@ export function MatchShareTab({ deal, onShared }: Props) {
                     {shareTel && (
                         <>
                             {shareToPartner && (
-                                <span style={{ fontSize: 11, color: '#7c3aed', fontWeight: 700, alignSelf: 'center' }}>
-                                    🤝 To partner {partnerName || 'agent'} (brochure)
+                                <span style={{ fontSize: 11, color: 'var(--blue-700)', fontWeight: 700, alignSelf: 'center' }}>
+                                    To partner {partnerName || 'agent'} (brochure)
                                 </span>
                             )}
                             <button onClick={sendViaCompanyWA} disabled={sending} style={{
                                 padding: '6px 14px', borderRadius: 7, fontSize: 12, fontWeight: 700, cursor: 'pointer',
-                                backgroundColor: 'rgba(37,211,102,0.12)', border: '1.5px solid rgba(37,211,102,0.5)', color: '#16a34a',
+                                backgroundColor: 'var(--rp-success-wash)', border: '1.5px solid var(--rp-success-line)', color: 'var(--rp-success-text)',
                             }}>
-                                {sending ? '⏳ Sending…' : (shareToPartner ? '📤 Send brochure to partner' : '📤 Company WhatsApp')}
+                                {sending ? 'Sending…' : (shareToPartner ? 'Send brochure to partner' : 'Company WhatsApp')}
                             </button>
                             <button onClick={sendViaPersonalWA} style={{
                                 padding: '6px 14px', borderRadius: 7, fontSize: 12, fontWeight: 700, cursor: 'pointer',
-                                backgroundColor: 'rgba(59,130,246,0.1)', border: '1.5px solid rgba(59,130,246,0.4)', color: 'var(--btn-blue-text)',
+                                backgroundColor: 'var(--rp-info-wash)', border: '1.5px solid var(--rp-info-line)', color: 'var(--btn-blue-text)',
                             }}>
-                                💬 Personal WhatsApp
+                                Personal WhatsApp
                             </button>
                         </>
                     )}
@@ -657,7 +658,7 @@ export function MatchShareTab({ deal, onShared }: Props) {
             {loading ? (
                 <div style={{ padding: 24, textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>Loading matches…</div>
             ) : sortedResults.length === 0 ? (
-                <div style={{ padding: 24, textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>No matching inventory found. Try ➕ Broaden or adjust filters.</div>
+                <div style={{ padding: 24, textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>No matching inventory found. Try Broaden or adjust filters.</div>
             ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                     {sortedResults.map(prop => {
@@ -675,14 +676,14 @@ export function MatchShareTab({ deal, onShared }: Props) {
                                 display: 'flex', alignItems: 'center', gap: 10,
                                 padding: '10px 12px', borderRadius: 8,
                                 border: `1.5px solid ${isSelected ? 'var(--accent-primary)' : 'var(--border-secondary)'}`,
-                                backgroundColor: isSelected ? 'rgba(37,99,235,0.06)' : 'var(--bg-primary)',
+                                backgroundColor: isSelected ? 'var(--rp-info-wash)' : 'var(--bg-primary)',
                                 opacity: prop.already_shared ? 0.65 : 1,
                             }}>
                                 <div onClick={() => setPreviewId(prop.id)} style={{ cursor: 'pointer', flexShrink: 0 }}>
                                     {prop.media_urls?.[0] ? (
                                         <img src={prop.media_urls[0]} alt="" style={{ width: 52, height: 40, borderRadius: 6, objectFit: 'cover' }} />
                                     ) : (
-                                        <div style={{ width: 52, height: 40, borderRadius: 6, backgroundColor: 'var(--bg-secondary)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>🏡</div>
+                                        <div style={{ width: 52, height: 40, borderRadius: 'var(--radius-control)', backgroundColor: 'var(--bg-secondary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><PresentationIcon value="house" size={18} /></div>
                                     )}
                                 </div>
 
@@ -691,38 +692,38 @@ export function MatchShareTab({ deal, onShared }: Props) {
                                     {/* #1: click-to-copy inventory code on the tile so it's easy to paste into search. */}
                                     {prop.display_id && <div style={{ marginTop: 2 }}><CopyChip text={prop.display_id} size="xs" /></div>}
                                     {/* Strict-BHK flag (2026-07-08): this listing has no recorded BHK; kept but ranked last. */}
-                                    {bhkUnknown && <div style={{ marginTop: 3, fontSize: 10, fontWeight: 700, color: '#b45309', display: 'inline-flex', alignItems: 'center', gap: 3 }}>⚠ BHK not specified</div>}
-                                    <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 2 }}>📍 {prop.city} · {formatPrice(prop.price, prop.price_unit)}</div>
+                                    {bhkUnknown && <div style={{ marginTop: 3, fontSize: 10, fontWeight: 700, color: 'var(--rp-warn-text)', display: 'inline-flex', alignItems: 'center', gap: 3 }}>⚠ BHK not specified</div>}
+                                    <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 4 }}><PresentationIcon value="map-pin" /> {prop.city} · {formatPrice(prop.price, prop.price_unit)}</div>
                                     {prop.match_reason && (
                                         <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 1 }}>{prop.match_reason}</div>
                                     )}
                                     <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 1 }}>
                                         Match: {Math.round((prop.match_score || 0))}%
                                         {prop.distance_km != null && <span> · {prop.distance_km.toFixed(1)} km</span>}
-                                        {prop.already_shared && <span style={{ marginLeft: 6, color: '#f59e0b', fontWeight: 600 }}>✓ Already shared{prop.shared_by_name ? ` by ${prop.shared_by_name}` : ''}</span>}
+                                        {prop.already_shared && <span style={{ marginLeft: 6, color: 'var(--rp-warn-text)', fontWeight: 600 }}>✓ Already shared{prop.shared_by_name ? ` by ${prop.shared_by_name}` : ''}</span>}
                                         <button onClick={() => setPreviewId(prop.id)} style={{
                                             marginLeft: 8, background: 'none', border: 'none', color: 'var(--accent-primary)',
                                             fontSize: 10, cursor: 'pointer', padding: 0, fontWeight: 600,
-                                        }}>👁 View</button>
+                                        }}>View</button>
                                     </div>
                                 </div>
 
-                                {status === 'pending' && <span style={{ fontSize: 14 }}>⏳</span>}
-                                {status === 'sent'    && <span style={{ fontSize: 14 }}>✅</span>}
-                                {status === 'failed'  && <span style={{ fontSize: 14 }}>❌</span>}
+                                {status === 'pending' && <span title="Sending"><PresentationIcon value="clock" /></span>}
+                                {status === 'sent'    && <span title="Sent"><PresentationIcon value="check-circle" /></span>}
+                                {status === 'failed'  && <span title="Failed"><PresentationIcon value="circle-alert" /></span>}
 
                                 {prop.already_shared ? (
                                     <div title={`Already shared${prop.shared_by_name ? ` by ${prop.shared_by_name}` : ''} — pick another property`} style={{
                                         width: 18, height: 18, flexShrink: 0, display: 'flex', alignItems: 'center',
                                         justifyContent: 'center', fontSize: 12, opacity: 0.7, cursor: 'not-allowed',
-                                    }}>🔒</div>
+                                    }}><PresentationIcon value="lock-keyhole" /></div>
                                 ) : (
                                 <div onClick={e => toggleSelect(prop.id, e)} style={{
                                     width: 18, height: 18, borderRadius: 4, flexShrink: 0, cursor: 'pointer',
                                     border: `2px solid ${isSelected ? 'var(--accent-primary)' : 'var(--border-secondary)'}`,
                                     backgroundColor: isSelected ? 'var(--accent-primary)' : 'transparent',
                                     display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                    color: '#fff', fontSize: 11,
+                                    color: 'var(--surface-white)', fontSize: 11,
                                 }}>
                                     {isSelected ? '✓' : ''}
                                 </div>

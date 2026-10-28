@@ -1,13 +1,14 @@
 import { useToast } from '../../contexts/ToastContext';
 import type { ToastItem } from '../../contexts/ToastContext';
+import { CheckCircle2, CircleAlert, Info, X } from 'lucide-react';
 
 function ToastCard({ toast, onDismiss }: { toast: ToastItem; onDismiss: () => void }) {
     return (
         <div className={`toast-card toast-card--${toast.type}`}>
-            <span className="toast-icon">
-                {toast.type === 'success' && '✅'}
-                {toast.type === 'error' && '❌'}
-                {toast.type === 'info' && 'ℹ️'}
+            <span className="toast-icon" aria-hidden="true">
+                {toast.type === 'success' && <CheckCircle2 size={18} strokeWidth={1.7} />}
+                {toast.type === 'error' && <CircleAlert size={18} strokeWidth={1.7} />}
+                {toast.type === 'info' && <Info size={18} strokeWidth={1.7} />}
             </span>
             <span className="toast-message">{toast.message}</span>
             {toast.undoFn && (
@@ -22,9 +23,10 @@ function ToastCard({ toast, onDismiss }: { toast: ToastItem; onDismiss: () => vo
             <button
                 type="button"
                 className="toast-dismiss-btn"
+                aria-label="Dismiss notification"
                 onClick={onDismiss}
             >
-                ×
+                <X size={16} strokeWidth={1.7} aria-hidden="true" />
             </button>
         </div>
     );

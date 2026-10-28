@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { PresentationIcon } from './ui/PresentationIcon';
 import { searchContactByPhone, ensureContact, createAppointment, getTeamMembersList } from '../api/client';
 
 interface BookVisitModalProps {
@@ -114,14 +115,14 @@ export default function BookVisitModal({ item, onClose, onBooked }: BookVisitMod
 
     const s = {
         overlay: {
-            position: 'fixed' as const, inset: 0, backgroundColor: 'rgba(0,0,0,0.7)',
+            position: 'fixed' as const, inset: 0, backgroundColor: 'var(--sheet-backdrop)',
             display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000
         },
         modal: {
             backgroundColor: 'var(--bg-secondary)', borderRadius: isMobile ? '12px 12px 0 0' : '12px',
             padding: isMobile ? '20px 16px' : '28px',
             width: isMobile ? '100%' : '480px', maxWidth: '90vw',
-            boxShadow: '0 8px 40px rgba(0,0,0,0.5)',
+            boxShadow: 'var(--rp-shadow-far)',
             maxHeight: isMobile ? '90vh' : undefined, overflowY: 'auto' as const,
         },
         title: { color: 'var(--text-primary)', fontSize: '18px', fontWeight: 700, margin: '0 0 16px' },
@@ -139,7 +140,7 @@ export default function BookVisitModal({ item, onClose, onBooked }: BookVisitMod
             boxSizing: 'border-box' as const,
         },
         btnPrimary: {
-            backgroundColor: '#8b5cf6', color: '#fff', border: 'none',
+            backgroundColor: 'var(--blue-600)', color: 'var(--surface-white)', border: 'none',
             padding: '10px 20px', borderRadius: '8px', cursor: 'pointer',
             fontSize: '14px', fontWeight: 600,
         },
@@ -154,11 +155,11 @@ export default function BookVisitModal({ item, onClose, onBooked }: BookVisitMod
         },
         contactCard: {
             backgroundColor: 'var(--bg-primary)', borderRadius: '8px', padding: '12px',
-            marginBottom: '12px', border: '1px solid #22c55e40',
+            marginBottom: '12px', border: '1px solid var(--rp-success-line)',
         },
         newContact: {
             backgroundColor: 'var(--bg-primary)', borderRadius: '8px', padding: '12px',
-            marginBottom: '12px', border: '1px solid #f59e0b40',
+            marginBottom: '12px', border: '1px solid var(--rp-warn-line)',
         },
         searchRow: {
             display: 'flex', gap: '8px', marginBottom: '12px',
@@ -190,7 +191,7 @@ export default function BookVisitModal({ item, onClose, onBooked }: BookVisitMod
                 {booked ? (
                     <div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
-                            <span style={{ fontSize: '24px' }}>✅</span>
+                            <PresentationIcon value="check-circle" size={24} />
                             <div>
                                 <div style={{ color: 'var(--text-primary)', fontWeight: 600 }}>Visit scheduled successfully!</div>
                                 <div style={{ color: 'var(--text-secondary)', fontSize: '13px' }}>
@@ -217,7 +218,7 @@ export default function BookVisitModal({ item, onClose, onBooked }: BookVisitMod
                                 onKeyDown={e => e.key === 'Enter' && handleSearch()}
                             />
                             <button
-                                style={{ ...s.btnPrimary, backgroundColor: '#3b82f6', padding: '8px 16px', opacity: searching ? 0.6 : 1 }}
+                                style={{ ...s.btnPrimary, padding: '8px 16px', opacity: searching ? 0.6 : 1 }}
                                 disabled={searching}
                                 onClick={handleSearch}
                             >
@@ -228,7 +229,7 @@ export default function BookVisitModal({ item, onClose, onBooked }: BookVisitMod
                         {/* Found contact */}
                         {searched && foundContact && (
                             <div style={s.contactCard}>
-                                <div style={{ fontWeight: 600, color: '#22c55e', fontSize: '13px', marginBottom: '4px' }}>
+                                <div style={{ fontWeight: 600, color: 'var(--rp-success-text)', fontSize: '13px', marginBottom: '4px' }}>
                                     Existing Contact Found
                                 </div>
                                 <div style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{foundContact.name || 'Unnamed'}</div>
@@ -242,7 +243,7 @@ export default function BookVisitModal({ item, onClose, onBooked }: BookVisitMod
                         {/* New contact */}
                         {searched && !foundContact && (
                             <div style={s.newContact}>
-                                <div style={{ fontWeight: 600, color: '#f59e0b', fontSize: '13px', marginBottom: '8px' }}>
+                                <div style={{ fontWeight: 600, color: 'var(--rp-warn-text)', fontSize: '13px', marginBottom: '8px' }}>
                                     New contact — will be created automatically
                                 </div>
                                 <label style={s.label}>Client Name</label>
@@ -257,7 +258,7 @@ export default function BookVisitModal({ item, onClose, onBooked }: BookVisitMod
                         )}
 
                         {error && (
-                            <div style={{ color: '#ef4444', fontSize: '13px', marginBottom: '12px' }}>{error}</div>
+                            <div style={{ color: 'var(--rp-danger-text)', fontSize: '13px', marginBottom: '12px' }}>{error}</div>
                         )}
 
                         <div style={s.btnRow}>
@@ -333,7 +334,7 @@ export default function BookVisitModal({ item, onClose, onBooked }: BookVisitMod
                         </div>
 
                         {error && (
-                            <div style={{ color: '#ef4444', fontSize: '13px', marginBottom: '12px' }}>{error}</div>
+                            <div style={{ color: 'var(--rp-danger-text)', fontSize: '13px', marginBottom: '12px' }}>{error}</div>
                         )}
 
                         <div style={s.btnRow}>

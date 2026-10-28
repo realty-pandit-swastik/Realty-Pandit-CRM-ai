@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import PhoneInput from './PhoneInput';
+import { PresentationIcon } from './ui/PresentationIcon';
 import { getContactsDirectory, getInventory, updateContactProfile, type DirectoryContact } from '../api/client';
 import { WhatsAppChatTab } from './WhatsAppChatTab';
 import { toDialablePhone } from '../lib/phone';
@@ -13,13 +14,13 @@ import { toDialablePhone } from '../lib/phone';
  */
 
 const TYPE_META: Record<string, { label: string; icon: string; color: string }> = {
-    BUYER: { label: 'Buyer', icon: '🏠', color: '#3b82f6' },
-    TENANT: { label: 'Tenant', icon: '🛋️', color: '#8b5cf6' },
-    LANDLORD: { label: 'Owner / Landlord', icon: '🔑', color: '#f59e0b' },
-    PARTNER_AGENT: { label: 'Partner Agent', icon: '🤝', color: '#22c55e' },
-    REAL_ESTATE_BUILDER: { label: 'Builder', icon: '🏗️', color: '#ef4444' },
-    MANAGEMENT: { label: 'Team', icon: '👔', color: '#64748b' },
-    UNKNOWN: { label: 'Unknown', icon: '👤', color: '#94a3b8' },
+    BUYER: { label: 'Buyer', icon: 'house', color: 'var(--rp-info-text)' },
+    TENANT: { label: 'Tenant', icon: 'sofa', color: 'var(--rp-info-text)' },
+    LANDLORD: { label: 'Owner / Landlord', icon: 'key-round', color: 'var(--rp-info-text)' },
+    PARTNER_AGENT: { label: 'Partner Agent', icon: 'handshake', color: 'var(--rp-info-text)' },
+    REAL_ESTATE_BUILDER: { label: 'Builder', icon: 'construction', color: 'var(--rp-info-text)' },
+    MANAGEMENT: { label: 'Team', icon: 'briefcase-business', color: 'var(--text-secondary)' },
+    UNKNOWN: { label: 'Unknown', icon: 'user-round', color: 'var(--text-secondary)' },
 };
 const TYPE_ORDER = ['BUYER', 'TENANT', 'LANDLORD', 'PARTNER_AGENT', 'REAL_ESTATE_BUILDER', 'MANAGEMENT', 'UNKNOWN'];
 
@@ -35,7 +36,7 @@ function demandLine(d: DirectoryContact['demand']): string {
     if (d.intent) parts.push(d.intent);
     const lo = fmtMoney(d.budget_min), hi = fmtMoney(d.budget_max);
     if (lo && hi) parts.push(`${lo}–${hi}`); else if (hi) parts.push(`up to ${hi}`); else if (lo) parts.push(`${lo}+`);
-    if (d.location) parts.push(`📍 ${d.location}`);
+    if (d.location) parts.push(`Location: ${d.location}`);
     return parts.join(' · ');
 }
 function meta(t: string) { return TYPE_META[t] || TYPE_META.UNKNOWN; }
@@ -74,7 +75,7 @@ export function ContactsPage() {
     return (
         <div style={{ display: 'flex', flexDirection: 'column', height: '100%', padding: isMobile ? '12px' : '20px', boxSizing: 'border-box', overflow: 'hidden' }}>
             <div style={{ flexShrink: 0 }}>
-                <h2 style={{ fontSize: isMobile ? 18 : 22, fontWeight: 800, color: 'var(--text-primary)', margin: '0 0 12px' }}>📇 Contacts {total > 0 && <span style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-muted)' }}>({total})</span>}</h2>
+                <h2 style={{ fontSize: isMobile ? 20 : 24, fontWeight: 600, color: 'var(--text-primary)', margin: '0 0 12px' }}>Contacts {total > 0 && <span style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-muted)' }}>({total})</span>}</h2>
                 <input
                     value={search}
                     onChange={e => { setSearch(e.target.value); setPage(1); }}
@@ -84,8 +85,8 @@ export function ContactsPage() {
                 <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 8 }}>
                     {tabs.map(tab => (
                         <button key={tab.key} onClick={() => { setType(tab.key); setPage(1); }}
-                            style={{ flexShrink: 0, padding: '6px 12px', borderRadius: 20, border: type === tab.key ? '1px solid #4F46E5' : '1px solid var(--border-secondary)', backgroundColor: type === tab.key ? '#4F46E5' : 'var(--bg-secondary)', color: type === tab.key ? '#fff' : 'var(--text-secondary)', fontSize: 12.5, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>
-                            {tab.key ? `${meta(tab.key).icon} ` : ''}{tab.label} ({tab.count})
+                            style={{ flexShrink: 0, padding: '8px 12px', borderRadius: 'var(--radius-control)', border: type === tab.key ? '1px solid var(--blue-600)' : '1px solid var(--border-secondary)', backgroundColor: type === tab.key ? 'var(--blue-600)' : 'var(--bg-primary)', color: type === tab.key ? 'var(--surface-white)' : 'var(--text-secondary)', fontSize: 13, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                            {tab.key ? <PresentationIcon value={meta(tab.key).icon} /> : ''}{tab.label} ({tab.count})
                         </button>
                     ))}
                 </div>
@@ -104,23 +105,23 @@ export function ContactsPage() {
                             return (
                                 <div key={c.phone_number} onClick={() => setSelected(c)}
                                     style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', borderRadius: 12, backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-primary)', cursor: 'pointer' }}>
-                                    <div style={{ width: 40, height: 40, borderRadius: 10, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, backgroundColor: `${m.color}22` }}>{m.icon}</div>
+                                    <div style={{ width: 40, height: 40, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)' }}><PresentationIcon value={m.icon} size={20} /></div>
                                     <div style={{ flex: 1, minWidth: 0 }}>
                                         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                                             <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>{c.name || tel || c.phone_number}</span>
-                                            <span style={{ fontSize: 10.5, fontWeight: 700, color: m.color, backgroundColor: `${m.color}1e`, borderRadius: 6, padding: '1px 7px' }}>{m.label}</span>
+                                            <span style={{ fontSize: 12, fontWeight: 500, color: m.color, backgroundColor: 'var(--rp-info-bg)', borderRadius: 'var(--radius-control)', padding: '4px 8px' }}>{m.label}</span>
                                         </div>
                                         <div style={{ fontSize: 11.5, color: 'var(--text-muted)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                            {c.inventory_count > 0 && <span>🏠 {c.inventory_count} listing{c.inventory_count !== 1 ? 's' : ''}</span>}
+                                            {c.inventory_count > 0 && <span><PresentationIcon value="house" /> {c.inventory_count} listing{c.inventory_count !== 1 ? 's' : ''}</span>}
                                             {c.demand && demandLine(c.demand) && <span>{c.inventory_count > 0 ? ' · ' : ''}{demandLine(c.demand)}</span>}
-                                            {c.manager && <span> · 🧑‍💼 {c.manager}</span>}
+                                            {c.manager && <span> · <PresentationIcon value="user-round" /> {c.manager}</span>}
                                         </div>
                                     </div>
                                     {tel && (
-                                        <a href={`tel:${tel}`} onClick={e => e.stopPropagation()} title="Call" style={{ color: '#22c55e', textDecoration: 'none', fontSize: 18, flexShrink: 0 }}>📞</a>
+                                        <a href={`tel:${tel}`} onClick={e => e.stopPropagation()} title="Call" style={{ color: 'var(--text-link)', textDecoration: 'none', minWidth: 44, minHeight: 44, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><PresentationIcon value="phone" /></a>
                                     )}
                                     {tel && (
-                                        <a href={`https://wa.me/${tel.replace('+', '')}`} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} title="WhatsApp" style={{ color: '#25d366', textDecoration: 'none', fontSize: 18, flexShrink: 0 }}>💬</a>
+                                        <a href={`https://wa.me/${tel.replace('+', '')}`} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} title="WhatsApp" style={{ color: 'var(--text-link)', textDecoration: 'none', minWidth: 44, minHeight: 44, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><PresentationIcon value="message-circle" /></a>
                                     )}
                                 </div>
                             );
@@ -173,13 +174,13 @@ function ContactDetailDrawer({ contact, isMobile, onClose, onSaved }: { contact:
     }, [contact.phone_number, contact.inventory_count]);
 
     return (
-        <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 1000, backgroundColor: 'var(--sheet-backdrop, rgba(0,0,0,0.45))', display: 'flex', justifyContent: isMobile ? 'center' : 'flex-end', alignItems: isMobile ? 'flex-end' : 'stretch' }}>
-            <div onClick={e => e.stopPropagation()} style={{ backgroundColor: 'var(--bg-secondary)', width: isMobile ? '100%' : 460, maxWidth: '100%', height: isMobile ? '88vh' : '100%', borderRadius: isMobile ? '18px 18px 0 0' : 0, display: 'flex', flexDirection: 'column', boxShadow: '-8px 0 40px rgba(0,0,0,0.3)' }}>
+        <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 1000, backgroundColor: 'var(--sheet-backdrop)', display: 'flex', justifyContent: isMobile ? 'center' : 'flex-end', alignItems: isMobile ? 'flex-end' : 'stretch' }}>
+            <div onClick={e => e.stopPropagation()} style={{ backgroundColor: 'var(--bg-primary)', width: isMobile ? '100%' : 460, maxWidth: '100%', height: isMobile ? '88dvh' : '100%', borderRadius: isMobile ? 'var(--radius-card) var(--radius-card) 0 0' : 0, display: 'flex', flexDirection: 'column', boxShadow: 'var(--rp-shadow-far)' }}>
                 {/* Header */}
                 <div style={{ padding: '16px 18px', borderBottom: '1px solid var(--border-primary)' }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
-                            <div style={{ width: 40, height: 40, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, backgroundColor: `${m.color}22` }}>{m.icon}</div>
+                            <div style={{ width: 40, height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)' }}><PresentationIcon value={m.icon} size={20} /></div>
                             <div style={{ minWidth: 0 }}>
                                 <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{contact.name || tel || contact.phone_number}</div>
                                 <div style={{ fontSize: 11.5, color: m.color, fontWeight: 700 }}>{m.label}</div>
@@ -197,20 +198,20 @@ function ContactDetailDrawer({ contact, isMobile, onClose, onSaved }: { contact:
                             <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="Name" style={{ width: '100%', padding: '9px 11px', borderRadius: 8, border: '1px solid var(--border-secondary)', backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)', fontSize: 13, boxSizing: 'border-box' }} />
                             <PhoneInput value={form.phone} onChange={v => setForm(f => ({ ...f, phone: v }))} placeholder="Phone number" style={{ width: '100%', padding: '9px 11px', borderRadius: 8, border: '1px solid var(--border-secondary)', backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)', fontSize: 13, boxSizing: 'border-box' }} />
                             <input value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} placeholder="Email (optional)" style={{ width: '100%', padding: '9px 11px', borderRadius: 8, border: '1px solid var(--border-secondary)', backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)', fontSize: 13, boxSizing: 'border-box' }} />
-                            {saveErr && <div style={{ color: '#ef4444', fontSize: 12 }}>{saveErr}</div>}
+                            {saveErr && <div style={{ color: 'var(--rp-danger-text)', fontSize: 12 }}>{saveErr}</div>}
                             <div style={{ display: 'flex', gap: 8 }}>
                                 <button onClick={() => { setEditing(false); setSaveErr(null); setForm({ name: contact.name || '', phone: contact.phone_number || '', email: contact.email || '' }); }} style={{ flex: 1, padding: '9px 0', borderRadius: 9, border: '1px solid var(--border-secondary)', background: 'transparent', color: 'var(--text-secondary)', fontWeight: 600, cursor: 'pointer' }}>Cancel</button>
-                                <button onClick={save} disabled={saving} style={{ flex: 1, padding: '9px 0', borderRadius: 9, border: 'none', background: '#4F46E5', color: '#fff', fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.7 : 1 }}>{saving ? 'Saving…' : 'Save'}</button>
+                                <button onClick={save} disabled={saving} style={{ flex: 1, padding: '12px 0', borderRadius: 'var(--radius-control)', border: 'none', background: 'var(--blue-600)', color: 'var(--surface-white)', fontWeight: 600, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.7 : 1 }}>{saving ? 'Saving…' : 'Save'}</button>
                             </div>
                             <div style={{ fontSize: 10.5, color: 'var(--text-muted)' }}>Changes cascade to the deal pipeline + connected inventory.</div>
                         </div>
                     ) : (
                         <>
                             <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-                                {tel && <a href={`tel:${tel}`} style={{ flex: 1, textAlign: 'center', padding: '9px 0', borderRadius: 9, backgroundColor: 'rgba(34,197,94,0.15)', color: '#22c55e', fontWeight: 700, textDecoration: 'none', fontSize: 13 }}>📞 Call</a>}
-                                {tel && <a href={`https://wa.me/${tel.replace('+', '')}`} target="_blank" rel="noreferrer" style={{ flex: 1, textAlign: 'center', padding: '9px 0', borderRadius: 9, backgroundColor: 'rgba(37,211,102,0.15)', color: '#25d366', fontWeight: 700, textDecoration: 'none', fontSize: 13 }}>💬 WhatsApp</a>}
+                                {tel && <a href={`tel:${tel}`} style={{ flex: 1, textAlign: 'center', padding: '12px 0', borderRadius: 'var(--radius-control)', backgroundColor: 'var(--rp-info-bg)', color: 'var(--rp-info-text)', fontWeight: 600, textDecoration: 'none', fontSize: 13 }}>Call</a>}
+                                {tel && <a href={`https://wa.me/${tel.replace('+', '')}`} target="_blank" rel="noreferrer" style={{ flex: 1, textAlign: 'center', padding: '12px 0', borderRadius: 'var(--radius-control)', backgroundColor: 'var(--rp-info-bg)', color: 'var(--rp-info-text)', fontWeight: 600, textDecoration: 'none', fontSize: 13 }}>WhatsApp</a>}
                             </div>
-                            {contact.manager && <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 10 }}>🧑‍💼 Manager: <span style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>{contact.manager}</span></div>}
+                            {contact.manager && <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 12 }}>Manager: <span style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>{contact.manager}</span></div>}
                         </>
                     )}
                 </div>
@@ -218,8 +219,8 @@ function ContactDetailDrawer({ contact, isMobile, onClose, onSaved }: { contact:
                 {/* Tabs */}
                 <div style={{ display: 'flex', borderBottom: '1px solid var(--border-primary)' }}>
                     {(['overview', 'chat'] as const).map(t => (
-                        <button key={t} onClick={() => setTab(t)} style={{ flex: 1, padding: '11px 0', background: 'none', border: 'none', borderBottom: tab === t ? '2px solid #4F46E5' : '2px solid transparent', color: tab === t ? 'var(--text-primary)' : 'var(--text-muted)', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
-                            {t === 'overview' ? 'Overview' : '💬 WhatsApp'}
+                        <button key={t} onClick={() => setTab(t)} style={{ flex: 1, padding: '12px 0', background: 'none', border: 'none', borderBottom: tab === t ? '2px solid var(--blue-600)' : '2px solid transparent', color: tab === t ? 'var(--text-primary)' : 'var(--text-muted)', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>
+                            {t === 'overview' ? 'Overview' : 'WhatsApp'}
                         </button>
                     ))}
                 </div>
@@ -232,13 +233,13 @@ function ContactDetailDrawer({ contact, isMobile, onClose, onSaved }: { contact:
                         <div style={{ padding: '14px 18px' }}>
                             {contact.demand && demandLine(contact.demand) && (
                                 <div style={{ marginBottom: 16 }}>
-                                    <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-muted)', marginBottom: 6 }}>🔎 Requirement (looking for)</div>
+                                    <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 8 }}>Requirement (looking for)</div>
                                     <div style={{ fontSize: 13.5, color: 'var(--text-secondary)' }}>{demandLine(contact.demand)}</div>
                                 </div>
                             )}
                             <div>
                                 <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-muted)', marginBottom: 6 }}>
-                                    🏠 Inventory provided ({contact.inventory_count})
+                                    Inventory provided ({contact.inventory_count})
                                 </div>
                                 {contact.inventory_count === 0 ? (
                                     <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>No inventory from this contact.</div>

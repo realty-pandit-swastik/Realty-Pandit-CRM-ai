@@ -8,6 +8,7 @@
  */
 
 import { useEffect, useState, useCallback } from 'react';
+import { IconText, PresentationIcon } from './ui/PresentationIcon';
 import { useAuth } from '../contexts/AuthContext';
 import {
     getWorkflowTaskQueue,
@@ -65,20 +66,12 @@ const STAGE_LABELS: Record<string, string> = {
     NEGOTIATE_DEAL: 'Negotiate Deal',
 };
 
-const STAGE_COLORS: Record<string, string> = {
-    QUALIFY_LEAD: '#3b82f6',
-    SHARE_PROPERTIES: '#8b5cf6',
-    SCHEDULE_VISIT: '#f59e0b',
-    VISIT_FEEDBACK: '#06b6d4',
-    NEGOTIATE_DEAL: '#f97316',
-};
-
 const STAGE_ICONS: Record<string, string> = {
-    QUALIFY_LEAD: '📞',
-    SHARE_PROPERTIES: '📤',
-    SCHEDULE_VISIT: '📅',
-    VISIT_FEEDBACK: '✅',
-    NEGOTIATE_DEAL: '🤝',
+    QUALIFY_LEAD: 'phone',
+    SHARE_PROPERTIES: 'send',
+    SCHEDULE_VISIT: 'calendar-days',
+    VISIT_FEEDBACK: 'check-circle',
+    NEGOTIATE_DEAL: 'handshake',
 };
 
 const REJECTION_REASONS = [
@@ -244,9 +237,9 @@ export default function LeadWorkflowPage() {
         borderRadius: 'var(--radius-clay)',
         padding: '14px 16px',
         marginBottom: '10px',
-        borderLeft: `4px solid ${STAGE_COLORS[task.task_type] || '#6b7280'}`,
+        border: task.task_type ? '1px solid var(--border-primary)' : '1px solid var(--border-secondary)',
         cursor: 'pointer',
-        boxShadow: 'var(--shadow-clay)',
+        boxShadow: 'none',
         transition: 'box-shadow 150ms ease',
     });
 
@@ -256,16 +249,16 @@ export default function LeadWorkflowPage() {
         borderRadius: '12px',
         fontSize: '11px',
         fontWeight: 600,
-        backgroundColor: color + '22',
-        color,
+        backgroundColor: 'var(--rp-info-bg)',
+        color: color ? 'var(--rp-info-text)' : 'var(--text-secondary)',
     });
 
-    const btnStyle = (bg: string, color: string = '#fff'): React.CSSProperties => ({
+    const btnStyle = (bg: string, color: string = 'var(--surface-white)'): React.CSSProperties => ({
         padding: '8px 16px',
-        borderRadius: '8px',
+        borderRadius: 'var(--radius-control)',
         border: 'none',
-        backgroundColor: bg,
-        color,
+        backgroundColor: bg === 'var(--rp-danger-text)' ? 'var(--danger)' : bg === 'var(--text-muted)' || bg === 'var(--text-secondary)' ? 'var(--ink-secondary)' : 'var(--blue-600)',
+        color: color === 'var(--text-muted)' ? 'var(--surface-white)' : color === 'var(--surface-white)' ? 'var(--surface-white)' : color,
         fontSize: '13px',
         fontWeight: 600,
         cursor: 'pointer',
@@ -288,11 +281,11 @@ export default function LeadWorkflowPage() {
     const renderStatsBar = () => {
         if (!stats) return null;
         const stages = [
-            { key: 'QUALIFY_LEAD',     icon: '📞', color: '#3b82f6' },
-            { key: 'SHARE_PROPERTIES', icon: '📤', color: '#8b5cf6' },
-            { key: 'SCHEDULE_VISIT',   icon: '📅', color: '#f59e0b' },
-            { key: 'VISIT_FEEDBACK',   icon: '✅', color: '#06b6d4' },
-            { key: 'NEGOTIATE_DEAL',   icon: '🤝', color: '#f97316' },
+            { key: 'QUALIFY_LEAD',     icon: 'phone', color: 'var(--blue-500)' },
+            { key: 'SHARE_PROPERTIES', icon: 'send', color: 'var(--chart-5)' },
+            { key: 'SCHEDULE_VISIT',   icon: 'calendar-days', color: 'var(--rp-warn-text)' },
+            { key: 'VISIT_FEEDBACK',   icon: 'check-circle', color: 'var(--chart-3)' },
+            { key: 'NEGOTIATE_DEAL',   icon: 'handshake', color: 'var(--rp-warn-text)' },
         ];
         return (
             <div style={{
@@ -305,11 +298,11 @@ export default function LeadWorkflowPage() {
                         <div key={s.key} style={{
                             display: 'flex', alignItems: 'center', gap: '5px',
                             padding: '7px 14px', borderRadius: 'var(--radius-chip)', flexShrink: 0,
-                            backgroundColor: s.color + '18', border: `1.5px solid ${s.color}33`,
+                            backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-primary)',
                             fontSize: '13px',
                         }}>
-                            <span>{s.icon}</span>
-                            <span style={{ fontWeight: 700, color: s.color }}>{count}</span>
+                            <PresentationIcon value={s.icon} />
+                            <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{count}</span>
                             <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{STAGE_LABELS[s.key]}</span>
                         </div>
                     );
@@ -318,11 +311,11 @@ export default function LeadWorkflowPage() {
                     <div style={{
                         display: 'flex', alignItems: 'center', gap: '5px',
                         padding: '7px 14px', borderRadius: 'var(--radius-chip)', flexShrink: 0,
-                        backgroundColor: '#ef444418', border: '1.5px solid #ef444433',
+                        backgroundColor: 'var(--rp-danger-bg)', border: '1px solid var(--rp-danger-line)',
                         fontSize: '13px',
                     }}>
-                        <span>🔴</span>
-                        <span style={{ fontWeight: 700, color: '#ef4444' }}>{stats.overdue}</span>
+                        <PresentationIcon value="circle-alert" />
+                        <span style={{ fontWeight: 600, color: 'var(--rp-danger-text)' }}>{stats.overdue}</span>
                         <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Overdue</span>
                     </div>
                 )}
@@ -337,20 +330,20 @@ export default function LeadWorkflowPage() {
             <div>
                 <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '12px' }}>
                     {toDialablePhone(task.contact_phone) && (
-                        <a href={`tel:${toDialablePhone(task.contact_phone)}`} style={{ ...btnStyle('#22c55e'), textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                            📞 Call Now
+                        <a href={`tel:${toDialablePhone(task.contact_phone)}`} style={{ ...btnStyle('var(--rp-success-text)'), textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                            Call Now
                         </a>
                     )}
-                    <button onClick={() => handleSnooze(task.id)} style={btnStyle('#6b7280')} disabled={actionLoading === task.id}>
-                        ⏰ Snooze ({task.snooze_count}/3)
+                    <button onClick={() => handleSnooze(task.id)} style={btnStyle('var(--text-muted)')} disabled={actionLoading === task.id}>
+                        Snooze ({task.snooze_count}/3)
                     </button>
                 </div>
 
                 {!isExpanded && (
                     <div style={{ marginTop: '12px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                        <button onClick={() => { setExpandedTaskId(task.id); setQualifyOutcome('VERIFIED'); }} style={btnStyle('#3b82f6')}>✓ Verified</button>
-                        <button onClick={() => { setExpandedTaskId(task.id); setQualifyOutcome('REJECTED'); }} style={btnStyle('#ef4444')}>✗ Not Genuine</button>
-                        <button onClick={() => { setExpandedTaskId(task.id); setQualifyOutcome('PARTNER_AGENT'); }} style={btnStyle('#8b5cf6')}>🔄 Partner Agent</button>
+                        <button onClick={() => { setExpandedTaskId(task.id); setQualifyOutcome('VERIFIED'); }} style={btnStyle('var(--blue-500)')}>✓ Verified</button>
+                        <button onClick={() => { setExpandedTaskId(task.id); setQualifyOutcome('REJECTED'); }} style={btnStyle('var(--rp-danger-text)')}>✗ Not Genuine</button>
+                        <button onClick={() => { setExpandedTaskId(task.id); setQualifyOutcome('PARTNER_AGENT'); }} style={btnStyle('var(--chart-5)')}>Partner Agent</button>
                     </div>
                 )}
 
@@ -366,33 +359,33 @@ export default function LeadWorkflowPage() {
                             <div><label style={{ fontSize: '11px', color: 'var(--text-muted)' }}>BHK</label><select value={qualifyBhk} onChange={e => setQualifyBhk(e.target.value)} style={inputStyle}><option value="">Select</option>{['1','2','3','4','5'].map(b => <option key={b} value={b}>{b} BHK</option>)}</select></div>
                         </div>
                         <div style={{ marginTop: '12px', display: 'flex', gap: '8px' }}>
-                            <button onClick={() => handleComplete(task.id, task.task_type, { outcome: 'VERIFIED', contactData: { name: qualifyName || undefined, budget_min: qualifyBudgetMin ? Number(qualifyBudgetMin) : undefined, budget_max: qualifyBudgetMax ? Number(qualifyBudgetMax) : undefined, preferred_location: qualifyLocation || undefined, intent: qualifyIntent || undefined, demand_bhk: qualifyBhk || undefined } })} style={btnStyle('#22c55e')} disabled={actionLoading === task.id}>Submit Verification</button>
-                            <button onClick={() => { setExpandedTaskId(null); resetFormState(); }} style={btnStyle('#6b7280')}>Cancel</button>
+                            <button onClick={() => handleComplete(task.id, task.task_type, { outcome: 'VERIFIED', contactData: { name: qualifyName || undefined, budget_min: qualifyBudgetMin ? Number(qualifyBudgetMin) : undefined, budget_max: qualifyBudgetMax ? Number(qualifyBudgetMax) : undefined, preferred_location: qualifyLocation || undefined, intent: qualifyIntent || undefined, demand_bhk: qualifyBhk || undefined } })} style={btnStyle('var(--rp-success-text)')} disabled={actionLoading === task.id}>Submit Verification</button>
+                            <button onClick={() => { setExpandedTaskId(null); resetFormState(); }} style={btnStyle('var(--text-muted)')}>Cancel</button>
                         </div>
                     </div>
                 )}
 
                 {isExpanded && qualifyOutcome === 'REJECTED' && (
-                    <div style={{ marginTop: '12px', backgroundColor: '#ef444415', padding: '12px', borderRadius: '8px' }}>
-                        <div style={{ fontWeight: 600, marginBottom: '8px', color: '#ef4444' }}>Close Lead — Not Genuine</div>
+                    <div style={{ marginTop: '12px', backgroundColor: 'var(--rp-danger-bg)', padding: '12px', borderRadius: '8px' }}>
+                        <div style={{ fontWeight: 600, marginBottom: '8px', color: 'var(--rp-danger-text)' }}>Close Lead — Not Genuine</div>
                         <select value={rejectReason} onChange={e => setRejectReason(e.target.value)} style={inputStyle}>
                             <option value="">Select reason...</option>
                             {REJECTION_REASONS.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
                         </select>
                         <textarea value={rejectRemarks} onChange={e => setRejectRemarks(e.target.value)} placeholder="Remarks (required)" rows={2} style={{ ...inputStyle, marginTop: '8px' }} />
                         <div style={{ marginTop: '8px' }}>
-                            <button onClick={() => handleComplete(task.id, task.task_type, { outcome: 'REJECTED', rejectionReason: rejectReason, rejectionRemarks: rejectRemarks })} style={btnStyle('#ef4444')} disabled={!rejectReason || !rejectRemarks || actionLoading === task.id}>Close Lead</button>
-                            <button onClick={() => { setExpandedTaskId(null); resetFormState(); }} style={btnStyle('#6b7280')}>Cancel</button>
+                            <button onClick={() => handleComplete(task.id, task.task_type, { outcome: 'REJECTED', rejectionReason: rejectReason, rejectionRemarks: rejectRemarks })} style={btnStyle('var(--rp-danger-text)')} disabled={!rejectReason || !rejectRemarks || actionLoading === task.id}>Close Lead</button>
+                            <button onClick={() => { setExpandedTaskId(null); resetFormState(); }} style={btnStyle('var(--text-muted)')}>Cancel</button>
                         </div>
                     </div>
                 )}
 
                 {isExpanded && qualifyOutcome === 'PARTNER_AGENT' && (
-                    <div style={{ marginTop: '12px', backgroundColor: '#8b5cf615', padding: '12px', borderRadius: '8px' }}>
-                        <div style={{ fontWeight: 600, marginBottom: '8px', color: '#8b5cf6' }}>Convert to Partner Agent</div>
+                    <div style={{ marginTop: '12px', backgroundColor: 'var(--blue-50)', padding: '12px', borderRadius: '8px' }}>
+                        <div style={{ fontWeight: 600, marginBottom: '8px', color: 'var(--chart-5)' }}>Convert to Partner Agent</div>
                         <p style={{ fontSize: '12px', color: 'var(--text-muted)', margin: '0 0 8px' }}>This will register the contact as a Partner Agent on the platform.</p>
-                        <button onClick={() => handleComplete(task.id, task.task_type, { outcome: 'PARTNER_AGENT', partnerData: { name: task.contact?.name } })} style={btnStyle('#8b5cf6')} disabled={actionLoading === task.id}>Convert to Partner</button>
-                        <button onClick={() => { setExpandedTaskId(null); resetFormState(); }} style={btnStyle('#6b7280')}>Cancel</button>
+                        <button onClick={() => handleComplete(task.id, task.task_type, { outcome: 'PARTNER_AGENT', partnerData: { name: task.contact?.name } })} style={btnStyle('var(--chart-5)')} disabled={actionLoading === task.id}>Convert to Partner</button>
+                        <button onClick={() => { setExpandedTaskId(null); resetFormState(); }} style={btnStyle('var(--text-muted)')}>Cancel</button>
                     </div>
                 )}
             </div>
@@ -412,13 +405,13 @@ export default function LeadWorkflowPage() {
                         {matches.map((m: any) => (
                             <div key={m.id} style={{ padding: '8px', backgroundColor: 'var(--bg-tertiary)', borderRadius: '6px', fontSize: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                 <span>{m.type} — {m.location} — {m.price ? formatBudget(m.price) : 'N/A'}</span>
-                                <span style={badgeStyle(m.match_score >= 70 ? '#22c55e' : m.match_score >= 40 ? '#f59e0b' : '#6b7280')}>{m.match_score}%</span>
+                                <span style={badgeStyle(m.match_score >= 70 ? 'var(--rp-success-text)' : m.match_score >= 40 ? 'var(--rp-warn-text)' : 'var(--text-muted)')}>{m.match_score}%</span>
                             </div>
                         ))}
                     </div>
                 )}
                 <div style={{ marginTop: '12px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                    <button onClick={() => handleComplete(task.id, task.task_type, { shortlistedPropertyIds: matches.map((m: any) => m.id) })} style={btnStyle('#8b5cf6')} disabled={matches.length === 0 || actionLoading === task.id}>
+                    <button onClick={() => handleComplete(task.id, task.task_type, { shortlistedPropertyIds: matches.map((m: any) => m.id) })} style={btnStyle('var(--chart-5)')} disabled={matches.length === 0 || actionLoading === task.id}>
                         Mark Shared & Shortlisted ({matches.length})
                     </button>
                 </div>
@@ -444,8 +437,8 @@ export default function LeadWorkflowPage() {
                         const aptRes = await scheduleVisitFromTask(task.id, { scheduled_at: new Date(visitDate).toISOString(), property_ids: props });
                         await handleComplete(task.id, task.task_type, { appointmentIds: aptRes.appointment_ids, propertyIds: props });
                     } catch (err: any) { showMessage('error', err.response?.data?.error || 'Failed'); setActionLoading(null); }
-                }} style={{ ...btnStyle('#f59e0b', '#000'), marginTop: '12px' }} disabled={!visitDate || actionLoading === task.id}>
-                    📅 Book Visit
+                }} style={{ ...btnStyle('var(--rp-warn-text)', 'var(--text-primary)'), marginTop: '12px' }} disabled={!visitDate || actionLoading === task.id}>
+                    Book Visit
                 </button>
             </div>
         );
@@ -463,8 +456,8 @@ export default function LeadWorkflowPage() {
                         <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
                             {(['INTERESTED', 'NOT_INTERESTED', 'REVISIT'] as const).map(r => (
                                 <button key={r} onClick={() => setFeedbackEntries(prev => ({ ...prev, [pid]: { result: r, reason: prev[pid]?.reason || '' } }))}
-                                    style={{ ...btnStyle(feedbackEntries[pid]?.result === r ? (r === 'INTERESTED' ? '#22c55e' : r === 'NOT_INTERESTED' ? '#ef4444' : '#f59e0b') : '#374151', feedbackEntries[pid]?.result === r ? '#fff' : 'var(--text-muted)'), fontSize: '11px', padding: '4px 10px' }}>
-                                    {r === 'INTERESTED' ? '👍 Liked' : r === 'NOT_INTERESTED' ? '👎 Not Interested' : '🔄 Revisit'}
+                                    style={{ ...btnStyle(feedbackEntries[pid]?.result === r ? (r === 'INTERESTED' ? 'var(--rp-success-text)' : r === 'NOT_INTERESTED' ? 'var(--rp-danger-text)' : 'var(--rp-warn-text)') : 'var(--text-secondary)', feedbackEntries[pid]?.result === r ? 'var(--surface-white)' : 'var(--text-muted)'), fontSize: '11px', padding: '4px 10px' }}>
+                                    {r === 'INTERESTED' ? 'Liked' : r === 'NOT_INTERESTED' ? 'Not Interested' : 'Revisit'}
                                 </button>
                             ))}
                         </div>
@@ -477,13 +470,13 @@ export default function LeadWorkflowPage() {
                 <div style={{ fontWeight: 600, fontSize: '13px', marginTop: '12px', marginBottom: '8px' }}>What's Next?</div>
                 <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                     {[
-                        { val: 'MORE_OPTIONS', label: '🔍 Show More Properties', color: '#8b5cf6' },
-                        { val: 'ANOTHER_VISIT', label: '📅 Schedule Another Visit', color: '#f59e0b' },
-                        { val: 'SELECT_PROPERTY', label: '🏠 Client Picked One!', color: '#22c55e' },
-                        { val: 'LOST', label: '❌ Lost Interest', color: '#ef4444' },
+                        { val: 'MORE_OPTIONS', label: '🔍 Show More Properties', color: 'var(--chart-5)' },
+                        { val: 'ANOTHER_VISIT', label: '📅 Schedule Another Visit', color: 'var(--rp-warn-text)' },
+                        { val: 'SELECT_PROPERTY', label: '🏠 Client Picked One!', color: 'var(--rp-success-text)' },
+                        { val: 'LOST', label: '❌ Lost Interest', color: 'var(--rp-danger-text)' },
                     ].map(a => (
-                        <button key={a.val} onClick={() => setFeedbackNextAction(a.val)} style={btnStyle(feedbackNextAction === a.val ? a.color : '#374151', feedbackNextAction === a.val ? '#fff' : 'var(--text-muted)')}>
-                            {a.label}
+                        <button key={a.val} onClick={() => setFeedbackNextAction(a.val)} style={btnStyle(feedbackNextAction === a.val ? a.color : 'var(--text-secondary)', feedbackNextAction === a.val ? 'var(--surface-white)' : 'var(--text-muted)')}>
+                            <IconText>{a.label}</IconText>
                         </button>
                     ))}
                 </div>
@@ -497,7 +490,7 @@ export default function LeadWorkflowPage() {
                             nextAction: feedbackNextAction,
                             selectedPropertyId: feedbackNextAction === 'SELECT_PROPERTY' ? interestedIds[0] : undefined,
                         });
-                    }} style={{ ...btnStyle('#22c55e'), marginTop: '12px' }} disabled={actionLoading === task.id}>
+                    }} style={{ ...btnStyle('var(--rp-success-text)'), marginTop: '12px' }} disabled={actionLoading === task.id}>
                         Submit Feedback
                     </button>
                 )}
@@ -510,25 +503,25 @@ export default function LeadWorkflowPage() {
         <div style={{ marginTop: '12px' }}>
             {!negotiateOutcome && (
                 <div style={{ display: 'flex', gap: '8px' }}>
-                    <button onClick={() => setNegotiateOutcome('CLOSED_WON')} style={btnStyle('#22c55e')}>🎉 Deal Won</button>
-                    <button onClick={() => setNegotiateOutcome('CLOSED_LOST')} style={btnStyle('#ef4444')}>❌ Deal Lost</button>
+                    <button onClick={() => setNegotiateOutcome('CLOSED_WON')} style={btnStyle('var(--rp-success-text)')}>Deal Won</button>
+                    <button onClick={() => setNegotiateOutcome('CLOSED_LOST')} style={btnStyle('var(--rp-danger-text)')}>Deal Lost</button>
                 </div>
             )}
             {negotiateOutcome === 'CLOSED_WON' && (
-                <div style={{ backgroundColor: '#22c55e15', padding: '12px', borderRadius: '8px', marginTop: '8px' }}>
-                    <div style={{ fontWeight: 600, color: '#22c55e', marginBottom: '8px' }}>Close Deal — Won!</div>
+                <div style={{ backgroundColor: 'var(--rp-success-wash)', padding: '12px', borderRadius: '8px', marginTop: '8px' }}>
+                    <div style={{ fontWeight: 600, color: 'var(--rp-success-text)', marginBottom: '8px' }}>Close Deal — Won!</div>
                     <label style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Final Price (₹)</label>
                     <input type="number" value={finalPrice} onChange={e => setFinalPrice(e.target.value)} style={inputStyle} />
-                    <button onClick={() => handleComplete(task.id, task.task_type, { outcome: 'CLOSED_WON', finalPrice: finalPrice ? Number(finalPrice) : undefined })} style={{ ...btnStyle('#22c55e'), marginTop: '8px' }} disabled={actionLoading === task.id}>Close Won</button>
-                    <button onClick={() => setNegotiateOutcome(null)} style={btnStyle('#6b7280')}>Cancel</button>
+                    <button onClick={() => handleComplete(task.id, task.task_type, { outcome: 'CLOSED_WON', finalPrice: finalPrice ? Number(finalPrice) : undefined })} style={{ ...btnStyle('var(--rp-success-text)'), marginTop: '8px' }} disabled={actionLoading === task.id}>Close Won</button>
+                    <button onClick={() => setNegotiateOutcome(null)} style={btnStyle('var(--text-muted)')}>Cancel</button>
                 </div>
             )}
             {negotiateOutcome === 'CLOSED_LOST' && (
-                <div style={{ backgroundColor: '#ef444415', padding: '12px', borderRadius: '8px', marginTop: '8px' }}>
-                    <div style={{ fontWeight: 600, color: '#ef4444', marginBottom: '8px' }}>Close Deal — Lost</div>
+                <div style={{ backgroundColor: 'var(--rp-danger-bg)', padding: '12px', borderRadius: '8px', marginTop: '8px' }}>
+                    <div style={{ fontWeight: 600, color: 'var(--rp-danger-text)', marginBottom: '8px' }}>Close Deal — Lost</div>
                     <input value={closeReason} onChange={e => setCloseReason(e.target.value)} placeholder="Reason..." style={inputStyle} />
-                    <button onClick={() => handleComplete(task.id, task.task_type, { outcome: 'CLOSED_LOST', closeReason })} style={{ ...btnStyle('#ef4444'), marginTop: '8px' }} disabled={actionLoading === task.id}>Close Lost</button>
-                    <button onClick={() => setNegotiateOutcome(null)} style={btnStyle('#6b7280')}>Cancel</button>
+                    <button onClick={() => handleComplete(task.id, task.task_type, { outcome: 'CLOSED_LOST', closeReason })} style={{ ...btnStyle('var(--rp-danger-text)'), marginTop: '8px' }} disabled={actionLoading === task.id}>Close Lost</button>
+                    <button onClick={() => setNegotiateOutcome(null)} style={btnStyle('var(--text-muted)')}>Cancel</button>
                 </div>
             )}
         </div>
@@ -540,20 +533,20 @@ export default function LeadWorkflowPage() {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                 <div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                        <span style={{ fontSize: '16px' }}>{STAGE_ICONS[task.task_type] || '📋'}</span>
+                        <PresentationIcon value={STAGE_ICONS[task.task_type] || 'clipboard-list'} />
                         <span style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '14px' }}>{task.title}</span>
                     </div>
                     <div style={{ fontSize: '12px', color: 'var(--text-muted)', display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
                         {task.contact?.name && <span>{task.contact.name}</span>}
                         <span>{task.contact_phone}</span>
-                        {task.contact?.source && <span style={badgeStyle('#6b7280')}>{task.contact.source}</span>}
+                        {task.contact?.source && <span style={badgeStyle('var(--text-muted)')}>{task.contact.source}</span>}
                         {task.contact?.intent && <span>{task.contact.intent}</span>}
                         {(task.contact?.budget_min || task.contact?.budget_max) && <span>{formatBudget(task.contact.budget_min, task.contact.budget_max)}</span>}
-                        {task.contact?.preferred_location && <span>📍 {task.contact.preferred_location}</span>}
+                        {task.contact?.preferred_location && <span><PresentationIcon value="map-pin" /> {task.contact.preferred_location}</span>}
                     </div>
                 </div>
                 <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                    <span style={badgeStyle(isOverdue(task) ? '#ef4444' : isDueToday(task) ? '#f59e0b' : '#6b7280')}>
+                    <span style={badgeStyle(isOverdue(task) ? 'var(--rp-danger-text)' : isDueToday(task) ? 'var(--rp-warn-text)' : 'var(--text-muted)')}>
                         {isOverdue(task) ? `Overdue ${timeAgo(task.due_date)}` : isDueToday(task) ? 'Due Today' : timeAgo(task.created_at)}
                     </span>
                     {task.workflow_round > 1 && (
@@ -596,9 +589,9 @@ export default function LeadWorkflowPage() {
                     <thead>
                         <tr style={{ borderBottom: '2px solid var(--border-secondary)' }}>
                             <th style={{ textAlign: 'left', padding: '8px' }}>Agent</th>
-                            {Object.keys(STAGE_LABELS).map(s => <th key={s} style={{ textAlign: 'center', padding: '8px', color: STAGE_COLORS[s] }}>{STAGE_ICONS[s]}</th>)}
-                            <th style={{ textAlign: 'center', padding: '8px' }}>🔴 Overdue</th>
-                            <th style={{ textAlign: 'center', padding: '8px' }}>✅ Today</th>
+                            {Object.keys(STAGE_LABELS).map(s => <th key={s} style={{ textAlign: 'center', padding: '8px', color: 'var(--text-secondary)' }}><PresentationIcon value={STAGE_ICONS[s]} /> <span className="sr-only">{STAGE_LABELS[s]}</span></th>)}
+                            <th style={{ textAlign: 'center', padding: '8px' }}>Overdue</th>
+                            <th style={{ textAlign: 'center', padding: '8px' }}>Today</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -610,8 +603,8 @@ export default function LeadWorkflowPage() {
                                 <tr key={agent.agent_id} style={{ borderBottom: '1px solid var(--border-secondary)' }}>
                                     <td style={{ padding: '8px', fontWeight: 500 }}>{agent.agent_name}</td>
                                     {Object.keys(STAGE_LABELS).map(s => <td key={s} style={{ textAlign: 'center', padding: '8px' }}>{getCount(s)}</td>)}
-                                    <td style={{ textAlign: 'center', padding: '8px', color: agent.overdue > 0 ? '#ef4444' : 'var(--text-muted)', fontWeight: agent.overdue > 0 ? 700 : 400 }}>{agent.overdue}</td>
-                                    <td style={{ textAlign: 'center', padding: '8px', color: '#22c55e' }}>{agent.completed_today}</td>
+                                    <td style={{ textAlign: 'center', padding: '8px', color: agent.overdue > 0 ? 'var(--rp-danger-text)' : 'var(--text-muted)', fontWeight: agent.overdue > 0 ? 700 : 400 }}>{agent.overdue}</td>
+                                    <td style={{ textAlign: 'center', padding: '8px', color: 'var(--rp-success-text)' }}>{agent.completed_today}</td>
                                 </tr>
                             );
                         })}
@@ -631,15 +624,15 @@ export default function LeadWorkflowPage() {
                 <h2 style={{ margin: 0, color: 'var(--text-primary)', fontSize: '20px' }}>Lead Tasks</h2>
                 {isBoss && (
                     <div style={{ display: 'flex', gap: '4px' }}>
-                        <button onClick={() => setViewMode('my-tasks')} style={{ ...btnStyle(viewMode === 'my-tasks' ? '#3b82f6' : '#374151'), fontSize: '12px', padding: '6px 12px' }}>My Tasks</button>
-                        <button onClick={() => setViewMode('team')} style={{ ...btnStyle(viewMode === 'team' ? '#3b82f6' : '#374151'), fontSize: '12px', padding: '6px 12px' }}>Team View</button>
+                        <button onClick={() => setViewMode('my-tasks')} style={{ ...btnStyle(viewMode === 'my-tasks' ? 'var(--blue-500)' : 'var(--text-secondary)'), fontSize: '12px', padding: '6px 12px' }}>My Tasks</button>
+                        <button onClick={() => setViewMode('team')} style={{ ...btnStyle(viewMode === 'team' ? 'var(--blue-500)' : 'var(--text-secondary)'), fontSize: '12px', padding: '6px 12px' }}>Team View</button>
                     </div>
                 )}
             </div>
 
             {/* Message */}
             {message && (
-                <div style={{ padding: '10px 16px', borderRadius: '8px', marginBottom: '16px', backgroundColor: message.type === 'success' ? '#22c55e22' : '#ef444422', color: message.type === 'success' ? '#16a34a' : '#dc2626', fontSize: '13px', fontWeight: 500 }}>
+                <div style={{ padding: '10px 16px', borderRadius: '8px', marginBottom: '16px', backgroundColor: message.type === 'success' ? 'var(--rp-success-bg)' : 'var(--rp-danger-bg)', color: message.type === 'success' ? 'var(--rp-success-text)' : 'var(--rp-danger-text)', fontSize: '13px', fontWeight: 500 }}>
                     {message.text}
                 </div>
             )}
@@ -652,15 +645,15 @@ export default function LeadWorkflowPage() {
                 <>
                     {tasks.length === 0 ? (
                         <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)' }}>
-                            <div style={{ fontSize: '48px', marginBottom: '12px' }}>✨</div>
+                            <div style={{ marginBottom: '12px' }}><PresentationIcon value="lightbulb" size={24} /></div>
                             <div style={{ fontSize: '16px', fontWeight: 500 }}>All caught up!</div>
                             <div style={{ fontSize: '13px', marginTop: '4px' }}>No pending lead tasks right now.</div>
                         </div>
                     ) : (
                         <>
-                            {renderTaskSection('Overdue', overdueTasks, '#ef4444')}
-                            {renderTaskSection('Due Today', todayTasks, '#f59e0b')}
-                            {renderTaskSection('Upcoming', upcomingTasks, '#6b7280')}
+                            {renderTaskSection('Overdue', overdueTasks, 'var(--rp-danger-text)')}
+                            {renderTaskSection('Due Today', todayTasks, 'var(--rp-warn-text)')}
+                            {renderTaskSection('Upcoming', upcomingTasks, 'var(--text-muted)')}
                         </>
                     )}
                 </>

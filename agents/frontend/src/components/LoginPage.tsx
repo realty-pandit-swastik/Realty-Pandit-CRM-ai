@@ -3,15 +3,7 @@ import { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import { useAuth } from '../contexts/AuthContext';
 import { API_BASE_URL } from '../lib/api';
-
-const STARS = Array.from({ length: 20 }, (_, i) => ({
-    size: i % 2 ? '1px' : '2px',
-    top: `${(i * 37) % 50}%`,
-    left: `${(i * 61) % 100}%`,
-    opacity: 0.3 + (i % 6) * 0.1,
-    duration: 2 + (i % 4),
-    delay: `${(i % 8) * 0.25}s`,
-}));
+import realtyPanditLogo from '../../../website/public/logo.png';
 
 // ─── Skyline Buildings SVG (real estate themed login transition) ───
 function SkylineOverlay({ onDone }: { onDone: () => void }) {
@@ -20,59 +12,26 @@ function SkylineOverlay({ onDone }: { onDone: () => void }) {
         return () => clearTimeout(timer);
     }, [onDone]);
 
-    const buildings = [
-        { x: 0, w: 60, h: 180, delay: 0, color: '#1e3a5f' },
-        { x: 55, w: 45, h: 260, delay: 0.08, color: '#2563eb' },
-        { x: 95, w: 70, h: 200, delay: 0.15, color: '#1e40af' },
-        { x: 160, w: 50, h: 300, delay: 0.1, color: '#3b82f6' },
-        { x: 205, w: 65, h: 230, delay: 0.2, color: '#1d4ed8' },
-        { x: 265, w: 55, h: 280, delay: 0.05, color: '#2563eb' },
-        { x: 315, w: 70, h: 190, delay: 0.18, color: '#1e3a5f' },
-        { x: 380, w: 50, h: 320, delay: 0.12, color: '#3b82f6' },
-        { x: 425, w: 60, h: 240, delay: 0.22, color: '#1e40af' },
-        { x: 480, w: 55, h: 270, delay: 0.07, color: '#1d4ed8' },
-        { x: 530, w: 70, h: 210, delay: 0.16, color: '#2563eb' },
-        { x: 595, w: 45, h: 290, delay: 0.03, color: '#1e3a5f' },
-    ];
-
     return (
         <div style={{
             position: 'fixed', inset: 0, zIndex: 1000,
-            background: 'linear-gradient(180deg, #0c1929 0%, #0f172a 40%, #1a1a2e 100%)',
+            background: 'var(--bg-secondary)',
             display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
             overflow: 'hidden',
         }}>
-            {/* Stars */}
-            {STARS.map((star, i) => (
-                <div key={`star-${i}`} style={{
-                    position: 'absolute',
-                    width: star.size,
-                    height: star.size,
-                    backgroundColor: '#fff',
-                    borderRadius: '50%',
-                    top: star.top,
-                    left: star.left,
-                    opacity: star.opacity,
-                    animation: `pulse ${star.duration}s ease-in-out infinite`,
-                    animationDelay: star.delay,
-                }} />
-            ))}
-
             {/* Welcome text */}
             <div style={{
-                animation: 'bounceIn 0.8s cubic-bezier(0.34, 1.56, 0.64, 1) forwards',
                 textAlign: 'center', marginBottom: '60px', zIndex: 2,
             }}>
-                <div style={{ fontSize: '48px', marginBottom: '8px' }}>🏠</div>
+                <img src={realtyPanditLogo} alt="Realty Pandit logo" width={160} height={90} style={{ display: 'block', maxWidth: '100%', height: 'auto', margin: '0 auto' }} />
                 <h1 style={{
-                    color: '#f8fafc', fontSize: '32px', fontWeight: 700, margin: '0 0 8px',
+                    color: 'var(--text-primary)', fontSize: '24px', fontWeight: 600, margin: '16px 0 8px',
                     fontFamily: 'Inter, sans-serif',
                 }}>
                     Welcome to Realty Pandit
                 </h1>
                 <p style={{
-                    color: '#94a3b8', fontSize: '15px', margin: 0,
-                    animation: 'slideUp 0.5s ease-out 0.4s both',
+                    color: 'var(--text-secondary)', fontSize: '15px', margin: 0,
                 }}>
                     Loading your dashboard...
                 </p>
@@ -80,49 +39,12 @@ function SkylineOverlay({ onDone }: { onDone: () => void }) {
                 <div style={{ display: 'flex', gap: '6px', justifyContent: 'center', marginTop: '16px' }}>
                     {[0, 1, 2].map(i => (
                         <div key={i} style={{
-                            width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#3b82f6',
-                            animation: `pulse 1s ease-in-out ${i * 0.2}s infinite`,
+                            width: '8px', height: '8px', borderRadius: '50%', backgroundColor: 'var(--accent-primary)',
                         }} />
                     ))}
                 </div>
             </div>
 
-            {/* Skyline at bottom */}
-            <svg
-                viewBox="0 0 640 340"
-                style={{
-                    position: 'absolute', bottom: 0, width: '100%', maxHeight: '45vh',
-                }}
-                preserveAspectRatio="xMidYMax meet"
-            >
-                {buildings.map((b, i) => (
-                    <g key={i}>
-                        <rect
-                            x={b.x} y={340 - b.h} width={b.w} height={b.h}
-                            fill={b.color} rx={2}
-                            className="building-bar"
-                            style={{ animationDelay: `${b.delay + 0.3}s` }}
-                        />
-                        {/* Windows */}
-                        {Array.from({ length: Math.floor(b.h / 30) }).map((_, wi) => (
-                            Array.from({ length: Math.floor(b.w / 18) }).map((_, wj) => (
-                                <rect
-                                    key={`w-${wi}-${wj}`}
-                                    x={b.x + 8 + wj * 16}
-                                    y={340 - b.h + 12 + wi * 28}
-                                    width={8} height={12} rx={1}
-                                    fill={Math.random() > 0.4 ? '#fbbf24' : '#1e293b'}
-                                    opacity={Math.random() > 0.4 ? 0.8 : 0.3}
-                                    className="building-bar"
-                                    style={{ animationDelay: `${b.delay + 0.5 + wi * 0.05}s` }}
-                                />
-                            ))
-                        ))}
-                    </g>
-                ))}
-                {/* Ground line */}
-                <rect x={0} y={338} width={640} height={2} fill="#334155" />
-            </svg>
         </div>
     );
 }
@@ -305,54 +227,28 @@ export function LoginPage() {
     return (
         <div
             ref={containerRef}
+            className="rp-login"
+            role="main"
             style={{
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                height: '100vh',
-                background: 'linear-gradient(135deg, #0c1929 0%, #0f172a 50%, #1a1a2e 100%)',
-                fontFamily: 'Inter, sans-serif',
-                position: 'relative', overflow: 'hidden',
-                padding: '0 16px', boxSizing: 'border-box' as const,
+                minHeight: '100dvh',
+                background: 'var(--bg-secondary)',
+                fontFamily: 'inherit',
+                position: 'relative', overflowY: 'auto',
+                padding: '32px 16px', boxSizing: 'border-box' as const,
             }}
         >
-            {/* Subtle background grid */}
-            <div style={{
-                position: 'absolute', inset: 0,
-                backgroundImage: `
-                    linear-gradient(rgba(59, 130, 246, 0.03) 1px, transparent 1px),
-                    linear-gradient(90deg, rgba(59, 130, 246, 0.03) 1px, transparent 1px)
-                `,
-                backgroundSize: '60px 60px',
-            }} />
-
-            {/* Floating particles */}
-            {Array.from({ length: 6 }).map((_, i) => (
-                <div
-                    key={`p-${i}`}
-                    className="login-particle"
-                    style={{
-                        bottom: '-20px',
-                        left: `${10 + i * 15}%`,
-                        width: '4px', height: '4px',
-                        backgroundColor: i % 2 === 0 ? '#3b82f6' : '#f59e0b',
-                        borderRadius: '50%',
-                        animationDuration: `${6 + i * 2}s`,
-                        animationDelay: `${i * 1.5}s`,
-                        opacity: 0.4,
-                    }}
-                />
-            ))}
-
             {/* Login Card */}
             <div
                 className={cardExiting ? 'login-transitioning' : ''}
                 style={{
-                    backgroundColor: '#1e293b',
-                    borderRadius: '16px',
+                    backgroundColor: 'var(--bg-primary)',
+                    borderRadius: 'var(--rp-radius)',
                     padding: window.innerWidth < 768 ? '28px 20px 24px' : '44px 40px 36px',
                     width: window.innerWidth < 768 ? '100%' : '420px',
                     maxWidth: '420px',
-                    boxShadow: '0 8px 40px rgba(0, 0, 0, 0.4), 0 0 80px rgba(59, 130, 246, 0.08)',
-                    border: '1px solid #334155',
+                    boxShadow: 'var(--rp-shadow-near)',
+                    border: '1px solid var(--border-secondary)',
                     position: 'relative',
                     zIndex: 1,
                     boxSizing: 'border-box' as const,
@@ -361,16 +257,16 @@ export function LoginPage() {
                 {/* Logo + Title */}
                 <div style={{ textAlign: 'center', marginBottom: '36px' }}>
                     <div className="login-logo login-logo-float" style={{ marginBottom: '12px' }}>
-                        <span style={{ fontSize: '52px', display: 'inline-block' }}>🏠</span>
+                        <img src={realtyPanditLogo} alt="Realty Pandit logo" width={160} height={90} style={{ display: 'block', maxWidth: '100%', height: 'auto', margin: '0 auto' }} />
                     </div>
                     <h1 className="login-logo" style={{
-                        color: '#f8fafc', fontSize: '28px', fontWeight: 700, margin: '0 0 6px',
+                        color: 'var(--text-primary)', fontSize: '28px', fontWeight: 700, margin: '0 0 6px',
                         letterSpacing: '-0.02em',
                     }}>
                         Realty Pandit
                     </h1>
                     <p className="login-subtitle" style={{
-                        color: '#64748b', margin: 0, fontSize: '14px',
+                        color: 'var(--text-secondary)', margin: 0, fontSize: '14px',
                     }}>
                         {mode === 'forgot' ? 'Reset Your Password' : mode === 'partner' ? 'Partner Agent Sign-in' : 'Management Dashboard'}
                     </p>
@@ -378,10 +274,10 @@ export function LoginPage() {
 
                 {/* Error */}
                 {error && (
-                    <div className="login-error" style={{
-                        backgroundColor: '#7f1d1d', color: '#fca5a5', padding: '10px 14px',
+                    <div role="alert" className="login-error" style={{
+                        backgroundColor: 'var(--rp-danger-bg)', color: 'var(--rp-danger-text)', padding: '12px 16px',
                         borderRadius: '8px', marginBottom: '16px', fontSize: '14px',
-                        border: '1px solid #991b1b',
+                        border: '1px solid var(--rp-danger-line)',
                     }}>
                         {error}
                     </div>
@@ -390,9 +286,9 @@ export function LoginPage() {
                 {/* Success */}
                 {successMessage && (
                     <div className="login-error" style={{
-                        backgroundColor: '#14532d', color: '#86efac', padding: '10px 14px',
+                        backgroundColor: 'var(--rp-success-bg)', color: 'var(--rp-success-text)', padding: '12px 16px',
                         borderRadius: '8px', marginBottom: '16px', fontSize: '14px',
-                        border: '1px solid #166534',
+                        border: '1px solid var(--rp-success-line)',
                     }}>
                         {successMessage}
                     </div>
@@ -402,34 +298,37 @@ export function LoginPage() {
                 {mode === 'login' && (
                     <form onSubmit={handleSubmit}>
                         <div className="login-form-field-1" style={{ marginBottom: '18px' }}>
-                            <label style={{ color: '#94a3b8', fontSize: '13px', display: 'block', marginBottom: '6px', fontWeight: 500 }}>
+                            <label htmlFor="rp-login-phone" style={{ color: 'var(--text-secondary)', fontSize: '13px', display: 'block', marginBottom: '6px', fontWeight: 500 }}>
                                 Phone Number
                             </label>
                             <input
+                                id="rp-login-phone" autoComplete="username" aria-describedby="rp-login-phone-hint"
                                 type="tel" value={loginPhone} onChange={e => setLoginPhone(e.target.value)}
                                 required
                                 className="login-input"
                                 placeholder="e.g. 9876543210"
                                 style={{
-                                    width: '100%', padding: '11px 14px', backgroundColor: '#0f172a',
-                                    border: '1px solid #334155', borderRadius: '10px', color: '#f8fafc',
+                                    width: '100%', padding: '12px 16px', backgroundColor: 'var(--bg-input)',
+                                    border: '1px solid var(--control-line)', borderRadius: 'var(--radius-control)', color: 'var(--text-primary)',
                                     fontSize: '14px', outline: 'none', boxSizing: 'border-box',
                                 }}
                             />
+                            <p id="rp-login-phone-hint" className="rp-hint" style={{ marginTop: 8 }}>Use the mobile number registered to your staff account.</p>
                         </div>
 
                         <div className="login-form-field-2" style={{ marginBottom: '12px' }}>
-                            <label style={{ color: '#94a3b8', fontSize: '13px', display: 'block', marginBottom: '6px', fontWeight: 500 }}>
+                            <label htmlFor="rp-login-password" style={{ color: 'var(--text-secondary)', fontSize: '13px', display: 'block', marginBottom: '6px', fontWeight: 500 }}>
                                 Password
                             </label>
                             <input
+                                id="rp-login-password" autoComplete="current-password"
                                 type="password" value={password} onChange={e => setPassword(e.target.value)}
                                 required minLength={6}
                                 className="login-input"
                                 placeholder="Enter your password"
                                 style={{
-                                    width: '100%', padding: '11px 14px', backgroundColor: '#0f172a',
-                                    border: '1px solid #334155', borderRadius: '10px', color: '#f8fafc',
+                                    width: '100%', padding: '12px 16px', backgroundColor: 'var(--bg-input)',
+                                    border: '1px solid var(--control-line)', borderRadius: 'var(--radius-control)', color: 'var(--text-primary)',
                                     fontSize: '14px', outline: 'none', boxSizing: 'border-box',
                                 }}
                             />
@@ -440,7 +339,7 @@ export function LoginPage() {
                                 type="button"
                                 onClick={() => { setMode('partner'); setError(''); setSuccessMessage(''); setPartnerStep('phone'); setOtp(''); }}
                                 style={{
-                                    background: 'none', border: 'none', color: '#94a3b8',
+                                    background: 'none', border: 'none', color: 'var(--text-link)',
                                     cursor: 'pointer', fontSize: '13px', padding: 0, fontWeight: 500,
                                 }}
                             >
@@ -450,7 +349,7 @@ export function LoginPage() {
                                 type="button"
                                 onClick={() => { setMode('forgot'); setError(''); setSuccessMessage(''); setForgotStep('phone'); }}
                                 style={{
-                                    background: 'none', border: 'none', color: '#f59e0b',
+                                    background: 'none', border: 'none', color: 'var(--text-link)',
                                     cursor: 'pointer', fontSize: '13px', padding: 0, fontWeight: 500,
                                 }}
                             >
@@ -462,24 +361,21 @@ export function LoginPage() {
                             type="submit" disabled={loading}
                             className={`login-btn ${loading ? 'login-btn-shimmer' : ''}`}
                             style={{
-                                width: '100%', padding: '13px', backgroundColor: '#3b82f6',
-                                color: '#fff', border: 'none', borderRadius: '10px', fontSize: '15px',
+                                width: '100%', padding: '12px', backgroundColor: 'var(--blue-600)',
+                                color: 'var(--surface-white)', border: 'none', borderRadius: 'var(--radius-control)', fontSize: '15px',
                                 fontWeight: 600, cursor: loading ? 'wait' : 'pointer',
                                 opacity: loading ? 0.85 : 1,
                                 transition: 'transform 0.15s, box-shadow 0.15s',
-                                boxShadow: '0 2px 12px rgba(59, 130, 246, 0.3)',
                             }}
-                            onMouseEnter={e => { if (!loading) { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = '0 4px 20px rgba(59, 130, 246, 0.4)'; } }}
-                            onMouseLeave={e => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 2px 12px rgba(59, 130, 246, 0.3)'; }}
                         >
                             {loading ? 'Signing in...' : 'Login'}
                         </button>
 
                         {/* Divider */}
                         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', margin: '18px 0' }}>
-                            <div style={{ flex: 1, height: '1px', backgroundColor: '#334155' }} />
-                            <span style={{ color: '#64748b', fontSize: '12px' }}>or</span>
-                            <div style={{ flex: 1, height: '1px', backgroundColor: '#334155' }} />
+                            <div style={{ flex: 1, height: '1px', backgroundColor: 'var(--border-primary)' }} />
+                            <span style={{ color: 'var(--text-muted)', fontSize: '12px' }}>or</span>
+                            <div style={{ flex: 1, height: '1px', backgroundColor: 'var(--border-primary)' }} />
                         </div>
 
                         {/* Sign in with Google (P1b) — only works for members who
@@ -489,22 +385,22 @@ export function LoginPage() {
                             onClick={handleGoogleSignIn}
                             disabled={loading}
                             style={{
-                                width: '100%', padding: '12px', backgroundColor: '#fff',
-                                color: '#1f2937', border: '1px solid #e5e7eb', borderRadius: '10px',
+                                width: '100%', padding: '12px', backgroundColor: 'var(--bg-primary)',
+                                color: 'var(--text-primary)', border: '1px solid var(--control-line)', borderRadius: 'var(--radius-control)',
                                 fontSize: '14px', fontWeight: 600,
                                 cursor: loading ? 'not-allowed' : 'pointer',
                                 display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px',
                             }}
                         >
                             <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
-                                <path fill="#4285F4" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.92c1.7-1.57 2.68-3.88 2.68-6.62z"/>
-                                <path fill="#34A853" d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.92-2.26c-.8.54-1.84.86-3.04.86-2.34 0-4.32-1.58-5.03-3.7H.96v2.33A9 9 0 0 0 9 18z"/>
-                                <path fill="#FBBC05" d="M3.97 10.72a5.4 5.4 0 0 1 0-3.44V4.95H.96a9 9 0 0 0 0 8.1l3.01-2.33z"/>
-                                <path fill="#EA4335" d="M9 3.58c1.32 0 2.5.45 3.44 1.35l2.58-2.58A9 9 0 0 0 .96 4.95l3.01 2.33C4.68 5.16 6.66 3.58 9 3.58z"/>
+                                <path fill="var(--brand-google-blue)" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.92c1.7-1.57 2.68-3.88 2.68-6.62z"/>
+                                <path fill="var(--brand-google-green)" d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.92-2.26c-.8.54-1.84.86-3.04.86-2.34 0-4.32-1.58-5.03-3.7H.96v2.33A9 9 0 0 0 9 18z"/>
+                                <path fill="var(--brand-google-yellow)" d="M3.97 10.72a5.4 5.4 0 0 1 0-3.44V4.95H.96a9 9 0 0 0 0 8.1l3.01-2.33z"/>
+                                <path fill="var(--brand-google-red)" d="M9 3.58c1.32 0 2.5.45 3.44 1.35l2.58-2.58A9 9 0 0 0 .96 4.95l3.01 2.33C4.68 5.16 6.66 3.58 9 3.58z"/>
                             </svg>
                             Sign in with Google
                         </button>
-                        <p style={{ color: '#64748b', fontSize: '11px', textAlign: 'center', marginTop: '10px', marginBottom: 0 }}>
+                        <p style={{ color: 'var(--text-muted)', fontSize: '12px', textAlign: 'center', marginTop: '12px', marginBottom: 0 }}>
                             Works only after you've connected Google in your profile.
                         </p>
                     </form>
@@ -516,15 +412,16 @@ export function LoginPage() {
                         {/* Phone is always needed for OTP + password sign-in */}
                         {(partnerAuthMode === 'password' || partnerStep === 'phone') && (
                             <div style={{ marginBottom: '16px' }}>
-                                <label style={{ display: 'block', color: '#94a3b8', fontSize: '13px', marginBottom: '6px', fontWeight: 500 }}>
+                                <label htmlFor="rp-partner-phone" style={{ display: 'block', color: 'var(--text-secondary)', fontSize: '13px', marginBottom: '8px', fontWeight: 500 }}>
                                     Your registered WhatsApp number
                                 </label>
                                 <input
+                                    id="rp-partner-phone"
                                     type="tel" inputMode="tel" value={phone} onChange={e => setPhone(e.target.value)}
                                     placeholder="9876543210" required autoFocus
                                     style={{
                                         width: '100%', padding: '12px 14px', borderRadius: '10px', fontSize: '15px',
-                                        border: '1px solid #334155', backgroundColor: '#0f172a', color: '#e2e8f0',
+                                        border: '1px solid var(--control-line)', backgroundColor: 'var(--bg-input)', color: 'var(--text-primary)',
                                         boxSizing: 'border-box',
                                     }}
                                 />
@@ -533,15 +430,16 @@ export function LoginPage() {
 
                         {partnerAuthMode === 'password' && (
                             <div style={{ marginBottom: '16px' }}>
-                                <label style={{ display: 'block', color: '#94a3b8', fontSize: '13px', marginBottom: '6px', fontWeight: 500 }}>
+                                <label htmlFor="rp-partner-password" style={{ display: 'block', color: 'var(--text-secondary)', fontSize: '13px', marginBottom: '8px', fontWeight: 500 }}>
                                     Password
                                 </label>
                                 <input
+                                    id="rp-partner-password"
                                     type="password" value={partnerPassword} onChange={e => setPartnerPassword(e.target.value)}
                                     placeholder="Enter your password" required
                                     style={{
                                         width: '100%', padding: '12px 14px', borderRadius: '10px', fontSize: '15px',
-                                        border: '1px solid #334155', backgroundColor: '#0f172a', color: '#e2e8f0',
+                                        border: '1px solid var(--control-line)', backgroundColor: 'var(--bg-input)', color: 'var(--text-primary)',
                                         boxSizing: 'border-box',
                                     }}
                                 />
@@ -550,17 +448,18 @@ export function LoginPage() {
 
                         {partnerAuthMode === 'otp' && partnerStep === 'otp' && (
                             <div style={{ marginBottom: '16px' }}>
-                                <label style={{ display: 'block', color: '#94a3b8', fontSize: '13px', marginBottom: '6px', fontWeight: 500 }}>
+                                <label htmlFor="rp-partner-otp" style={{ display: 'block', color: 'var(--text-secondary)', fontSize: '13px', marginBottom: '8px', fontWeight: 500 }}>
                                     Enter the OTP sent to WhatsApp
                                 </label>
                                 <input
+                                    id="rp-partner-otp"
                                     type="tel" inputMode="numeric" value={otp}
                                     onChange={e => setOtp(e.target.value.replace(/\D/g, ''))}
                                     placeholder="••••••" maxLength={6} required autoFocus
                                     style={{
                                         width: '100%', padding: '12px 14px', borderRadius: '10px',
                                         fontSize: '20px', letterSpacing: '6px', textAlign: 'center',
-                                        border: '1px solid #334155', backgroundColor: '#0f172a', color: '#e2e8f0',
+                                        border: '1px solid var(--control-line)', backgroundColor: 'var(--bg-input)', color: 'var(--text-primary)',
                                         boxSizing: 'border-box',
                                     }}
                                 />
@@ -581,7 +480,7 @@ export function LoginPage() {
                                 setError(''); setSuccessMessage(''); setOtp(''); setPartnerPassword(''); setPartnerStep('phone');
                             }}
                             style={{
-                                background: 'none', border: 'none', color: '#f59e0b', cursor: 'pointer',
+                                background: 'none', border: 'none', color: 'var(--text-link)', cursor: 'pointer',
                                 fontSize: '13px', padding: '12px 0 0', width: '100%', fontWeight: 500,
                             }}
                         >
@@ -590,9 +489,9 @@ export function LoginPage() {
 
                         {/* Google — works for partners whose Google email is on their partner record */}
                         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', margin: '14px 0' }}>
-                            <div style={{ flex: 1, height: '1px', backgroundColor: '#334155' }} />
-                            <span style={{ color: '#64748b', fontSize: '12px' }}>or</span>
-                            <div style={{ flex: 1, height: '1px', backgroundColor: '#334155' }} />
+                            <div style={{ flex: 1, height: '1px', backgroundColor: 'var(--border-primary)' }} />
+                            <span style={{ color: 'var(--text-muted)', fontSize: '12px' }}>or</span>
+                            <div style={{ flex: 1, height: '1px', backgroundColor: 'var(--border-primary)' }} />
                         </div>
                         <button type="button" onClick={handleGoogleSignIn} className="google-btn" style={{ width: '100%' }}>
                             Sign in with Google
@@ -602,13 +501,13 @@ export function LoginPage() {
                             type="button"
                             onClick={() => { setMode('login'); setError(''); setSuccessMessage(''); setOtp(''); setPartnerPassword(''); setPartnerStep('phone'); setPartnerAuthMode('otp'); }}
                             style={{
-                                background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer',
+                                background: 'none', border: 'none', color: 'var(--text-link)', cursor: 'pointer',
                                 fontSize: '13px', padding: '12px 0 0', width: '100%', fontWeight: 500,
                             }}
                         >
                             ← Back to team login
                         </button>
-                        <p style={{ color: '#64748b', fontSize: '11px', textAlign: 'center', marginTop: '10px', marginBottom: 0 }}>
+                        <p style={{ color: 'var(--text-muted)', fontSize: '12px', textAlign: 'center', marginTop: '12px', marginBottom: 0 }}>
                             Not registered? Contact your Realty Pandit coordinator.
                         </p>
                     </form>
@@ -619,21 +518,22 @@ export function LoginPage() {
                     <form onSubmit={handleForgotSubmit}>
                         {forgotStep === 'phone' && (
                             <div className="login-form-field-1" style={{ marginBottom: '18px' }}>
-                                <label style={{ color: '#94a3b8', fontSize: '13px', display: 'block', marginBottom: '6px', fontWeight: 500 }}>
+                                <label htmlFor="rp-reset-phone" style={{ color: 'var(--text-secondary)', fontSize: '13px', display: 'block', marginBottom: '8px', fontWeight: 500 }}>
                                     WhatsApp Phone Number
                                 </label>
                                 <input
+                                    id="rp-reset-phone"
                                     type="tel" value={phone} onChange={e => setPhone(e.target.value)}
                                     placeholder="e.g. 9876543210"
                                     required
                                     className="login-input"
                                     style={{
-                                        width: '100%', padding: '11px 14px', backgroundColor: '#0f172a',
-                                        border: '1px solid #334155', borderRadius: '10px', color: '#f8fafc',
+                                        width: '100%', padding: '12px 16px', backgroundColor: 'var(--bg-input)',
+                                        border: '1px solid var(--control-line)', borderRadius: 'var(--radius-control)', color: 'var(--text-primary)',
                                         fontSize: '14px', outline: 'none', boxSizing: 'border-box',
                                     }}
                                 />
-                                <p style={{ color: '#64748b', fontSize: '12px', marginTop: '6px' }}>
+                                <p style={{ color: 'var(--text-muted)', fontSize: '12px', marginTop: '8px' }}>
                                     We'll send a 6-digit OTP to this number on WhatsApp.
                                 </p>
                             </div>
@@ -642,17 +542,18 @@ export function LoginPage() {
                         {forgotStep === 'otp' && (
                             <>
                                 <div className="login-form-field-1" style={{ marginBottom: '18px' }}>
-                                    <label style={{ color: '#94a3b8', fontSize: '13px', display: 'block', marginBottom: '6px', fontWeight: 500 }}>
+                                    <label htmlFor="rp-reset-otp" style={{ color: 'var(--text-secondary)', fontSize: '13px', display: 'block', marginBottom: '8px', fontWeight: 500 }}>
                                         Enter OTP
                                     </label>
                                     <input
+                                        id="rp-reset-otp"
                                         type="text" value={otp} onChange={e => setOtp(e.target.value)}
                                         placeholder="6-digit OTP" maxLength={6}
                                         required
                                         className="login-input"
                                         style={{
-                                            width: '100%', padding: '11px 14px', backgroundColor: '#0f172a',
-                                            border: '1px solid #334155', borderRadius: '10px', color: '#f8fafc',
+                                            width: '100%', padding: '12px 16px', backgroundColor: 'var(--bg-input)',
+                                            border: '1px solid var(--control-line)', borderRadius: 'var(--radius-control)', color: 'var(--text-primary)',
                                             fontSize: '14px', outline: 'none', boxSizing: 'border-box',
                                             letterSpacing: '4px', textAlign: 'center',
                                         }}
@@ -664,7 +565,7 @@ export function LoginPage() {
                                             disabled={resendCountdown > 0 || resendLoading}
                                             style={{
                                                 background: 'none', border: 'none', padding: 0,
-                                                color: resendCountdown > 0 ? '#475569' : '#f59e0b',
+                                                color: resendCountdown > 0 ? 'var(--text-muted)' : 'var(--text-link)',
                                                 cursor: resendCountdown > 0 ? 'default' : 'pointer',
                                                 fontSize: '13px', fontWeight: 500,
                                             }}
@@ -674,17 +575,18 @@ export function LoginPage() {
                                     </div>
                                 </div>
                                 <div className="login-form-field-2" style={{ marginBottom: '18px' }}>
-                                    <label style={{ color: '#94a3b8', fontSize: '13px', display: 'block', marginBottom: '6px', fontWeight: 500 }}>
+                                    <label htmlFor="rp-reset-password" style={{ color: 'var(--text-secondary)', fontSize: '13px', display: 'block', marginBottom: '8px', fontWeight: 500 }}>
                                         New Password
                                     </label>
                                     <input
+                                        id="rp-reset-password"
                                         type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)}
                                         placeholder="Min 6 characters" minLength={6}
                                         required
                                         className="login-input"
                                         style={{
-                                            width: '100%', padding: '11px 14px', backgroundColor: '#0f172a',
-                                            border: '1px solid #334155', borderRadius: '10px', color: '#f8fafc',
+                                            width: '100%', padding: '12px 16px', backgroundColor: 'var(--bg-input)',
+                                            border: '1px solid var(--control-line)', borderRadius: 'var(--radius-control)', color: 'var(--text-primary)',
                                             fontSize: '14px', outline: 'none', boxSizing: 'border-box',
                                         }}
                                     />
@@ -696,8 +598,8 @@ export function LoginPage() {
                             type="submit" disabled={loading}
                             className={`login-btn ${loading ? 'login-btn-shimmer' : ''}`}
                             style={{
-                                width: '100%', padding: '13px', backgroundColor: '#f59e0b',
-                                color: '#0f172a', border: 'none', borderRadius: '10px', fontSize: '15px',
+                                width: '100%', padding: '12px', backgroundColor: 'var(--blue-600)',
+                                color: 'var(--surface-white)', border: 'none', borderRadius: 'var(--radius-control)', fontSize: '15px',
                                 fontWeight: 600, cursor: loading ? 'wait' : 'pointer',
                                 opacity: loading ? 0.85 : 1,
                                 transition: 'transform 0.15s',
@@ -709,7 +611,7 @@ export function LoginPage() {
                 )}
 
                 {mode === 'forgot' && forgotStep === 'done' && (
-                    <p style={{ color: '#86efac', textAlign: 'center', fontSize: '14px' }}>
+                    <p style={{ color: 'var(--rp-success-text)', textAlign: 'center', fontSize: '14px' }}>
                         Redirecting to login...
                     </p>
                 )}
@@ -720,44 +622,20 @@ export function LoginPage() {
                         <button
                             onClick={() => { setMode('login'); setError(''); setSuccessMessage(''); setForgotStep('phone'); setPhone(''); setOtp(''); setNewPassword(''); }}
                             style={{
-                                background: 'none', border: 'none', color: '#60a5fa',
+                                background: 'none', border: 'none', color: 'var(--text-link)',
                                 cursor: 'pointer', fontSize: '13px', fontWeight: 500,
                             }}
                         >
                             Back to Login
                         </button>
                     ) : (
-                        <p style={{ color: '#475569', fontSize: '12px', margin: 0 }}>
+                        <p style={{ color: 'var(--text-secondary)', fontSize: '12px', margin: 0 }}>
                             Powered by Realty Pandit AI
                         </p>
                     )}
                 </div>
             </div>
 
-            {/* Decorative bottom skyline (subtle) */}
-            <svg
-                viewBox="0 0 640 100"
-                style={{
-                    position: 'absolute', bottom: 0, width: '100%', height: '100px',
-                    opacity: 0.15,
-                }}
-                preserveAspectRatio="xMidYMax meet"
-            >
-                <rect x={0} y={40} width={40} height={60} fill="#3b82f6" rx={1} />
-                <rect x={45} y={20} width={30} height={80} fill="#1d4ed8" rx={1} />
-                <rect x={80} y={50} width={50} height={50} fill="#2563eb" rx={1} />
-                <rect x={135} y={10} width={35} height={90} fill="#3b82f6" rx={1} />
-                <rect x={175} y={35} width={45} height={65} fill="#1e40af" rx={1} />
-                <rect x={225} y={55} width={35} height={45} fill="#2563eb" rx={1} />
-                <rect x={265} y={25} width={40} height={75} fill="#1d4ed8" rx={1} />
-                <rect x={310} y={45} width={50} height={55} fill="#3b82f6" rx={1} />
-                <rect x={365} y={15} width={30} height={85} fill="#1e40af" rx={1} />
-                <rect x={400} y={40} width={45} height={60} fill="#2563eb" rx={1} />
-                <rect x={450} y={55} width={35} height={45} fill="#3b82f6" rx={1} />
-                <rect x={490} y={20} width={40} height={80} fill="#1d4ed8" rx={1} />
-                <rect x={535} y={35} width={50} height={65} fill="#2563eb" rx={1} />
-                <rect x={590} y={50} width={50} height={50} fill="#1e40af" rx={1} />
-            </svg>
         </div>
     );
 }

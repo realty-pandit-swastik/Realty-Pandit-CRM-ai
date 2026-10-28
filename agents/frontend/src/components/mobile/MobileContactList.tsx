@@ -1,5 +1,6 @@
 
 import { useState, useMemo } from 'react';
+import { PresentationIcon } from '../ui/PresentationIcon';
 
 interface MobileContactListProps {
     contacts: any[];
@@ -8,7 +9,7 @@ interface MobileContactListProps {
 }
 
 const TYPE_ICON: Record<string, string> = {
-    BUYER: '🏠', TENANT: '🛋️', LANDLORD: '🔑', PARTNER_AGENT: '🤝', REAL_ESTATE_BUILDER: '🏗️', MANAGEMENT: '👔', UNKNOWN: '👤',
+    BUYER: 'house', TENANT: 'sofa', LANDLORD: 'key-round', PARTNER_AGENT: 'handshake', REAL_ESTATE_BUILDER: 'construction', MANAGEMENT: 'briefcase-business', UNKNOWN: 'user-round',
 };
 const TYPE_LABEL: Record<string, string> = {
     BUYER: 'Buyer', TENANT: 'Tenant', LANDLORD: 'Landlord', PARTNER_AGENT: 'Partner', REAL_ESTATE_BUILDER: 'Builder', MANAGEMENT: 'Team', UNKNOWN: 'Unknown',
@@ -20,7 +21,7 @@ const FILTER_CHIPS = [
     { key: 'TENANT', label: 'Tenants' },
     { key: 'LANDLORD', label: 'Landlords' },
     { key: 'PARTNER_AGENT', label: 'Partners' },
-    { key: 'hot', label: '🔥 Hot' },
+    { key: 'hot', label: 'Hot' },
 ];
 
 export function MobileContactList({ contacts, loading = false, onSelect }: MobileContactListProps) {
@@ -84,7 +85,7 @@ export function MobileContactList({ contacts, loading = false, onSelect }: Mobil
                     </div>
                 ) : filtered.length === 0 ? (
                     <div style={{ padding: '40px 20px', textAlign: 'center', color: 'var(--text-muted)' }}>
-                        <div style={{ fontSize: '36px', marginBottom: '12px' }}>💬</div>
+                        <div style={{ marginBottom: '12px' }}><PresentationIcon value="message-circle" size={24} /></div>
                         <div style={{ fontWeight: 600, fontSize: '15px' }}>No contacts found</div>
                         <div style={{ fontSize: '13px', marginTop: '6px' }}>Try a different filter or search</div>
                     </div>
@@ -105,12 +106,12 @@ export function MobileContactList({ contacts, loading = false, onSelect }: Mobil
                                     backgroundColor: 'var(--bg-primary)', display: 'flex', alignItems: 'center',
                                     justifyContent: 'center', fontSize: '20px', flexShrink: 0,
                                 }}>
-                                    {TYPE_ICON[c.contact_type] || '👤'}
+                                    <PresentationIcon value={TYPE_ICON[c.contact_type] || 'user-round'} size={20} />
                                 </div>
                                 <div style={{ flex: 1, minWidth: 0 }}>
-                                    <div style={{ color: 'var(--text-primary)', fontWeight: 600, fontSize: '14px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                    <button type="button" className="rp-lead-name" style={{ color: 'var(--text-primary)', fontWeight: 600, fontSize: '14px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%' }}>
                                         {c.name || c.phone_number}
-                                    </div>
+                                    </button>
                                     {c.name && <div style={{ color: 'var(--text-muted)', fontSize: '12px' }}>{c.phone_number}</div>}
                                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px' }}>
                                         <span style={{
@@ -124,8 +125,8 @@ export function MobileContactList({ contacts, loading = false, onSelect }: Mobil
                                 </div>
                                 {c.lead_score?.total_score != null && (
                                     <div style={{
-                                        backgroundColor: c.lead_score.total_score >= 70 ? '#7f1d1d' : c.lead_score.total_score >= 40 ? '#14532d' : 'var(--bg-primary)',
-                                        color: c.lead_score.total_score >= 70 ? '#f87171' : c.lead_score.total_score >= 40 ? '#4ade80' : 'var(--text-muted)',
+                                        backgroundColor: c.lead_score.total_score >= 70 ? 'var(--rp-danger-bg)' : c.lead_score.total_score >= 40 ? 'var(--rp-warn-bg)' : 'var(--bg-primary)',
+                                        color: c.lead_score.total_score >= 70 ? 'var(--rp-danger-text)' : c.lead_score.total_score >= 40 ? 'var(--rp-warn-text)' : 'var(--text-muted)',
                                         padding: '3px 10px', borderRadius: '10px', fontSize: '13px', fontWeight: 700, flexShrink: 0,
                                     }}>
                                         {c.lead_score.total_score}

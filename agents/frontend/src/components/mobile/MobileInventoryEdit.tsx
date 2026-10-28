@@ -340,7 +340,7 @@ export function MobileInventoryEdit({ item, onSaved }: MobileInventoryEditProps)
                 padding: '12px 0', border: 'none', background: 'none', cursor: 'pointer',
                 borderBottom: '1px solid var(--border-secondary)',
             }}>
-            <span style={{ fontSize: '14px', fontWeight: 700, color: '#4F46E5' }}>{title}</span>
+            <span style={{ fontSize: '14px', fontWeight: 700, color: 'var(--blue-600)' }}>{title}</span>
             <span style={{ color: 'var(--text-muted)', fontSize: '16px' }}>{expandedSections[sectionKey] ? '▲' : '▼'}</span>
         </button>
     );
@@ -364,7 +364,7 @@ export function MobileInventoryEdit({ item, onSaved }: MobileInventoryEditProps)
                                                 style={{
                                                     position: 'absolute', top: '4px', right: '4px',
                                                     width: '28px', height: '28px', borderRadius: '50%',
-                                                    backgroundColor: 'rgba(239,68,68,0.9)', color: '#fff',
+                                                    backgroundColor: 'var(--rp-danger-text)', color: 'var(--surface-white)',
                                                     border: 'none', fontSize: '14px', cursor: 'pointer',
                                                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                                                 }}>
@@ -402,7 +402,7 @@ export function MobileInventoryEdit({ item, onSaved }: MobileInventoryEditProps)
                                                 style={{
                                                     position: 'absolute', top: '4px', right: '4px',
                                                     width: '28px', height: '28px', borderRadius: '50%',
-                                                    backgroundColor: 'rgba(239,68,68,0.9)', color: '#fff',
+                                                    backgroundColor: 'var(--rp-danger-text)', color: 'var(--surface-white)',
                                                     border: 'none', fontSize: '14px', cursor: 'pointer',
                                                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                                                 }}>
@@ -428,7 +428,7 @@ export function MobileInventoryEdit({ item, onSaved }: MobileInventoryEditProps)
                             {uploading ? 'Uploading...' : '+ Add Videos'}
                         </button>
 
-                        {uploadError && <div style={{ color: '#EF4444', fontSize: '12px', marginTop: '6px' }}>{uploadError}</div>}
+                        {uploadError && <div style={{ color: 'var(--rp-danger-text)', fontSize: '12px', marginTop: '6px' }}>{uploadError}</div>}
                     </div>
                 )}
 
@@ -469,13 +469,13 @@ export function MobileInventoryEdit({ item, onSaved }: MobileInventoryEditProps)
                             <label style={labelStyle}>Roof Rights</label>
                             <button type="button" onClick={() => set('roof_rights', !data.roof_rights)}
                                 style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 12px', borderRadius: '8px', cursor: 'pointer', width: '100%', textAlign: 'left',
-                                    border: data.roof_rights ? '1.5px solid #f59e0b' : '1px solid var(--border-secondary)',
-                                    backgroundColor: data.roof_rights ? 'rgba(245,158,11,0.08)' : 'var(--bg-secondary)' }}>
+                                    border: data.roof_rights ? '1.5px solid var(--rp-warn-text)' : '1px solid var(--border-secondary)',
+                                    backgroundColor: data.roof_rights ? 'var(--rp-danger-wash)' : 'var(--bg-secondary)' }}>
                                 <div style={{ width: '20px', height: '20px', borderRadius: '4px', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                    border: data.roof_rights ? '2px solid #f59e0b' : '2px solid var(--border-secondary)', backgroundColor: data.roof_rights ? '#f59e0b' : 'transparent' }}>
-                                    {data.roof_rights && <span style={{ color: '#fff', fontSize: '12px', lineHeight: 1 }}>✓</span>}
+                                    border: data.roof_rights ? '2px solid var(--rp-warn-text)' : '2px solid var(--border-secondary)', backgroundColor: data.roof_rights ? 'var(--rp-warn-text)' : 'transparent' }}>
+                                    {data.roof_rights && <span style={{ color: 'var(--surface-white)', fontSize: '12px', lineHeight: 1 }}>✓</span>}
                                 </div>
-                                <span style={{ fontSize: '13px', fontWeight: 600, color: data.roof_rights ? '#f59e0b' : 'var(--text-secondary)' }}>
+                                <span style={{ fontSize: '13px', fontWeight: 600, color: data.roof_rights ? 'var(--rp-warn-text)' : 'var(--text-secondary)' }}>
                                     {data.roof_rights ? 'Roof rights included ✓' : 'Mark roof rights'}
                                 </span>
                             </button>
@@ -486,13 +486,13 @@ export function MobileInventoryEdit({ item, onSaved }: MobileInventoryEditProps)
                                 <label style={labelStyle}>Commercial Use</label>
                                 <button type="button" onClick={() => set('commercial_use', !data.commercial_use)}
                                     style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 12px', borderRadius: '8px', cursor: 'pointer', width: '100%', textAlign: 'left',
-                                        border: data.commercial_use ? '1.5px solid #a855f7' : '1px solid var(--border-secondary)',
-                                        backgroundColor: data.commercial_use ? 'rgba(168,85,247,0.08)' : 'var(--bg-secondary)' }}>
+                                        border: data.commercial_use ? '1.5px solid var(--blue-600)' : '1px solid var(--border-secondary)',
+                                        backgroundColor: data.commercial_use ? 'var(--rp-info-wash)' : 'var(--bg-secondary)' }}>
                                     <div style={{ width: '20px', height: '20px', borderRadius: '4px', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                        border: data.commercial_use ? '2px solid #a855f7' : '2px solid var(--border-secondary)', backgroundColor: data.commercial_use ? '#a855f7' : 'transparent' }}>
-                                        {data.commercial_use && <span style={{ color: '#fff', fontSize: '12px', lineHeight: 1 }}>✓</span>}
+                                        border: data.commercial_use ? '2px solid var(--blue-600)' : '2px solid var(--border-secondary)', backgroundColor: data.commercial_use ? 'var(--blue-600)' : 'transparent' }}>
+                                        {data.commercial_use && <span style={{ color: 'var(--surface-white)', fontSize: '12px', lineHeight: 1 }}>✓</span>}
                                     </div>
-                                    <span style={{ fontSize: '13px', fontWeight: 600, color: data.commercial_use ? '#a855f7' : 'var(--text-secondary)' }}>
+                                    <span style={{ fontSize: '13px', fontWeight: 600, color: data.commercial_use ? 'var(--blue-600)' : 'var(--text-secondary)' }}>
                                         {data.commercial_use ? 'Also usable commercially ✓' : 'Mark as commercial-usable'}
                                     </span>
                                 </button>
@@ -540,7 +540,7 @@ export function MobileInventoryEdit({ item, onSaved }: MobileInventoryEditProps)
                                                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
                                                     {f.options.map((o: string) => {
                                                         const on = Array.isArray(schemaValues[f.key]) && schemaValues[f.key].includes(o);
-                                                        return <button key={o} type="button" onClick={() => toggle(o)} style={{ padding: '8px 12px', borderRadius: '999px', fontSize: '13px', cursor: 'pointer', minHeight: '40px', border: on ? '1px solid #6366f1' : '1px solid var(--border-secondary)', background: on ? '#6366f1' : 'transparent', color: on ? '#fff' : 'var(--text-primary)' }}>{o}</button>;
+                                                        return <button key={o} type="button" onClick={() => toggle(o)} style={{ padding: '8px 12px', borderRadius: '999px', fontSize: '13px', cursor: 'pointer', minHeight: '40px', border: on ? '1px solid var(--chart-5)' : '1px solid var(--border-secondary)', background: on ? 'var(--chart-5)' : 'transparent', color: on ? 'var(--surface-white)' : 'var(--text-primary)' }}>{o}</button>;
                                                     })}
                                                 </div>
                                             ) : Array.isArray(f.options) && f.options.length > 0 ? (
@@ -629,11 +629,11 @@ export function MobileInventoryEdit({ item, onSaved }: MobileInventoryEditProps)
                                 return (
                                     <div style={{
                                         padding: '10px', borderRadius: '8px', marginBottom: '10px', textAlign: 'center',
-                                        border: `1px solid ${margin < 0 ? '#f8717140' : '#34d39940'}`,
-                                        backgroundColor: margin < 0 ? '#f8717108' : '#34d39908',
+                                        border: `1px solid ${margin < 0 ? 'var(--rp-danger-line)' : 'var(--rp-success-line)'}`,
+                                        backgroundColor: margin < 0 ? 'var(--rp-danger-bg)' : 'var(--rp-success-wash)',
                                     }}>
                                         <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>Margin: </span>
-                                        <strong style={{ fontSize: '15px', color: margin < 0 ? '#f87171' : '#34d399' }}>
+                                        <strong style={{ fontSize: '15px', color: margin < 0 ? 'var(--rp-danger-text)' : 'var(--rp-success-text)' }}>
                                             {margin > 0 ? '+' : ''}₹{fmt(margin)} ({pct}%)
                                         </strong>
                                     </div>
@@ -662,7 +662,7 @@ export function MobileInventoryEdit({ item, onSaved }: MobileInventoryEditProps)
                     <div style={{ padding: '12px 0' }}>
                         {/* Upload Section */}
                         <div style={{ padding: '12px', borderRadius: '8px', border: '1px dashed var(--border-secondary)', backgroundColor: 'var(--bg-primary)', marginBottom: '12px' }}>
-                            <div style={{ fontSize: '13px', fontWeight: 700, color: '#4F46E5', marginBottom: '8px' }}>Upload Document</div>
+                            <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--blue-600)', marginBottom: '8px' }}>Upload Document</div>
                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '8px' }}>
                                 <div>
                                     <label style={labelStyle}>Type</label>
@@ -741,7 +741,7 @@ export function MobileInventoryEdit({ item, onSaved }: MobileInventoryEditProps)
                                                     {doc.title || doc.file_name}
                                                 </div>
                                                 <div style={{ display: 'flex', gap: '6px', alignItems: 'center', marginTop: '2px' }}>
-                                                    <span style={{ fontSize: '11px', padding: '1px 6px', borderRadius: '4px', backgroundColor: 'rgba(99,102,241,0.1)', color: '#818cf8' }}>
+                                                    <span style={{ fontSize: '11px', padding: '1px 6px', borderRadius: '4px', backgroundColor: 'var(--rp-info-wash)', color: 'var(--blue-500)' }}>
                                                         {DOC_LABELS[doc.doc_type] || doc.doc_type}
                                                     </span>
                                                     {doc.file_size && (
@@ -756,7 +756,7 @@ export function MobileInventoryEdit({ item, onSaved }: MobileInventoryEditProps)
                                                 View
                                             </a>
                                             <button type="button"
-                                                style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid #f87171', fontSize: '12px', color: '#f87171', background: 'none', cursor: 'pointer', minHeight: '32px' }}
+                                                style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid var(--rp-danger-text)', fontSize: '12px', color: 'var(--rp-danger-text)', background: 'none', cursor: 'pointer', minHeight: '32px' }}
                                                 onClick={async () => {
                                                     const ok = await confirm('Delete this document?');
                                                     if (!ok) return;
@@ -783,7 +783,7 @@ export function MobileInventoryEdit({ item, onSaved }: MobileInventoryEditProps)
                     <MobileEditContactSection
                         currentPhone={data.owner_phone}
                         currentName={data.owner_name}
-                        color="#34d399"
+                        color="var(--rp-success-text)"
                         onContactSelected={(contact) => {
                             // Owner-only — the uploader is audit data and stays untouched.
                             setOwnerError('');
@@ -795,7 +795,7 @@ export function MobileInventoryEdit({ item, onSaved }: MobileInventoryEditProps)
                 {ownerError && expandedSections.owner_contact && (
                     <div role="alert" style={{
                         padding: '10px 12px', borderRadius: '8px', fontSize: '12px', marginTop: '8px',
-                        backgroundColor: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.35)', color: '#fca5a5',
+                        backgroundColor: 'var(--rp-danger-wash)', border: '1px solid var(--rp-danger-line)', color: 'var(--rp-danger-text)',
                     }}>{ownerError}</div>
                 )}
 
@@ -813,7 +813,7 @@ export function MobileInventoryEdit({ item, onSaved }: MobileInventoryEditProps)
                             <MobileEditContactSection
                                 currentPhone={data.key_holder_phone}
                                 currentName={data.key_holder_name}
-                                color="#60a5fa"
+                                color="var(--blue-400)"
                                 onContactSelected={(contact) => {
                                     set('key_holder_name', contact.name);
                                     set('key_holder_phone', contact.phone);
@@ -846,7 +846,7 @@ export function MobileInventoryEdit({ item, onSaved }: MobileInventoryEditProps)
                                         fontSize: '13px', color: 'var(--text-secondary)', cursor: 'pointer',
                                         padding: '8px 10px', borderRadius: '8px',
                                         border: '1px solid var(--border-secondary)',
-                                        background: (data.shared_with_ids || []).includes(a.id) ? 'rgba(99,102,241,0.1)' : 'transparent',
+                                        background: (data.shared_with_ids || []).includes(a.id) ? 'var(--rp-info-wash)' : 'transparent',
                                         minHeight: '44px',
                                     }}>
                                         <input
@@ -871,7 +871,7 @@ export function MobileInventoryEdit({ item, onSaved }: MobileInventoryEditProps)
 
                         {/* Transfer Ownership */}
                             <div>
-                                <div style={{ fontSize: '13px', fontWeight: 700, color: '#f87171', marginBottom: '8px' }}>Transfer Ownership</div>
+                                <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--rp-danger-text)', marginBottom: '8px' }}>Transfer Ownership</div>
                                 <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '10px' }}>
                                     Transfer moves primary assignment to another team member.
                                 </p>
@@ -882,7 +882,7 @@ export function MobileInventoryEdit({ item, onSaved }: MobileInventoryEditProps)
                                 <button type="button"
                                     style={{
                                         width: '100%', padding: '12px', borderRadius: '8px',
-                                        backgroundColor: '#f87171', color: '#fff', border: 'none',
+                                        backgroundColor: 'var(--rp-danger-text)', color: 'var(--surface-white)', border: 'none',
                                         fontSize: '14px', fontWeight: 600, cursor: 'pointer',
                                         minHeight: '44px',
                                     }}
@@ -919,7 +919,7 @@ export function MobileInventoryEdit({ item, onSaved }: MobileInventoryEditProps)
                 <button type="button" onClick={handleSave} disabled={saving}
                     style={{
                         width: '100%', padding: '14px', borderRadius: CARD_RADIUS,
-                        backgroundColor: '#10B981', color: '#fff', border: 'none',
+                        backgroundColor: 'var(--rp-success-text)', color: 'var(--surface-white)', border: 'none',
                         fontSize: '16px', fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer',
                         opacity: saving ? 0.6 : 1,
                     }}>

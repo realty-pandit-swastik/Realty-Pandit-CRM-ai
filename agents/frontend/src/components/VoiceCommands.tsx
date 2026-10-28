@@ -4,6 +4,7 @@
  */
 
 import { useState, useEffect, useRef } from 'react';
+import { CircleAlert, CircleHelp, Power, Mic, Square, Zap } from 'lucide-react';
 
 interface VoiceCommandsProps {
   onNavigate: (view: string) => void;
@@ -219,7 +220,7 @@ const VoiceCommands = ({ onNavigate, currentView }: VoiceCommandsProps) => {
         color: 'var(--error-text)', fontSize: '13px',
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-          <span style={{ fontSize: '20px' }}>⚠️</span>
+          <CircleAlert size={20} strokeWidth={1.7} aria-hidden="true" />
           <strong>Voice Commands Not Supported</strong>
         </div>
         <p style={{ margin: 0 }}>
@@ -239,11 +240,11 @@ const VoiceCommands = ({ onNavigate, currentView }: VoiceCommandsProps) => {
         <div style={{
           backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-primary)',
           borderRadius: '12px', padding: '16px', width: '320px', maxHeight: '400px',
-          overflowY: 'auto', boxShadow: '0 4px 16px rgba(0,0,0,0.2)',
+          overflowY: 'auto', boxShadow: 'var(--rp-shadow-far)',
         }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
             <h3 style={{ margin: 0, color: 'var(--text-primary)', fontSize: '16px', fontWeight: 700 }}>
-              🎤 Voice Commands
+              Voice Commands
             </h3>
             <button
               onClick={() => setShowHelp(false)}
@@ -314,7 +315,7 @@ const VoiceCommands = ({ onNavigate, currentView }: VoiceCommandsProps) => {
         <div style={{
           backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-primary)',
           borderRadius: '12px', padding: '12px 16px', width: '280px',
-          boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+          boxShadow: 'var(--rp-shadow-near)',
         }}>
           {transcript && (
             <div style={{ marginBottom: '8px' }}>
@@ -327,7 +328,7 @@ const VoiceCommands = ({ onNavigate, currentView }: VoiceCommandsProps) => {
             </div>
           )}
           {feedback && (
-            <div style={{ color: listening ? '#3b82f6' : 'var(--text-secondary)', fontSize: '12px' }}>
+            <div style={{ color: listening ? 'var(--text-link)' : 'var(--text-secondary)', fontSize: '12px' }}>
               {feedback}
             </div>
           )}
@@ -341,31 +342,32 @@ const VoiceCommands = ({ onNavigate, currentView }: VoiceCommandsProps) => {
           onClick={() => setShowHelp(!showHelp)}
           title="View available commands"
           style={{
-            width: '48px', height: '48px', borderRadius: '50%',
+            width: '48px', height: '48px', borderRadius: 'var(--radius-control)',
             backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-secondary)',
             color: 'var(--text-primary)', cursor: 'pointer', fontSize: '20px',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            boxShadow: '0 2px 8px rgba(0,0,0,0.1)', transition: 'all 0.2s',
+            boxShadow: 'var(--rp-shadow-near)', transition: 'background-color var(--rp-dur-fast)',
           }}
         >
-          ❓
+          <CircleHelp size={20} strokeWidth={1.7} aria-hidden="true" />
         </button>
 
         {/* Power Button */}
         <button
           onClick={toggleVoiceControl}
+          aria-pressed={enabled}
           title={enabled ? 'Disable voice control' : 'Enable voice control'}
           style={{
-            width: '48px', height: '48px', borderRadius: '50%',
-            backgroundColor: enabled ? '#22c55e' : 'var(--bg-secondary)',
+            width: '48px', height: '48px', borderRadius: 'var(--radius-control)',
+            backgroundColor: enabled ? 'var(--blue-600)' : 'var(--bg-secondary)',
             border: enabled ? 'none' : '1px solid var(--border-secondary)',
-            color: enabled ? '#fff' : 'var(--text-secondary)',
+            color: enabled ? 'var(--surface-white)' : 'var(--text-secondary)',
             cursor: 'pointer', fontSize: '20px',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            boxShadow: '0 2px 8px rgba(0,0,0,0.1)', transition: 'all 0.2s',
+            boxShadow: 'var(--rp-shadow-near)', transition: 'background-color var(--rp-dur-fast)',
           }}
         >
-          {enabled ? '⚡' : '🔌'}
+          {enabled ? <Zap size={20} strokeWidth={1.7} aria-hidden="true" /> : <Power size={20} strokeWidth={1.7} aria-hidden="true" />}
         </button>
 
         {/* Microphone Button */}
@@ -374,26 +376,17 @@ const VoiceCommands = ({ onNavigate, currentView }: VoiceCommandsProps) => {
           disabled={!enabled}
           title={listening ? 'Stop listening' : 'Start listening'}
           style={{
-            width: '56px', height: '56px', borderRadius: '50%',
-            backgroundColor: listening ? '#ef4444' : enabled ? '#3b82f6' : 'var(--bg-tertiary)',
-            border: 'none', color: '#fff', cursor: enabled ? 'pointer' : 'not-allowed',
+            width: '56px', height: '56px', borderRadius: 'var(--radius-control)',
+            backgroundColor: listening ? 'var(--danger)' : enabled ? 'var(--blue-600)' : 'var(--bg-tertiary)',
+            border: 'none', color: enabled ? 'var(--surface-white)' : 'var(--text-muted)', cursor: enabled ? 'pointer' : 'not-allowed',
             fontSize: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center',
-            boxShadow: listening ? '0 4px 16px rgba(239, 68, 68, 0.4)' : '0 2px 8px rgba(0,0,0,0.1)',
-            animation: listening ? 'pulse 1.5s ease-in-out infinite' : 'none',
-            transition: 'all 0.2s',
+            boxShadow: 'var(--rp-shadow-near)',
+            transition: 'background-color var(--rp-dur-fast)',
           }}
         >
-          {listening ? '⏹️' : '🎤'}
+          {listening ? <Square size={24} strokeWidth={1.7} aria-hidden="true" /> : <Mic size={24} strokeWidth={1.7} aria-hidden="true" />}
         </button>
       </div>
-
-      {/* Pulse Animation */}
-      <style>{`
-        @keyframes pulse {
-          0%, 100% { box-shadow: 0 4px 16px rgba(239, 68, 68, 0.4); transform: scale(1); }
-          50% { box-shadow: 0 8px 24px rgba(239, 68, 68, 0.6); transform: scale(1.05); }
-        }
-      `}</style>
 
       {/* Current View Indicator */}
       {enabled && (

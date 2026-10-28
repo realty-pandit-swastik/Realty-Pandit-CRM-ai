@@ -7,6 +7,7 @@ import AddressFields, { type AddressValue, inferAddressLayout } from './AddressF
 import DuplicateAddressWarning from './DuplicateAddressWarning';
 import { getTaxonomyTree } from '../api/client';
 import { useConfirm } from '../contexts/ConfirmContext';
+import { PresentationIcon } from './ui/PresentationIcon';
 
 interface AddInventoryProps {
     onBack: () => void;
@@ -30,8 +31,8 @@ export const AddInventory: React.FC<AddInventoryProps> = ({ onBack, onCreated })
         return (
             <div style={s.page}>
                 <div style={{ textAlign: 'center', padding: '40px 20px' }}>
-                    <div style={{ fontSize: '48px', marginBottom: '16px' }}>&#10004;</div>
-                    <h2 style={{ ...s.h2, marginBottom: '12px' }}>Property Saved Successfully!</h2>
+                    <div style={{ marginBottom: '16px', color: 'var(--rp-success-text)' }}><PresentationIcon value="check-circle" size={28} /></div>
+                    <h2 style={{ ...s.h2, marginBottom: '12px' }}>Property saved</h2>
                     <p style={{ color: 'var(--text-muted)', marginBottom: '4px' }}>Inventory ID:</p>
                     <p style={{ fontFamily: 'monospace', fontSize: '20px', color: 'var(--text-link)', fontWeight: 'bold', marginBottom: '20px' }}>
                         {wf.displayId || wf.inventoryId}
@@ -41,12 +42,12 @@ export const AddInventory: React.FC<AddInventoryProps> = ({ onBack, onCreated })
                     {wf.completionPct !== undefined && (
                         <div style={{ marginBottom: '20px' }}>
                             <p style={{ color: 'var(--text-muted)', fontSize: '13px', marginBottom: '8px' }}>
-                                Listing Completion: <strong style={{ color: wf.completionPct > 60 ? '#34d399' : '#f59e0b' }}>{wf.completionPct}%</strong>
+                                Listing Completion: <strong style={{ color: 'var(--text-primary)' }}>{wf.completionPct}%</strong>
                             </p>
                             <div style={{ width: '100%', height: '6px', borderRadius: '3px', background: 'var(--bg-secondary)' }}>
                                 <div style={{
                                     width: `${wf.completionPct}%`, height: '100%', borderRadius: '3px',
-                                    background: wf.completionPct > 60 ? '#34d399' : '#f59e0b',
+                                    background: wf.completionPct > 60 ? 'var(--blue-700)' : 'var(--blue-500)',
                                     transition: 'width 0.5s ease',
                                 }} />
                             </div>
@@ -54,8 +55,8 @@ export const AddInventory: React.FC<AddInventoryProps> = ({ onBack, onCreated })
                     )}
 
                     {/* Enrichment Section — prominent CTA */}
-                    <div style={{ background: 'linear-gradient(135deg, #064e3b11, #1e3a5f11)', borderRadius: '12px', padding: '24px', marginBottom: '24px', textAlign: 'left', border: '1px solid #34d39940' }}>
-                        <h3 style={{ ...s.h2, fontSize: '16px', marginBottom: '8px', color: '#34d399' }}>Add More Details to Improve Listing</h3>
+                    <div style={{ background: 'var(--bg-secondary)', borderRadius: 'var(--radius-card)', padding: '24px', marginBottom: '24px', textAlign: 'left', border: '1px solid var(--border-primary)' }}>
+                        <h3 style={{ ...s.h2, fontSize: '16px', marginBottom: '8px', color: 'var(--text-primary)' }}>Add More Details to Improve Listing</h3>
                         <p style={{ color: 'var(--text-muted)', fontSize: '13px', marginBottom: '16px' }}>
                             Complete your listing with pricing, amenities, area, and other details. Better details = more visibility.
                         </p>
@@ -196,11 +197,11 @@ function ProgressBar({ groups, currentStep, done }: {
                         textAlign: 'center',
                         fontSize: '11px',
                         fontWeight: isActive ? 700 : 500,
-                        backgroundColor: isDone ? '#064e3b' : isActive ? '#1e3a5f' : 'var(--bg-secondary)',
-                        color: isDone ? '#34d399' : isActive ? '#60a5fa' : 'var(--text-muted)',
-                        border: isActive ? '1px solid #3b82f6' : '1px solid var(--border-secondary)',
+                        backgroundColor: isDone ? 'var(--rp-info-bg)' : isActive ? 'var(--bg-active)' : 'var(--bg-secondary)',
+                        color: isDone ? 'var(--rp-info-text)' : isActive ? 'var(--rp-info-text)' : 'var(--text-muted)',
+                        border: isActive ? '1px solid var(--blue-600)' : '1px solid var(--border-secondary)',
                     }}>
-                        {g.icon} {g.label}
+                        <PresentationIcon value={g.icon || ''} /> {g.label}
                     </div>
                 );
             })}
@@ -289,15 +290,15 @@ function StepPanel({ step, options, metadata, currentValue, secondaryValue, docu
                             <div style={{
                                 marginBottom: '16px',
                                 padding: '12px',
-                                backgroundColor: 'rgba(59, 130, 246, 0.1)',
-                                border: '1px solid rgba(59, 130, 246, 0.3)',
+                                backgroundColor: 'var(--rp-info-bg)',
+                                border: '1px solid var(--rp-info-line)',
                                 borderRadius: '8px',
                                 fontSize: '13px',
                                 color: 'var(--text-primary)',
                                 display: 'flex',
                                 gap: '8px',
                             }}>
-                                <span>ℹ️</span>
+                                <PresentationIcon value="info" />
                                 <span>This is the property owner's contact (different from the agent/uploader).</span>
                             </div>
                         )}
@@ -396,9 +397,9 @@ function OptionCards({ options, value, onSelect }: {
                         style={{
                             padding: '12px', borderRadius: '8px', cursor: 'pointer', textAlign: 'center',
                             fontSize: '13px', fontWeight: value === opt.value ? 700 : 500,
-                            backgroundColor: value === opt.value ? '#1e3a5f' : 'var(--bg-primary)',
-                            color: value === opt.value ? '#60a5fa' : 'var(--text-secondary)',
-                            border: value === opt.value ? '1px solid #3b82f6' : '1px solid var(--border-secondary)',
+                            backgroundColor: value === opt.value ? 'var(--bg-active)' : 'var(--bg-primary)',
+                            color: value === opt.value ? 'var(--rp-info-text)' : 'var(--text-secondary)',
+                            border: value === opt.value ? '1px solid var(--blue-600)' : '1px solid var(--border-secondary)',
                         }}
                     >
                         {opt.label}
@@ -568,7 +569,7 @@ function SchemaFields({ fields, value, onSubmit }: { fields: SchemaField[]; valu
                                     <button key={o} type="button" onClick={() => toggle(f.key, o)}
                                         style={{ padding: '6px 12px', borderRadius: '999px', fontSize: '12px', cursor: 'pointer',
                                             border: on ? '1px solid var(--accent-primary)' : '1px solid var(--border-secondary)',
-                                            background: on ? 'var(--accent-primary)' : 'var(--bg-secondary)', color: on ? '#fff' : 'var(--text-primary)' }}>
+                                            background: on ? 'var(--blue-600)' : 'var(--bg-secondary)', color: on ? 'var(--surface-white)' : 'var(--text-primary)' }}>
                                         {o}
                                     </button>
                                 );
@@ -642,9 +643,9 @@ function MultiSelectField({ options, value, onSubmit }: {
                         style={{
                             padding: '10px', borderRadius: '8px', cursor: 'pointer', textAlign: 'center',
                             fontSize: '12px', fontWeight: selected[opt.value] ? 700 : 400,
-                            backgroundColor: selected[opt.value] ? '#064e3b' : 'var(--bg-primary)',
-                            color: selected[opt.value] ? '#34d399' : 'var(--text-secondary)',
-                            border: selected[opt.value] ? '1px solid #065f46' : '1px solid var(--border-secondary)',
+                            backgroundColor: selected[opt.value] ? 'var(--bg-active)' : 'var(--bg-primary)',
+                            color: selected[opt.value] ? 'var(--rp-info-text)' : 'var(--text-secondary)',
+                            border: selected[opt.value] ? '1px solid var(--blue-600)' : '1px solid var(--border-secondary)',
                         }}
                     >
                         {selected[opt.value] ? '+ ' : ''}{opt.label}
@@ -695,7 +696,7 @@ function MediaUpload({ value, onSubmit, onUpload }: {
                 <input ref={inputRef} type="file" accept="image/jpeg,image/png,image/webp" multiple style={{ display: 'none' }} onChange={e => handleFiles(e.target.files)} />
             </div>
             {uploadError && (
-                <div style={{ padding: '12px', marginBottom: '12px', backgroundColor: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.3)', borderRadius: '8px', color: '#ef4444', fontSize: '14px' }}>
+                <div style={{ padding: '12px', marginBottom: '12px', backgroundColor: 'var(--rp-danger-bg)', border: '1px solid var(--rp-danger-line)', borderRadius: 'var(--radius-card)', color: 'var(--rp-danger-text)', fontSize: '14px' }}>
                     {uploadError}
                 </div>
             )}
@@ -706,7 +707,7 @@ function MediaUpload({ value, onSubmit, onUpload }: {
                             <img src={url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                             <button
                                 onClick={() => setUrls(prev => prev.filter((_, idx) => idx !== i))}
-                                style={{ position: 'absolute', top: 0, right: 0, width: '18px', height: '18px', borderRadius: '50%', background: '#ef4444', color: '#fff', border: 'none', fontSize: '10px', cursor: 'pointer' }}
+                                style={{ position: 'absolute', top: 0, right: 0, width: '44px', height: '44px', borderRadius: 'var(--radius-control)', background: 'var(--danger)', color: 'var(--surface-white)', border: 'none', fontSize: '16px', cursor: 'pointer' }}
                             >
                                 &times;
                             </button>
@@ -760,7 +761,7 @@ function VideoUpload({ value, onSubmit, onUpload }: {
                 <input ref={inputRef} type="file" accept="video/mp4,video/webm,video/quicktime,video/x-msvideo" multiple style={{ display: 'none' }} onChange={e => handleFiles(e.target.files)} />
             </div>
             {uploadError && (
-                <div style={{ padding: '12px', marginBottom: '12px', backgroundColor: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.3)', borderRadius: '8px', color: '#ef4444', fontSize: '14px' }}>
+                <div style={{ padding: '12px', marginBottom: '12px', backgroundColor: 'var(--rp-danger-bg)', border: '1px solid var(--rp-danger-line)', borderRadius: 'var(--radius-card)', color: 'var(--rp-danger-text)', fontSize: '14px' }}>
                     {uploadError}
                 </div>
             )}
@@ -769,7 +770,7 @@ function VideoUpload({ value, onSubmit, onUpload }: {
                     {urls.map((_url, i) => (
                         <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', backgroundColor: 'var(--bg-primary)', borderRadius: '8px', marginBottom: '4px', border: '1px solid var(--border-secondary)' }}>
                             <span style={{ fontSize: '13px', color: 'var(--text-primary)' }}>Video {i + 1}</span>
-                            <button onClick={() => setUrls(prev => prev.filter((_, idx) => idx !== i))} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '14px' }}>&times;</button>
+                            <button onClick={() => setUrls(prev => prev.filter((_, idx) => idx !== i))} style={{ background: 'none', border: 'none', color: 'var(--rp-danger-text)', cursor: 'pointer', fontSize: '16px', minWidth: 44, minHeight: 44 }}>&times;</button>
                         </div>
                     ))}
                 </div>
@@ -819,7 +820,7 @@ function DocumentUpload({ value, documentTypes, onSubmit, onUpload }: {
             </div>
             <input ref={inputRef} type="file" accept="application/pdf,image/*,.doc,.docx,.xls,.xlsx,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" style={{ display: 'none' }} onChange={e => handleFile(e.target.files)} />
             {uploadError && (
-                <div style={{ padding: '12px', marginBottom: '12px', backgroundColor: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.3)', borderRadius: '8px', color: '#ef4444', fontSize: '14px' }}>
+                <div style={{ padding: '12px', marginBottom: '12px', backgroundColor: 'var(--rp-danger-bg)', border: '1px solid var(--rp-danger-line)', borderRadius: 'var(--radius-card)', color: 'var(--rp-danger-text)', fontSize: '14px' }}>
                     {uploadError}
                 </div>
             )}
@@ -828,7 +829,7 @@ function DocumentUpload({ value, documentTypes, onSubmit, onUpload }: {
                     {docs.map((doc, i) => (
                         <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 12px', backgroundColor: 'var(--bg-primary)', borderRadius: '8px', marginBottom: '4px', border: '1px solid var(--border-secondary)' }}>
                             <span style={{ fontSize: '13px', color: 'var(--text-primary)' }}>{doc.title} ({doc.doc_type?.replace(/_/g, ' ')})</span>
-                            <button onClick={() => setDocs(prev => prev.filter((_, idx) => idx !== i))} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '14px' }}>&times;</button>
+                            <button onClick={() => setDocs(prev => prev.filter((_, idx) => idx !== i))} style={{ background: 'none', border: 'none', color: 'var(--rp-danger-text)', cursor: 'pointer', fontSize: '16px', minWidth: 44, minHeight: 44 }}>&times;</button>
                         </div>
                     ))}
                 </div>
@@ -892,9 +893,9 @@ function AddressBlockField({ value, onSubmit, addressConfig }: {
         <div>
             <AddressFields value={addr} onChange={setAddr} layout={layout} mainCategory={cfg.main_category} slug={cfg.sub_category_slug} />
             <DuplicateAddressWarning value={addr} />
-            {error && <div style={{ fontSize: '12px', color: '#fca5a5', marginBottom: '8px' }}>{error}</div>}
+            {error && <div style={{ fontSize: '12px', color: 'var(--rp-danger-text)', marginBottom: '8px' }}>{error}</div>}
             <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                <button type="button" style={{ padding: '10px 20px', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: 600, backgroundColor: '#059669', color: '#fff', border: 'none' }} onClick={handleSubmit}>Next &rarr;</button>
+                <button type="button" style={{ padding: '12px 24px', borderRadius: 'var(--radius-control)', cursor: 'pointer', fontSize: '13px', fontWeight: 600, backgroundColor: 'var(--blue-600)', color: 'var(--surface-white)', border: 'none' }} onClick={handleSubmit}>Next &rarr;</button>
             </div>
         </div>
     );
@@ -941,7 +942,7 @@ function OwnerBlockField({ value, onSubmit }: {
         border: '1px solid var(--border-secondary)', outline: 'none', boxSizing: 'border-box',
     };
     const labelStyle: React.CSSProperties = { fontSize: '12px', color: 'var(--text-muted)', marginBottom: '4px', fontWeight: 600 };
-    const errStyle: React.CSSProperties = { fontSize: '11px', color: '#fca5a5', marginTop: '2px' };
+    const errStyle: React.CSSProperties = { fontSize: '12px', color: 'var(--rp-danger-text)', marginTop: '4px' };
 
     const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
         if (e.key === 'Enter') {
@@ -959,9 +960,9 @@ function OwnerBlockField({ value, onSubmit }: {
                     style={{
                         flex: 1, padding: '12px', borderRadius: '8px', cursor: 'pointer', textAlign: 'center',
                         fontSize: '14px', fontWeight: isOwner ? 700 : 500,
-                        backgroundColor: isOwner ? '#064e3b' : 'var(--bg-primary)',
-                        color: isOwner ? '#34d399' : 'var(--text-secondary)',
-                        border: isOwner ? '2px solid #065f46' : '1px solid var(--border-secondary)',
+                        backgroundColor: isOwner ? 'var(--bg-active)' : 'var(--bg-primary)',
+                        color: isOwner ? 'var(--rp-info-text)' : 'var(--text-secondary)',
+                        border: isOwner ? '2px solid var(--blue-600)' : '1px solid var(--border-secondary)',
                     }}
                 >
                     Yes, I am the owner
@@ -972,9 +973,9 @@ function OwnerBlockField({ value, onSubmit }: {
                     style={{
                         flex: 1, padding: '12px', borderRadius: '8px', cursor: 'pointer', textAlign: 'center',
                         fontSize: '14px', fontWeight: !isOwner ? 700 : 500,
-                        backgroundColor: !isOwner ? '#1e3a5f' : 'var(--bg-primary)',
-                        color: !isOwner ? '#60a5fa' : 'var(--text-secondary)',
-                        border: !isOwner ? '2px solid #3b82f6' : '1px solid var(--border-secondary)',
+                        backgroundColor: !isOwner ? 'var(--bg-active)' : 'var(--bg-primary)',
+                        color: !isOwner ? 'var(--rp-info-text)' : 'var(--text-secondary)',
+                        border: !isOwner ? '2px solid var(--blue-600)' : '1px solid var(--border-secondary)',
                     }}
                 >
                     No, someone else
@@ -1011,7 +1012,7 @@ function OwnerBlockField({ value, onSubmit }: {
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                <button type="button" style={{ padding: '10px 20px', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: 600, backgroundColor: '#059669', color: '#fff', border: 'none' }} onClick={handleSubmit}>Next &rarr;</button>
+                <button type="button" style={{ padding: '12px 24px', borderRadius: 'var(--radius-control)', cursor: 'pointer', fontSize: '13px', fontWeight: 600, backgroundColor: 'var(--blue-600)', color: 'var(--surface-white)', border: 'none' }} onClick={handleSubmit}>Next &rarr;</button>
             </div>
         </div>
     );
@@ -1039,7 +1040,7 @@ const s: Record<string, React.CSSProperties> = {
     },
     primaryBtn: {
         padding: '10px 20px', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: 600,
-        backgroundColor: '#059669', color: '#fff', border: 'none', whiteSpace: 'nowrap' as const,
+        backgroundColor: 'var(--blue-600)', color: 'var(--surface-white)', border: 'none', whiteSpace: 'nowrap' as const,
     },
     secondaryBtn: {
         padding: '10px 16px', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: 500,
@@ -1048,7 +1049,7 @@ const s: Record<string, React.CSSProperties> = {
     },
     error: {
         padding: '10px 14px', borderRadius: '8px', fontSize: '13px',
-        backgroundColor: '#7f1d1d', color: '#fca5a5', border: '1px solid #991b1b',
+        backgroundColor: 'var(--rp-danger-bg)', color: 'var(--rp-danger-text)', border: '1px solid var(--rp-danger-line)',
         marginBottom: '12px',
     },
 };

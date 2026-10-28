@@ -155,14 +155,14 @@ export const PartnerReassignDialog: React.FC<Props> = ({
 
 const styles: Record<string, React.CSSProperties> = {
     overlay: {
-        position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.55)',
+        position: 'fixed', inset: 0, backgroundColor: 'var(--rp-overlay-soft)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         zIndex: 100, padding: 16,
     },
     modal: {
         backgroundColor: 'var(--bg-primary)', borderRadius: 12, padding: 24,
         width: '100%', maxWidth: 480, border: '1px solid var(--border-secondary)',
-        boxShadow: '0 12px 40px rgba(0,0,0,0.5)',
+        boxShadow: '0 12px 40px var(--rp-overlay-soft)',
     },
     title: {
         margin: '0 0 8px', fontSize: 18, fontWeight: 700, color: 'var(--text-primary)',
@@ -187,12 +187,12 @@ const styles: Record<string, React.CSSProperties> = {
     },
     error: {
         marginTop: 12, padding: '8px 12px', borderRadius: 6, fontSize: 13,
-        backgroundColor: 'rgba(239,68,68,0.1)', color: '#fca5a5',
-        border: '1px solid rgba(239,68,68,0.3)',
+        backgroundColor: 'var(--rp-danger-wash)', color: 'var(--rp-danger-text)',
+        border: '1px solid var(--rp-danger-line)',
     },
     primaryBtn: {
         flex: 1, padding: '10px 16px', borderRadius: 8,
-        backgroundColor: '#3b82f6', color: '#fff', border: 'none',
+        backgroundColor: 'var(--blue-500)', color: 'var(--surface-white)', border: 'none',
         fontSize: 14, fontWeight: 600, cursor: 'pointer',
     },
     secondaryBtn: {

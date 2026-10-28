@@ -2,19 +2,20 @@
 import { useEffect, useState } from 'react';
 import { getAppointments, updateAppointment } from '../../api/client';
 import { useToast } from '../../contexts/ToastContext';
+import { PresentationIcon } from '../ui/PresentationIcon';
 
 const CARD_RADIUS = '12px';
 
 const STATUS_COLORS: Record<string, { bg: string; color: string }> = {
-    scheduled: { bg: '#4F46E533', color: '#818CF8' },
-    confirmed: { bg: '#10B98133', color: '#34D399' },
-    completed: { bg: '#14532d', color: '#4ade80' },
-    cancelled: { bg: '#7f1d1d', color: '#f87171' },
-    no_show: { bg: '#78350f', color: '#fbbf24' },
+    scheduled: { bg: 'var(--blue-50)', color: 'var(--blue-500)' },
+    confirmed: { bg: 'var(--rp-success-bg)', color: 'var(--rp-success-text)' },
+    completed: { bg: 'var(--rp-success-bg)', color: 'var(--rp-success-text)' },
+    cancelled: { bg: 'var(--rp-danger-text)', color: 'var(--rp-danger-text)' },
+    no_show: { bg: 'var(--rp-warn-bg)', color: 'var(--rp-warn-text)' },
 };
 
 const TYPE_ICONS: Record<string, string> = {
-    site_visit: '🏠', phone_call: '📞', video_call: '📹', meeting: '🤝', follow_up: '🔄',
+    site_visit: 'house', phone_call: 'phone', video_call: 'video', meeting: 'handshake', follow_up: 'refresh-cw',
 };
 
 export function MobileCalendar() {
@@ -68,9 +69,9 @@ export function MobileCalendar() {
                     <button key={chip.key} onClick={() => setFilter(chip.key)}
                         style={{
                             flexShrink: 0, padding: '6px 14px', borderRadius: '20px',
-                            border: filter === chip.key ? '1px solid #4F46E5' : '1px solid var(--border-secondary)',
-                            backgroundColor: filter === chip.key ? '#4F46E5' : 'var(--bg-secondary)',
-                            color: filter === chip.key ? '#fff' : 'var(--text-secondary)',
+                            border: filter === chip.key ? '1px solid var(--blue-600)' : '1px solid var(--border-secondary)',
+                            backgroundColor: filter === chip.key ? 'var(--blue-600)' : 'var(--bg-secondary)',
+                            color: filter === chip.key ? 'var(--surface-white)' : 'var(--text-secondary)',
                             fontSize: '13px', fontWeight: 600, cursor: 'pointer',
                         }}>
                         {chip.label}
@@ -101,7 +102,7 @@ export function MobileCalendar() {
                                         }}>
                                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '6px' }}>
                                                 <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                                                    <span style={{ fontSize: '18px' }}>{TYPE_ICONS[apt.type] || '📋'}</span>
+                                                    <PresentationIcon value={TYPE_ICONS[apt.type] || 'clipboard-list'} size={18} />
                                                     <div>
                                                         <div style={{ fontWeight: 600, fontSize: '14px', color: 'var(--text-primary)' }}>{apt.title}</div>
                                                         <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{time} · {apt.duration || 30}min</div>
@@ -116,21 +117,21 @@ export function MobileCalendar() {
                                             </div>
                                             {apt.contact && (
                                                 <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '4px' }}>
-                                                    👤 {apt.contact.name || apt.contact.phone_number}
+                                                    <PresentationIcon value="user-round" /> {apt.contact.name || apt.contact.phone_number}
                                                 </div>
                                             )}
                                             {apt.location && (
-                                                <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>📍 {apt.location}</div>
+                                                <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}><PresentationIcon value="map-pin" /> {apt.location}</div>
                                             )}
                                             {/* Quick actions */}
                                             {apt.status === 'scheduled' && (
                                                 <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
                                                     <button onClick={() => handleStatusChange(apt.id, 'confirmed')}
-                                                        style={{ flex: 1, padding: '6px', borderRadius: '8px', border: '1px solid #10B981', backgroundColor: 'transparent', color: '#10B981', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}>
+                                                        style={{ flex: 1, padding: '6px', borderRadius: '8px', border: '1px solid var(--rp-success-text)', backgroundColor: 'transparent', color: 'var(--rp-success-text)', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}>
                                                         Confirm
                                                     </button>
                                                     <button onClick={() => handleStatusChange(apt.id, 'cancelled')}
-                                                        style={{ flex: 1, padding: '6px', borderRadius: '8px', border: '1px solid #EF4444', backgroundColor: 'transparent', color: '#EF4444', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}>
+                                                        style={{ flex: 1, padding: '6px', borderRadius: '8px', border: '1px solid var(--rp-danger-text)', backgroundColor: 'transparent', color: 'var(--rp-danger-text)', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}>
                                                         Cancel
                                                     </button>
                                                 </div>

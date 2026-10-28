@@ -17,20 +17,21 @@ import { toDialablePhone } from '../lib/phone';
 import { InventoryQuickView } from './InventoryQuickView';
 import { LogActionModal, type LogActionType } from './LogActionModal';
 import CloseWonDialog from './deal/CloseWonDialog';
+import { IconText, PresentationIcon } from './ui/PresentationIcon';
 
 export const STAGES = ['NEW', 'QUALIFIED', 'VISIT_SCHEDULED', 'VISITED', 'NEGOTIATION', 'CLOSED_WON', 'CLOSED_LOST', 'ON_HOLD'] as const;
 
 export const STAGE_COLORS: Record<string, string> = {
-    NEW: '#3b82f6',
-    QUALIFIED: '#8b5cf6',
-    VISIT_SCHEDULED: '#f59e0b',
-    VISITED: '#06b6d4',
-    NEGOTIATION: '#f97316',
-    CLOSED_WON: '#22c55e',
-    CLOSED_LOST: '#ef4444',
-    ON_HOLD: '#6b7280',
-    MATCHED: '#8b5cf6', // legacy
-    MATCHING_APPOINTMENT: '#ec4899', // legacy
+    NEW: 'var(--rp-info-text)',
+    QUALIFIED: 'var(--rp-info-text)',
+    VISIT_SCHEDULED: 'var(--rp-info-text)',
+    VISITED: 'var(--rp-info-text)',
+    NEGOTIATION: 'var(--rp-info-text)',
+    CLOSED_WON: 'var(--rp-success-text)',
+    CLOSED_LOST: 'var(--rp-danger-text)',
+    ON_HOLD: 'var(--rp-warn-text)',
+    MATCHED: 'var(--rp-info-text)', // legacy
+    MATCHING_APPOINTMENT: 'var(--rp-info-text)', // legacy
 };
 
 export const STAGE_LABELS: Record<string, string> = {
@@ -448,7 +449,7 @@ export default function DealPipeline({
         const cell = (label: string, color: 'blue'|'purple'|'amber'|'cyan'|'green'|'orange'|'gray'|'red', onClick: () => void) => (
             <button type="button" onClick={e => { e.stopPropagation(); onClick(); }}
                 style={{ ...actionBtnStyle(color), fontSize: '11px', padding: '7px 6px', width: '100%' }}>
-                {label}
+                <IconText>{label}</IconText>
             </button>
         );
         return (
@@ -456,7 +457,7 @@ export default function DealPipeline({
                 {dial && (
                     <a href={`tel:${dial}`} onClick={e => e.stopPropagation()}
                         style={{ ...actionBtnStyle('blue'), width: '100%', textAlign: 'center', textDecoration: 'none', display: 'block', boxSizing: 'border-box' }}>
-                        📞 Call {deal.demand_contact?.name || ''}
+                        <PresentationIcon value="phone" /> Call {deal.demand_contact?.name || ''}
                     </a>
                 )}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
@@ -546,7 +547,7 @@ export default function DealPipeline({
         if (Number.isNaN(t)) return null;
         const days = Math.floor((Date.now() - t) / 86400000);
         const label = days <= 0 ? 'today' : `${days}d`;
-        const color = days >= 14 ? '#ef4444' : days >= 7 ? '#f59e0b' : 'var(--text-muted)';
+        const color = days >= 14 ? 'var(--rp-danger-text)' : days >= 7 ? 'var(--rp-warn-text)' : 'var(--text-muted)';
         const createdStr = new Date(created).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
         const title = `Created ${createdStr} · ${days <= 0 ? 'today' : `${days} day${days === 1 ? '' : 's'} old`}`;
         return { label, color, title };
@@ -558,11 +559,11 @@ export default function DealPipeline({
         return (
             <span title={a.title} style={{
                 display: 'inline-flex', alignItems: 'center', gap: 3,
-                padding: '2px 7px', borderRadius: 999, fontSize: '10px', fontWeight: 700,
+                padding: '4px 8px', borderRadius: 'var(--radius-control)', fontSize: '12px', fontWeight: 500,
                 whiteSpace: 'nowrap', flexShrink: 0,
                 backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-secondary)',
                 color: a.color,
-            }}>🕐 {a.label}</span>
+            }}><PresentationIcon value="clock" /> {a.label}</span>
         );
     };
 
@@ -614,9 +615,9 @@ export default function DealPipeline({
         if (!last && !next && !noAns) return null;
         return (
             <div style={{ display: 'flex', justifyContent: last ? 'space-between' : 'flex-start', alignItems: 'center', gap: 8, flexWrap: 'wrap', fontSize: '11px', marginBottom: '6px', lineHeight: 1.4 }}>
-                {last && <span style={{ color: 'var(--text-secondary)' }}>{last}</span>}
-                {noAns > 0 && <span style={{ color: noAns >= 4 ? '#f87171' : 'var(--text-muted)', whiteSpace: 'nowrap', fontWeight: 600 }} title={`${noAns} no-answer call${noAns === 1 ? '' : 's'} logged`}>📵 {noAns}× no answer</span>}
-                {next && <span style={{ color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>➡️ Next: {next}</span>}
+                {last && <span style={{ color: 'var(--text-secondary)' }}><IconText>{last}</IconText></span>}
+                {noAns > 0 && <span style={{ color: noAns >= 4 ? 'var(--rp-danger-text)' : 'var(--text-muted)', whiteSpace: 'nowrap', fontWeight: 600 }} title={`${noAns} no-answer call${noAns === 1 ? '' : 's'} logged`}><PresentationIcon value="phone-off" /> {noAns}× no answer</span>}
+                {next && <span style={{ color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>Next: {next}</span>}
             </div>
         );
     };
@@ -627,9 +628,9 @@ export default function DealPipeline({
         if (variant === 'red') {
             return {
                 padding: '6px 12px', borderRadius: '7px', fontSize: '12px', fontWeight: 700,
-                backgroundColor: 'rgba(239,68,68,0.10)',
-                border: '1.5px solid rgba(239,68,68,0.45)',
-                color: '#fca5a5',
+                backgroundColor: 'var(--rp-danger-bg)',
+                border: '1px solid var(--rp-danger-text)',
+                color: 'var(--rp-danger-text)',
                 cursor: 'pointer', flex: 1,
                 transition: 'background-color 150ms ease, border-color 150ms ease',
             };
@@ -761,8 +762,8 @@ export default function DealPipeline({
                 {/* View toggle — desktop only */}
                 {!isMobile && (
                     <div style={{ display: 'flex', borderRadius: '8px', border: '1px solid var(--border-secondary)', overflow: 'hidden' }}>
-                        <button onClick={() => setViewMode('kanban')} style={{ padding: '6px 14px', fontSize: '12px', fontWeight: 600, border: 'none', cursor: 'pointer', backgroundColor: viewMode === 'kanban' ? 'var(--accent-primary)' : 'var(--bg-secondary)', color: viewMode === 'kanban' ? '#fff' : 'var(--text-secondary)' }}>Kanban</button>
-                        <button onClick={() => setViewMode('list')} style={{ padding: '6px 14px', fontSize: '12px', fontWeight: 600, border: 'none', cursor: 'pointer', backgroundColor: viewMode === 'list' ? 'var(--accent-primary)' : 'var(--bg-secondary)', color: viewMode === 'list' ? '#fff' : 'var(--text-secondary)' }}>List</button>
+                        <button onClick={() => setViewMode('kanban')} style={{ padding: '6px 14px', fontSize: '12px', fontWeight: 600, border: 'none', cursor: 'pointer', backgroundColor: viewMode === 'kanban' ? 'var(--accent-primary)' : 'var(--bg-secondary)', color: viewMode === 'kanban' ? 'var(--surface-white)' : 'var(--text-secondary)' }}>Kanban</button>
+                        <button onClick={() => setViewMode('list')} style={{ padding: '6px 14px', fontSize: '12px', fontWeight: 600, border: 'none', cursor: 'pointer', backgroundColor: viewMode === 'list' ? 'var(--accent-primary)' : 'var(--bg-secondary)', color: viewMode === 'list' ? 'var(--surface-white)' : 'var(--text-secondary)' }}>List</button>
                     </div>
                 )}
             </div>
@@ -771,7 +772,7 @@ export default function DealPipeline({
             <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '20px', flexWrap: isMobile ? 'wrap' : 'nowrap' }}>
                 {/* Search bar */}
                 <div style={{ position: 'relative', flex: 1, minWidth: isMobile ? '100%' : '220px' }}>
-                    <span style={{ position: 'absolute', left: '11px', top: '50%', transform: 'translateY(-50%)', fontSize: '14px', color: 'var(--text-muted)', pointerEvents: 'none' }}>🔍</span>
+                    <span style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)', pointerEvents: 'none' }}><PresentationIcon value="search" /></span>
                     <input
                         type="text"
                         placeholder="Search by name, phone, or address..."
@@ -800,11 +801,11 @@ export default function DealPipeline({
                         style={{
                             display: 'inline-flex', alignItems: 'center', gap: '6px', flexShrink: 0,
                             padding: '6px 10px', borderRadius: '10px', fontSize: '12px', fontWeight: 600,
-                            backgroundColor: 'rgba(59,130,246,0.10)', border: '1px solid rgba(59,130,246,0.40)',
+                            backgroundColor: 'var(--rp-info-wash)', border: '1px solid var(--rp-info-line)',
                             color: 'var(--text-primary)',
                         }}
                     >
-                        <span>👤 {contactName || contactPhone}</span>
+                        <span><PresentationIcon value="user-round" /> {contactName || contactPhone}</span>
                         <button
                             type="button"
                             aria-label="Clear lead filter"
@@ -819,12 +820,13 @@ export default function DealPipeline({
 
                 {/* Stage dropdown */}
                 <select
+                    aria-label="Stage filter"
                     value={filterStatus}
                     onChange={e => setFilterStatus(e.target.value)}
                     style={{
                         padding: '9px 10px', borderRadius: '10px', fontSize: '13px', fontWeight: 600, flexShrink: 0,
                         border: filterStatus ? `1.5px solid ${STAGE_COLORS[filterStatus]}` : '1px solid var(--border-secondary)',
-                        backgroundColor: filterStatus ? STAGE_COLORS[filterStatus] + '15' : 'var(--bg-secondary)',
+                        backgroundColor: filterStatus ? 'var(--bg-active)' : 'var(--bg-primary)',
                         color: filterStatus ? STAGE_COLORS[filterStatus] : 'var(--text-primary)',
                         cursor: 'pointer',
                     }}
@@ -839,6 +841,7 @@ export default function DealPipeline({
 
                 {/* Sort control (2026-07-22) — server-side ordering across ALL matching deals */}
                 <select
+                    aria-label="Sort deals"
                     value={sortMode}
                     onChange={e => setSortMode(e.target.value)}
                     title="Sort deals"
@@ -849,11 +852,11 @@ export default function DealPipeline({
                         fontWeight: 600, fontSize: '13px', outline: 'none',
                     }}
                 >
-                    <option value="next_action">⚡ Work queue (default)</option>
-                    <option value="lead_date:desc">🆕 Newest lead first</option>
-                    <option value="lead_date:asc">🕰 Oldest lead first</option>
-                    <option value="reminder_date:asc">⏰ Oldest reminder first</option>
-                    <option value="reminder_date:desc">⏳ Latest reminder first</option>
+                    <option value="next_action">Work queue (default)</option>
+                    <option value="lead_date:desc">Newest lead first</option>
+                    <option value="lead_date:asc">Oldest lead first</option>
+                    <option value="reminder_date:asc">Oldest reminder first</option>
+                    <option value="reminder_date:desc">Latest reminder first</option>
                 </select>
 
                 {/* Filters button */}
@@ -867,17 +870,17 @@ export default function DealPipeline({
                                 padding: '9px 14px', borderRadius: '10px', cursor: 'pointer', flexShrink: 0,
                                 border: activeCount > 0 ? '1.5px solid var(--text-link)' : '1px solid var(--border-secondary)',
                                 backgroundColor: activeCount > 0 ? 'var(--text-link)' : 'var(--bg-secondary)',
-                                color: activeCount > 0 ? '#fff' : 'var(--text-secondary)',
+                                color: activeCount > 0 ? 'var(--surface-white)' : 'var(--text-secondary)',
                                 fontWeight: 600, fontSize: '13px',
                                 display: 'flex', alignItems: 'center', gap: '6px',
                             }}
                         >
-                            <span>⚙</span>
+                            <PresentationIcon value="settings" />
                             <span>Filters{activeCount > 0 ? ` (${activeCount})` : ''}</span>
                             {activeCount > 0 && (
                                 <span style={{
                                     marginLeft: 2, padding: '1px 7px', borderRadius: 999,
-                                    backgroundColor: 'rgba(255,255,255,0.25)', fontWeight: 700,
+                                    backgroundColor: 'var(--rp-surface-wash)', fontWeight: 700,
                                     fontSize: '12px',
                                 }}>
                                     {deals.length} result{deals.length !== 1 ? 's' : ''}
@@ -895,18 +898,18 @@ export default function DealPipeline({
                     style={{
                         padding: '9px 12px', borderRadius: '10px', cursor: 'pointer', flexShrink: 0,
                         border: '1px solid var(--border-secondary)',
-                        backgroundColor: showClosedDeals ? 'var(--bg-tertiary, #1f2937)' : 'var(--bg-secondary)',
+                        backgroundColor: showClosedDeals ? 'var(--bg-tertiary, var(--text-primary))' : 'var(--bg-secondary)',
                         color: 'var(--text-secondary)',
                         fontWeight: 600, fontSize: '12px',
                         display: 'flex', alignItems: 'center', gap: '4px',
                     }}
                 >
-                    {showClosedDeals ? '👁 Hide closed' : '🗂 Show closed'}
+                    {showClosedDeals ? 'Hide closed' : 'Show closed'}
                 </button>
             </div>
 
             {error && (
-                <div style={{ padding: '12px', borderRadius: '8px', backgroundColor: '#fef2f2', color: '#dc2626', marginBottom: '12px', fontSize: '13px' }}>
+                <div style={{ padding: '12px', borderRadius: 'var(--radius-card)', backgroundColor: 'var(--rp-danger-bg)', color: 'var(--rp-danger-text)', marginBottom: '12px', fontSize: '13px' }}>
                     {error}
                 </div>
             )}
@@ -920,7 +923,7 @@ export default function DealPipeline({
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                         {deals.length === 0 ? (
                             <div className="empty-state">
-                                <span className="empty-state__icon">🎯</span>
+                                <span className="empty-state__icon"><PresentationIcon value="target" size={28} /></span>
                                 <p className="empty-state__title">No deals yet</p>
                                 <p className="empty-state__body">Create your first deal to track it through the pipeline.</p>
                             </div>
@@ -949,10 +952,10 @@ export default function DealPipeline({
                                                 style={{
                                                     display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
                                                     width: 22, height: 22, borderRadius: '50%',
-                                                    backgroundColor: '#22c55e22', color: '#16a34a',
+                                                    backgroundColor: 'var(--rp-success-bg)', color: 'var(--rp-success-text)',
                                                     textDecoration: 'none', fontSize: 12, flexShrink: 0,
                                                 }}
-                                            >📞</a>
+                                            ><PresentationIcon value="phone" /></a>
                                         )}
                                         {/* #6 (2026-07-01): call the referral partner directly from the tile (partner-referral
                                             deals have a PENDING placeholder customer phone, so the green call above is hidden). */}
@@ -961,8 +964,8 @@ export default function DealPipeline({
                                                 href={`tel:${toDialablePhone((deal.demand_contact as any)?.referral_partner_phone)}`}
                                                 onClick={e => e.stopPropagation()}
                                                 title={`Call partner ${(deal.demand_contact as any)?.referral_partner_name || ''}`.trim()}
-                                                style={{ display: 'inline-flex', alignItems: 'center', gap: 3, height: 22, borderRadius: 11, padding: '0 8px', backgroundColor: '#8b5cf622', color: '#7c3aed', textDecoration: 'none', fontSize: 11, fontWeight: 600, flexShrink: 0 }}
-                                            >🤝📞 {((deal.demand_contact as any)?.referral_partner_name || 'Partner').split(' ')[0]}</a>
+                                                style={{ display: 'inline-flex', alignItems: 'center', gap: 3, height: 22, borderRadius: 11, padding: '0 8px', backgroundColor: 'var(--blue-50)', color: 'var(--blue-700)', textDecoration: 'none', fontSize: 11, fontWeight: 600, flexShrink: 0 }}
+                                            ><PresentationIcon value="phone" /> {((deal.demand_contact as any)?.referral_partner_name || 'Partner').split(' ')[0]}</a>
                                         )}
                                     </div>
                                     <div style={{ display: 'flex', gap: 4, alignItems: 'center', flexShrink: 0 }}>
@@ -970,7 +973,7 @@ export default function DealPipeline({
                                         {(deal as any).ai_status && <AIStatusBadge status={(deal as any).ai_status} />}
                                         <span style={{
                                             padding: '2px 8px', borderRadius: '10px', fontSize: '10px', fontWeight: 600,
-                                            backgroundColor: STAGE_COLORS[deal.status] + '15',
+                                            backgroundColor: 'var(--bg-primary)',
                                             color: STAGE_COLORS[deal.status],
                                         }}>
                                             {STAGE_LABELS[deal.status] || deal.status}
@@ -1004,16 +1007,16 @@ export default function DealPipeline({
                                     {matchCounts[deal.id] != null && (
                                         <span title="Properties matching this budget & type (location not applied)" style={{
                                             fontSize: '10px', fontWeight: 700, padding: '2px 7px', borderRadius: 999, whiteSpace: 'nowrap',
-                                            backgroundColor: matchCounts[deal.id] > 0 ? 'rgba(34,197,94,0.12)' : 'rgba(107,114,128,0.12)',
-                                            color: matchCounts[deal.id] > 0 ? '#16a34a' : 'var(--text-muted)',
-                                        }}>🏠 {matchCounts[deal.id]} match{matchCounts[deal.id] === 1 ? '' : 'es'}</span>
+                                            backgroundColor: matchCounts[deal.id] > 0 ? 'var(--rp-success-wash)' : 'var(--rp-neutral-wash)',
+                                            color: matchCounts[deal.id] > 0 ? 'var(--rp-success-text)' : 'var(--text-muted)',
+                                        }}><PresentationIcon value="house" /> {matchCounts[deal.id]} match{matchCounts[deal.id] === 1 ? '' : 'es'}</span>
                                     )}
                                 </div>
 
                                 {/* Stage info line (AI activity) */}
                                 {getStageInfoLine(deal) && (
                                     <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '6px' }}>
-                                        {getStageInfoLine(deal)}
+                                        <IconText>{getStageInfoLine(deal)!}</IconText>
                                     </div>
                                 )}
                                 {/* Last human action + next action */}
@@ -1044,7 +1047,7 @@ export default function DealPipeline({
                                             style={{ width: '100%', fontSize: '11px', padding: '3px 6px', borderRadius: '4px', border: '1px solid var(--border-secondary)', backgroundColor: 'var(--bg-input)', color: 'var(--text-primary)' }}
                                             title="Assign to one of your team members"
                                         >
-                                            <option value="">👤 Assign to teammate…</option>
+                                            <option value="">Assign to teammate…</option>
                                             {partnerRoster.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
                                         </select>
                                     </div>
@@ -1056,8 +1059,8 @@ export default function DealPipeline({
                                         style={{ marginBottom: 8, cursor: 'pointer' }}
                                         onClick={e => { e.stopPropagation(); setQuickViewInventoryId(deal.inventory!.id); }}
                                     >
-                                        <div style={{ fontSize: '11px', color: '#60a5fa', textDecoration: 'underline' }}>
-                                            📋 {(deal.inventory as any).type || 'Property'} · {(deal.inventory as any).location || ''} →
+                                        <div style={{ fontSize: '11px', color: 'var(--blue-400)', textDecoration: 'underline' }}>
+                                            <PresentationIcon value="clipboard-list" /> {(deal.inventory as any).type || 'Property'} · {(deal.inventory as any).location || ''} →
                                         </div>
                                     </div>
                                 )}
@@ -1067,9 +1070,9 @@ export default function DealPipeline({
                                 {deal.status === 'QUALIFIED' && (
                                     <div style={{ marginTop: 6, display: 'flex', flexDirection: 'column', gap: 6 }}>
                                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6 }}>
-                                            <button type="button" onClick={e => { e.stopPropagation(); setQualifiedAction({ deal, mode: 'reminder' }); }} style={actionBtnStyle('cyan')}>⏰ Reminder</button>
-                                            <button type="button" onClick={e => openLogAction(deal, 'SCHEDULED_VISIT', e)} style={actionBtnStyle('amber')}>📅 Visit</button>
-                                            <button type="button" onClick={e => { e.stopPropagation(); setQualifiedAction({ deal, mode: 'share' }); }} style={actionBtnStyle('purple')}>📤 Share</button>
+                                            <button type="button" onClick={e => { e.stopPropagation(); setQualifiedAction({ deal, mode: 'reminder' }); }} style={actionBtnStyle('cyan')}>Reminder</button>
+                                            <button type="button" onClick={e => openLogAction(deal, 'SCHEDULED_VISIT', e)} style={actionBtnStyle('amber')}>Visit</button>
+                                            <button type="button" onClick={e => { e.stopPropagation(); setQualifiedAction({ deal, mode: 'share' }); }} style={actionBtnStyle('purple')}>Share</button>
                                         </div>
                                         <button type="button" onClick={e => { e.stopPropagation(); handleDispose(deal); }}
                                             style={{ background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: '11px', cursor: 'pointer', alignSelf: 'flex-start', textDecoration: 'underline', padding: '2px 0' }}>
@@ -1080,39 +1083,39 @@ export default function DealPipeline({
                                 {/* P7 (2026-07-01): guided VISIT_SCHEDULED — advance→Visited / reschedule / next reminder. */}
                                 {deal.status === 'VISIT_SCHEDULED' && (
                                     <div style={{ marginTop: 6, display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6 }}>
-                                        <button type="button" onClick={e => { e.stopPropagation(); advanceAndRemind(deal, 'VISITED'); }} style={actionBtnStyle('green')}>✅ Visited</button>
-                                        <button type="button" onClick={e => openLogAction(deal, 'SCHEDULED_VISIT', e)} style={actionBtnStyle('amber')}>📅 Reschedule</button>
-                                        <button type="button" onClick={e => { e.stopPropagation(); setQualifiedAction({ deal, mode: 'reminder' }); }} style={actionBtnStyle('cyan')}>⏰ Reminder</button>
+                                        <button type="button" onClick={e => { e.stopPropagation(); advanceAndRemind(deal, 'VISITED'); }} style={actionBtnStyle('green')}>Visited</button>
+                                        <button type="button" onClick={e => openLogAction(deal, 'SCHEDULED_VISIT', e)} style={actionBtnStyle('amber')}>Reschedule</button>
+                                        <button type="button" onClick={e => { e.stopPropagation(); setQualifiedAction({ deal, mode: 'reminder' }); }} style={actionBtnStyle('cyan')}>Reminder</button>
                                     </div>
                                 )}
                                 {/* P7: guided VISITED — move to negotiation / book a revisit / next reminder. */}
                                 {deal.status === 'VISITED' && (
                                     <div style={{ marginTop: 6, display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6 }}>
-                                        <button type="button" onClick={e => { e.stopPropagation(); advanceAndRemind(deal, 'NEGOTIATION'); }} style={actionBtnStyle('green')}>👍 Negotiate</button>
-                                        <button type="button" onClick={e => openLogAction(deal, 'SCHEDULED_VISIT', e)} style={actionBtnStyle('amber')}>🔁 Revisit</button>
-                                        <button type="button" onClick={e => { e.stopPropagation(); setQualifiedAction({ deal, mode: 'reminder' }); }} style={actionBtnStyle('cyan')}>⏰ Reminder</button>
+                                        <button type="button" onClick={e => { e.stopPropagation(); advanceAndRemind(deal, 'NEGOTIATION'); }} style={actionBtnStyle('green')}>Negotiate</button>
+                                        <button type="button" onClick={e => openLogAction(deal, 'SCHEDULED_VISIT', e)} style={actionBtnStyle('amber')}>Revisit</button>
+                                        <button type="button" onClick={e => { e.stopPropagation(); setQualifiedAction({ deal, mode: 'reminder' }); }} style={actionBtnStyle('cyan')}>Reminder</button>
                                     </div>
                                 )}
                                 {deal.status === 'NEGOTIATION' && (
                                     <>
                                         <button type="button" onClick={e => openLogAction(deal, 'MEETING_BOOKED', e)}
                                             style={{ ...actionBtnStyle('orange'), marginTop: 6, width: '100%' }}>
-                                            📝 Log Update
+                                            Log Update
                                         </button>
                                         <button type="button" onClick={e => { e.stopPropagation(); setQualifiedAction({ deal, mode: 'reminder' }); }}
                                             style={{ ...actionBtnStyle('cyan'), marginTop: 6, width: '100%' }}>
-                                            ⏰ Set Reminder
+                                            Set Reminder
                                         </button>
                                         <button type="button" onClick={e => { e.stopPropagation(); setCloseWonTarget({ id: deal.id, label: `${deal.demand_contact?.name ? deal.demand_contact.name + ' · ' : ''}Deal #${deal.id.slice(0, 8)}` }); }}
                                             style={{ ...actionBtnStyle('green'), marginTop: 6, width: '100%' }}>
-                                            🏆 Close Won
+                                            Close Won
                                         </button>
                                     </>
                                 )}
                                 {deal.status === 'ON_HOLD' && (
                                     <button type="button" onClick={e => { e.stopPropagation(); setReviveStage(''); setReviveDeal(deal); }}
                                         style={{ ...actionBtnStyle('gray'), marginTop: 6, width: '100%' }}>
-                                        🔄 Review / Revive
+                                        Review / Revive
                                     </button>
                                 )}
                                 {/* 2026-05-12: Close-as-Lost shortcut on every ACTIVE deal card.
@@ -1129,7 +1132,7 @@ export default function DealPipeline({
                                         }}
                                         title="Close this deal as Lost. Captures the reason in the deal timeline."
                                     >
-                                        ❌ Close as Lost
+                                        Close as Lost
                                     </button>
                                 )}
                                 {deal.status === 'CLOSED_WON' && (
@@ -1137,7 +1140,7 @@ export default function DealPipeline({
                                         {deal.inventory_id && (
                                             <button type="button" onClick={e => { e.stopPropagation(); openTransferModal(deal); }}
                                                 style={actionBtnStyle('green')}>
-                                                🏠 Transfer
+                                                Transfer
                                             </button>
                                         )}
                                         <button type="button" onClick={e => { e.stopPropagation(); setCommissionDealId(deal.id); }}
@@ -1187,7 +1190,7 @@ export default function DealPipeline({
                                     </span>
                                     <span style={{
                                         fontSize: '11px', fontWeight: 600, color: STAGE_COLORS[stage],
-                                        backgroundColor: STAGE_COLORS[stage] + '15', padding: '2px 8px', borderRadius: '10px',
+                                        backgroundColor: 'var(--bg-primary)', padding: '4px 8px', borderRadius: 'var(--radius-control)',
                                     }}>
                                         {stageCounts[stage] || 0}
                                     </span>
@@ -1197,7 +1200,7 @@ export default function DealPipeline({
                                 <div style={{ flex: 1, overflowY: 'auto', padding: '8px' }}>
                                     {stageDeals.length === 0 && (
                                         <div className="empty-state" style={{ padding: '20px' }}>
-                                            <span className="empty-state__icon" style={{ fontSize: '24px' }}>📋</span>
+                                            <span className="empty-state__icon"><PresentationIcon value="clipboard-list" size={24} /></span>
                                             <p className="empty-state__body">No deals in this stage</p>
                                         </div>
                                     )}
@@ -1231,10 +1234,10 @@ export default function DealPipeline({
                                                             style={{
                                                                 display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
                                                                 width: 20, height: 20, borderRadius: '50%',
-                                                                backgroundColor: '#22c55e22', color: '#16a34a',
+                                                                backgroundColor: 'var(--rp-success-bg)', color: 'var(--rp-success-text)',
                                                                 textDecoration: 'none', fontSize: 11, flexShrink: 0,
                                                             }}
-                                                        >📞</a>
+                                                        ><PresentationIcon value="phone" /></a>
                                                     )}
                                                     {/* #6 (2026-07-01): call the referral partner directly from the tile (mobile). */}
                                                     {toDialablePhone((deal.demand_contact as any)?.referral_partner_phone) && (
@@ -1242,8 +1245,8 @@ export default function DealPipeline({
                                                             href={`tel:${toDialablePhone((deal.demand_contact as any)?.referral_partner_phone)}`}
                                                             onClick={e => e.stopPropagation()}
                                                             title={`Call partner ${(deal.demand_contact as any)?.referral_partner_name || ''}`.trim()}
-                                                            style={{ display: 'inline-flex', alignItems: 'center', gap: 3, height: 20, borderRadius: 10, padding: '0 7px', backgroundColor: '#8b5cf622', color: '#7c3aed', textDecoration: 'none', fontSize: 10, fontWeight: 600, flexShrink: 0 }}
-                                                        >🤝📞 {((deal.demand_contact as any)?.referral_partner_name || 'Partner').split(' ')[0]}</a>
+                                                            style={{ display: 'inline-flex', alignItems: 'center', gap: 3, height: 20, borderRadius: 10, padding: '0 7px', backgroundColor: 'var(--blue-50)', color: 'var(--blue-700)', textDecoration: 'none', fontSize: 10, fontWeight: 600, flexShrink: 0 }}
+                                                        ><PresentationIcon value="phone" /> {((deal.demand_contact as any)?.referral_partner_name || 'Partner').split(' ')[0]}</a>
                                                     )}
                                                 </div>
                                                 <div style={{ display: 'flex', gap: 4, alignItems: 'center', flexShrink: 0 }}>
@@ -1277,16 +1280,16 @@ export default function DealPipeline({
                                                 {matchCounts[deal.id] != null && (
                                                     <span title="Properties matching this budget & type (location not applied)" style={{
                                                         fontSize: '10px', fontWeight: 700, padding: '2px 7px', borderRadius: 999, whiteSpace: 'nowrap',
-                                                        backgroundColor: matchCounts[deal.id] > 0 ? 'rgba(34,197,94,0.12)' : 'rgba(107,114,128,0.12)',
-                                                        color: matchCounts[deal.id] > 0 ? '#16a34a' : 'var(--text-muted)',
-                                                    }}>🏠 {matchCounts[deal.id]} match{matchCounts[deal.id] === 1 ? '' : 'es'}</span>
+                                                        backgroundColor: matchCounts[deal.id] > 0 ? 'var(--rp-success-wash)' : 'var(--rp-neutral-wash)',
+                                                        color: matchCounts[deal.id] > 0 ? 'var(--rp-success-text)' : 'var(--text-muted)',
+                                                    }}><PresentationIcon value="house" /> {matchCounts[deal.id]} match{matchCounts[deal.id] === 1 ? '' : 'es'}</span>
                                                 )}
                                             </div>
 
                                             {/* Stage-specific info line (AI activity) */}
                                             {getStageInfoLine(deal) && (
                                                 <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '6px', lineHeight: 1.4 }}>
-                                                    {getStageInfoLine(deal)}
+                                                    <IconText>{getStageInfoLine(deal)!}</IconText>
                                                 </div>
                                             )}
                                             {/* Last human action + next action */}
@@ -1323,7 +1326,7 @@ export default function DealPipeline({
                                                         style={{ width: '100%', fontSize: '11px', padding: '3px 6px', borderRadius: '4px', border: '1px solid var(--border-secondary)', backgroundColor: 'var(--bg-input)', color: 'var(--text-primary)' }}
                                                         title="Assign to one of your team members"
                                                     >
-                                                        <option value="">👤 Assign to teammate…</option>
+                                                        <option value="">Assign to teammate…</option>
                                                         {partnerRoster.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
                                                     </select>
                                                 </div>
@@ -1341,8 +1344,8 @@ export default function DealPipeline({
                                                             <img src={deal.inventory.media_urls[0]} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                                                         </div>
                                                     )}
-                                                    <div style={{ fontSize: '11px', color: '#60a5fa', textDecoration: 'underline' }}>
-                                                        📋 {(deal.inventory as any).type || 'Property'} · {(deal.inventory as any).location || ''} →
+                                                    <div style={{ fontSize: '11px', color: 'var(--blue-400)', textDecoration: 'underline' }}>
+                                                        <PresentationIcon value="clipboard-list" /> {(deal.inventory as any).type || 'Property'} · {(deal.inventory as any).location || ''} →
                                                     </div>
                                                 </div>
                                             )}
@@ -1352,9 +1355,9 @@ export default function DealPipeline({
                                             {deal.status === 'QUALIFIED' && (
                                                 <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
                                                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6 }}>
-                                                        <button type="button" onClick={e => { e.stopPropagation(); setQualifiedAction({ deal, mode: 'reminder' }); }} style={actionBtnStyle('cyan')}>⏰ Reminder</button>
-                                                        <button type="button" onClick={e => openLogAction(deal, 'SCHEDULED_VISIT', e)} style={actionBtnStyle('amber')}>📅 Visit</button>
-                                                        <button type="button" onClick={e => { e.stopPropagation(); setQualifiedAction({ deal, mode: 'share' }); }} style={actionBtnStyle('purple')}>📤 Share</button>
+                                                        <button type="button" onClick={e => { e.stopPropagation(); setQualifiedAction({ deal, mode: 'reminder' }); }} style={actionBtnStyle('cyan')}>Reminder</button>
+                                                        <button type="button" onClick={e => openLogAction(deal, 'SCHEDULED_VISIT', e)} style={actionBtnStyle('amber')}>Visit</button>
+                                                        <button type="button" onClick={e => { e.stopPropagation(); setQualifiedAction({ deal, mode: 'share' }); }} style={actionBtnStyle('purple')}>Share</button>
                                                     </div>
                                                     <button type="button" onClick={e => { e.stopPropagation(); handleDispose(deal); }}
                                                         style={{ background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: '11px', cursor: 'pointer', alignSelf: 'flex-start', textDecoration: 'underline', padding: '2px 0' }}>
@@ -1365,39 +1368,39 @@ export default function DealPipeline({
                                             {/* P7 (2026-07-01): guided VISIT_SCHEDULED (mobile). */}
                                             {deal.status === 'VISIT_SCHEDULED' && (
                                                 <div style={{ marginTop: 8, display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6 }}>
-                                                    <button type="button" onClick={e => { e.stopPropagation(); advanceAndRemind(deal, 'VISITED'); }} style={actionBtnStyle('green')}>✅ Visited</button>
-                                                    <button type="button" onClick={e => openLogAction(deal, 'SCHEDULED_VISIT', e)} style={actionBtnStyle('amber')}>📅 Reschedule</button>
-                                                    <button type="button" onClick={e => { e.stopPropagation(); setQualifiedAction({ deal, mode: 'reminder' }); }} style={actionBtnStyle('cyan')}>⏰ Reminder</button>
+                                                    <button type="button" onClick={e => { e.stopPropagation(); advanceAndRemind(deal, 'VISITED'); }} style={actionBtnStyle('green')}>Visited</button>
+                                                    <button type="button" onClick={e => openLogAction(deal, 'SCHEDULED_VISIT', e)} style={actionBtnStyle('amber')}>Reschedule</button>
+                                                    <button type="button" onClick={e => { e.stopPropagation(); setQualifiedAction({ deal, mode: 'reminder' }); }} style={actionBtnStyle('cyan')}>Reminder</button>
                                                 </div>
                                             )}
                                             {/* P7: guided VISITED (mobile). */}
                                             {deal.status === 'VISITED' && (
                                                 <div style={{ marginTop: 8, display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6 }}>
-                                                    <button type="button" onClick={e => { e.stopPropagation(); advanceAndRemind(deal, 'NEGOTIATION'); }} style={actionBtnStyle('green')}>👍 Negotiate</button>
-                                                    <button type="button" onClick={e => openLogAction(deal, 'SCHEDULED_VISIT', e)} style={actionBtnStyle('amber')}>🔁 Revisit</button>
-                                                    <button type="button" onClick={e => { e.stopPropagation(); setQualifiedAction({ deal, mode: 'reminder' }); }} style={actionBtnStyle('cyan')}>⏰ Reminder</button>
+                                                    <button type="button" onClick={e => { e.stopPropagation(); advanceAndRemind(deal, 'NEGOTIATION'); }} style={actionBtnStyle('green')}>Negotiate</button>
+                                                    <button type="button" onClick={e => openLogAction(deal, 'SCHEDULED_VISIT', e)} style={actionBtnStyle('amber')}>Revisit</button>
+                                                    <button type="button" onClick={e => { e.stopPropagation(); setQualifiedAction({ deal, mode: 'reminder' }); }} style={actionBtnStyle('cyan')}>Reminder</button>
                                                 </div>
                                             )}
                                             {deal.status === 'NEGOTIATION' && (
                                                 <>
                                                     <button type="button" onClick={e => openLogAction(deal, 'MEETING_BOOKED', e)}
                                                         style={{ ...actionBtnStyle('orange'), marginTop: 8, width: '100%' }}>
-                                                        📝 Log Update
+                                                        Log Update
                                                     </button>
                                                     <button type="button" onClick={e => { e.stopPropagation(); setQualifiedAction({ deal, mode: 'reminder' }); }}
                                                         style={{ ...actionBtnStyle('cyan'), marginTop: 8, width: '100%' }}>
-                                                        ⏰ Set Reminder
+                                                        Set Reminder
                                                     </button>
                                                     <button type="button" onClick={e => { e.stopPropagation(); setCloseWonTarget({ id: deal.id, label: `${deal.demand_contact?.name ? deal.demand_contact.name + ' · ' : ''}Deal #${deal.id.slice(0, 8)}` }); }}
                                                         style={{ ...actionBtnStyle('green'), marginTop: 8, width: '100%' }}>
-                                                        🏆 Close Won
+                                                        Close Won
                                                     </button>
                                                 </>
                                             )}
                                             {deal.status === 'ON_HOLD' && (
                                                 <button type="button" onClick={e => { e.stopPropagation(); setReviveStage(''); setReviveDeal(deal); }}
                                                     style={{ ...actionBtnStyle('gray'), marginTop: 8, width: '100%' }}>
-                                                    🔄 Review / Revive
+                                                    Review / Revive
                                                 </button>
                                             )}
                                             {deal.status === 'CLOSED_WON' && (
@@ -1413,7 +1416,7 @@ export default function DealPipeline({
                                                     style={{ ...actionBtnStyle('red'), marginTop: 8, width: '100%', fontSize: '11px' }}
                                                     title="Close this deal as Lost. Captures the reason in the deal timeline."
                                                 >
-                                                    ❌ Close as Lost
+                                                    Close as Lost
                                                 </button>
                                             )}
                                             </div>
@@ -1435,7 +1438,7 @@ export default function DealPipeline({
                 </div>
             ) : (
                 /* List View (desktop only) */
-                <div style={{ flex: 1, overflowY: 'auto' }}>
+                <div className="rp-table-scroll" tabIndex={0} role="region" aria-label="Deal pipeline table" style={{ flex: 1, overflowY: 'auto' }}>
                     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
                         <thead>
                             <tr style={{ borderBottom: '2px solid var(--border-secondary)' }}>
@@ -1462,7 +1465,7 @@ export default function DealPipeline({
                                     <td style={{ padding: '10px 8px' }}>
                                         <span style={{
                                             padding: '2px 8px', borderRadius: '10px', fontSize: '11px', fontWeight: 600,
-                                            backgroundColor: STAGE_COLORS[deal.status] + '15',
+                                            backgroundColor: 'var(--bg-primary)',
                                             color: STAGE_COLORS[deal.status],
                                         }}>
                                             {STAGE_LABELS[deal.status] || deal.status}
@@ -1481,7 +1484,7 @@ export default function DealPipeline({
                     </table>
                     {deals.length === 0 && (
                         <div className="empty-state">
-                            <span className="empty-state__icon">🎯</span>
+                            <span className="empty-state__icon"><PresentationIcon value="target" size={28} /></span>
                             <p className="empty-state__title">No deals found</p>
                             <p className="empty-state__body">Create your first deal to track it through the pipeline.</p>
                         </div>
@@ -1646,12 +1649,12 @@ export default function DealPipeline({
             {/* Ownership Transfer Modal */}
             {ownershipTransferDeal && (
                 <div
-                    style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                    style={{ position: 'fixed', inset: 0, backgroundColor: 'var(--rp-overlay-soft)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                     onMouseDown={e => { if (e.target === e.currentTarget && !transferring) setOwnershipTransferDeal(null); }}
                 >
                     <div style={{ backgroundColor: 'var(--bg-primary)', borderRadius: '14px', padding: '24px', width: '440px', maxWidth: '90vw' }}>
                         <div style={{ fontSize: '16px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '4px' }}>
-                            🏠 Transfer Property Ownership
+                            Transfer Property Ownership
                         </div>
                         <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '20px' }}>
                             Deal #{ownershipTransferDeal.id.slice(0, 8)} · Inventory {ownershipTransferDeal.inventory_id?.slice(0, 8)}
@@ -1659,15 +1662,15 @@ export default function DealPipeline({
 
                         {transferSuccess ? (
                             <div style={{ textAlign: 'center', padding: '20px 0' }}>
-                                <div style={{ fontSize: '40px', marginBottom: '12px' }}>✅</div>
-                                <div style={{ fontSize: '15px', fontWeight: 700, color: '#22c55e', marginBottom: '8px' }}>Ownership Transferred!</div>
+                                <div style={{ marginBottom: '12px', color: 'var(--rp-success-text)' }}><PresentationIcon value="check-circle" size={28} /></div>
+                                <div style={{ fontSize: '15px', fontWeight: 700, color: 'var(--rp-success-text)', marginBottom: '8px' }}>Ownership Transferred!</div>
                                 <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '20px' }}>
                                     Property now belongs to {transferName || transferPhone}. Audit log created.
                                 </div>
                                 <button
                                     type="button"
                                     onClick={() => setOwnershipTransferDeal(null)}
-                                    style={{ padding: '10px 24px', borderRadius: '8px', fontWeight: 700, backgroundColor: '#22c55e', color: '#fff', border: 'none', cursor: 'pointer' }}
+                                    style={{ padding: '10px 24px', borderRadius: '8px', fontWeight: 700, backgroundColor: 'var(--rp-success-text)', color: 'var(--surface-white)', border: 'none', cursor: 'pointer' }}
                                 >Done</button>
                             </div>
                         ) : (
@@ -1690,7 +1693,7 @@ export default function DealPipeline({
                                             onClick={() => { setTransferPhone(c.phone_number); setTransferName(c.name || ''); setTransferContactSearch(''); setTransferContactResults([]); }}
                                             style={{ padding: '8px 12px', borderRadius: '8px', cursor: 'pointer', margin: '4px 0', backgroundColor: 'var(--bg-secondary)', display: 'flex', gap: '10px', alignItems: 'center' }}
                                         >
-                                            <div style={{ width: '30px', height: '30px', borderRadius: '50%', backgroundColor: 'rgba(34,197,94,0.12)', color: '#22c55e', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '13px', flexShrink: 0 }}>
+                                            <div style={{ width: '30px', height: '30px', borderRadius: '50%', backgroundColor: 'var(--rp-success-wash)', color: 'var(--rp-success-text)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '13px', flexShrink: 0 }}>
                                                 {(c.name || c.phone_number)[0].toUpperCase()}
                                             </div>
                                             <div>
@@ -1708,7 +1711,7 @@ export default function DealPipeline({
                                         placeholder="e.g. 9876543210"
                                         value={transferPhone}
                                         onChange={e => setTransferPhone(e.target.value)}
-                                        style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', fontSize: '13px', border: transferPhone ? '1.5px solid #22c55e' : '1px solid var(--border-secondary)', backgroundColor: 'var(--bg-secondary)', color: 'var(--text-primary)', outline: 'none', boxSizing: 'border-box' }}
+                                        style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', fontSize: '13px', border: transferPhone ? '1.5px solid var(--rp-success-text)' : '1px solid var(--border-secondary)', backgroundColor: 'var(--bg-secondary)', color: 'var(--text-primary)', outline: 'none', boxSizing: 'border-box' }}
                                     />
                                 </div>
 
@@ -1734,12 +1737,12 @@ export default function DealPipeline({
                                     />
                                 </div>
 
-                                <div style={{ padding: '10px 14px', borderRadius: '8px', backgroundColor: 'rgba(59,130,246,0.06)', border: '1px solid rgba(59,130,246,0.2)', marginBottom: '16px', fontSize: '11px', color: 'var(--text-muted)', lineHeight: '1.5' }}>
-                                    <strong style={{ color: '#3b82f6' }}>What happens:</strong> The inventory ownership will be reassigned to the new contact. The previous owner's record is preserved. An audit log entry is created. The new contact will appear as BUYER in the system.
+                                <div style={{ padding: '10px 14px', borderRadius: '8px', backgroundColor: 'var(--rp-info-wash)', border: '1px solid var(--rp-info-wash)', marginBottom: '16px', fontSize: '11px', color: 'var(--text-muted)', lineHeight: '1.5' }}>
+                                    <strong style={{ color: 'var(--blue-500)' }}>What happens:</strong> The inventory ownership will be reassigned to the new contact. The previous owner's record is preserved. An audit log entry is created. The new contact will appear as BUYER in the system.
                                 </div>
 
                                 {transferError && (
-                                    <div style={{ padding: '10px 14px', borderRadius: '8px', backgroundColor: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', color: '#ef4444', fontSize: '12px', marginBottom: '12px' }}>
+                                    <div style={{ padding: '10px 14px', borderRadius: '8px', backgroundColor: 'var(--rp-danger-wash)', border: '1px solid var(--rp-danger-wash)', color: 'var(--rp-danger-text)', fontSize: '12px', marginBottom: '12px' }}>
                                         {transferError}
                                     </div>
                                 )}
@@ -1755,8 +1758,8 @@ export default function DealPipeline({
                                         type="button"
                                         onClick={handleOwnershipTransfer}
                                         disabled={transferring || !transferPhone.trim()}
-                                        style={{ flex: 2, padding: '10px', borderRadius: '8px', fontWeight: 700, backgroundColor: !transferPhone.trim() ? 'var(--bg-secondary)' : '#22c55e', color: !transferPhone.trim() ? 'var(--text-muted)' : '#fff', border: 'none', cursor: !transferPhone.trim() ? 'not-allowed' : 'pointer', opacity: transferring ? 0.7 : 1 }}
-                                    >{transferring ? 'Transferring...' : '🏠 Confirm Transfer'}</button>
+                                        style={{ flex: 2, padding: '10px', borderRadius: '8px', fontWeight: 700, backgroundColor: !transferPhone.trim() ? 'var(--bg-secondary)' : 'var(--rp-success-text)', color: !transferPhone.trim() ? 'var(--text-muted)' : 'var(--surface-white)', border: 'none', cursor: !transferPhone.trim() ? 'not-allowed' : 'pointer', opacity: transferring ? 0.7 : 1 }}
+                                    >{transferring ? 'Transferring...' : 'Confirm Transfer'}</button>
                                 </div>
                             </>
                         )}
@@ -1765,7 +1768,7 @@ export default function DealPipeline({
             )}
             {/* Visit Outcome Modal — shown when lead manager submits visit result */}
             {visitOutcomeDeal && (
-                <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                <div style={{ position: 'fixed', inset: 0, backgroundColor: 'var(--rp-overlay-soft)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                     onMouseDown={e => { if (e.target === e.currentTarget && !visitSubmitting) setVisitOutcomeDeal(null); }}>
                     <div style={{ backgroundColor: 'var(--bg-primary)', borderRadius: '14px', padding: '24px', width: '460px', maxWidth: '90vw', maxHeight: '85vh', overflowY: 'auto' }}>
                         <div style={{ fontSize: '16px', fontWeight: 700, marginBottom: '4px' }}>Submit Visit Outcome</div>
@@ -1820,7 +1823,7 @@ export default function DealPipeline({
                                 Cancel
                             </button>
                             <button onClick={handleVisitOutcomeSubmit} disabled={visitSubmitting || !visitOutcome || !visitInterestLevel}
-                                style={{ flex: 2, padding: '10px', borderRadius: '8px', fontWeight: 700, backgroundColor: (!visitOutcome || !visitInterestLevel) ? 'var(--bg-secondary)' : '#06b6d4', color: (!visitOutcome || !visitInterestLevel) ? 'var(--text-muted)' : '#fff', border: 'none', cursor: (!visitOutcome || !visitInterestLevel) ? 'not-allowed' : 'pointer', opacity: visitSubmitting ? 0.7 : 1 }}>
+                                style={{ flex: 2, padding: '10px', borderRadius: '8px', fontWeight: 700, backgroundColor: (!visitOutcome || !visitInterestLevel) ? 'var(--bg-secondary)' : 'var(--chart-3)', color: (!visitOutcome || !visitInterestLevel) ? 'var(--text-muted)' : 'var(--surface-white)', border: 'none', cursor: (!visitOutcome || !visitInterestLevel) ? 'not-allowed' : 'pointer', opacity: visitSubmitting ? 0.7 : 1 }}>
                                 {visitSubmitting ? 'Submitting...' : 'Submit Outcome'}
                             </button>
                         </div>
@@ -1830,7 +1833,7 @@ export default function DealPipeline({
 
             {/* ON_HOLD Revive / Dispose Modal */}
             {reviveDeal && (
-                <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                <div style={{ position: 'fixed', inset: 0, backgroundColor: 'var(--rp-overlay-soft)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                     onMouseDown={e => { if (e.target === e.currentTarget && !reviving) setReviveDeal(null); }}>
                     <div style={{ backgroundColor: 'var(--bg-primary)', borderRadius: '14px', padding: '24px', width: '420px', maxWidth: '90vw' }}>
                         <div style={{ fontSize: '16px', fontWeight: 700, marginBottom: '4px' }}>Deal on Hold</div>
@@ -1857,11 +1860,11 @@ export default function DealPipeline({
                                 Cancel
                             </button>
                             <button onClick={() => handleDispose(reviveDeal)} disabled={reviving}
-                                style={{ flex: 1, padding: '10px', borderRadius: '8px', fontWeight: 700, backgroundColor: '#fef2f2', color: '#ef4444', border: '1px solid #fecaca', cursor: 'pointer' }}>
+                                style={{ flex: 1, padding: '10px', borderRadius: '8px', fontWeight: 700, backgroundColor: 'var(--rp-danger-bg)', color: 'var(--rp-danger-text)', border: '1px solid var(--rp-danger-line)', cursor: 'pointer' }}>
                                 Dispose (Lost)
                             </button>
                             <button onClick={handleRevive} disabled={reviving || !reviveStage}
-                                style={{ flex: 1, padding: '10px', borderRadius: '8px', fontWeight: 700, backgroundColor: !reviveStage ? 'var(--bg-secondary)' : '#22c55e', color: !reviveStage ? 'var(--text-muted)' : '#fff', border: 'none', cursor: !reviveStage ? 'not-allowed' : 'pointer', opacity: reviving ? 0.7 : 1 }}>
+                                style={{ flex: 1, padding: '10px', borderRadius: '8px', fontWeight: 700, backgroundColor: !reviveStage ? 'var(--bg-secondary)' : 'var(--rp-success-text)', color: !reviveStage ? 'var(--text-muted)' : 'var(--surface-white)', border: 'none', cursor: !reviveStage ? 'not-allowed' : 'pointer', opacity: reviving ? 0.7 : 1 }}>
                                 {reviving ? 'Moving...' : 'Revive'}
                             </button>
                         </div>
@@ -1882,7 +1885,7 @@ export default function DealPipeline({
                             backgroundColor: 'var(--bg-secondary)',
                             overflowY: 'auto',
                             padding: '0 0 32px',
-                            boxShadow: '-8px 0 40px rgba(0,0,0,0.25)',
+                            boxShadow: '-8px 0 40px var(--rp-shadow-tint)',
                             animation: 'slide-in-right 250ms cubic-bezier(0.34,1.2,0.64,1) forwards',
                         } : {
                             position: 'absolute', bottom: 0, left: 0, right: 0,
@@ -1891,7 +1894,7 @@ export default function DealPipeline({
                             maxHeight: '85vh', overflowY: 'auto',
                             WebkitOverflowScrolling: 'touch',
                             padding: '0 0 32px',
-                            boxShadow: '0 -8px 40px rgba(0,0,0,0.25)',
+                            boxShadow: '0 -8px 40px var(--rp-shadow-tint)',
                             animation: 'slide-up-in 250ms cubic-bezier(0.34,1.2,0.64,1) forwards',
                         }}
                         onClick={e => e.stopPropagation()}
@@ -1926,7 +1929,7 @@ export default function DealPipeline({
                                     <button key={stage} type="button"
                                         onClick={() => setFilterStatus(filterStatus === stage ? '' : stage)}
                                         className={`chip ${filterStatus === stage ? 'chip-active' : 'chip-inactive'}`}
-                                        style={filterStatus === stage ? { borderColor: STAGE_COLORS[stage], backgroundColor: STAGE_COLORS[stage] + '20', color: STAGE_COLORS[stage] } : {}}>
+                                        style={filterStatus === stage ? { borderColor: STAGE_COLORS[stage], backgroundColor: 'var(--bg-active)', color: STAGE_COLORS[stage] } : {}}>
                                         {STAGE_LABELS[stage]} ({stageCounts[stage] || 0})
                                     </button>
                                 ))}
@@ -2006,9 +2009,9 @@ export default function DealPipeline({
                         <FilterSection title="Priority" defaultOpen={false} badge={filterMinPriority ? 1 : 0}>
                             <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                                 {[
-                                    { label: '🔥 Hot (≥7)', value: '7' },
-                                    { label: '🟡 Medium (≥4)', value: '4' },
-                                    { label: '🔵 Any (≥1)', value: '1' },
+                                    { label: 'Hot (≥7)', value: '7' },
+                                    { label: 'Medium (≥4)', value: '4' },
+                                    { label: 'Any (≥1)', value: '1' },
                                 ].map(opt => (
                                     <button key={opt.value} type="button"
                                         onClick={() => setFilterMinPriority(filterMinPriority === opt.value ? '' : opt.value)}
@@ -2023,7 +2026,7 @@ export default function DealPipeline({
                         <div style={{ padding: '16px 20px 0' }}>
                             <button type="button"
                                 onClick={() => setShowFilterSheet(false)}
-                                style={{ width: '100%', padding: '14px', borderRadius: '12px', border: 'none', backgroundColor: 'var(--text-link)', color: '#fff', fontWeight: 700, fontSize: '15px', cursor: 'pointer' }}
+                                style={{ width: '100%', padding: '14px', borderRadius: '12px', border: 'none', backgroundColor: 'var(--text-link)', color: 'var(--surface-white)', fontWeight: 700, fontSize: '15px', cursor: 'pointer' }}
                             >
                                 {(() => {
                                     const count = [filterStatus, filterScenario, filterMinPriority, filterSource, filterIntent, filterCoordinatorId].filter(Boolean).length + (filterTaxonomy.nodeIds.length || filterTaxonomy.bhk.length ? 1 : 0);

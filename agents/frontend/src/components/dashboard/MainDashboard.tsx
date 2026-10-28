@@ -5,7 +5,7 @@ import {
 } from '../../api/client';
 import { useAuth } from '../../contexts/AuthContext';
 import { useIsMobile } from '../../hooks/useIsMobile';
-import { ClayCard, SectionLabel, KpiCard, formatNum, formatINR, formatMins } from './analytics/clay';
+import { ClayCard, SectionLabel, KpiCard, MetricIcon, formatNum, formatINR, formatMins } from './analytics/clay';
 import { HealthBar } from './analytics/charts';
 import { RangeBar, defaultRange, type DateRange } from './analytics/FilterBar';
 import { useAsyncData, LoadingState, ErrorState } from './analytics/AsyncState';
@@ -125,7 +125,7 @@ async function loadCockpit(range: DateRange): Promise<Cockpit> {
 const HouseRow: React.FC<{ label: string; count: number }> = ({ label, count }) => (
   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '9px 12px', borderRadius: 10, backgroundColor: 'var(--bg-tertiary)' }}>
     <span style={{ fontSize: 12.5, color: 'var(--text-secondary)' }}>{label}</span>
-    <span style={{ fontSize: 14, fontWeight: 800, color: count > 0 ? '#f59e0b' : 'var(--text-muted)' }}>{formatNum(count)}</span>
+    <span style={{ fontSize: 14, fontWeight: 600, color: count > 0 ? 'var(--rp-warn-text)' : 'var(--text-muted)' }}>{formatNum(count)}</span>
   </div>
 );
 
@@ -167,15 +167,14 @@ export const MainDashboard: React.FC = () => {
   const d = data as Cockpit;
 
   const pad = isMobile ? 16 : '24px 32px';
-  const kpiGrid: React.CSSProperties = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 'var(--bento-gap)' };
-  const colTwo: React.CSSProperties = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 14 };
+  const colTwo: React.CSSProperties = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 320px), 1fr))', gap: 'var(--rp-s-4)' };
   const actionTotal = openByType.callbacks + openByType.visits + openByType.overdue + alertBy('stale_leads') + alertBy('inventory_missing_photos');
   const stateLine = `${formatNum(d.pulse.leads.cur)} new leads · ${formatNum(d.pulse.visits.cur)} visits · ${formatNum(d.pulse.deals.cur)} deals closed this period — ${formatNum(actionTotal)} things need action.`;
 
   return (
-    <div style={{ flex: 1, overflowY: 'auto', padding: pad, backgroundColor: 'var(--bg-primary)' }}>
+    <div className="rp-cockpit rp-dashboard" style={{ flex: 1, minWidth: 0, overflowY: 'auto', padding: pad, backgroundColor: 'var(--bg-secondary)' }}>
       <div>
-        <h1 style={{ fontSize: isMobile ? 20 : 24, fontWeight: 800, margin: 0, color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>{greeting}, {firstName} 👋</h1>
+        <h1 style={{ fontSize: isMobile ? 20 : 24, fontWeight: 600, margin: 0, color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>{greeting}, {firstName}</h1>
         <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: '4px 0 0' }}>{today} · {stateLine}</p>
       </div>
 
@@ -185,26 +184,26 @@ export const MainDashboard: React.FC = () => {
         {/* Do This Now */}
         <div>
           <SectionLabel icon="⚡">Do This Now</SectionLabel>
-          <div style={kpiGrid}>
-            <Drill target={{ entity: 'tasks' }}><KpiCard label="Callbacks Now" value={formatNum(openByType.callbacks)} accent="#ef4444" icon="📞" /></Drill>
-            <Drill target={{ entity: 'tasks' }}><KpiCard label="Visits ASAP" value={formatNum(openByType.visits)} accent="#f43f5e" icon="🏃" /></Drill>
-            <Drill target={{ entity: 'tasks' }}><KpiCard label="Overdue Tasks" value={formatNum(openByType.overdue)} accent="#f59e0b" icon="⏰" /></Drill>
-            <Drill target={{ entity: 'leads' }}><KpiCard label="Neglected Leads" value={formatNum(alertBy('stale_leads'))} accent="#8b5cf6" icon="😴" /></Drill>
-            <Drill target={{ entity: 'inventory', filter: { status: 'active' } }}><KpiCard label="Missing Photos" value={formatNum(alertBy('inventory_missing_photos'))} accent="#ec4899" icon="📷" /></Drill>
+          <div className="rp-metric-grid">
+            <Drill target={{ entity: 'tasks' }}><KpiCard label="Callbacks Now" value={formatNum(openByType.callbacks)} icon="📞" /></Drill>
+            <Drill target={{ entity: 'tasks' }}><KpiCard label="Visits ASAP" value={formatNum(openByType.visits)} icon="🏃" /></Drill>
+            <Drill target={{ entity: 'tasks' }}><KpiCard label="Overdue Tasks" value={formatNum(openByType.overdue)} icon="⏰" /></Drill>
+            <Drill target={{ entity: 'leads' }}><KpiCard label="Neglected Leads" value={formatNum(alertBy('stale_leads'))} icon="😴" /></Drill>
+            <Drill target={{ entity: 'inventory', filter: { status: 'active' } }}><KpiCard label="Missing Photos" value={formatNum(alertBy('inventory_missing_photos'))} icon="📷" /></Drill>
           </div>
         </div>
 
         {/* Pulse */}
         <div>
           <SectionLabel icon="📊">Pulse</SectionLabel>
-          <div style={kpiGrid}>
-            <KpiCard label="New Leads" value={formatNum(d.pulse.leads.cur)} delta={pctDelta(d.pulse.leads.cur, d.pulse.leads.prev)} accent="#3b82f6" icon="👥" />
-            <KpiCard label="Visits" value={formatNum(d.pulse.visits.cur)} delta={pctDelta(d.pulse.visits.cur, d.pulse.visits.prev)} accent="#06b6d4" icon="📅" />
-            <KpiCard label="Deals Closed" value={formatNum(d.pulse.deals.cur)} delta={pctDelta(d.pulse.deals.cur, d.pulse.deals.prev)} accent="#22c55e" icon="✅" />
-            <KpiCard label="Commission" value={formatINR(d.pulse.commission)} accent="#f59e0b" icon="₹" />
-            <KpiCard label="Speed-to-Lead" value={formatMins(d.pulse.stl_median)} sub="median, 1st reply" accent="#ef4444" icon="⚡" />
-            <Drill target={{ entity: 'inventory', filter: { status: 'active' } }}><KpiCard label="Active Listings" value={formatNum(d.pulse.activeListings)} accent="#14b8a6" icon="🏠" /></Drill>
-            <Drill target={{ entity: 'deals' }}><KpiCard label="Open Deals" value={formatNum(d.pulse.openDeals)} accent="#6366f1" icon="🎯" /></Drill>
+          <div className="rp-pulse-grid">
+            <KpiCard label="New Leads" value={formatNum(d.pulse.leads.cur)} delta={pctDelta(d.pulse.leads.cur, d.pulse.leads.prev)} icon="👥" />
+            <KpiCard label="Visits" value={formatNum(d.pulse.visits.cur)} delta={pctDelta(d.pulse.visits.cur, d.pulse.visits.prev)} icon="📅" />
+            <KpiCard label="Deals Closed" value={formatNum(d.pulse.deals.cur)} delta={pctDelta(d.pulse.deals.cur, d.pulse.deals.prev)} icon="✅" />
+            <KpiCard label="Commission" value={formatINR(d.pulse.commission)} icon="₹" />
+            <KpiCard label="Speed-to-Lead" value={formatMins(d.pulse.stl_median)} sub="median, 1st reply" icon="⚡" />
+            <Drill target={{ entity: 'inventory', filter: { status: 'active' } }}><KpiCard label="Active Listings" value={formatNum(d.pulse.activeListings)} icon="🏠" /></Drill>
+            <Drill target={{ entity: 'deals' }}><KpiCard label="Open Deals" value={formatNum(d.pulse.openDeals)} icon="🎯" /></Drill>
           </div>
         </div>
 
@@ -215,14 +214,14 @@ export const MainDashboard: React.FC = () => {
           </ClayCard>
           <ClayCard title="Next Actions" subtitle="Your most urgent tasks">
             {nextActions.length === 0 ? (
-              <div style={{ padding: 24, textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>✅ All caught up</div>
+              <div style={{ padding: 24, textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>All caught up</div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {nextActions.map((tk) => {
                   const overdue = tk.due_date && new Date(tk.due_date).getTime() < now;
                   return (
                     <div key={tk.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', borderRadius: 10, backgroundColor: 'var(--bg-tertiary)' }}>
-                      <span style={{ fontSize: 11, fontWeight: 800, color: overdue ? '#ef4444' : 'var(--text-muted)', width: 58, flexShrink: 0 }}>{overdue ? 'OVERDUE' : (tk.priority || 'MEDIUM')}</span>
+                      <span style={{ fontSize: 11, fontWeight: 600, color: overdue ? 'var(--rp-danger-text)' : 'var(--text-muted)', width: 58, flexShrink: 0 }}>{overdue ? 'OVERDUE' : (tk.priority || 'MEDIUM')}</span>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{tk.task_type.replace(/_/g, ' ')}</div>
                         <div style={{ fontSize: 11.5, color: 'var(--text-muted)' }}>{tk.contact?.name || tk.contact?.phone_number || '—'}</div>
@@ -244,7 +243,7 @@ export const MainDashboard: React.FC = () => {
               <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
                 {d.activity.map((e, i) => (
                   <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 12.5, color: 'var(--text-secondary)' }}>
-                    <span>{e.icon}</span><span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.text}</span>
+                    <MetricIcon value={e.icon} /><span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.text}</span>
                   </div>
                 ))}
               </div>

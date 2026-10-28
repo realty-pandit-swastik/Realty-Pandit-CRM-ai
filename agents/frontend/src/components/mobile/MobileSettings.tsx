@@ -9,9 +9,9 @@ interface MobileSettingsProps {
 const CARD_RADIUS = '12px';
 
 const ROLE_COLORS: Record<string, { bg: string; color: string }> = {
-    super_boss: { bg: '#7f1d1d', color: '#f87171' },
-    manager: { bg: '#78350f', color: '#fbbf24' },
-    employee: { bg: '#14532d', color: '#4ade80' },
+    super_boss: { bg: 'var(--rp-danger-text)', color: 'var(--rp-danger-text)' },
+    manager: { bg: 'var(--rp-warn-bg)', color: 'var(--rp-warn-text)' },
+    employee: { bg: 'var(--rp-success-bg)', color: 'var(--rp-success-text)' },
 };
 
 export function MobileSettings({ onNavigate }: MobileSettingsProps) {
@@ -39,8 +39,8 @@ export function MobileSettings({ onNavigate }: MobileSettingsProps) {
             }}>
                 <div style={{
                     width: '64px', height: '64px', borderRadius: '50%',
-                    backgroundColor: '#4F46E5', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    margin: '0 auto 12px', fontSize: '28px', color: '#fff', fontWeight: 700,
+                    backgroundColor: 'var(--blue-600)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    margin: '0 auto 12px', fontSize: '28px', color: 'var(--surface-white)', fontWeight: 700,
                 }}>
                     {agent?.name?.charAt(0)?.toUpperCase() || '?'}
                 </div>
@@ -70,11 +70,11 @@ export function MobileSettings({ onNavigate }: MobileSettingsProps) {
                 </div>
                 <div style={{
                     width: '44px', height: '24px', borderRadius: '12px',
-                    backgroundColor: theme === 'dark' ? '#4F46E5' : 'var(--border-secondary)',
+                    backgroundColor: theme === 'dark' ? 'var(--blue-600)' : 'var(--border-secondary)',
                     position: 'relative', transition: 'background-color 0.2s',
                 }}>
                     <div style={{
-                        width: '20px', height: '20px', borderRadius: '50%', backgroundColor: '#fff',
+                        width: '20px', height: '20px', borderRadius: '50%', backgroundColor: 'var(--surface-white)',
                         position: 'absolute', top: '2px',
                         left: theme === 'dark' ? '22px' : '2px', transition: 'left 0.2s',
                     }} />
@@ -107,8 +107,8 @@ export function MobileSettings({ onNavigate }: MobileSettingsProps) {
             <button onClick={logout}
                 style={{
                     width: '100%', padding: '14px', borderRadius: CARD_RADIUS,
-                    border: '1px solid #EF4444', backgroundColor: 'transparent',
-                    color: '#EF4444', fontSize: '15px', fontWeight: 700, cursor: 'pointer',
+                    border: '1px solid var(--rp-danger-text)', backgroundColor: 'transparent',
+                    color: 'var(--rp-danger-text)', fontSize: '15px', fontWeight: 700, cursor: 'pointer',
                 }}>
                 Logout
             </button>

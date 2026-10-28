@@ -9,6 +9,9 @@ import { useToast } from '../contexts/ToastContext';
 import { useConfirm } from '../contexts/ConfirmContext';
 import { InventoryModal } from './InventoryModal';
 import { InventoryDetailView } from './InventoryDetailView';
+import { SkeletonRows } from './ui/States';
+import { IconText, PresentationIcon } from './ui/PresentationIcon';
+import { Pagination } from './ui/Pagination';
 import ParkingListField from './ParkingListField';
 import TaxonomyCascade from './TaxonomyCascade';
 import { CopyChip } from './CopyChip';
@@ -121,8 +124,8 @@ function EditContactSection({ label, color, currentPhone, currentName, onContact
             {error && (
                 <div role="alert" style={{
                     marginTop: '8px', padding: '8px 12px', borderRadius: '6px', fontSize: '12px',
-                    backgroundColor: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.35)',
-                    color: '#fca5a5',
+                    backgroundColor: 'var(--rp-danger-wash)', border: '1px solid var(--rp-danger-line)',
+                    color: 'var(--rp-danger-text)',
                 }}>{error}</div>
             )}
         </div>
@@ -1071,42 +1074,42 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
     };
 
     const s: Record<string, React.CSSProperties> = {
-        page: { padding: window.innerWidth < 768 ? '12px' : '24px', overflowY: 'auto', flex: 1, backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)' },
+        page: { padding: window.innerWidth < 768 ? '16px' : '24px', overflowY: 'auto', minWidth: 0, flex: 1, backgroundColor: 'var(--bg-secondary)', color: 'var(--text-primary)' },
         header: { display: 'flex', justifyContent: 'space-between', alignItems: window.innerWidth < 768 ? 'flex-start' : 'center', marginBottom: '20px', flexDirection: window.innerWidth < 768 ? 'column' as const : 'row' as const, gap: '10px' },
         h2: { margin: 0, fontSize: '20px', color: 'var(--text-primary)' },
         btnPrimary: {
-            backgroundColor: '#3b82f6', color: '#fff', border: 'none',
-            padding: '8px 16px', borderRadius: '8px', cursor: 'pointer',
+            backgroundColor: 'var(--blue-600)', color: 'var(--surface-white)', border: 'none',
+            padding: '8px 16px', borderRadius: 'var(--radius-control)', cursor: 'pointer',
             fontSize: '14px', fontWeight: 600
         },
         card: {
-            border: '1px solid var(--bg-secondary)', borderRadius: '8px', padding: '16px',
-            backgroundColor: 'var(--bg-secondary)', marginBottom: '12px'
+            border: '1px solid var(--border-secondary)', borderRadius: 'var(--rp-radius)', padding: 'var(--rp-s-5)',
+            backgroundColor: 'var(--bg-primary)', marginBottom: 'var(--rp-s-4)'
         },
         cardHeader: { display: 'flex', justifyContent: 'space-between', marginBottom: '10px' },
         title: { fontWeight: 'bold', fontSize: '15px', color: 'var(--text-primary)' },
         badgeActive: {
-            backgroundColor: '#064e3b', color: '#34d399', padding: '3px 10px',
-            borderRadius: '12px', fontSize: '12px'
+            backgroundColor: 'var(--rp-success-bg)', color: 'var(--rp-success-text)', padding: '4px 8px',
+            borderRadius: 'var(--radius-control)', fontSize: '12px'
         },
         badgeInactive: {
-            backgroundColor: '#450a0a', color: '#f87171', padding: '3px 10px',
-            borderRadius: '12px', fontSize: '12px'
+            backgroundColor: 'var(--rp-danger-bg)', color: 'var(--rp-danger-text)', padding: '4px 8px',
+            borderRadius: 'var(--radius-control)', fontSize: '12px'
         },
         badgePending: {
-            backgroundColor: '#451a03', color: '#fbbf24', padding: '3px 10px',
-            borderRadius: '12px', fontSize: '12px'
+            backgroundColor: 'var(--rp-warn-bg)', color: 'var(--rp-warn-text)', padding: '4px 8px',
+            borderRadius: 'var(--radius-control)', fontSize: '12px'
         },
         meta: { fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '4px' },
         overlay: {
-            position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.7)',
+            position: 'fixed', inset: 0, backgroundColor: 'var(--sheet-backdrop)',
             display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000
         },
         modal: {
             backgroundColor: 'var(--bg-secondary)', borderRadius: window.innerWidth < 768 ? '12px 12px 0 0' : '12px',
             padding: window.innerWidth < 768 ? '20px 16px' : '28px',
             width: window.innerWidth < 768 ? '100%' : '500px', maxWidth: '90vw',
-            boxShadow: '0 8px 40px rgba(0,0,0,0.5)',
+            boxShadow: 'var(--rp-shadow-far)',
             maxHeight: window.innerWidth < 768 ? '90vh' : undefined,
             overflowY: 'auto' as const,
         },
@@ -1121,11 +1124,11 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
             padding: '4px 10px', borderRadius: '6px', cursor: 'pointer', fontSize: '13px'
         },
         successBox: {
-            backgroundColor: '#064e3b', border: '1px solid #065f46',
+            backgroundColor: 'var(--rp-success-bg)', color: 'var(--rp-success-text)', border: '1px solid var(--rp-success-line)',
             borderRadius: '8px', padding: '12px', marginBottom: '12px'
         },
         errorBox: {
-            backgroundColor: '#450a0a', border: '1px solid var(--error-bg)',
+            backgroundColor: 'var(--rp-danger-bg)', color: 'var(--rp-danger-text)', border: '1px solid var(--rp-danger-line)',
             borderRadius: '8px', padding: '12px', marginBottom: '12px',
             maxHeight: '160px', overflowY: 'auto'
         },
@@ -1149,7 +1152,7 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
             position: 'absolute' as const, bottom: '100%', left: 0, marginBottom: '4px',
             backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-secondary)',
             borderRadius: '8px', padding: '4px', minWidth: '200px', zIndex: 100,
-            boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+            boxShadow: 'var(--rp-shadow-far)',
         },
         callEntry: {
             display: 'flex', flexDirection: 'column' as const, padding: '8px 12px', borderRadius: '6px',
@@ -1157,7 +1160,7 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
         },
         callLabel: { fontSize: '10px', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' as const, letterSpacing: '0.5px' },
         callName: { fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' },
-        callPhone: { fontSize: '12px', color: '#22d3ee' },
+        callPhone: { fontSize: '12px', color: 'var(--text-link)' },
     };
 
     // InventoryModal is rendered at end of main return JSX (no longer a full-page takeover)
@@ -1166,12 +1169,12 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
     // the page + filter sheet mounted — the "Updating…" affordance shows on the list instead.
     if (loading && initialLoad) return (
         <div style={{ ...s.page, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <span style={{ color: 'var(--text-muted)' }}>Loading inventory...</span>
+            <div style={{ width: '100%' }}><SkeletonRows rows={5} cols={3} label="Loading inventory" /></div>
         </div>
     );
 
     return (
-        <div style={s.page}>
+        <div className="rp-inventory-page" style={s.page}>
             <div style={s.header}>
                 <h2 style={s.h2}>
                     Property Inventory ({totalCount})
@@ -1184,15 +1187,15 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
                         onClick={() => { setSelectionMode(p => !p); setSelectedIds(new Set()); }}
                         style={{
                             padding: '7px 14px', borderRadius: '8px', fontSize: '12px', fontWeight: 600, cursor: 'pointer',
-                            border: selectionMode ? '1.5px solid #3b82f6' : '1px solid var(--border-secondary)',
-                            backgroundColor: selectionMode ? 'rgba(59,130,246,0.1)' : 'var(--bg-secondary)',
-                            color: selectionMode ? '#3b82f6' : 'var(--text-secondary)',
+                            border: selectionMode ? '1.5px solid var(--blue-600)' : '1px solid var(--border-secondary)',
+                            backgroundColor: selectionMode ? 'var(--bg-active)' : 'var(--bg-primary)',
+                            color: selectionMode ? 'var(--text-link)' : 'var(--text-secondary)',
                         }}
                     >
-                        {selectionMode ? `✓ ${selectedIds.size} Selected` : '☐ Select'}
+                        {selectionMode ? `✓ ${selectedIds.size} Selected` : 'Select'}
                     </button>
                     {hasPermission('edit_inventory') && (
-                        <button style={{ ...s.btnPrimary, backgroundColor: '#059669' }} onClick={() => setShowAddForm(true)}>
+                        <button style={{ ...s.btnPrimary }} onClick={() => setShowAddForm(true)}>
                             + Add Property
                         </button>
                     )}
@@ -1223,7 +1226,7 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
                     }}
                 />
                 {hasActiveFilters && (
-                    <button style={{ ...s.smallBtn, color: '#f87171', borderColor: '#f87171' }} onClick={clearFilters}>
+                    <button style={{ ...s.smallBtn, color: 'var(--rp-danger-text)', borderColor: 'var(--rp-danger-text)' }} onClick={clearFilters}>
                         Clear
                     </button>
                 )}
@@ -1235,13 +1238,13 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
                     title="Browse the whole catalog to match a client (details outside your team are redacted)"
                     style={{
                         padding: '10px 14px', borderRadius: '12px', cursor: 'pointer', flexShrink: 0,
-                        border: filterBrowseAll ? '1.5px solid #22c55e' : '1px solid var(--border-secondary)',
-                        backgroundColor: filterBrowseAll ? '#22c55e' : 'var(--bg-secondary)',
-                        color: filterBrowseAll ? '#fff' : 'var(--text-secondary)',
+                        border: filterBrowseAll ? '1.5px solid var(--blue-600)' : '1px solid var(--border-secondary)',
+                        backgroundColor: filterBrowseAll ? 'var(--blue-600)' : 'var(--bg-primary)',
+                        color: filterBrowseAll ? 'var(--surface-white)' : 'var(--text-secondary)',
                         fontWeight: 600, fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px',
                     }}
                 >
-                    🌐 Browse all
+                    Browse all
                 </button>
                 <button
                     type="button"
@@ -1250,17 +1253,17 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
                         padding: '10px 14px', borderRadius: '12px', cursor: 'pointer', flexShrink: 0,
                         border: activeInventoryFilterCount > 0 ? '1.5px solid var(--text-link)' : '1px solid var(--border-secondary)',
                         backgroundColor: activeInventoryFilterCount > 0 ? 'var(--text-link)' : 'var(--bg-secondary)',
-                        color: activeInventoryFilterCount > 0 ? '#fff' : 'var(--text-secondary)',
+                        color: activeInventoryFilterCount > 0 ? 'var(--surface-white)' : 'var(--text-secondary)',
                         fontWeight: 600, fontSize: '13px',
                         display: 'flex', alignItems: 'center', gap: '6px',
                     }}
                 >
-                    <span>⚙</span>
+                    <PresentationIcon value="settings" />
                     <span>Filters{activeInventoryFilterCount > 0 ? ` (${activeInventoryFilterCount})` : ''}</span>
                     {hasActiveFilters && (
                         <span style={{
                             marginLeft: 2, padding: '1px 7px', borderRadius: 999,
-                            backgroundColor: 'rgba(255,255,255,0.25)', fontWeight: 700, fontSize: '12px',
+                            backgroundColor: 'var(--rp-surface-wash)', fontWeight: 700, fontSize: '12px',
                         }}>
                             {totalCount} result{totalCount !== 1 ? 's' : ''}
                         </span>
@@ -1270,7 +1273,7 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
 
             {inventory.length === 0 ? (
                 <div className="empty-state" style={{ padding: '64px 16px' }}>
-                    <span className="empty-state__icon" style={{ fontSize: '48px' }}>{hasActiveFilters ? '🔍' : '🏠'}</span>
+                    <span className="empty-state__icon"><PresentationIcon value={hasActiveFilters ? 'search' : 'house'} size={28} /></span>
                     <p className="empty-state__title" style={{ fontSize: '16px' }}>
                         {hasActiveFilters ? 'No properties match your filters' : 'No inventory yet'}
                     </p>
@@ -1297,7 +1300,7 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
                                     {/* ── Section: Media Management ── */}
                                     <div style={{ marginBottom: '16px' }}>
                                         <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-link)', marginBottom: '8px', borderBottom: '1px solid var(--border-secondary)', paddingBottom: '4px' }}>
-                                            Photos & Videos {compressMsg ? <span style={{ color: '#38bdf8', fontWeight: 400 }}> ({compressMsg})</span> : mediaUploading && <span style={{ color: '#fbbf24', fontWeight: 400 }}> (uploading...)</span>}
+                                            Photos & Videos {compressMsg ? <span style={{ color: 'var(--blue-500)', fontWeight: 400 }}> ({compressMsg})</span> : mediaUploading && <span style={{ color: 'var(--rp-warn-text)', fontWeight: 400 }}> (uploading...)</span>}
                                         </div>
                                         {/* Images */}
                                         <div style={{ marginBottom: '8px' }}>
@@ -1314,7 +1317,7 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
                                                             />
                                                             <button
                                                                 onClick={() => handleDeleteMedia(editingId!, url)}
-                                                                style={{ position: 'absolute', top: '2px', right: '2px', background: 'rgba(0,0,0,0.7)', border: 'none', color: '#fff', borderRadius: '50%', width: '18px', height: '18px', cursor: 'pointer', fontSize: '10px', lineHeight: '18px', padding: 0 }}
+                                                                style={{ position: 'absolute', top: '2px', right: '2px', background: 'var(--rp-overlay-soft)', border: 'none', color: 'var(--surface-white)', borderRadius: '50%', width: '18px', height: '18px', cursor: 'pointer', fontSize: '10px', lineHeight: '18px', padding: 0 }}
                                                             >✕</button>
                                                         </div>
                                                     ))}
@@ -1332,8 +1335,8 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
                                                 <div style={{ marginBottom: '6px' }}>
                                                     {editVideoUrls.map(url => (
                                                         <div key={url} style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px', fontSize: '12px', color: 'var(--text-secondary)' }}>
-                                                            <span>🎬 {url.split('/').pop()}</span>
-                                                            <button onClick={() => handleDeleteVideo(editingId!, url)} style={{ background: 'none', border: 'none', color: '#f87171', cursor: 'pointer', fontSize: '12px' }}>✕ Remove</button>
+                                                            <span><PresentationIcon value="play" /> {url.split('/').pop()}</span>
+                                                            <button onClick={() => handleDeleteVideo(editingId!, url)} style={{ background: 'none', border: 'none', color: 'var(--rp-danger-text)', cursor: 'pointer', fontSize: '12px' }}>✕ Remove</button>
                                                         </div>
                                                     ))}
                                                 </div>
@@ -1613,7 +1616,7 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
                                     {/* ── Section: Owner / Source Contact ── */}
                                     <EditContactSection
                                         label="Owner / Source Contact"
-                                        color="#34d399"
+                                        color="var(--rp-success-text)"
                                         currentPhone={editData.owner_phone}
                                         currentName={editData.owner_name}
                                         error={editOwnerError}
@@ -1644,7 +1647,7 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
                                         {editData.key_holder_type === 'EXTERNAL' && (
                                             <EditContactSection
                                                 label="Key Holder Contact"
-                                                color="#60a5fa"
+                                                color="var(--blue-400)"
                                                 currentPhone={editData.key_holder_phone}
                                                 currentName={editData.key_holder_name}
                                                 onContactSelected={(contact) => setEditData({
@@ -1687,12 +1690,12 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
                                                 }}
                                                 style={{
                                                     width: '18px', height: '18px', borderRadius: '4px', flexShrink: 0, cursor: 'pointer', alignSelf: 'center',
-                                                    border: selectedIds.has(item.id) ? '2px solid #3b82f6' : '2px solid var(--border-secondary)',
-                                                    backgroundColor: selectedIds.has(item.id) ? '#3b82f6' : 'transparent',
+                                                    border: selectedIds.has(item.id) ? '2px solid var(--blue-500)' : '2px solid var(--border-secondary)',
+                                                    backgroundColor: selectedIds.has(item.id) ? 'var(--blue-500)' : 'transparent',
                                                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                                                 }}
                                             >
-                                                {selectedIds.has(item.id) && <span style={{ color: '#fff', fontSize: '12px', lineHeight: 1 }}>✓</span>}
+                                                {selectedIds.has(item.id) && <span style={{ color: 'var(--surface-white)', fontSize: '12px', lineHeight: 1 }}>✓</span>}
                                             </div>
                                         )}
                                         {/* Thumbnail */}
@@ -1715,16 +1718,19 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
                                         <div style={{ flex: 1, minWidth: 0 }}>
                                             {/* Row 1: Title + badges */}
                                             <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', marginBottom: '4px' }}>
-                                                <span style={{ fontWeight: 700, fontSize: '14px', color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '300px' }}>
+                                                <button type="button" className="rp-lead-name" onClick={e => {
+                                                    e.stopPropagation();
+                                                    if (!selectionMode) setViewingId(item.id);
+                                                }} style={{ fontWeight: 700, fontSize: '15px', color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '300px' }}>
                                                     {item.taxonomy_node?.name || item.flat_property_type?.name || item.property_type_link?.name || item.type?.replace(/_/g, ' ') || 'Property'}
-                                                </span>
+                                                </button>
                                                 {/* #1 (2026-07-01): click-to-copy inventory code (RP-…) for fast paste into search. */}
                                                 <CopyChip text={item.display_id || (item.id ? `ID: ${item.id.slice(0, 8)}` : null)} size="xs" />
                                                 <span style={{
                                                     fontSize: '11px', padding: '2px 8px', borderRadius: '10px', fontWeight: 600,
-                                                    ...(item.intent === 'sell' ? { backgroundColor: '#312e81', color: '#818cf8' } :
-                                                        item.intent === 'rent' ? { backgroundColor: '#064e3b', color: '#34d399' } :
-                                                            { backgroundColor: '#451a03', color: '#fbbf24' })
+                                                    ...(item.intent === 'sell' ? { backgroundColor: 'var(--blue-800)', color: 'var(--blue-500)' } :
+                                                        item.intent === 'rent' ? { backgroundColor: 'var(--rp-success-bg)', color: 'var(--rp-success-text)' } :
+                                                            { backgroundColor: 'var(--rp-warn-bg)', color: 'var(--rp-warn-text)' })
                                                 }}>
                                                     {item.intent?.toUpperCase()}
                                                 </span>
@@ -1732,20 +1738,20 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
                                                     {item.status === 'pending_approval' ? 'PENDING' : item.status?.toUpperCase()}
                                                 </span>
                                                 {item.upload_source === 'mobile_app' && (
-                                                    <span style={{ fontSize: 10, background: 'rgba(34,197,94,0.12)', color: '#16a34a', borderRadius: 4, padding: '1px 5px' }}>Partner</span>
+                                                    <span style={{ fontSize: 10, background: 'var(--rp-success-wash)', color: 'var(--rp-success-text)', borderRadius: 4, padding: '1px 5px' }}>Partner</span>
                                                 )}
                                                 {item.lead_reference?.startsWith('NEEDS_REVIEW') && (
-                                                    <span style={{ fontSize: 10, background: 'rgba(239,68,68,0.15)', color: '#f87171', borderRadius: 4, padding: '1px 6px', fontWeight: 700 }}>Needs Review</span>
+                                                    <span style={{ fontSize: 10, background: 'var(--rp-danger-wash)', color: 'var(--rp-danger-text)', borderRadius: 4, padding: '1px 6px', fontWeight: 700 }}>Needs Review</span>
                                                 )}
                                                 {item.renovated && (
-                                                    <span style={{ fontSize: 10, background: 'rgba(34,197,94,0.12)', color: '#22c55e', borderRadius: 4, padding: '1px 6px', fontWeight: 700 }}>🔨 Renovated</span>
+                                                    <span style={{ fontSize: 12, background: 'var(--rp-info-bg)', color: 'var(--rp-info-text)', borderRadius: 'var(--radius-control)', padding: '4px 8px', fontWeight: 500 }}>Renovated</span>
                                                 )}
                                                 {item.roof_rights && (
-                                                    <span style={{ fontSize: 10, background: 'rgba(245,158,11,0.12)', color: '#f59e0b', borderRadius: 4, padding: '1px 6px', fontWeight: 700 }}>🏠 Roof rights</span>
+                                                    <span style={{ fontSize: 12, background: 'var(--rp-info-bg)', color: 'var(--rp-info-text)', borderRadius: 'var(--radius-control)', padding: '4px 8px', fontWeight: 500 }}>Roof rights</span>
                                                 )}
                                                 {item.pre_rented && (
-                                                    <span style={{ fontSize: 10, background: 'rgba(59,130,246,0.12)', color: '#3b82f6', borderRadius: 4, padding: '1px 6px', fontWeight: 700 }}>
-                                                        🏷 Pre-rented{item.pre_rented_monthly_rent ? ` · ₹${Number(item.pre_rented_monthly_rent).toLocaleString('en-IN')}/mo` : ''}
+                                                    <span style={{ fontSize: 10, background: 'var(--rp-info-wash)', color: 'var(--blue-500)', borderRadius: 4, padding: '1px 6px', fontWeight: 700 }}>
+                                                        Pre-rented{item.pre_rented_monthly_rent ? ` · ₹${Number(item.pre_rented_monthly_rent).toLocaleString('en-IN')}/mo` : ''}
                                                     </span>
                                                 )}
                                             </div>
@@ -1764,7 +1770,7 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
                                                 {formatInventoryAddress(item)}
                                                 {/* Type-aware specs (residential→BHK/Bath/Area, hospitality→Rooms/Area,
                                                     commercial/land→Area; ⚠ on implausible area). See lib/specChips. */}
-                                                {pickSpecChips(item).map(c => ` | ${c.warn ? '⚠ ' : ''}${c.value}`).join('')}
+                                                <IconText>{pickSpecChips(item).map(c => ` | ${c.warn ? '⚠ ' : ''}${c.value}`).join('')}</IconText>
                                             </div>
 
                                             {/* Row 3: Dual Pricing */}
@@ -1788,7 +1794,7 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
                                                         return (
                                                             <span style={{
                                                                 fontSize: '12px', fontWeight: 600, padding: '1px 6px', borderRadius: '4px',
-                                                                ...(margin > 0 ? { color: '#34d399', backgroundColor: 'rgba(52,211,153,0.1)' } : { color: '#f87171', backgroundColor: 'rgba(248,113,113,0.1)' })
+                                                                ...(margin > 0 ? { color: 'var(--rp-success-text)', backgroundColor: 'var(--rp-success-wash)' } : { color: 'var(--rp-danger-text)', backgroundColor: 'var(--rp-danger-wash)' })
                                                             }}>
                                                                 {margin > 0 ? '+' : ''}{formatPrice(margin, 'sell')} ({pct}%)
                                                             </span>
@@ -1802,17 +1808,17 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
                                                 gated "Call" dropdown below (redacted for non-handling agents). */}
                                             <div style={{ display: 'flex', gap: '12px', fontSize: '12px', color: 'var(--text-secondary)', flexWrap: 'wrap', marginBottom: '8px', alignItems: 'center' }}>
                                                 {item.mine && (
-                                                    <span style={{ fontSize: '11px', fontWeight: 700, color: '#22c55e', backgroundColor: 'rgba(34,197,94,0.15)', padding: '2px 8px', borderRadius: '6px' }} title="You uploaded or are assigned this listing">⭐ Yours</span>
+                                                    <span style={{ fontSize: '12px', fontWeight: 500, color: 'var(--rp-info-text)', backgroundColor: 'var(--rp-info-bg)', padding: '4px 8px', borderRadius: 'var(--radius-control)' }} title="You uploaded or are assigned this listing">Yours</span>
                                                 )}
                                                 {item.needs_owner_fix && (
-                                                    <span style={{ fontSize: '11px', fontWeight: 700, color: '#f59e0b', backgroundColor: 'rgba(245,158,11,0.18)', padding: '2px 8px', borderRadius: '6px' }} title="The owner number is a team member's own number — edit and add the real owner's name & number">⚠ Add owner details</span>
+                                                    <span style={{ fontSize: '12px', fontWeight: 500, color: 'var(--rp-warn-text)', backgroundColor: 'var(--rp-warn-bg)', padding: '4px 8px', borderRadius: 'var(--radius-control)' }} title="The owner number is a team member's own number — edit and add the real owner's name & number"><PresentationIcon value="circle-alert" /> Add owner details</span>
                                                 )}
                                                 {relativeAge(item.created_at) && (
-                                                    <span style={{ color: 'var(--text-muted)' }} title="Listed">🕐 {relativeAge(item.created_at)}</span>
+                                                    <span style={{ color: 'var(--text-muted)' }} title="Listed"><PresentationIcon value="clock" /> {relativeAge(item.created_at)}</span>
                                                 )}
                                                 {item.source && (
                                                     <span>
-                                                        {item.source.type === 'DEALER' ? '🤝 Dealer' : item.source.type === 'AGENT_OWNER' ? '👤 Owner (agent)' : '👤 Owner'}
+                                                        {item.source.type === 'DEALER' ? 'Dealer' : item.source.type === 'AGENT_OWNER' ? 'Owner (agent)' : 'Owner'}
                                                         {item.source.name ? `: ${item.source.name}` : ''}
                                                     </span>
                                                 )}
@@ -1821,9 +1827,9 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
                                             {/* Engagement counts — shares / website views / visits (scheduled · visited) */}
                                             {item.stats && (
                                                 <div style={{ display: 'flex', gap: '14px', fontSize: '12px', color: 'var(--text-muted)', flexWrap: 'wrap', marginBottom: '8px' }}>
-                                                    <span title="Times shared with clients">📤 {item.stats.shares} shared</span>
-                                                    <span title="Website views by clients">👁 {item.stats.views} views</span>
-                                                    <span title="Site visits: scheduled · visited">📅 {item.stats.visits_scheduled} sched · {item.stats.visits_done} visited</span>
+                                                    <span title="Times shared with clients"><PresentationIcon value="send" /> {item.stats.shares} shared</span>
+                                                    <span title="Website views by clients"><PresentationIcon value="eye" /> {item.stats.views} views</span>
+                                                    <span title="Site visits: scheduled · visited"><PresentationIcon value="calendar-days" /> {item.stats.visits_scheduled} sched · {item.stats.visits_done} visited</span>
                                                 </div>
                                             )}
 
@@ -1831,9 +1837,9 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
                                             <button
                                                 type="button"
                                                 onClick={(e) => { e.stopPropagation(); setMatchInvId(item.id); }}
-                                                style={{ alignSelf: 'flex-start', display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 12px', borderRadius: 8, border: '1px solid rgba(59,130,246,0.4)', background: 'rgba(59,130,246,0.12)', color: '#3b82f6', fontSize: 12, fontWeight: 600, cursor: 'pointer', marginBottom: 8 }}
+                                                style={{ alignSelf: 'flex-start', display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 12px', borderRadius: 8, border: '1px solid var(--rp-info-line)', background: 'var(--rp-info-wash)', color: 'var(--blue-500)', fontSize: 12, fontWeight: 600, cursor: 'pointer', marginBottom: 8 }}
                                             >
-                                                🔍 Match Clients
+                                                Match Clients
                                             </button>
 
                                             {/* Row 4: Completion Bar */}
@@ -1842,17 +1848,17 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
                                                     <div style={{
                                                         height: '100%', borderRadius: '3px', transition: 'width 0.3s ease',
                                                         width: `${item.completion_pct || 0}%`,
-                                                        backgroundColor: (item.completion_pct || 0) > 60 ? '#34d399' : (item.completion_pct || 0) > 30 ? '#fbbf24' : '#f87171',
+                                                        backgroundColor: (item.completion_pct || 0) > 60 ? 'var(--rp-success-text)' : (item.completion_pct || 0) > 30 ? 'var(--rp-warn-text)' : 'var(--rp-danger-text)',
                                                     }} />
                                                 </div>
                                                 <span style={{
                                                     fontSize: '11px', fontWeight: 700, minWidth: '32px',
-                                                    color: (item.completion_pct || 0) > 60 ? '#34d399' : (item.completion_pct || 0) > 30 ? '#fbbf24' : '#f87171',
+                                                    color: (item.completion_pct || 0) > 60 ? 'var(--rp-success-text)' : (item.completion_pct || 0) > 30 ? 'var(--rp-warn-text)' : 'var(--rp-danger-text)',
                                                 }}>
                                                     {item.completion_pct || 0}%
                                                 </span>
                                                 {item.assigned_agent && (
-                                                    <span style={{ fontSize: '11px', color: '#38bdf8', backgroundColor: 'rgba(56,189,248,0.1)', padding: '2px 6px', borderRadius: '4px' }}>
+                                                    <span style={{ fontSize: '11px', color: 'var(--blue-500)', backgroundColor: 'var(--rp-info-wash)', padding: '2px 6px', borderRadius: '4px' }}>
                                                         {item.assigned_agent.name}
                                                     </span>
                                                 )}
@@ -1869,7 +1875,7 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
                                                 {item.can_edit && (item.uploader_phone || item.owner_phone || item.key_holder_phone) && (
                                                     <div style={{ position: 'relative', display: 'inline-block' }}>
                                                         <button
-                                                            style={{ ...s.actionBtn, color: '#22d3ee', borderColor: '#22d3ee' }}
+                                                            style={{ ...s.actionBtn, color: 'var(--blue-500)', borderColor: 'var(--blue-500)' }}
                                                             onClick={(e) => {
                                                                 e.stopPropagation();
                                                                 setCallDropdownId(callDropdownId === item.id ? null : item.id);
@@ -1911,7 +1917,7 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
                                                 {toDialablePhone(item.assigned_agent?.phone || item.uploaded_by_agent?.phone) && (
                                                     <a
                                                         href={`tel:${toDialablePhone(item.assigned_agent?.phone || item.uploaded_by_agent?.phone)}`}
-                                                        style={{ ...s.actionBtn, color: '#38bdf8', borderColor: '#38bdf8', textDecoration: 'none' }}
+                                                        style={{ ...s.actionBtn, color: 'var(--blue-500)', borderColor: 'var(--blue-500)', textDecoration: 'none' }}
                                                         onClick={e => e.stopPropagation()}
                                                         title={`Call inventory manager: ${item.assigned_agent?.name || item.uploaded_by_agent?.name || ''}`}
                                                     >&#9742; Manager</a>
@@ -1919,7 +1925,7 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
                                                 {!isPartner && hasPermission('edit_inventory') && item.status === 'pending_approval' && (
                                                     <>
                                                         <button
-                                                            style={{ ...s.actionBtn, color: '#34d399', borderColor: '#34d399' }}
+                                                            style={{ ...s.actionBtn, color: 'var(--rp-success-text)', borderColor: 'var(--rp-success-text)' }}
                                                             onClick={async () => {
                                                                 const ok = await confirm('Approve this listing?');
                                                                 if (!ok) return;
@@ -1928,7 +1934,7 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
                                                             }}
                                                         >Approve</button>
                                                         <button
-                                                            style={{ ...s.actionBtn, color: '#f87171', borderColor: '#f87171' }}
+                                                            style={{ ...s.actionBtn, color: 'var(--rp-danger-text)', borderColor: 'var(--rp-danger-text)' }}
                                                             onClick={async () => {
                                                                 const reason = prompt('Rejection reason (optional):') ?? undefined;
                                                                 if (reason === null) return;
@@ -1938,20 +1944,20 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
                                                         >Reject</button>
                                                     </>
                                                 )}
-                                                <button style={{ ...s.actionBtn, color: '#22c55e', borderColor: '#22c55e' }} onClick={() => { setSelectedIds(new Set([item.id])); setShowBatchShareModal(true); }}>Share</button>
-                                                <button style={{ ...s.actionBtn, color: '#8b5cf6', borderColor: '#8b5cf6' }} onClick={() => setBookVisitItem(item)}>Visit</button>
+                                                <button style={{ ...s.actionBtn, color: 'var(--rp-success-text)', borderColor: 'var(--rp-success-text)' }} onClick={() => { setSelectedIds(new Set([item.id])); setShowBatchShareModal(true); }}>Share</button>
+                                                <button style={{ ...s.actionBtn, color: 'var(--chart-5)', borderColor: 'var(--chart-5)' }} onClick={() => setBookVisitItem(item)}>Visit</button>
                                                 {hasPermission('edit_inventory') && item.can_edit && (
                                                     <button style={{ ...s.actionBtn, color: 'var(--text-link)', borderColor: 'var(--text-link)' }} onClick={() => handleEdit(item)}>Edit</button>
                                                 )}
                                                 {hasPermission('edit_inventory') && item.can_edit && item.status !== 'sold' && (
                                                     <>
-                                                        <button style={{ ...s.actionBtn, color: '#16a34a', borderColor: '#16a34a' }} onClick={() => { setSoldName(''); setSoldPhone(''); setSoldPrice(''); setSoldItem(item); }}>Sold</button>
-                                                        <button style={{ ...s.actionBtn, color: '#f59e0b', borderColor: '#f59e0b' }} onClick={() => { setHoldWhen(plus24hLocal()); setHoldNote(''); setHoldItem(item); }}>{item.status === 'on_hold' ? 'On Hold \u2713' : 'Hold'}</button>
+                                                        <button style={{ ...s.actionBtn, color: 'var(--rp-success-text)', borderColor: 'var(--rp-success-text)' }} onClick={() => { setSoldName(''); setSoldPhone(''); setSoldPrice(''); setSoldItem(item); }}>Sold</button>
+                                                        <button style={{ ...s.actionBtn, color: 'var(--rp-warn-text)', borderColor: 'var(--rp-warn-text)' }} onClick={() => { setHoldWhen(plus24hLocal()); setHoldNote(''); setHoldItem(item); }}>{item.status === 'on_hold' ? 'On Hold \u2713' : 'Hold'}</button>
                                                     </>
                                                 )}
                                                 {hasPermission('edit_inventory') && item.can_edit && item.status !== 'pending_approval' && (
                                                     <button
-                                                        style={{ ...s.actionBtn, color: item.status === 'active' ? '#f59e0b' : '#10b981' }}
+                                                        style={{ ...s.actionBtn, color: item.status === 'active' ? 'var(--rp-warn-text)' : 'var(--rp-success-text)' }}
                                                         onClick={async () => {
                                                             const newStatus = item.status === 'active' ? 'inactive' : 'active';
                                                             const ok = await confirm(`${newStatus === 'inactive' ? 'Deactivate' : 'Activate'} this property?`);
@@ -1964,7 +1970,7 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
                                                     </button>
                                                 )}
                                                 {hasPermission('delete_inventory') && (
-                                                    <button style={{ ...s.actionBtn, color: '#f87171' }} onClick={() => setDeletingId(item.id)}>Delete</button>
+                                                    <button style={{ ...s.actionBtn, color: 'var(--rp-danger-text)' }} onClick={() => setDeletingId(item.id)}>Delete</button>
                                                 )}
                                             </div>
                                         </div>
@@ -1977,28 +1983,8 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
             )}
 
             {/* Pagination */}
-            {totalPages > 1 && (
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '16px', padding: '12px 16px', backgroundColor: 'var(--bg-secondary)', borderRadius: '8px', border: '1px solid var(--border-secondary)' }}>
-                    <span style={{ color: 'var(--text-muted)', fontSize: '13px' }}>
-                        Showing {(currentPage - 1) * pageSize + 1}–{Math.min(currentPage * pageSize, totalCount)} of {totalCount}
-                    </span>
-                    <div style={{ display: 'flex', gap: '8px' }}>
-                        <button
-                            style={{ ...s.smallBtn, opacity: currentPage <= 1 ? 0.4 : 1 }}
-                            disabled={currentPage <= 1}
-                            onClick={() => setCurrentPage(p => p - 1)}
-                        >Previous</button>
-                        <span style={{ color: 'var(--text-secondary)', fontSize: '13px', padding: '4px 8px' }}>
-                            Page {currentPage} / {totalPages}
-                        </span>
-                        <button
-                            style={{ ...s.smallBtn, opacity: currentPage >= totalPages ? 0.4 : 1 }}
-                            disabled={currentPage >= totalPages}
-                            onClick={() => setCurrentPage(p => p + 1)}
-                        >Next</button>
-                    </div>
-                </div>
-            )}
+            <Pagination page={currentPage} totalPages={totalPages} totalCount={totalCount}
+                pageSize={pageSize} onPageChange={setCurrentPage} itemLabel="properties" />
 
             {/* Delete Confirmation Modal - soft-withdraw by default, hard delete only when safe */}
             {deletingId && (() => {
@@ -2019,7 +2005,7 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
                         <div style={s.btnRow}>
                             <button style={s.cancelBtn} onClick={() => setDeletingId(null)}>Cancel</button>
                             <button
-                                style={{ ...s.btnPrimary, backgroundColor: hasHistory ? '#f59e0b' : '#ef4444', opacity: deleting ? 0.6 : 1 }}
+                                style={{ ...s.btnPrimary, backgroundColor: hasHistory ? 'var(--rp-warn-text)' : 'var(--rp-danger-text)', opacity: deleting ? 0.6 : 1 }}
                                 disabled={deleting}
                                 onClick={handleDelete}
                             >
@@ -2051,7 +2037,7 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
                                 <div
                                     style={{
                                         ...s.dropzone,
-                                        borderColor: uploadFile ? '#3b82f6' : 'var(--border-secondary)'
+                                        borderColor: uploadFile ? 'var(--blue-500)' : 'var(--border-secondary)'
                                     }}
                                     onClick={() => fileInputRef.current?.click()}
                                 >
@@ -2105,10 +2091,10 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
                         ) : (
                             <>
                                 <div style={s.successBox}>
-                                    <div style={{ color: '#34d399', fontWeight: 700, fontSize: '16px', marginBottom: '6px' }}>
+                                    <div style={{ color: 'var(--rp-success-text)', fontWeight: 700, fontSize: '16px', marginBottom: '6px' }}>
                                         {uploadResult.message}
                                     </div>
-                                    <div style={{ color: '#6ee7b7', fontSize: '13px' }}>
+                                    <div style={{ color: 'var(--rp-success-text)', fontSize: '13px' }}>
                                         Imported: {uploadResult.imported} &nbsp;|&nbsp;
                                         Skipped: {uploadResult.skipped} &nbsp;|&nbsp;
                                         Total rows: {uploadResult.total}
@@ -2117,7 +2103,7 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
 
                                 {uploadResult.errors.length > 0 && (
                                     <div style={s.errorBox}>
-                                        <div style={{ color: '#f87171', fontWeight: 600, marginBottom: '6px', fontSize: '13px' }}>
+                                        <div style={{ color: 'var(--rp-danger-text)', fontWeight: 600, marginBottom: '6px', fontSize: '13px' }}>
                                             {uploadResult.errors.length} row(s) had issues:
                                         </div>
                                         {uploadResult.errors.map((err, i) => (
@@ -2154,7 +2140,7 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
                         backgroundColor: 'var(--bg-secondary)',
                         borderRadius: '12px',
                         border: '1px solid var(--border-secondary)',
-                        boxShadow: '0 25px 60px rgba(0,0,0,0.5)',
+                        boxShadow: '0 25px 60px var(--rp-overlay-soft)',
                         overflow: 'hidden',
                     }}>
                         {/* Modal Header */}
@@ -2164,7 +2150,7 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
                                     <span style={{ fontSize: '16px', fontWeight: 700, color: 'var(--text-primary)' }}>Edit Inventory</span>
                                     <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>ID: {editingId?.substring(0, 8)}</span>
-                                    {editLoading && <span style={{ fontSize: '12px', color: '#fbbf24' }}>Loading fresh data...</span>}
+                                    {editLoading && <span style={{ fontSize: '12px', color: 'var(--rp-warn-text)' }}>Loading fresh data...</span>}
                                 </div>
                                 <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', marginTop: '6px', fontSize: '12px' }}>
                                     {editItem?.owner_phone && (
@@ -2179,7 +2165,7 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
                                         <span style={{ color: 'var(--text-secondary)' }}>
                                             <span style={{ color: 'var(--text-muted)' }}>Uploaded by:</span> {editItem.uploaded_by_agent?.name || editItem.uploader_name}
                                             {editItem.uploader_phone && <span style={{ color: 'var(--text-muted)', marginLeft: 4 }}>({editItem.uploader_phone})</span>}
-                                            {editItem.upload_source === 'mobile_app' && <span style={{ marginLeft: 4, fontSize: 11, background: 'rgba(34,197,94,0.12)', color: '#16a34a', borderRadius: 4, padding: '1px 5px' }}>Partner</span>}
+                                            {editItem.upload_source === 'mobile_app' && <span style={{ marginLeft: 4, fontSize: 11, background: 'var(--rp-success-wash)', color: 'var(--rp-success-text)', borderRadius: 4, padding: '1px 5px' }}>Partner</span>}
                                         </span>
                                     )}
                                     {editItem?.upload_source && !editItem?.uploaded_by_agent && !editItem?.uploader_name && (
@@ -2188,7 +2174,7 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
                                     {toDialablePhone(editItem?.assigned_agent?.phone || editItem?.uploaded_by_agent?.phone) && (
                                         <a
                                             href={`tel:${toDialablePhone(editItem.assigned_agent?.phone || editItem.uploaded_by_agent?.phone)}`}
-                                            style={{ color: '#38bdf8', textDecoration: 'none' }}
+                                            style={{ color: 'var(--blue-500)', textDecoration: 'none' }}
                                             title="Call inventory manager"
                                         >
                                             <span style={{ color: 'var(--text-muted)' }}>Manager:</span> &#9742; {editItem.assigned_agent?.name || editItem.uploaded_by_agent?.name || 'Call'}
@@ -2245,7 +2231,7 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
                             {editTab === 'media' && (
                                 <div>
                                     <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-link)', marginBottom: '12px' }}>
-                                        Photos & Videos {compressMsg ? <span style={{ color: '#38bdf8', fontWeight: 400 }}>({compressMsg})</span> : mediaUploading && <span style={{ color: '#fbbf24', fontWeight: 400 }}>(uploading...)</span>}
+                                        Photos & Videos {compressMsg ? <span style={{ color: 'var(--blue-500)', fontWeight: 400 }}>({compressMsg})</span> : mediaUploading && <span style={{ color: 'var(--rp-warn-text)', fontWeight: 400 }}>(uploading...)</span>}
                                     </div>
                                     <div style={{ marginBottom: '16px' }}>
                                         <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '8px' }}>Photos ({editMediaUrls.length})</div>
@@ -2261,7 +2247,7 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
                                                         />
                                                         <button
                                                             onClick={() => handleDeleteMedia(editingId!, url)}
-                                                            style={{ position: 'absolute', top: '3px', right: '3px', background: 'rgba(0,0,0,0.7)', border: 'none', color: '#fff', borderRadius: '50%', width: '20px', height: '20px', cursor: 'pointer', fontSize: '11px', lineHeight: '20px', padding: 0 }}
+                                                            style={{ position: 'absolute', top: '3px', right: '3px', background: 'var(--rp-overlay-soft)', border: 'none', color: 'var(--surface-white)', borderRadius: '50%', width: '20px', height: '20px', cursor: 'pointer', fontSize: '11px', lineHeight: '20px', padding: 0 }}
                                                         >✕</button>
                                                     </div>
                                                 ))}
@@ -2276,8 +2262,8 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
                                             <div style={{ marginBottom: '10px' }}>
                                                 {editVideoUrls.map(url => (
                                                     <div key={url} style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px', fontSize: '13px', color: 'var(--text-secondary)' }}>
-                                                        <span>🎬 {url.split('/').pop()}</span>
-                                                        <button onClick={() => handleDeleteVideo(editingId!, url)} style={{ background: 'none', border: 'none', color: '#f87171', cursor: 'pointer', fontSize: '12px' }}>✕ Remove</button>
+                                                        <span><PresentationIcon value="play" /> {url.split('/').pop()}</span>
+                                                        <button onClick={() => handleDeleteVideo(editingId!, url)} style={{ background: 'none', border: 'none', color: 'var(--rp-danger-text)', cursor: 'pointer', fontSize: '12px' }}>✕ Remove</button>
                                                     </div>
                                                 ))}
                                             </div>
@@ -2344,20 +2330,20 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
                                             style={{
                                                 display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 14px',
                                                 borderRadius: '8px', cursor: 'pointer', width: '100%', textAlign: 'left',
-                                                border: editData.renovated ? '1.5px solid #22c55e' : '1px solid var(--border-secondary)',
-                                                backgroundColor: editData.renovated ? 'rgba(34,197,94,0.08)' : 'var(--bg-secondary)',
+                                                border: editData.renovated ? '1.5px solid var(--rp-success-text)' : '1px solid var(--border-secondary)',
+                                                backgroundColor: editData.renovated ? 'var(--rp-success-wash)' : 'var(--bg-secondary)',
                                             }}
                                         >
                                             <div style={{
                                                 width: '20px', height: '20px', borderRadius: '4px', flexShrink: 0,
-                                                border: editData.renovated ? '2px solid #22c55e' : '2px solid var(--border-secondary)',
-                                                backgroundColor: editData.renovated ? '#22c55e' : 'transparent',
+                                                border: editData.renovated ? '2px solid var(--rp-success-text)' : '2px solid var(--border-secondary)',
+                                                backgroundColor: editData.renovated ? 'var(--rp-success-text)' : 'transparent',
                                                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                                             }}>
-                                                {editData.renovated && <span style={{ color: '#fff', fontSize: '12px', lineHeight: 1 }}>✓</span>}
+                                                {editData.renovated && <span style={{ color: 'var(--surface-white)', fontSize: '12px', lineHeight: 1 }}>✓</span>}
                                             </div>
                                             <div>
-                                                <div style={{ fontSize: '13px', fontWeight: 600, color: editData.renovated ? '#22c55e' : 'var(--text-secondary)' }}>
+                                                <div style={{ fontSize: '13px', fontWeight: 600, color: editData.renovated ? 'var(--rp-success-text)' : 'var(--text-secondary)' }}>
                                                     {editData.renovated ? 'Renovated ✓' : 'Mark as Renovated'}
                                                 </div>
                                                 <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
@@ -2373,20 +2359,20 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
                                             style={{
                                                 display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 14px',
                                                 borderRadius: '8px', cursor: 'pointer', width: '100%', textAlign: 'left',
-                                                border: editData.roof_rights ? '1.5px solid #f59e0b' : '1px solid var(--border-secondary)',
-                                                backgroundColor: editData.roof_rights ? 'rgba(245,158,11,0.08)' : 'var(--bg-secondary)',
+                                                border: editData.roof_rights ? '1.5px solid var(--rp-warn-text)' : '1px solid var(--border-secondary)',
+                                                backgroundColor: editData.roof_rights ? 'var(--rp-danger-wash)' : 'var(--bg-secondary)',
                                             }}
                                         >
                                             <div style={{
                                                 width: '20px', height: '20px', borderRadius: '4px', flexShrink: 0,
-                                                border: editData.roof_rights ? '2px solid #f59e0b' : '2px solid var(--border-secondary)',
-                                                backgroundColor: editData.roof_rights ? '#f59e0b' : 'transparent',
+                                                border: editData.roof_rights ? '2px solid var(--rp-warn-text)' : '2px solid var(--border-secondary)',
+                                                backgroundColor: editData.roof_rights ? 'var(--rp-warn-text)' : 'transparent',
                                                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                                             }}>
-                                                {editData.roof_rights && <span style={{ color: '#fff', fontSize: '12px', lineHeight: 1 }}>✓</span>}
+                                                {editData.roof_rights && <span style={{ color: 'var(--surface-white)', fontSize: '12px', lineHeight: 1 }}>✓</span>}
                                             </div>
                                             <div>
-                                                <div style={{ fontSize: '13px', fontWeight: 600, color: editData.roof_rights ? '#f59e0b' : 'var(--text-secondary)' }}>
+                                                <div style={{ fontSize: '13px', fontWeight: 600, color: editData.roof_rights ? 'var(--rp-warn-text)' : 'var(--text-secondary)' }}>
                                                     {editData.roof_rights ? 'Roof rights included ✓' : 'Mark roof rights'}
                                                 </div>
                                                 <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
@@ -2405,20 +2391,20 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
                                                 style={{
                                                     display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 14px',
                                                     borderRadius: '8px', cursor: 'pointer', width: '100%', textAlign: 'left',
-                                                    border: editData.pre_rented ? '1.5px solid #3b82f6' : '1px solid var(--border-secondary)',
-                                                    backgroundColor: editData.pre_rented ? 'rgba(59,130,246,0.08)' : 'var(--bg-secondary)',
+                                                    border: editData.pre_rented ? '1.5px solid var(--blue-500)' : '1px solid var(--border-secondary)',
+                                                    backgroundColor: editData.pre_rented ? 'var(--rp-info-wash)' : 'var(--bg-secondary)',
                                                 }}
                                             >
                                                 <div style={{
                                                     width: '20px', height: '20px', borderRadius: '4px', flexShrink: 0,
-                                                    border: editData.pre_rented ? '2px solid #3b82f6' : '2px solid var(--border-secondary)',
-                                                    backgroundColor: editData.pre_rented ? '#3b82f6' : 'transparent',
+                                                    border: editData.pre_rented ? '2px solid var(--blue-500)' : '2px solid var(--border-secondary)',
+                                                    backgroundColor: editData.pre_rented ? 'var(--blue-500)' : 'transparent',
                                                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                                                 }}>
-                                                    {editData.pre_rented && <span style={{ color: '#fff', fontSize: '12px', lineHeight: 1 }}>✓</span>}
+                                                    {editData.pre_rented && <span style={{ color: 'var(--surface-white)', fontSize: '12px', lineHeight: 1 }}>✓</span>}
                                                 </div>
                                                 <div>
-                                                    <div style={{ fontSize: '13px', fontWeight: 600, color: editData.pre_rented ? '#3b82f6' : 'var(--text-secondary)' }}>
+                                                    <div style={{ fontSize: '13px', fontWeight: 600, color: editData.pre_rented ? 'var(--blue-500)' : 'var(--text-secondary)' }}>
                                                         {editData.pre_rented ? 'Pre-rented ✓' : 'Mark as Pre-rented'}
                                                     </div>
                                                     <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
@@ -2447,13 +2433,13 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
                                             <button
                                                 type="button"
                                                 onClick={() => setEditData((p: any) => ({ ...p, commercial_use: !p.commercial_use, commercial_use_type: !p.commercial_use ? (p.commercial_use_type || 'office') : '' }))}
-                                                style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 14px', borderRadius: '8px', cursor: 'pointer', width: '100%', textAlign: 'left', border: editData.commercial_use ? '1.5px solid #a855f7' : '1px solid var(--border-secondary)', backgroundColor: editData.commercial_use ? 'rgba(168,85,247,0.08)' : 'var(--bg-secondary)' }}
+                                                style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 14px', borderRadius: '8px', cursor: 'pointer', width: '100%', textAlign: 'left', border: editData.commercial_use ? '1.5px solid var(--blue-600)' : '1px solid var(--border-secondary)', backgroundColor: editData.commercial_use ? 'var(--rp-info-wash)' : 'var(--bg-secondary)' }}
                                             >
-                                                <div style={{ width: '20px', height: '20px', borderRadius: '4px', flexShrink: 0, border: editData.commercial_use ? '2px solid #a855f7' : '2px solid var(--border-secondary)', backgroundColor: editData.commercial_use ? '#a855f7' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                                    {editData.commercial_use && <span style={{ color: '#fff', fontSize: '12px', lineHeight: 1 }}>✓</span>}
+                                                <div style={{ width: '20px', height: '20px', borderRadius: '4px', flexShrink: 0, border: editData.commercial_use ? '2px solid var(--blue-600)' : '2px solid var(--border-secondary)', backgroundColor: editData.commercial_use ? 'var(--blue-600)' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                    {editData.commercial_use && <span style={{ color: 'var(--surface-white)', fontSize: '12px', lineHeight: 1 }}>✓</span>}
                                                 </div>
                                                 <div>
-                                                    <div style={{ fontSize: '13px', fontWeight: 600, color: editData.commercial_use ? '#a855f7' : 'var(--text-secondary)' }}>
+                                                    <div style={{ fontSize: '13px', fontWeight: 600, color: editData.commercial_use ? 'var(--blue-600)' : 'var(--text-secondary)' }}>
                                                         {editData.commercial_use ? 'Also usable commercially ✓' : 'Mark as commercial-usable'}
                                                     </div>
                                                     <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
@@ -2524,7 +2510,7 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
                                                             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
                                                                 {f.options.map(o => {
                                                                     const on = Array.isArray(editSchemaValues[f.key]) && editSchemaValues[f.key].includes(o);
-                                                                    return <button key={o} type="button" onClick={() => toggle(o)} style={{ padding: '6px 12px', borderRadius: '999px', fontSize: '12px', cursor: 'pointer', border: on ? '1px solid var(--text-link)' : '1px solid var(--border-secondary)', background: on ? 'var(--text-link)' : 'var(--bg-tertiary)', color: on ? '#fff' : 'var(--text-primary)' }}>{o}</button>;
+                                                                    return <button key={o} type="button" onClick={() => toggle(o)} style={{ padding: '6px 12px', borderRadius: '999px', fontSize: '12px', cursor: 'pointer', border: on ? '1px solid var(--text-link)' : '1px solid var(--border-secondary)', background: on ? 'var(--text-link)' : 'var(--bg-tertiary)', color: on ? 'var(--surface-white)' : 'var(--text-primary)' }}>{o}</button>;
                                                                 })}
                                                             </div>
                                                         ) : Array.isArray(f.options) && f.options.length > 0 ? (
@@ -2639,8 +2625,8 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
                                             return (
                                                 <div style={{
                                                     padding: '12px 16px', borderRadius: '8px', marginBottom: '16px',
-                                                    border: `1px solid ${isNegative ? 'rgba(248,113,113,0.3)' : isPositive ? 'rgba(52,211,153,0.3)' : 'var(--border-secondary)'}`,
-                                                    backgroundColor: isNegative ? 'rgba(248,113,113,0.05)' : isPositive ? 'rgba(52,211,153,0.05)' : 'var(--bg-primary)',
+                                                    border: `1px solid ${isNegative ? 'var(--rp-danger-line)' : isPositive ? 'var(--rp-success-line)' : 'var(--border-secondary)'}`,
+                                                    backgroundColor: isNegative ? 'var(--rp-danger-wash)' : isPositive ? 'var(--rp-success-wash)' : 'var(--bg-primary)',
                                                     display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                                                 }}>
                                                     <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
@@ -2648,7 +2634,7 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
                                                     </span>
                                                     <span style={{
                                                         fontSize: '16px', fontWeight: 700,
-                                                        color: isNegative ? '#f87171' : isPositive ? '#34d399' : 'var(--text-primary)',
+                                                        color: isNegative ? 'var(--rp-danger-text)' : isPositive ? 'var(--rp-success-text)' : 'var(--text-primary)',
                                                     }}>
                                                         {isPositive ? '+' : ''}{formatPrice(margin, 'sell')} ({pct}%)
                                                     </span>
@@ -2719,7 +2705,7 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
                                     {/* Change owner (2026-07-29): repoint a wrongly-attached owner contact — parity with the PWA. */}
                                     <EditContactSection
                                         label="Owner / Source Contact"
-                                        color="#34d399"
+                                        color="var(--rp-success-text)"
                                         currentPhone={editData.owner_phone}
                                         currentName={editData.owner_name}
                                         error={editOwnerError}
@@ -2777,7 +2763,7 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
                                                 </select>
                                             </div>
                                         </div>
-                                        <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '8px' }}>Uploads are named from the file — rename any document below with ✏️.</div>
+                                        <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '8px' }}>Uploads are named from the file — rename any document below with the edit button.</div>
                                         <input
                                             ref={docUploadRef}
                                             type="file"
@@ -2830,7 +2816,7 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
                                                     }}>
                                                         {/* Icon */}
                                                         <span style={{ fontSize: '20px', flexShrink: 0 }}>
-                                                            {isPdf ? '📄' : isImage ? '🖼' : '📎'}
+                                                            <PresentationIcon value={isPdf ? 'file-text' : isImage ? 'image' : 'paperclip'} />
                                                         </span>
                                                         {/* Info */}
                                                         <div style={{ flex: 1, minWidth: 0 }}>
@@ -2839,7 +2825,7 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
                                                                     <input autoFocus style={{ ...s.editInput, fontSize: '13px', padding: '4px 8px' }} value={renameValue}
                                                                         onChange={e => setRenameValue(e.target.value)}
                                                                         onKeyDown={e => { if (e.key === 'Escape') setRenamingDocId(null); }} />
-                                                                    <button style={{ ...s.smallBtn, color: '#22c55e', borderColor: '#22c55e' }} onClick={async () => {
+                                                                    <button style={{ ...s.smallBtn, color: 'var(--rp-success-text)', borderColor: 'var(--rp-success-text)' }} onClick={async () => {
                                                                         const t = renameValue.trim();
                                                                         if (!t || !editingId) { setRenamingDocId(null); return; }
                                                                         try { const upd = await renameInventoryDocument(editingId, doc.id, t); setEditDocuments(prev => prev.map((d: any) => d.id === doc.id ? { ...d, title: upd.title } : d)); }
@@ -2854,7 +2840,7 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
                                                                 </div>
                                                             )}
                                                             <div style={{ display: 'flex', gap: '6px', alignItems: 'center', marginTop: '2px' }}>
-                                                                <span style={{ fontSize: '11px', padding: '1px 6px', borderRadius: '4px', backgroundColor: 'rgba(99,102,241,0.1)', color: '#818cf8' }}>
+                                                                <span style={{ fontSize: '11px', padding: '1px 6px', borderRadius: '4px', backgroundColor: 'var(--rp-info-wash)', color: 'var(--blue-500)' }}>
                                                                     {DOC_TYPE_LABELS[doc.doc_type] || doc.doc_type}
                                                                 </span>
                                                                 {doc.file_size && (
@@ -2872,8 +2858,8 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
                                                         {/* Actions */}
                                                         <button style={s.smallBtn} title="Rename document"
                                                             onClick={() => { setRenamingDocId(doc.id); setRenameValue(doc.title || doc.file_name || ''); }}
-                                                        >✏️</button>
-                                                        <button style={{ ...s.smallBtn, color: '#22c55e', borderColor: '#22c55e' }} title="Share this document to a contact"
+                                                        ><PresentationIcon value="pencil" /></button>
+                                                        <button style={{ ...s.smallBtn, color: 'var(--rp-success-text)', borderColor: 'var(--rp-success-text)' }} title="Share this document to a contact"
                                                             onClick={() => { setSharingDocId(sharingDocId === doc.id ? null : doc.id); setSharePhone(''); setShareEmail(''); setShareName(''); }}
                                                         >Share</button>
                                                         <a
@@ -2883,7 +2869,7 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
                                                             style={{ ...s.smallBtn, textDecoration: 'none', color: 'var(--text-link)' }}
                                                         >View</a>
                                                         <button
-                                                            style={{ ...s.smallBtn, color: '#f87171', borderColor: '#f87171' }}
+                                                            style={{ ...s.smallBtn, color: 'var(--rp-danger-text)', borderColor: 'var(--rp-danger-text)' }}
                                                             onClick={async () => {
                                                                 const ok = await confirm('Delete this document?');
                                                                 if (!ok || !editingId) return;
@@ -2913,7 +2899,7 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
                                                                     placeholder="Email (optional)" value={shareEmail} onChange={e => setShareEmail(e.target.value)} />
                                                             </div>
                                                             <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                                                                <button style={{ ...s.smallBtn, color: '#22c55e', borderColor: '#22c55e', opacity: shareBusy ? 0.5 : 1 }}
+                                                                <button style={{ ...s.smallBtn, color: 'var(--rp-success-text)', borderColor: 'var(--rp-success-text)', opacity: shareBusy ? 0.5 : 1 }}
                                                                     disabled={shareBusy || (!sharePhone.trim() && !shareEmail.trim())}
                                                                     onClick={async () => {
                                                                         if (!editingId) return;
@@ -3001,7 +2987,7 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
                                         <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '10px' }}>Select team members who should also see and work on this inventory.</div>
                                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px' }}>
                                             {agentsList.map((a: any) => (
-                                                <label key={a.id} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', color: 'var(--text-secondary)', cursor: 'pointer', padding: '6px 8px', borderRadius: '6px', border: '1px solid var(--border-secondary)', background: (editData.shared_with_ids || []).includes(a.id) ? 'rgba(99,102,241,0.1)' : 'transparent' }}>
+                                                <label key={a.id} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', color: 'var(--text-secondary)', cursor: 'pointer', padding: '6px 8px', borderRadius: '6px', border: '1px solid var(--border-secondary)', background: (editData.shared_with_ids || []).includes(a.id) ? 'var(--rp-info-wash)' : 'transparent' }}>
                                                     <input
                                                         type="checkbox"
                                                         checked={(editData.shared_with_ids || []).includes(a.id)}
@@ -3025,7 +3011,7 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
                                     {/* Transfer — team-only; never shown to an external partner. */}
                                     {!isPartner && hasPermission('transfer_inventory') && (
                                         <div>
-                                            <div style={{ fontSize: '13px', fontWeight: 700, color: '#f87171', marginBottom: '8px', borderBottom: '1px solid var(--border-secondary)', paddingBottom: '4px' }}>Transfer Ownership</div>
+                                            <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--rp-danger-text)', marginBottom: '8px', borderBottom: '1px solid var(--border-secondary)', paddingBottom: '4px' }}>Transfer Ownership</div>
                                             <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '12px' }}>
                                                 Transfer moves primary assignment to another team member. The current handler loses access unless shared.
                                             </p>
@@ -3035,7 +3021,7 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
                                                     {agentsList.map((a: any) => <option key={a.id} value={a.id}>{a.name} ({a.role})</option>)}
                                                 </select>
                                                 <button
-                                                    style={{ ...s.btnPrimary, backgroundColor: '#f87171', whiteSpace: 'nowrap' }}
+                                                    style={{ ...s.btnPrimary, backgroundColor: 'var(--rp-danger-text)', whiteSpace: 'nowrap' }}
                                                     onClick={async () => {
                                                         const sel = document.getElementById('transfer-target-select') as HTMLSelectElement;
                                                         const target = sel?.value;
@@ -3107,7 +3093,7 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
                         <input value={soldPrice} onChange={e => setSoldPrice(e.target.value)} placeholder="e.g. 5500000" style={{    width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid var(--border-secondary)', backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)', fontSize: '13px', boxSizing: 'border-box', marginBottom: '10px' }} />
                         <div style={s.btnRow}>
                             <button style={s.cancelBtn} onClick={() => setSoldItem(null)}>Cancel</button>
-                            <button style={{ ...s.btnPrimary, backgroundColor: '#16a34a', opacity: statusBusy ? 0.6 : 1 }} disabled={statusBusy}
+                            <button style={{ ...s.btnPrimary, backgroundColor: 'var(--rp-success-text)', opacity: statusBusy ? 0.6 : 1 }} disabled={statusBusy}
                                 onClick={async () => { setStatusBusy(true); try { await markInventorySold(soldItem.id, { new_owner_phone: soldPhone.trim() || undefined, new_owner_name: soldName.trim() || undefined, final_price: soldPrice.trim() || undefined }); setSoldItem(null); await loadInventory(); showToast('Marked sold', 'success'); } catch (err: any) { showToast(err.response?.data?.error || 'Failed', 'error'); } finally { setStatusBusy(false); } }}>
                                 {statusBusy ? 'Saving…' : 'Confirm Sold'}
                             </button>
@@ -3128,7 +3114,7 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
                         <input value={holdNote} onChange={e => setHoldNote(e.target.value)} placeholder="Why on hold / what to check" style={{    width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid var(--border-secondary)', backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)', fontSize: '13px', boxSizing: 'border-box', marginBottom: '10px' }} />
                         <div style={s.btnRow}>
                             <button style={s.cancelBtn} onClick={() => setHoldItem(null)}>Cancel</button>
-                            <button style={{ ...s.btnPrimary, backgroundColor: '#f59e0b', opacity: (statusBusy || !holdWhen) ? 0.6 : 1 }} disabled={statusBusy || !holdWhen}
+                            <button style={{ ...s.btnPrimary, backgroundColor: 'var(--rp-warn-text)', opacity: (statusBusy || !holdWhen) ? 0.6 : 1 }} disabled={statusBusy || !holdWhen}
                                 onClick={async () => { setStatusBusy(true); try { await markInventoryOnHold(holdItem.id, { follow_up_at: holdWhen, note: holdNote.trim() || undefined }); setHoldItem(null); await loadInventory(); showToast('On hold — follow-up task created', 'success'); } catch (err: any) { showToast(err.response?.data?.error || 'Failed', 'error'); } finally { setStatusBusy(false); } }}>
                                 {statusBusy ? 'Saving…' : 'Confirm Hold'}
                             </button>
@@ -3148,12 +3134,7 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
 
             {/* Floating action bar — appears when items are selected */}
             {selectionMode && selectedIds.size > 0 && (
-                <div style={{
-                    position: 'fixed', bottom: '24px', left: '50%', transform: 'translateX(-50%)',
-                    backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-secondary)',
-                    borderRadius: '12px', padding: '12px 20px', display: 'flex', alignItems: 'center', gap: '12px',
-                    boxShadow: '0 8px 32px rgba(0,0,0,0.2)', zIndex: 1000,
-                }}>
+                <div className="rp-selection-dock" role="region" aria-label="Selected inventory actions">
                     <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>
                         {selectedIds.size} propert{selectedIds.size === 1 ? 'y' : 'ies'} selected
                     </span>
@@ -3161,13 +3142,13 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
                         onClick={() => { setShowBatchShareModal(true); setBatchShareResults([]); setBatchShareContact(null); setBatchContactSearch(''); }}
                         style={{
                             padding: '8px 18px', borderRadius: '8px', fontSize: '13px', fontWeight: 700, cursor: 'pointer',
-                            backgroundColor: '#25d366', border: 'none', color: '#fff',
+                            backgroundColor: 'var(--rp-success-text)', border: 'none', color: 'var(--surface-white)',
                         }}
-                    >📲 Share via WhatsApp</button>
+                    >Share via WhatsApp</button>
                     <button
                         onClick={() => { setShowReassignModal(true); setReassignTarget(''); setReassignMsg(''); }}
-                        style={{ padding: '8px 18px', borderRadius: '8px', fontSize: '13px', fontWeight: 700, cursor: 'pointer', backgroundColor: '#8b5cf6', border: 'none', color: '#fff' }}
-                    >🔄 Reassign</button>
+                        style={{ padding: '8px 18px', borderRadius: '8px', fontSize: '13px', fontWeight: 700, cursor: 'pointer', backgroundColor: 'var(--chart-5)', border: 'none', color: 'var(--surface-white)' }}
+                    >Reassign</button>
                     <button
                         onClick={() => { setSelectedIds(new Set()); setSelectionMode(false); }}
                         style={{ padding: '8px 14px', borderRadius: '8px', fontSize: '12px', cursor: 'pointer', border: '1px solid var(--border-secondary)', backgroundColor: 'transparent', color: 'var(--text-muted)' }}
@@ -3177,11 +3158,11 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
 
             {/* Bulk reassign modal (#4) → POST /inventory/bulk-transfer */}
             {showReassignModal && (
-                <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 2100, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                <div style={{ position: 'fixed', inset: 0, backgroundColor: 'var(--rp-overlay-soft)', zIndex: 2100, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                     onMouseDown={e => { if (e.target === e.currentTarget && !reassigning) setShowReassignModal(false); }}>
                     <div style={{ backgroundColor: 'var(--bg-primary)', borderRadius: '14px', padding: '24px', width: '400px', maxWidth: '90vw' }}>
                         <div style={{ fontSize: '16px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '8px' }}>
-                            🔄 Reassign {selectedIds.size} listing{selectedIds.size === 1 ? '' : 's'}
+                            Reassign {selectedIds.size} listing{selectedIds.size === 1 ? '' : 's'}
                         </div>
                         <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '16px' }}>
                             Transfer the selected propert{selectedIds.size === 1 ? 'y' : 'ies'} to another team member — they become the assigned agent.
@@ -3192,7 +3173,7 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
                             <option value="">Select an agent…</option>
                             {agentsList.map((a: any) => <option key={a.id} value={a.id}>{a.name}{a.role ? ` (${a.role})` : ''}</option>)}
                         </select>
-                        {reassignMsg && <div style={{ fontSize: '12px', color: reassignMsg.startsWith('✅') ? '#22c55e' : '#ef4444', marginBottom: '12px' }}>{reassignMsg}</div>}
+                        {reassignMsg && <div style={{ fontSize: '12px', color: reassignMsg.startsWith('✅') ? 'var(--rp-success-text)' : 'var(--rp-danger-text)', marginBottom: '12px' }}><IconText>{reassignMsg}</IconText></div>}
                         <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
                             <button disabled={reassigning} onClick={() => setShowReassignModal(false)}
                                 style={{ padding: '8px 16px', borderRadius: '8px', fontSize: '13px', cursor: 'pointer', border: '1px solid var(--border-secondary)', backgroundColor: 'transparent', color: 'var(--text-muted)' }}>Cancel</button>
@@ -3209,7 +3190,7 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
                                     setReassignMsg(`❌ ${err?.response?.data?.error || 'Reassign failed'}`);
                                 } finally { setReassigning(false); }
                             }}
-                                style={{ padding: '8px 18px', borderRadius: '8px', fontSize: '13px', fontWeight: 700, cursor: reassignTarget ? 'pointer' : 'not-allowed', backgroundColor: '#8b5cf6', border: 'none', color: '#fff', opacity: reassignTarget && !reassigning ? 1 : 0.5 }}>
+                                style={{ padding: '8px 18px', borderRadius: '8px', fontSize: '13px', fontWeight: 700, cursor: reassignTarget ? 'pointer' : 'not-allowed', backgroundColor: 'var(--chart-5)', border: 'none', color: 'var(--surface-white)', opacity: reassignTarget && !reassigning ? 1 : 0.5 }}>
                                 {reassigning ? 'Reassigning…' : 'Confirm reassign'}
                             </button>
                         </div>
@@ -3220,49 +3201,49 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
             {/* Batch Share Modal */}
             {showBatchShareModal && (
                 <div
-                    style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                    style={{ position: 'fixed', inset: 0, backgroundColor: 'var(--rp-overlay-soft)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                     onMouseDown={e => { if (e.target === e.currentTarget) setShowBatchShareModal(false); }}
                 >
                     <div style={{ backgroundColor: 'var(--bg-primary)', borderRadius: '14px', padding: '24px', width: '420px', maxWidth: '90vw', maxHeight: '80vh', overflowY: 'auto' }}>
                         <div style={{ fontSize: '16px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '16px' }}>
-                            📲 Share {selectedIds.size} Propert{selectedIds.size === 1 ? 'y' : 'ies'} via WhatsApp
+                            Share {selectedIds.size} Propert{selectedIds.size === 1 ? 'y' : 'ies'} via WhatsApp
                         </div>
                         {batchShareResults.length > 0 ? (
                             <div>
                                 {batchShareResults.map(r => (
                                     <div key={r.id} style={{ display: 'flex', gap: '10px', padding: '8px 0', borderBottom: '1px solid var(--border-secondary)', alignItems: 'flex-start' }}>
                                         <span style={{ fontSize: '16px' }}>
-                                            {r.status === 'sent' ? '✅' : r.status === 'already_shared' ? '⚠️' : '❌'}
+                                            <PresentationIcon value={r.status === 'sent' ? 'check-circle' : r.status === 'already_shared' ? 'circle-alert' : 'circle-alert'} />
                                         </span>
                                         <div>
                                             <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>{r.title}</div>
-                                            <div style={{ fontSize: '11px', color: r.status === 'already_shared' ? '#f59e0b' : r.status === 'error' ? '#ef4444' : '#22c55e' }}>{r.message}</div>
+                                            <div style={{ fontSize: '11px', color: r.status === 'already_shared' ? 'var(--rp-warn-text)' : r.status === 'error' ? 'var(--rp-danger-text)' : 'var(--rp-success-text)' }}>{r.message}</div>
                                         </div>
                                     </div>
                                 ))}
                                 {/* Sequential suggestion: also share from the team member's OWN WhatsApp,
                                     landing directly in the client's chat with the numbered text + links. */}
                                 {batchShareResults.some(r => r.link) && (
-                                    <div style={{ marginTop: '16px', padding: '12px', borderRadius: '10px', backgroundColor: 'rgba(37,211,102,0.08)', border: '1px solid rgba(37,211,102,0.3)' }}>
+                                    <div style={{ marginTop: '16px', padding: '12px', borderRadius: '10px', backgroundColor: 'var(--rp-success-wash)', border: '1px solid var(--rp-success-line)' }}>
                                         <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '8px' }}>
                                             Want to follow up personally? Share it yourself too — {batchShareMode === 'dealer' ? 'PDF is unbranded for partners' : 'branded PDF for clients'}.
                                         </div>
                                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px' }}>
                                             <button onClick={handleOwnWhatsAppShare}
-                                                style={{ padding: '10px 6px', borderRadius: '8px', fontWeight: 700, fontSize: '12px', backgroundColor: '#128c7e', color: '#fff', border: 'none', cursor: 'pointer' }}
-                                            >📱 My WhatsApp</button>
+                                                style={{ padding: '10px 6px', borderRadius: '8px', fontWeight: 700, fontSize: '12px', backgroundColor: 'var(--rp-success-text)', color: 'var(--surface-white)', border: 'none', cursor: 'pointer' }}
+                                            >My WhatsApp</button>
                                             <button onClick={handlePostSharePdf} disabled={postPdfBusy}
-                                                style={{ padding: '10px 6px', borderRadius: '8px', fontWeight: 700, fontSize: '12px', backgroundColor: '#ef4444', color: '#fff', border: 'none', cursor: postPdfBusy ? 'wait' : 'pointer', opacity: postPdfBusy ? 0.7 : 1 }}
-                                            >📄 {postPdfBusy ? '…' : 'PDF'}</button>
+                                                style={{ padding: '10px 6px', borderRadius: '8px', fontWeight: 700, fontSize: '12px', backgroundColor: 'var(--rp-danger-text)', color: 'var(--surface-white)', border: 'none', cursor: postPdfBusy ? 'wait' : 'pointer', opacity: postPdfBusy ? 0.7 : 1 }}
+                                            >{postPdfBusy ? '…' : 'PDF'}</button>
                                             <button onClick={handlePostShareLink}
-                                                style={{ padding: '10px 6px', borderRadius: '8px', fontWeight: 700, fontSize: '12px', backgroundColor: '#3b82f6', color: '#fff', border: 'none', cursor: 'pointer' }}
-                                            >🔗 {postLinkCopied ? 'Copied' : 'Link'}</button>
+                                                style={{ padding: '10px 6px', borderRadius: '8px', fontWeight: 700, fontSize: '12px', backgroundColor: 'var(--blue-500)', color: 'var(--surface-white)', border: 'none', cursor: 'pointer' }}
+                                            >{postLinkCopied ? 'Copied' : 'Link'}</button>
                                         </div>
                                     </div>
                                 )}
                                 <button
                                     onClick={() => { setShowBatchShareModal(false); setSelectionMode(false); setSelectedIds(new Set()); setBatchShareResults([]); setBatchShareMode(null); }}
-                                    style={{ marginTop: '16px', width: '100%', padding: '10px', borderRadius: '8px', fontWeight: 700, backgroundColor: '#3b82f6', color: '#fff', border: 'none', cursor: 'pointer' }}
+                                    style={{ marginTop: '16px', width: '100%', padding: '10px', borderRadius: '8px', fontWeight: 700, backgroundColor: 'var(--blue-500)', color: 'var(--surface-white)', border: 'none', cursor: 'pointer' }}
                                 >Done</button>
                             </div>
                         ) : (
@@ -3285,7 +3266,7 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
                                                 onClick={() => { setBatchShareContact(c); setBatchContactSearch(''); setBatchContactResults([]); }}
                                                 style={{ padding: '10px 12px', borderRadius: '8px', cursor: 'pointer', margin: '4px 0', backgroundColor: 'var(--bg-secondary)', display: 'flex', gap: '10px', alignItems: 'center' }}
                                             >
-                                                <div style={{ width: '32px', height: '32px', borderRadius: '50%', backgroundColor: 'rgba(59,130,246,0.12)', color: '#3b82f6', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '13px', flexShrink: 0 }}>
+                                                <div style={{ width: '32px', height: '32px', borderRadius: '50%', backgroundColor: 'var(--rp-info-wash)', color: 'var(--blue-500)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '13px', flexShrink: 0 }}>
                                                     {(c.name || c.phone_number)[0].toUpperCase()}
                                                 </div>
                                                 <div>
@@ -3295,12 +3276,12 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
                                             </div>
                                         ))}
                                         {!batchContactSearching && batchContactResults.length === 0 && isPhoneish(batchContactSearch) && (
-                                            <div style={{ marginTop: '12px', padding: '12px', borderRadius: '10px', backgroundColor: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.35)' }}>
-                                                <div style={{ fontSize: '12px', color: '#b45309', fontWeight: 600, marginBottom: '8px' }}>📵 Not in our database — add as a new lead?</div>
+                                            <div style={{ marginTop: '12px', padding: '12px', borderRadius: '10px', backgroundColor: 'var(--rp-danger-wash)', border: '1px solid var(--rp-danger-line)' }}>
+                                                <div style={{ fontSize: '12px', color: 'var(--rp-warn-text)', fontWeight: 600, marginBottom: '8px' }}>Not in our database — add as a new lead?</div>
                                                 <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
                                                     {(['direct', 'partner'] as const).map(r => (
                                                         <button key={r} type="button" onClick={() => setAddLeadRole(r)}
-                                                            style={{ flex: 1, padding: '8px', borderRadius: '8px', fontSize: '12px', fontWeight: 700, cursor: 'pointer', border: addLeadRole === r ? '2px solid #3b82f6' : '1px solid var(--border-secondary)', backgroundColor: addLeadRole === r ? 'rgba(59,130,246,0.1)' : 'transparent', color: 'var(--text-primary)' }}>
+                                                            style={{ flex: 1, padding: '8px', borderRadius: '8px', fontSize: '12px', fontWeight: 700, cursor: 'pointer', border: addLeadRole === r ? '2px solid var(--blue-500)' : '1px solid var(--border-secondary)', backgroundColor: addLeadRole === r ? 'var(--rp-info-wash)' : 'transparent', color: 'var(--text-primary)' }}>
                                                             {r === 'direct' ? 'Direct client' : 'Partner agent'}
                                                         </button>
                                                     ))}
@@ -3317,16 +3298,16 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
                                                     })}
                                                 </select>
                                                 <button type="button" onClick={handleAddLead} disabled={addLeadLoading}
-                                                    style={{ width: '100%', padding: '10px', borderRadius: '8px', fontWeight: 700, fontSize: '13px', backgroundColor: '#f59e0b', color: '#fff', border: 'none', cursor: addLeadLoading ? 'not-allowed' : 'pointer', opacity: addLeadLoading ? 0.7 : 1 }}>
-                                                    {addLeadLoading ? 'Adding…' : `➕ Add as ${addLeadRole === 'direct' ? 'direct client' : 'partner agent'} & continue`}
+                                                    style={{ width: '100%', padding: '10px', borderRadius: '8px', fontWeight: 700, fontSize: '13px', backgroundColor: 'var(--rp-warn-text)', color: 'var(--surface-white)', border: 'none', cursor: addLeadLoading ? 'not-allowed' : 'pointer', opacity: addLeadLoading ? 0.7 : 1 }}>
+                                                    {addLeadLoading ? 'Adding…' : `Add as ${addLeadRole === 'direct' ? 'direct client' : 'partner agent'} & continue`}
                                                 </button>
                                             </div>
                                         )}
                                     </div>
                                 ) : (
                                     <div>
-                                        <div style={{ padding: '12px', borderRadius: '10px', backgroundColor: 'rgba(37,211,102,0.08)', border: '1px solid rgba(37,211,102,0.3)', marginBottom: '16px' }}>
-                                            <div style={{ fontSize: '12px', color: '#25d366', fontWeight: 600, marginBottom: '4px' }}>Sending to:</div>
+                                        <div style={{ padding: '12px', borderRadius: '10px', backgroundColor: 'var(--rp-success-wash)', border: '1px solid var(--rp-success-line)', marginBottom: '16px' }}>
+                                            <div style={{ fontSize: '12px', color: 'var(--rp-success-text)', fontWeight: 600, marginBottom: '4px' }}>Sending to:</div>
                                             <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-primary)' }}>{batchShareContact.name || batchShareContact.phone_number}</div>
                                             <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{batchShareContact.phone_number}</div>
                                             <button onClick={() => setBatchShareContact(null)} style={{ marginTop: '8px', fontSize: '11px', color: 'var(--text-muted)', background: 'none', border: 'none', cursor: 'pointer' }}>Change contact</button>
@@ -3338,8 +3319,8 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
                                         <button
                                             onClick={handleBatchShare}
                                             disabled={batchShareLoading}
-                                            style={{ width: '100%', padding: '12px', borderRadius: '10px', fontWeight: 700, fontSize: '14px', backgroundColor: '#25d366', color: '#fff', border: 'none', cursor: batchShareLoading ? 'not-allowed' : 'pointer', opacity: batchShareLoading ? 0.7 : 1 }}
-                                        >{batchShareLoading ? 'Sending...' : '📲 Send via WhatsApp'}</button>
+                                            style={{ width: '100%', padding: '12px', borderRadius: '10px', fontWeight: 700, fontSize: '14px', backgroundColor: 'var(--rp-success-text)', color: 'var(--surface-white)', border: 'none', cursor: batchShareLoading ? 'not-allowed' : 'pointer', opacity: batchShareLoading ? 0.7 : 1 }}
+                                        >{batchShareLoading ? 'Sending...' : 'Send via WhatsApp'}</button>
                                     </div>
                                 )}
                             </div>
@@ -3395,7 +3376,7 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
                             backgroundColor: 'var(--bg-secondary)',
                             overflowY: 'auto',
                             padding: '0 0 32px',
-                            boxShadow: '-8px 0 40px rgba(0,0,0,0.25)',
+                            boxShadow: '-8px 0 40px var(--rp-shadow-tint)',
                             animation: 'slide-in-right 250ms cubic-bezier(0.34,1.2,0.64,1) forwards',
                         } : {
                             position: 'absolute', bottom: 0, left: 0, right: 0,
@@ -3404,7 +3385,7 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
                             maxHeight: '85vh', overflowY: 'auto',
                             WebkitOverflowScrolling: 'touch',
                             padding: '0 0 32px',
-                            boxShadow: '0 -8px 40px rgba(0,0,0,0.25)',
+                            boxShadow: '0 -8px 40px var(--rp-shadow-tint)',
                             animation: 'slide-up-in 250ms cubic-bezier(0.34,1.2,0.64,1) forwards',
                         }}
                         onClick={e => e.stopPropagation()}
@@ -3478,7 +3459,7 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
                             <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                                 {[{ label: 'Sq.ft', value: 'sqft' }, { label: 'Sq.yd (Gaj)', value: 'sqyd' }, { label: 'Sq.m', value: 'sqm' }].map(opt => (
                                     <button key={opt.value} type="button" onClick={() => setFilterAreaUnit(opt.value)}
-                                        style={{ ...({ padding: '7px 12px', borderRadius: '8px', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }), border: filterAreaUnit === opt.value ? '1.5px solid var(--text-link)' : '1px solid var(--border-secondary)', backgroundColor: filterAreaUnit === opt.value ? 'var(--text-link)' : 'var(--bg-secondary)', color: filterAreaUnit === opt.value ? '#fff' : 'var(--text-secondary)' }}>{opt.label}</button>
+                                        style={{ ...({ padding: '7px 12px', borderRadius: '8px', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }), border: filterAreaUnit === opt.value ? '1.5px solid var(--text-link)' : '1px solid var(--border-secondary)', backgroundColor: filterAreaUnit === opt.value ? 'var(--text-link)' : 'var(--bg-secondary)', color: filterAreaUnit === opt.value ? 'var(--surface-white)' : 'var(--text-secondary)' }}>{opt.label}</button>
                                 ))}
                             </div>
                             <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>
@@ -3490,13 +3471,13 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
                         <FilterSection title="Roof rights" defaultOpen={false} badge={filterRoofRights ? 1 : 0}>
                             <button type="button" onClick={() => setFilterRoofRights(v => !v)}
                                 style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 14px', borderRadius: '8px', cursor: 'pointer', width: '100%', textAlign: 'left',
-                                    border: filterRoofRights ? '1.5px solid #f59e0b' : '1px solid var(--border-secondary)',
-                                    backgroundColor: filterRoofRights ? 'rgba(245,158,11,0.08)' : 'var(--bg-secondary)' }}>
+                                    border: filterRoofRights ? '1.5px solid var(--rp-warn-text)' : '1px solid var(--border-secondary)',
+                                    backgroundColor: filterRoofRights ? 'var(--rp-danger-wash)' : 'var(--bg-secondary)' }}>
                                 <div style={{ width: '20px', height: '20px', borderRadius: '4px', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                    border: filterRoofRights ? '2px solid #f59e0b' : '2px solid var(--border-secondary)', backgroundColor: filterRoofRights ? '#f59e0b' : 'transparent' }}>
-                                    {filterRoofRights && <span style={{ color: '#fff', fontSize: '12px', lineHeight: 1 }}>✓</span>}
+                                    border: filterRoofRights ? '2px solid var(--rp-warn-text)' : '2px solid var(--border-secondary)', backgroundColor: filterRoofRights ? 'var(--rp-warn-text)' : 'transparent' }}>
+                                    {filterRoofRights && <span style={{ color: 'var(--surface-white)', fontSize: '12px', lineHeight: 1 }}>✓</span>}
                                 </div>
-                                <div style={{ fontSize: '13px', fontWeight: 600, color: filterRoofRights ? '#f59e0b' : 'var(--text-secondary)' }}>
+                                <div style={{ fontSize: '13px', fontWeight: 600, color: filterRoofRights ? 'var(--rp-warn-text)' : 'var(--text-secondary)' }}>
                                     {filterRoofRights ? 'Only listings with roof rights' : 'Show only roof-rights listings'}
                                 </div>
                             </button>
@@ -3506,13 +3487,13 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
                         <FilterSection title="Commercial use" defaultOpen={false} badge={filterCommercialUse ? 1 : 0}>
                             <button type="button" onClick={() => { const n = !filterCommercialUse; setFilterCommercialUse(n); if (!n) setFilterCommercialUseType(''); }}
                                 style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 14px', borderRadius: '8px', cursor: 'pointer', width: '100%', textAlign: 'left',
-                                    border: filterCommercialUse ? '1.5px solid #a855f7' : '1px solid var(--border-secondary)',
-                                    backgroundColor: filterCommercialUse ? 'rgba(168,85,247,0.08)' : 'var(--bg-secondary)' }}>
+                                    border: filterCommercialUse ? '1.5px solid var(--blue-600)' : '1px solid var(--border-secondary)',
+                                    backgroundColor: filterCommercialUse ? 'var(--rp-info-wash)' : 'var(--bg-secondary)' }}>
                                 <div style={{ width: '20px', height: '20px', borderRadius: '4px', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                    border: filterCommercialUse ? '2px solid #a855f7' : '2px solid var(--border-secondary)', backgroundColor: filterCommercialUse ? '#a855f7' : 'transparent' }}>
-                                    {filterCommercialUse && <span style={{ color: '#fff', fontSize: '12px', lineHeight: 1 }}>✓</span>}
+                                    border: filterCommercialUse ? '2px solid var(--blue-600)' : '2px solid var(--border-secondary)', backgroundColor: filterCommercialUse ? 'var(--blue-600)' : 'transparent' }}>
+                                    {filterCommercialUse && <span style={{ color: 'var(--surface-white)', fontSize: '12px', lineHeight: 1 }}>✓</span>}
                                 </div>
-                                <div style={{ fontSize: '13px', fontWeight: 600, color: filterCommercialUse ? '#a855f7' : 'var(--text-secondary)' }}>
+                                <div style={{ fontSize: '13px', fontWeight: 600, color: filterCommercialUse ? 'var(--blue-600)' : 'var(--text-secondary)' }}>
                                     {filterCommercialUse ? 'Only commercial-usable' : 'Show only commercial-usable'}
                                 </div>
                             </button>
@@ -3623,7 +3604,7 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
                         <div style={{ padding: '16px 20px 0' }}>
                             <button type="button"
                                 onClick={() => setShowFilterSheet(false)}
-                                style={{ width: '100%', padding: '14px', borderRadius: '12px', border: 'none', backgroundColor: 'var(--text-link)', color: '#fff', fontWeight: 700, fontSize: '15px', cursor: 'pointer' }}
+                                style={{ width: '100%', padding: '14px', borderRadius: '12px', border: 'none', backgroundColor: 'var(--text-link)', color: 'var(--surface-white)', fontWeight: 700, fontSize: '15px', cursor: 'pointer' }}
                             >
                                 Apply Filters{activeInventoryFilterCount > 0 ? ` (${activeInventoryFilterCount} active)` : ''}
                             </button>

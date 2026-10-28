@@ -362,7 +362,7 @@ export function RequirementsTab({ deal, stageLabels, onRefresh, onDealUpdated, o
                             {fields.demand_amenities.map((a: string) => (
                                 <span key={a} style={{
                                     padding: '3px 10px', borderRadius: 16, fontSize: 11, fontWeight: 600,
-                                    backgroundColor: 'var(--accent-primary)', color: '#fff',
+                                    backgroundColor: 'var(--accent-primary)', color: 'var(--surface-white)',
                                 }}>{a}</span>
                             ))}
                         </div>
@@ -385,9 +385,9 @@ export function RequirementsTab({ deal, stageLabels, onRefresh, onDealUpdated, o
                             finally { setAiToggling(false); }
                         }} style={{
                             padding: '4px 10px', borderRadius: 6, fontSize: 11, fontWeight: 700, cursor: 'pointer',
-                            backgroundColor: (deal as any).ai_paused ? 'rgba(34,197,94,0.12)' : 'rgba(107,114,128,0.12)',
-                            border: '1px solid ' + ((deal as any).ai_paused ? 'rgba(34,197,94,0.4)' : 'rgba(107,114,128,0.4)'),
-                            color: (deal as any).ai_paused ? '#22c55e' : '#6b7280',
+                            backgroundColor: (deal as any).ai_paused ? 'var(--rp-success-wash)' : 'var(--rp-neutral-wash)',
+                            border: '1px solid ' + ((deal as any).ai_paused ? 'var(--rp-success-line)' : 'var(--rp-neutral-line)'),
+                            color: (deal as any).ai_paused ? 'var(--rp-success-text)' : 'var(--text-muted)',
                         }}>
                             {aiToggling ? '...' : (deal as any).ai_paused ? 'Resume AI' : 'Pause AI'}
                         </button>
@@ -424,7 +424,7 @@ export function RequirementsTab({ deal, stageLabels, onRefresh, onDealUpdated, o
                     </button>
                     <button type="button" onClick={() => formRef.current?.submit()} disabled={saving} style={{
                         padding: '5px 12px', borderRadius: 6, fontSize: 11, fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer',
-                        backgroundColor: 'var(--accent-primary)', border: 'none', color: '#fff',
+                        backgroundColor: 'var(--accent-primary)', border: 'none', color: 'var(--surface-white)',
                     }}>
                         {saving ? 'Saving…' : 'Save & Close'}
                     </button>
@@ -522,7 +522,7 @@ function StageActions({ deal, stageLabels, statusChanging, onStatusChange, onVis
                 {deal.status === 'VISIT_SCHEDULED' && onVisitOutcome && (
                     <button type="button" onClick={() => onVisitOutcome(deal)} style={{
                         padding: '6px 14px', borderRadius: 7, fontSize: 12, fontWeight: 600, cursor: 'pointer',
-                        backgroundColor: 'rgba(245,158,11,0.1)', border: '1.5px solid rgba(245,158,11,0.4)', color: '#f59e0b',
+                        backgroundColor: 'var(--rp-danger-wash)', border: '1.5px solid var(--rp-danger-line)', color: 'var(--rp-warn-text)',
                     }}>
                         Submit Visit Outcome
                     </button>
@@ -530,7 +530,7 @@ function StageActions({ deal, stageLabels, statusChanging, onStatusChange, onVis
                 {deal.status === 'ON_HOLD' && onRevive && (
                     <button type="button" onClick={() => onRevive(deal)} style={{
                         padding: '6px 14px', borderRadius: 7, fontSize: 12, fontWeight: 600, cursor: 'pointer',
-                        backgroundColor: 'rgba(34,197,94,0.1)', border: '1.5px solid rgba(34,197,94,0.4)', color: '#22c55e',
+                        backgroundColor: 'var(--rp-success-wash)', border: '1.5px solid var(--rp-success-line)', color: 'var(--rp-success-text)',
                     }}>
                         Revive Deal
                     </button>

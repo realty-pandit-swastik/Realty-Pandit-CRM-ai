@@ -73,14 +73,14 @@ export function ReminderModal({ deal, onClose, onSaved }: Props) {
     return (
         <>
             <div onClick={onClose} style={{
-                position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.4)', zIndex: 200,
+                position: 'fixed', inset: 0, backgroundColor: 'var(--rp-overlay-soft)', zIndex: 200,
             }} />
             <div style={{
                 position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)',
                 backgroundColor: 'var(--bg-primary)', borderRadius: 14,
                 width: 420, maxWidth: '92vw', maxHeight: '88vh', overflow: 'hidden',
                 display: 'flex', flexDirection: 'column',
-                boxShadow: '0 20px 50px rgba(0,0,0,0.3)', zIndex: 201,
+                boxShadow: '0 20px 50px var(--rp-shadow-tint)', zIndex: 201,
             }}>
                 {/* Header (pinned) */}
                 <div style={{
@@ -104,8 +104,8 @@ export function ReminderModal({ deal, onClose, onSaved }: Props) {
                     <div style={{
                         fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.5,
                         padding: '6px 10px', borderRadius: 6,
-                        backgroundColor: 'rgba(59,130,246,0.06)',
-                        border: '1px solid rgba(59,130,246,0.2)',
+                        backgroundColor: 'var(--rp-info-wash)',
+                        border: '1px solid var(--rp-info-wash)',
                     }}>
                         You will get a push alert before and at the time. The reminder is
                         recorded in this deal's timeline and the client's lead history.
@@ -178,7 +178,7 @@ export function ReminderModal({ deal, onClose, onSaved }: Props) {
                         disabled={saving || !remindAt}
                         style={{
                             flex: 1, padding: '10px 16px', borderRadius: 8, fontSize: 13, fontWeight: 700,
-                            backgroundColor: 'var(--accent-primary)', color: '#fff', border: 'none',
+                            backgroundColor: 'var(--accent-primary)', color: 'var(--surface-white)', border: 'none',
                             cursor: saving || !remindAt ? 'not-allowed' : 'pointer',
                             opacity: saving || !remindAt ? 0.6 : 1,
                         }}

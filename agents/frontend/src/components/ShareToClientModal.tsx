@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { PresentationIcon } from './ui/PresentationIcon';
 import { shareToClient } from '../api/client';
 import ShareContentPicker, { DEFAULT_SHARE_CONTENT } from './ShareContentPicker';
 
@@ -50,14 +51,14 @@ export default function ShareToClientModal({ item, onClose, onShared }: ShareToC
 
     const s = {
         overlay: {
-            position: 'fixed' as const, inset: 0, backgroundColor: 'rgba(0,0,0,0.7)',
+            position: 'fixed' as const, inset: 0, backgroundColor: 'var(--sheet-backdrop)',
             display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000
         },
         modal: {
             backgroundColor: 'var(--bg-secondary)', borderRadius: isMobile ? '12px 12px 0 0' : '12px',
             padding: isMobile ? '20px 16px' : '28px',
             width: isMobile ? '100%' : '440px', maxWidth: '90vw',
-            boxShadow: '0 8px 40px rgba(0,0,0,0.5)',
+            boxShadow: 'var(--rp-shadow-far)',
             maxHeight: isMobile ? '90vh' : undefined, overflowY: 'auto' as const,
         },
         title: { color: 'var(--text-primary)', fontSize: '18px', fontWeight: 700, margin: '0 0 16px' },
@@ -69,7 +70,7 @@ export default function ShareToClientModal({ item, onClose, onShared }: ShareToC
             boxSizing: 'border-box' as const,
         },
         btnPrimary: {
-            backgroundColor: '#22c55e', color: '#fff', border: 'none',
+            backgroundColor: 'var(--blue-600)', color: 'var(--surface-white)', border: 'none',
             padding: '10px 20px', borderRadius: '8px', cursor: 'pointer',
             fontSize: '14px', fontWeight: 600, width: '100%',
         },
@@ -95,7 +96,7 @@ export default function ShareToClientModal({ item, onClose, onShared }: ShareToC
             color: 'var(--text-link)', fontSize: '13px',
         },
         copyBtn: {
-            backgroundColor: '#3b82f6', color: '#fff', border: 'none',
+            backgroundColor: 'var(--blue-600)', color: 'var(--surface-white)', border: 'none',
             padding: '8px 14px', borderRadius: '6px', cursor: 'pointer',
             fontSize: '13px', fontWeight: 600, whiteSpace: 'nowrap' as const,
         },
@@ -148,7 +149,7 @@ export default function ShareToClientModal({ item, onClose, onShared }: ShareToC
                         <ShareContentPicker value={content} onChange={setContent} disabled={sending} />
 
                         {error && (
-                            <div style={{ color: '#ef4444', fontSize: '13px', marginBottom: '12px' }}>
+                            <div style={{ color: 'var(--rp-danger-text)', fontSize: '13px', marginBottom: '12px' }}>
                                 {error}
                             </div>
                         )}
@@ -168,7 +169,7 @@ export default function ShareToClientModal({ item, onClose, onShared }: ShareToC
                     <div style={s.resultBox}>
                         {/* WhatsApp Status */}
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
-                            <span style={{ fontSize: '20px' }}>{result.whatsapp_sent ? '✅' : '⚠️'}</span>
+                            <PresentationIcon value={result.whatsapp_sent ? 'check-circle' : 'circle-alert'} size={20} />
                             <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>
                                 {result.whatsapp_sent
                                     ? 'Property sent via WhatsApp!'
@@ -177,7 +178,7 @@ export default function ShareToClientModal({ item, onClose, onShared }: ShareToC
                         </div>
 
                         {!!result.media_pending && (
-                            <div style={{ color: '#f59e0b', marginBottom: '12px' }}>
+                            <div style={{ color: 'var(--rp-warn-text)', marginBottom: '12px' }}>
                                 {result.media_pending} attachment(s) pending. They will retry when the client messages us.
                                 <button disabled={sending} onClick={async () => {
                                     setSending(true); setError('');
@@ -189,15 +190,15 @@ export default function ShareToClientModal({ item, onClose, onShared }: ShareToC
                         )}
                         {error && <div role="alert">{error}</div>}
                         {result.pdf_requested && !result.pdf_sent && (
-                            <div style={{ fontSize: '12px', color: '#f59e0b', marginBottom: '12px' }}>
-                                ⚠ PDF could not be delivered — try sharing again with PDF ticked.
+                            <div style={{ fontSize: '12px', color: 'var(--rp-warn-text)', marginBottom: '12px' }}>
+                                <PresentationIcon value="circle-alert" /> PDF could not be delivered — try sharing again with PDF ticked.
                             </div>
                         )}
 
                         {/* Non-blocking re-share notice (the send still went out). */}
                         {result.already_shared && (
-                            <div style={{ fontSize: '12px', color: '#f59e0b', marginBottom: '12px' }}>
-                                ⚠ Previously shared with this client{result.previously_shared_at ? ` on ${new Date(result.previously_shared_at).toLocaleDateString('en-IN')}` : ''} — re-sent now.
+                            <div style={{ fontSize: '12px', color: 'var(--rp-warn-text)', marginBottom: '12px' }}>
+                                <PresentationIcon value="circle-alert" /> Previously shared with this client{result.previously_shared_at ? ` on ${new Date(result.previously_shared_at).toLocaleDateString('en-IN')}` : ''} — re-sent now.
                             </div>
                         )}
 

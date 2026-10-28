@@ -87,7 +87,7 @@ export function GoogleAccountCard({ isMobile }: { isMobile?: boolean }) {
         return (
             <div style={card}>
                 <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--text-primary)', marginBottom: 14 }}>
-                    📅 Google Calendar &amp; Tasks
+                    Google Calendar &amp; Tasks
                 </div>
                 <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>Loading…</div>
             </div>
@@ -103,17 +103,17 @@ export function GoogleAccountCard({ isMobile }: { isMobile?: boolean }) {
         <div style={card}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
                 <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--text-primary)' }}>
-                    📅 Google Calendar &amp; Tasks
+                    Google Calendar &amp; Tasks
                 </div>
                 {connected && (
-                    <span style={{ fontSize: 11, color: '#10b981', fontWeight: 600 }}>● Connected</span>
+                    <span style={{ fontSize: 12, color: 'var(--rp-success-text)', fontWeight: 600 }}>● Connected</span>
                 )}
             </div>
 
             <div style={{
-                fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.6,
+                fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.6,
                 padding: '10px 12px', borderRadius: 8, marginBottom: 16,
-                backgroundColor: 'rgba(59,130,246,0.06)', border: '1px solid rgba(59,130,246,0.2)',
+                backgroundColor: 'var(--rp-info-bg)', border: '1px solid var(--rp-info-line)',
             }}>
                 Connect your own Google account so the deal reminders you set and
                 your scheduled property visits also appear in <strong>your Google
@@ -131,16 +131,16 @@ export function GoogleAccountCard({ isMobile }: { isMobile?: boolean }) {
                 border: '1px solid var(--border-secondary)', backgroundColor: 'var(--bg-primary)',
             }}>
                 <div style={{ fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 8 }}>
-                    📲 Install the Google apps to get the alerts on your phone:
+                    Install the Google apps to get the alerts on your phone:
                 </div>
                 <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: isMobile ? 8 : 20 }}>
                     <div>
-                        <div style={{ color: 'var(--text-primary)', fontWeight: 600, marginBottom: 2 }}>📅 Google Calendar</div>
+                        <div style={{ color: 'var(--text-primary)', fontWeight: 600, marginBottom: 4 }}>Google Calendar</div>
                         <a href="https://play.google.com/store/apps/details?id=com.google.android.calendar" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--text-link)', marginRight: 12 }}>Android</a>
                         <a href="https://apps.apple.com/app/google-calendar/id909319292" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--text-link)' }}>iPhone</a>
                     </div>
                     <div>
-                        <div style={{ color: 'var(--text-primary)', fontWeight: 600, marginBottom: 2 }}>✅ Google Tasks</div>
+                        <div style={{ color: 'var(--text-primary)', fontWeight: 600, marginBottom: 4 }}>Google Tasks</div>
                         <a href="https://play.google.com/store/apps/details?id=com.google.android.apps.tasks" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--text-link)', marginRight: 12 }}>Android</a>
                         <a href="https://apps.apple.com/app/google-tasks/id1353634006" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--text-link)' }}>iPhone</a>
                     </div>
@@ -174,7 +174,7 @@ export function GoogleAccountCard({ isMobile }: { isMobile?: boolean }) {
                             disabled={busy}
                             style={{
                                 padding: '10px 18px', borderRadius: 8, fontSize: 13, cursor: busy ? 'not-allowed' : 'pointer',
-                                backgroundColor: 'transparent', border: '1px solid #f87171', color: '#f87171', opacity: busy ? 0.6 : 1,
+                                backgroundColor: 'transparent', border: '1px solid var(--rp-danger-text)', color: 'var(--rp-danger-text)', opacity: busy ? 0.6 : 1,
                             }}
                         >
                             Disconnect
@@ -188,7 +188,7 @@ export function GoogleAccountCard({ isMobile }: { isMobile?: boolean }) {
                     disabled={busy}
                     style={{
                         padding: '10px 18px', borderRadius: 8, fontSize: 13, fontWeight: 700,
-                        backgroundColor: 'var(--accent-primary)', color: '#fff', border: 'none',
+                        backgroundColor: 'var(--blue-600)', color: 'var(--surface-white)', border: 'none',
                         cursor: busy ? 'not-allowed' : 'pointer', opacity: busy ? 0.6 : 1,
                     }}
                 >

@@ -126,19 +126,19 @@ export function MyProfile({ isMobile }: { isMobile?: boolean }) {
     };
 
     const card: React.CSSProperties = {
-        backgroundColor: 'var(--bg-secondary)', borderRadius: '12px', padding: '20px',
-        marginBottom: '16px', border: '1px solid var(--border-secondary)',
+        backgroundColor: 'var(--bg-primary)', borderRadius: 'var(--radius-card)', padding: 'var(--rp-s-6)',
+        marginBottom: 'var(--rp-s-4)', border: '1px solid var(--border-primary)',
     };
-    const label: React.CSSProperties = { fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 4, textTransform: 'uppercase' };
+    const label: React.CSSProperties = { display: 'block', fontSize: 12, fontWeight: 500, color: 'var(--text-secondary)', marginBottom: 4 };
     const input: React.CSSProperties = {
-        width: '100%', padding: '9px 10px', borderRadius: 7, fontSize: 13,
-        border: '1px solid var(--border-secondary)', backgroundColor: 'var(--bg-primary)',
+        width: '100%', padding: 'var(--rp-s-3)', borderRadius: 'var(--radius-control)', fontSize: 14,
+        border: '1px solid var(--control-line)', backgroundColor: 'var(--bg-primary)',
         color: 'var(--text-primary)', outline: 'none', boxSizing: 'border-box',
     };
     const ro: React.CSSProperties = { fontSize: 13, color: 'var(--text-primary)', padding: '8px 0' };
     const btn = (bg: string, disabled?: boolean): React.CSSProperties => ({
-        padding: '10px 18px', borderRadius: 8, fontSize: 13, fontWeight: 700,
-        backgroundColor: bg, color: '#fff', border: 'none',
+        padding: '12px 16px', borderRadius: 'var(--radius-control)', fontSize: 13, fontWeight: 600,
+        backgroundColor: bg, color: 'var(--surface-white)', border: 'none',
         cursor: disabled ? 'not-allowed' : 'pointer', opacity: disabled ? 0.6 : 1,
     });
 
@@ -147,9 +147,9 @@ export function MyProfile({ isMobile }: { isMobile?: boolean }) {
     const mailboxAddr = (me?.email || '').toLowerCase();
 
     return (
-        <div style={{
+        <div className="rp-profile" style={{
             flex: 1, padding: isMobile ? '16px' : '24px', overflowY: 'auto',
-            backgroundColor: 'var(--bg-primary)',
+            backgroundColor: 'var(--bg-secondary)',
         }}>
             <h2 style={{ color: 'var(--text-primary)', margin: '0 0 4px', fontSize: 20 }}>My Profile</h2>
             <p style={{ color: 'var(--text-muted)', margin: '0 0 20px', fontSize: 13 }}>
@@ -162,11 +162,11 @@ export function MyProfile({ isMobile }: { isMobile?: boolean }) {
                 <>
                     {/* Personal details */}
                     <div style={card}>
-                        <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--text-primary)', marginBottom: 14 }}>👤 Personal Details</div>
+                        <div style={{ fontWeight: 600, fontSize: 16, color: 'var(--text-primary)', marginBottom: 16 }}>Personal Details</div>
                         <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 12 }}>
                             <div>
-                                <div style={label}>Name</div>
-                                <input style={input} value={name} onChange={e => setName(e.target.value)} />
+                                <label htmlFor="rp-profile-name" style={label}>Name</label>
+                                <input id="rp-profile-name" style={input} value={name} onChange={e => setName(e.target.value)} />
                             </div>
                             <div>
                                 <div style={label}>Phone</div>
@@ -195,7 +195,7 @@ export function MyProfile({ isMobile }: { isMobile?: boolean }) {
                             </div>
                         </div>
                         <div style={{ marginTop: 16 }}>
-                            <button type="button" onClick={saveProfile} disabled={savingProfile} style={btn('var(--accent-primary)', savingProfile)}>
+                            <button type="button" onClick={saveProfile} disabled={savingProfile} style={btn('var(--blue-600)', savingProfile)}>
                                 {savingProfile ? 'Saving…' : 'Save Details'}
                             </button>
                         </div>
@@ -203,7 +203,7 @@ export function MyProfile({ isMobile }: { isMobile?: boolean }) {
 
                     {/* Portal account email — read-only (admin-managed) */}
                     <div style={card}>
-                        <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--text-primary)', marginBottom: 6 }}>📨 Portal Account Email</div>
+                        <div style={{ fontWeight: 600, fontSize: 16, color: 'var(--text-primary)', marginBottom: 8 }}>Portal Account Email</div>
                         <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.6, marginBottom: 12 }}>
                             The Gmail you use to log in to <strong>99acres / MagicBricks / Housing</strong>.
                             Incoming leads on listings posted under this email are auto-assigned to you.
@@ -215,9 +215,9 @@ export function MyProfile({ isMobile }: { isMobile?: boolean }) {
                     {/* Email mailbox — read-only setup info for Outlook (send + receive) */}
                     <div style={card}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                            <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--text-primary)' }}>📧 Your Email Mailbox</div>
+                            <div style={{ fontWeight: 600, fontSize: 16, color: 'var(--text-primary)' }}>Your Email Mailbox</div>
                             {me?.email_mailbox_activated && (
-                                <span style={{ fontSize: 11, color: '#10b981', fontWeight: 600 }}>● Activated</span>
+                                <span style={{ fontSize: 12, color: 'var(--rp-success-text)', fontWeight: 600 }}>● Activated</span>
                             )}
                         </div>
 
@@ -227,7 +227,7 @@ export function MyProfile({ isMobile }: { isMobile?: boolean }) {
                                 <div style={{
                                     fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.6, marginBottom: 14,
                                     padding: '10px 12px', borderRadius: 8,
-                                    backgroundColor: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.3)',
+                                    backgroundColor: 'var(--rp-warn-bg)', border: '1px solid var(--rp-warn-line)',
                                 }}>
                                     <strong>Activate your email account.</strong> First, set your
                                     mailbox password below. Once set, your Outlook configuration
@@ -236,12 +236,12 @@ export function MyProfile({ isMobile }: { isMobile?: boolean }) {
                                 </div>
                                 <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 12 }}>
                                     <div>
-                                        <div style={label}>New mailbox password</div>
-                                        <input style={input} type="password" value={mbPwd} onChange={e => setMbPwd(e.target.value)} autoComplete="new-password" />
+                                        <label htmlFor="rp-mailbox-password" style={label}>New mailbox password</label>
+                                        <input id="rp-mailbox-password" style={input} type="password" value={mbPwd} onChange={e => setMbPwd(e.target.value)} autoComplete="new-password" />
                                     </div>
                                     <div>
-                                        <div style={label}>Confirm password</div>
-                                        <input style={input} type="password" value={mbConfirm} onChange={e => setMbConfirm(e.target.value)} autoComplete="new-password" />
+                                        <label htmlFor="rp-mailbox-confirm" style={label}>Confirm password</label>
+                                        <input id="rp-mailbox-confirm" style={input} type="password" value={mbConfirm} onChange={e => setMbConfirm(e.target.value)} autoComplete="new-password" />
                                     </div>
                                 </div>
                                 <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 8 }}>
@@ -249,7 +249,7 @@ export function MyProfile({ isMobile }: { isMobile?: boolean }) {
                                     This is separate from your CRM login password.
                                 </div>
                                 <div style={{ marginTop: 16 }}>
-                                    <button type="button" onClick={setMailboxPassword} disabled={savingMb} style={btn('var(--accent-primary)', savingMb)}>
+                                    <button type="button" onClick={setMailboxPassword} disabled={savingMb} style={btn('var(--blue-600)', savingMb)}>
                                         {savingMb ? 'Activating…' : 'Set Password & Activate'}
                                     </button>
                                 </div>
@@ -258,9 +258,9 @@ export function MyProfile({ isMobile }: { isMobile?: boolean }) {
                             /* Activated — show the Outlook send+receive config */
                             <>
                                 <div style={{
-                                    fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.6, marginBottom: 14,
+                                    fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.6, marginBottom: 14,
                                     padding: '10px 12px', borderRadius: 8,
-                                    backgroundColor: 'rgba(59,130,246,0.06)', border: '1px solid rgba(59,130,246,0.2)',
+                                    backgroundColor: 'var(--rp-info-bg)', border: '1px solid var(--rp-info-line)',
                                 }}>
                                     Add this account in <strong>Outlook</strong> (or any mail app) as an
                                     <strong> IMAP</strong> account to <strong>send and receive</strong> your
@@ -301,16 +301,16 @@ export function MyProfile({ isMobile }: { isMobile?: boolean }) {
                                     <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid var(--border-secondary)' }}>
                                         <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 12 }}>
                                             <div>
-                                                <div style={label}>New mailbox password</div>
-                                                <input style={input} type="password" value={mbPwd} onChange={e => setMbPwd(e.target.value)} autoComplete="new-password" />
+                                                <label htmlFor="rp-mailbox-password" style={label}>New mailbox password</label>
+                                                <input id="rp-mailbox-password" style={input} type="password" value={mbPwd} onChange={e => setMbPwd(e.target.value)} autoComplete="new-password" />
                                             </div>
                                             <div>
-                                                <div style={label}>Confirm password</div>
-                                                <input style={input} type="password" value={mbConfirm} onChange={e => setMbConfirm(e.target.value)} autoComplete="new-password" />
+                                                <label htmlFor="rp-mailbox-confirm" style={label}>Confirm password</label>
+                                                <input id="rp-mailbox-confirm" style={input} type="password" value={mbConfirm} onChange={e => setMbConfirm(e.target.value)} autoComplete="new-password" />
                                             </div>
                                         </div>
                                         <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-                                            <button type="button" onClick={setMailboxPassword} disabled={savingMb} style={btn('var(--accent-primary)', savingMb)}>
+                                            <button type="button" onClick={setMailboxPassword} disabled={savingMb} style={btn('var(--blue-600)', savingMb)}>
                                                 {savingMb ? 'Saving…' : 'Update mailbox password'}
                                             </button>
                                             <button type="button" onClick={() => { setShowMbForm(false); setMbPwd(''); setMbConfirm(''); }} disabled={savingMb}
@@ -334,19 +334,19 @@ export function MyProfile({ isMobile }: { isMobile?: boolean }) {
 
                     {/* Change password */}
                     <div style={card}>
-                        <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--text-primary)', marginBottom: 14 }}>🔑 Change Password</div>
+                        <div style={{ fontWeight: 600, fontSize: 16, color: 'var(--text-primary)', marginBottom: 16 }}>Change Password</div>
                         <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 12 }}>
                             <div style={{ gridColumn: isMobile ? 'auto' : '1 / -1' }}>
-                                <div style={label}>Current Password</div>
-                                <input style={input} type="password" value={curPwd} onChange={e => setCurPwd(e.target.value)} autoComplete="current-password" />
+                                <label htmlFor="rp-current-password" style={label}>Current Password</label>
+                                <input id="rp-current-password" style={input} type="password" value={curPwd} onChange={e => setCurPwd(e.target.value)} autoComplete="current-password" />
                             </div>
                             <div>
-                                <div style={label}>New Password (min 8)</div>
-                                <input style={input} type="password" value={newPwd} onChange={e => setNewPwd(e.target.value)} autoComplete="new-password" />
+                                <label htmlFor="rp-new-password" style={label}>New Password (min 8)</label>
+                                <input id="rp-new-password" style={input} type="password" value={newPwd} onChange={e => setNewPwd(e.target.value)} autoComplete="new-password" />
                             </div>
                             <div>
-                                <div style={label}>Confirm New Password</div>
-                                <input style={input} type="password" value={confirmPwd} onChange={e => setConfirmPwd(e.target.value)} autoComplete="new-password" />
+                                <label htmlFor="rp-confirm-password" style={label}>Confirm New Password</label>
+                                <input id="rp-confirm-password" style={input} type="password" value={confirmPwd} onChange={e => setConfirmPwd(e.target.value)} autoComplete="new-password" />
                             </div>
                         </div>
                         <div style={{ marginTop: 16 }}>
@@ -354,7 +354,7 @@ export function MyProfile({ isMobile }: { isMobile?: boolean }) {
                                 type="button"
                                 onClick={changePassword}
                                 disabled={savingPwd || !curPwd || !newPwd || !confirmPwd}
-                                style={btn('#8b5cf6', savingPwd || !curPwd || !newPwd || !confirmPwd)}
+                                style={btn('var(--blue-600)', savingPwd || !curPwd || !newPwd || !confirmPwd)}
                             >
                                 {savingPwd ? 'Changing…' : 'Change Password'}
                             </button>

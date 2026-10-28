@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { PresentationIcon } from './ui/PresentationIcon';
 import client from '../api/client';
 
 interface ShareableItem {
@@ -76,7 +77,7 @@ export default function SharePropertyOptions({ item, onClose, onWhatsAppChosen }
         <div
             style={{
                 position: 'fixed', inset: 0, zIndex: 1000,
-                backgroundColor: 'rgba(0,0,0,0.55)',
+                backgroundColor: 'var(--rp-overlay-soft)',
                 display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
             }}
             onClick={onClose}
@@ -86,10 +87,10 @@ export default function SharePropertyOptions({ item, onClose, onWhatsAppChosen }
                 onClick={e => e.stopPropagation()}
                 style={{
                     width: '100%', maxWidth: 380,
-                    backgroundColor: 'var(--bg-primary, #0f172a)',
-                    border: '1px solid var(--border-secondary, #334155)',
+                    backgroundColor: 'var(--bg-primary, var(--text-primary))',
+                    border: '1px solid var(--border-secondary, var(--text-secondary))',
                     borderRadius: 14, padding: 18,
-                    boxShadow: '0 20px 60px rgba(0,0,0,0.5)',
+                    boxShadow: '0 20px 60px var(--rp-overlay-soft)',
                 }}
             >
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
@@ -143,8 +144,8 @@ export default function SharePropertyOptions({ item, onClose, onWhatsAppChosen }
                 {copiedLink && (
                     <div style={{
                         padding: '12px 14px', borderRadius: 10,
-                        backgroundColor: 'rgba(34,197,94,0.12)', border: '1px solid rgba(34,197,94,0.3)',
-                        color: '#22c55e', fontSize: 12, textAlign: 'center',
+                        backgroundColor: 'var(--rp-success-wash)', border: '1px solid var(--rp-success-line)',
+                        color: 'var(--rp-success-text)', fontSize: 12, textAlign: 'center',
                     }}>
                         ✓ Link copied to clipboard
                         <div style={{ marginTop: 4, fontSize: 10, color: 'var(--text-muted)', wordBreak: 'break-all' }}>{copiedLink}</div>
@@ -154,8 +155,8 @@ export default function SharePropertyOptions({ item, onClose, onWhatsAppChosen }
                 {error && (
                     <div style={{
                         marginTop: 10, padding: '8px 12px', borderRadius: 8,
-                        backgroundColor: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.3)',
-                        color: '#ef4444', fontSize: 12,
+                        backgroundColor: 'var(--rp-danger-wash)', border: '1px solid var(--rp-danger-line)',
+                        color: 'var(--rp-danger-text)', fontSize: 12,
                     }}>{error}</div>
                 )}
             </div>
@@ -174,18 +175,18 @@ function ShareOption({ icon, label, sublabel, onClick, disabled }: {
             style={{
                 padding: '14px 8px',
                 borderRadius: 10,
-                border: '1px solid var(--border-secondary, #334155)',
-                backgroundColor: 'var(--bg-secondary, #1e293b)',
+                border: '1px solid var(--border-secondary, var(--text-secondary))',
+                backgroundColor: 'var(--bg-secondary, var(--text-bright))',
                 color: 'var(--text-primary)',
                 cursor: disabled ? 'wait' : 'pointer',
                 display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4,
                 opacity: disabled ? 0.5 : 1,
                 transition: 'border-color 0.15s, background-color 0.15s',
             }}
-            onMouseEnter={e => { if (!disabled) e.currentTarget.style.borderColor = 'var(--text-link, #3b82f6)'; }}
-            onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border-secondary, #334155)'; }}
+            onMouseEnter={e => { if (!disabled) e.currentTarget.style.borderColor = 'var(--text-link, var(--blue-500))'; }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border-secondary, var(--text-secondary))'; }}
         >
-            <span style={{ fontSize: 22 }}>{icon}</span>
+            <PresentationIcon value={icon} size={22} />
             <span style={{ fontSize: 12, fontWeight: 600 }}>{label}</span>
             {sublabel && <span style={{ fontSize: 10, color: 'var(--text-muted)', textAlign: 'center', lineHeight: 1.3 }}>{sublabel}</span>}
         </button>

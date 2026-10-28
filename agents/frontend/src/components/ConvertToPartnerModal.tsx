@@ -55,13 +55,13 @@ export function ConvertToPartnerModal({ phone, defaultName, contactType, leadSta
 
     return (
         <>
-            <div onClick={onClose} style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.55)', zIndex: 400 }} />
+            <div onClick={onClose} style={{ position: 'fixed', inset: 0, backgroundColor: 'var(--rp-overlay-soft)', zIndex: 400 }} />
             <div style={{
                 position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)',
                 backgroundColor: 'var(--bg-primary)', borderRadius: 14, width: 420, maxWidth: '94vw',
-                zIndex: 401, boxShadow: '0 20px 60px rgba(0,0,0,0.35)', padding: 20,
+                zIndex: 401, boxShadow: '0 20px 60px var(--rp-overlay-soft)', padding: 20,
             }}>
-                <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 4 }}>🤝 Convert to Partner Agent</div>
+                <div style={{ fontSize: 16, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 4 }}>Convert to Partner Agent</div>
                 {/* Spell out what happens. The old copy was one grey line, and the form arrives
                     pre-filled and valid — so Convert was a single click away with no stated cost. */}
                 <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 12 }}>This will:</div>
@@ -73,11 +73,11 @@ export function ConvertToPartnerModal({ phone, defaultName, contactType, leadSta
 
                 {isLiveLead && (
                     <div style={{
-                        border: '1px solid #ef4444', backgroundColor: 'rgba(239,68,68,0.08)',
+                        border: '1px solid var(--rp-danger-text)', backgroundColor: 'var(--rp-danger-wash)',
                         borderRadius: 10, padding: '10px 12px', marginBottom: 14,
                     }}>
-                        <div style={{ fontSize: 12.5, fontWeight: 700, color: '#ef4444', marginBottom: 6 }}>
-                            ⚠ This is a live {String(contactType).toUpperCase()} lead{leadStatus ? ` (status: ${String(leadStatus).toLowerCase()})` : ''}
+                        <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--rp-danger-text)', marginBottom: 6 }}>
+                            This is a live {String(contactType).toUpperCase()} lead{leadStatus ? ` (status: ${String(leadStatus).toLowerCase()})` : ''}
                         </div>
                         <div style={{ fontSize: 11.5, color: 'var(--text-secondary)', marginBottom: 8 }}>
                             They are a customer, not a broker. Converting moves them out of your leads and
@@ -102,7 +102,7 @@ export function ConvertToPartnerModal({ phone, defaultName, contactType, leadSta
                         <button key={c} type="button" onClick={() => setCategory(c)} style={{
                             flex: 1, padding: '7px 0', borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: 'pointer',
                             border: `1.5px solid ${category === c ? 'var(--accent-primary)' : 'var(--border-secondary)'}`,
-                            backgroundColor: category === c ? 'rgba(37,99,235,0.08)' : 'transparent',
+                            backgroundColor: category === c ? 'var(--rp-info-wash)' : 'transparent',
                             color: category === c ? 'var(--accent-primary)' : 'var(--text-secondary)',
                         }}>{c === 'INDIVIDUAL' ? 'Individual' : 'Company'}</button>
                     ))}
@@ -120,7 +120,7 @@ export function ConvertToPartnerModal({ phone, defaultName, contactType, leadSta
                     <button type="button" onClick={submit} disabled={saving || (isLiveLead && !acknowledged)} style={{
                         padding: '8px 16px', borderRadius: 8, fontSize: 13, fontWeight: 700,
                         cursor: (isLiveLead && !acknowledged) ? 'not-allowed' : 'pointer',
-                        border: 'none', backgroundColor: '#10b981', color: '#fff',
+                        border: 'none', backgroundColor: 'var(--rp-success-text)', color: 'var(--surface-white)',
                         opacity: (saving || (isLiveLead && !acknowledged)) ? 0.5 : 1,
                     }}>{saving ? 'Converting…' : 'Convert'}</button>
                 </div>

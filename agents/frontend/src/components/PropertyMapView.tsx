@@ -43,14 +43,14 @@ interface Filters {
 const getMarkerColor = (status: string): string => {
   switch (status.toLowerCase()) {
     case 'active':
-      return '#10b981'; // Green
+      return 'var(--rp-success-text)'; // Green
     case 'sold':
     case 'rented':
-      return '#ef4444'; // Red
+      return 'var(--rp-danger-text)'; // Red
     case 'withdrawn':
-      return '#6b7280'; // Gray
+      return 'var(--text-muted)'; // Gray
     default:
-      return '#f59e0b'; // Yellow/Orange for hold/pending
+      return 'var(--rp-warn-text)'; // Yellow/Orange for hold/pending
   }
 };
 
@@ -460,7 +460,7 @@ export const PropertyMapView: React.FC = () => {
                     width: '12px',
                     height: '12px',
                     borderRadius: '50%',
-                    backgroundColor: '#10b981',
+                    backgroundColor: 'var(--rp-success-text)',
                     marginRight: '8px',
                   }}
                 />
@@ -472,7 +472,7 @@ export const PropertyMapView: React.FC = () => {
                     width: '12px',
                     height: '12px',
                     borderRadius: '50%',
-                    backgroundColor: '#ef4444',
+                    backgroundColor: 'var(--rp-danger-text)',
                     marginRight: '8px',
                   }}
                 />
@@ -484,7 +484,7 @@ export const PropertyMapView: React.FC = () => {
                     width: '12px',
                     height: '12px',
                     borderRadius: '50%',
-                    backgroundColor: '#f59e0b',
+                    backgroundColor: 'var(--rp-warn-text)',
                     marginRight: '8px',
                   }}
                 />
@@ -496,7 +496,7 @@ export const PropertyMapView: React.FC = () => {
                     width: '12px',
                     height: '12px',
                     borderRadius: '50%',
-                    backgroundColor: '#6b7280',
+                    backgroundColor: 'var(--text-muted)',
                     marginRight: '8px',
                   }}
                 />
@@ -544,7 +544,7 @@ export const PropertyMapView: React.FC = () => {
               padding: '40px',
               backgroundColor: 'var(--bg-primary)',
               borderRadius: '12px',
-              boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+              boxShadow: '0 2px 8px var(--rp-shadow-tint)',
               maxWidth: '400px',
             }}
           >
@@ -587,7 +587,7 @@ export const PropertyMapView: React.FC = () => {
                           scale: 8,
                           fillColor: getMarkerColor(property.status),
                           fillOpacity: 0.9,
-                          strokeColor: '#ffffff',
+                          strokeColor: 'var(--surface-white)',
                           strokeWeight: 2,
                         }}
                       />
@@ -621,14 +621,14 @@ export const PropertyMapView: React.FC = () => {
                     {selectedProperty.type?.toUpperCase()} for{' '}
                     {selectedProperty.intent === 'sell' ? 'Sale' : 'Rent'}
                   </h3>
-                  <p style={{ margin: '0 0 8px 0', fontSize: '14px', color: '#666' }}>
+                  <p style={{ margin: '0 0 8px 0', fontSize: '14px', color: 'var(--text-secondary)' }}>
                     {selectedProperty.locality || selectedProperty.location}, {selectedProperty.city}
                   </p>
-                  <p style={{ margin: '0 0 8px 0', fontSize: '16px', fontWeight: '600', color: '#059669' }}>
+                  <p style={{ margin: '0 0 8px 0', fontSize: '16px', fontWeight: '600', color: 'var(--rp-success-text)' }}>
                     {formatPrice(selectedProperty.price, selectedProperty.intent)}
                   </p>
                   {selectedProperty.specs && (
-                    <p style={{ margin: '0 0 12px 0', fontSize: '13px', color: '#666' }}>
+                    <p style={{ margin: '0 0 12px 0', fontSize: '13px', color: 'var(--text-secondary)' }}>
                       {selectedProperty.specs.bedrooms && `${selectedProperty.specs.bedrooms} BHK`}
                       {selectedProperty.specs.area && ` • ${selectedProperty.specs.area} ${selectedProperty.specs.unit || 'sqft'}`}
                     </p>

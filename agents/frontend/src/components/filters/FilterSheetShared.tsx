@@ -40,7 +40,7 @@ export function FilterSection({
                     {title}
                     {badge != null && badge > 0 && (
                         <span style={{
-                            background: 'var(--text-link)', color: '#fff', borderRadius: '10px',
+                            background: 'var(--text-link)', color: 'var(--surface-white)', borderRadius: '10px',
                             fontSize: '11px', fontWeight: 700, padding: '1px 7px',
                         }}>{badge}</span>
                     )}
@@ -57,7 +57,7 @@ export function FilterSection({
 const CHIP_STYLE_ACTIVE: React.CSSProperties = {
     padding: '6px 12px', borderRadius: '20px', fontSize: '12px', fontWeight: 600,
     cursor: 'pointer', border: '1.5px solid var(--text-link)',
-    backgroundColor: 'rgba(59,130,246,0.12)', color: 'var(--text-link)',
+    backgroundColor: 'var(--rp-info-wash)', color: 'var(--text-link)',
 };
 const CHIP_STYLE_INACTIVE: React.CSSProperties = {
     padding: '6px 12px', borderRadius: '20px', fontSize: '12px', fontWeight: 500,

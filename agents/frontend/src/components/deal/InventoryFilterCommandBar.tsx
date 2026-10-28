@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { IconText } from '../ui/PresentationIcon';
 
 /**
  * InventoryFilterCommandBar — a command-menu style filter (2026-07-08).
@@ -188,12 +189,12 @@ export function InventoryFilterCommandBar(p: Props) {
         display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 9px', borderRadius: 999,
         fontSize: 12, fontWeight: 600,
         backgroundColor: removable ? 'var(--accent-primary)' : 'var(--bg-tertiary)',
-        color: removable ? '#fff' : 'var(--text-secondary)',
+        color: removable ? 'var(--surface-white)' : 'var(--text-secondary)',
     });
     const dropStyle: React.CSSProperties = {
         position: 'absolute', top: 'calc(100% + 6px)', left: 0, right: 0, zIndex: 60,
         backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-secondary)', borderRadius: 10,
-        boxShadow: '0 14px 34px rgba(0,0,0,0.30)', maxHeight: 300, overflowY: 'auto', padding: 6,
+        boxShadow: '0 14px 34px var(--rp-shadow-tint)', maxHeight: 300, overflowY: 'auto', padding: 6,
     };
     const rowStyle = (active: boolean): React.CSSProperties => ({
         display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
@@ -206,7 +207,7 @@ export function InventoryFilterCommandBar(p: Props) {
     };
     const applyBtn: React.CSSProperties = {
         padding: '7px 14px', borderRadius: 7, fontSize: 12, fontWeight: 700, cursor: 'pointer',
-        backgroundColor: 'var(--accent-primary)', color: '#fff', border: 'none',
+        backgroundColor: 'var(--accent-primary)', color: 'var(--surface-white)', border: 'none',
     };
     const backRow: React.CSSProperties = { ...rowStyle(false), color: 'var(--text-muted)', fontWeight: 600 };
 
@@ -215,7 +216,7 @@ export function InventoryFilterCommandBar(p: Props) {
             <div style={barStyle} onClick={() => { setOpen(true); inputRef.current?.focus(); }}>
                 {tokens.map(t => (
                     <span key={t.key} style={tokenStyle(t.removable)}>
-                        {t.label}
+                        <IconText>{t.label}</IconText>
                         {t.removable && (
                             <span role="button" aria-label={`Remove ${t.label}`} title="Remove"
                                 onClick={e => { e.stopPropagation(); t.remove?.(); }}
@@ -229,7 +230,7 @@ export function InventoryFilterCommandBar(p: Props) {
                     onChange={e => { setQuery(e.target.value); setOpen(true); if (activeCat && e.target.value) setActiveCat(null); }}
                     onFocus={() => setOpen(true)}
                     onKeyDown={onKey}
-                    placeholder={tokens.length ? 'Add filter…' : '🔎 Add filter or search inventory…'}
+                    placeholder={tokens.length ? 'Add filter…' : 'Add filter or search inventory…'}
                     aria-label="Add filter or search inventory"
                     style={{ flex: 1, minWidth: 130, border: 'none', outline: 'none', background: 'transparent', color: 'var(--text-primary)', fontSize: 13, padding: '3px 4px' }}
                 />
@@ -277,7 +278,7 @@ export function InventoryFilterCommandBar(p: Props) {
                             <div style={{ display: 'flex', gap: 6 }}>
                                 {[{ l: 'Sq.ft', v: 'sqft' }, { l: 'Sq.yd', v: 'sqyd' }, { l: 'Sq.m', v: 'sqm' }].map(u => (
                                     <button key={u.v} type="button" onClick={() => setAreaUnitDraft(u.v)}
-                                        style={{ flex: 1, padding: '7px', borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: 'pointer', border: areaUnitDraft === u.v ? '1.5px solid var(--accent-primary)' : '1px solid var(--border-secondary)', backgroundColor: areaUnitDraft === u.v ? 'var(--accent-primary)' : 'var(--bg-secondary)', color: areaUnitDraft === u.v ? '#fff' : 'var(--text-secondary)' }}>{u.l}</button>
+                                        style={{ flex: 1, padding: '7px', borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: 'pointer', border: areaUnitDraft === u.v ? '1.5px solid var(--accent-primary)' : '1px solid var(--border-secondary)', backgroundColor: areaUnitDraft === u.v ? 'var(--accent-primary)' : 'var(--bg-secondary)', color: areaUnitDraft === u.v ? 'var(--surface-white)' : 'var(--text-secondary)' }}>{u.l}</button>
                                 ))}
                             </div>
                             <button type="button" style={applyBtn} onClick={() => { p.onSetArea(areaMinRef.current?.value || '', areaMaxRef.current?.value || '', areaUnitDraft); close(); }}>Apply size</button>
@@ -304,7 +305,7 @@ export function InventoryFilterCommandBar(p: Props) {
                                 onMouseEnter={() => setHi(i)}
                                 onClick={() => it.run()}>
                                 <span style={{ display: 'flex', flexDirection: 'column' }}>
-                                    <span>{it.checked ? '✓ ' : ''}{it.label}</span>
+                                    <span>{it.checked ? '✓ ' : ''}<IconText>{it.label}</IconText></span>
                                     {it.sub && <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>{it.sub}</span>}
                                 </span>
                                 {it.arrow && <span style={{ color: 'var(--text-muted)' }}>›</span>}

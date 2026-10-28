@@ -3,6 +3,10 @@ import { type ReactNode, useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { NotificationBell } from '../NotificationBell';
+import { NavigationIcon } from '../ui/NavigationIcon';
+import { CommandPalette } from '../ui/CommandPalette';
+import { useDialogFocus } from '../../hooks/useDialogFocus';
+import { Menu, Moon, Sun, X } from 'lucide-react';
 
 interface MobileLayoutProps {
     activeView: string;
@@ -10,7 +14,7 @@ interface MobileLayoutProps {
     children: ReactNode;
 }
 
-const PRIMARY = '#4F46E5';
+const PRIMARY = 'var(--accent-primary)';
 
 const NAV_SECTIONS: { label: string; items: { id: string; label: string; icon: string; permission: string | null }[] }[] = [
     {
@@ -73,15 +77,16 @@ const NAV_SECTIONS: { label: string; items: { id: string; label: string; icon: s
 const ALL_NAV_ITEMS = NAV_SECTIONS.flatMap(s => s.items);
 
 const ROLE_COLORS: Record<string, { bg: string; color: string }> = {
-    super_boss: { bg: '#7f1d1d', color: '#f87171' },
-    manager: { bg: '#78350f', color: '#fbbf24' },
-    employee: { bg: '#14532d', color: '#4ade80' },
+    super_boss: { bg: 'var(--rp-info-bg)', color: 'var(--rp-info-text)' },
+    manager: { bg: 'var(--rp-info-bg)', color: 'var(--rp-info-text)' },
+    employee: { bg: 'var(--rp-info-bg)', color: 'var(--rp-info-text)' },
 };
 
 export function MobileLayout({ activeView, onViewChange, children }: MobileLayoutProps) {
     const { agent, logout, hasPermission } = useAuth();
     const { theme, toggleTheme } = useTheme();
     const [drawerOpen, setDrawerOpen] = useState(false);
+    const drawerRef = useDialogFocus(() => setDrawerOpen(false), drawerOpen);
 
     // Bottom nav (2026-06-19 redesign): left = Leads + Pipeline, centre = Dashboard,
     // right = Inventory + Visits. The ☰ menu lives in the top bar. Chats removed (it
@@ -134,26 +139,26 @@ export function MobileLayout({ activeView, onViewChange, children }: MobileLayou
                 padding: '0 16px',
             }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                    <button onClick={() => setDrawerOpen(true)} style={{ background: 'none', border: 'none', color: 'var(--text-primary)', cursor: 'pointer', fontSize: '20px', padding: '10px', minWidth: '44px', minHeight: '44px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        ☰
+                    <button aria-label="Open navigation menu" aria-expanded={drawerOpen} onClick={() => setDrawerOpen(true)} style={{ background: 'none', border: 'none', color: 'var(--text-primary)', cursor: 'pointer', fontSize: '20px', padding: '10px', minWidth: '44px', minHeight: '44px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <Menu size={20} strokeWidth={1.7} aria-hidden="true" />
                     </button>
                     <span style={{ fontSize: '16px', fontWeight: 700, color: 'var(--text-primary)' }}>{displayTitle}</span>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                     <NotificationBell onNavigate={(url) => { if (url.startsWith('#/')) onViewChange(url.replace('#/', '').split('?')[0]); }} />
-                    <button onClick={toggleTheme} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '18px', padding: '10px', minWidth: '44px', minHeight: '44px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        {theme === 'dark' ? '☀️' : '🌙'}
+                    <button onClick={toggleTheme} aria-label="Toggle dark mode" style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '18px', padding: '10px', minWidth: '44px', minHeight: '44px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        {theme === 'dark' ? <Sun size={18} strokeWidth={1.7} aria-hidden="true" /> : <Moon size={18} strokeWidth={1.7} aria-hidden="true" />}
                     </button>
                 </div>
             </div>
 
             {/* Content Area */}
-            <div style={{ flex: 1, overflow: 'auto', WebkitOverflowScrolling: 'touch', minHeight: 0 }}>
+            <main id="main-content" tabIndex={-1} style={{ flex: 1, overflow: 'auto', WebkitOverflowScrolling: 'touch', minHeight: 0, minWidth: 0 }}>
                 {children}
-            </div>
+            </main>
 
             {/* Bottom Navigation */}
-            <div style={{
+            <nav aria-label="Primary mobile navigation" style={{
                 height: '64px', flexShrink: 0,
                 backgroundColor: 'var(--bg-secondary)',
                 borderTop: '1px solid var(--border-primary)',
@@ -165,6 +170,7 @@ export function MobileLayout({ activeView, onViewChange, children }: MobileLayou
                     return (
                         <button
                             key={tab.id}
+                            aria-current={isActive ? 'page' : undefined}
                             onClick={() => handleTabClick(tab.id)}
                             style={{
                                 background: 'none', border: 'none', cursor: 'pointer',
@@ -175,24 +181,25 @@ export function MobileLayout({ activeView, onViewChange, children }: MobileLayou
                             }}
                         >
                             {isActive && <div style={{ position: 'absolute', top: '-1px', left: '50%', transform: 'translateX(-50%)', width: '24px', height: '3px', backgroundColor: PRIMARY, borderRadius: '0 0 3px 3px' }} />}
-                            <span style={{ fontSize: tab.id === '_menu' ? '20px' : '22px', lineHeight: 1 }}>{tab.icon}</span>
+                            <NavigationIcon view={tab.id} size={21} />
                             <span style={{ fontSize: '12px', fontWeight: isActive ? 700 : 500 }}>{tab.label}</span>
                         </button>
                     );
                 })}
-            </div>
+            </nav>
 
             {/* Slide-out Drawer */}
             {drawerOpen && (
                 <div
-                    style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1000 }}
+                    style={{ position: 'fixed', inset: 0, backgroundColor: 'var(--rp-overlay-soft)', zIndex: 1000 }}
                     onClick={() => setDrawerOpen(false)}
                 >
                     <div
+                        ref={drawerRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label="Navigation menu"
                         style={{
                             width: '280px', height: '100%', backgroundColor: 'var(--bg-secondary)',
                             display: 'flex', flexDirection: 'column', overflow: 'hidden',
-                            boxShadow: '4px 0 20px rgba(0,0,0,0.3)',
+                            boxShadow: '4px 0 20px var(--rp-shadow-tint)',
                         }}
                         onClick={e => e.stopPropagation()}
                     >
@@ -205,13 +212,17 @@ export function MobileLayout({ activeView, onViewChange, children }: MobileLayou
                                 <div style={{ fontSize: '18px', fontWeight: 700, color: 'var(--text-primary)' }}>Realty Pandit</div>
                                 <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>Admin Panel</div>
                             </div>
-                            <button onClick={() => setDrawerOpen(false)} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '22px', padding: '4px' }}>
-                                ✕
+                            <button aria-label="Close navigation menu" onClick={() => setDrawerOpen(false)} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '22px', padding: '4px' }}>
+                                <X size={20} strokeWidth={1.7} aria-hidden="true" />
                             </button>
                         </div>
 
                         {/* Sectioned Navigation */}
                         <nav style={{ flex: 1, padding: '8px 8px', overflowY: 'auto', minHeight: 0, WebkitOverflowScrolling: 'touch' }}>
+                            <CommandPalette onNavigate={handleDrawerNav} items={NAV_SECTIONS.flatMap(section => section.items.filter(
+                                item => isPartner ? ['inventory', 'leads', 'deals', 'my-profile'].includes(item.id)
+                                    : (item.permission === null || hasPermission(item.permission))
+                            ).map(item => ({ id: item.id, label: item.label, section: section.label })))} />
                             {NAV_SECTIONS.map(section => {
                                 const sectionItems = section.items.filter(
                                     item => isPartner
@@ -222,14 +233,15 @@ export function MobileLayout({ activeView, onViewChange, children }: MobileLayou
                                 return (
                                     <div key={section.label} style={{ marginBottom: '4px' }}>
                                         <div style={{
-                                            fontSize: '10px', fontWeight: 700, letterSpacing: '0.08em',
-                                            textTransform: 'uppercase', color: 'var(--text-muted)',
+                                            fontSize: '12px', fontWeight: 500,
+                                            color: 'var(--text-muted)',
                                             padding: '8px 14px 4px',
                                         }}>
                                             {section.label}
                                         </div>
                                         {sectionItems.map(item => (
                                             <button
+                                                className="rp-nav-item" aria-current={activeView === item.id ? 'page' : undefined}
                                                 key={item.id}
                                                 onClick={() => handleDrawerNav(item.id)}
                                                 style={{
@@ -243,7 +255,7 @@ export function MobileLayout({ activeView, onViewChange, children }: MobileLayou
                                                     minHeight: '44px',
                                                 }}
                                             >
-                                                <span style={{ fontSize: '18px', flexShrink: 0 }}>{item.icon}</span>
+                                                <NavigationIcon view={item.id} />
                                                 {item.label}
                                             </button>
                                         ))}
@@ -261,7 +273,7 @@ export function MobileLayout({ activeView, onViewChange, children }: MobileLayou
                                     <div style={{
                                         width: '40px', height: '40px', borderRadius: '50%',
                                         backgroundColor: PRIMARY, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                        fontSize: '18px', color: '#fff', fontWeight: 700, flexShrink: 0,
+                                        fontSize: '18px', color: 'var(--surface-white)', fontWeight: 700, flexShrink: 0,
                                     }}>
                                         {agent?.name?.charAt(0)?.toUpperCase() || '?'}
                                     </div>
@@ -290,15 +302,15 @@ export function MobileLayout({ activeView, onViewChange, children }: MobileLayou
                                         display: 'flex', alignItems: 'center', gap: '8px',
                                     }}
                                 >
-                                    {theme === 'dark' ? '☀️' : '🌙'}
+                                    {theme === 'dark' ? <Sun size={18} strokeWidth={1.7} aria-hidden="true" /> : <Moon size={18} strokeWidth={1.7} aria-hidden="true" />}
                                     {theme === 'dark' ? 'Light Mode' : 'Dark Mode'}
                                 </button>
                                 <button
                                     onClick={logout}
                                     style={{
                                         width: '100%', padding: '10px 14px', borderRadius: '10px',
-                                        border: '1px solid #EF4444', backgroundColor: 'transparent',
-                                        color: '#EF4444', cursor: 'pointer', fontSize: '13px', fontWeight: 600,
+                                        border: '1px solid var(--rp-danger-text)', backgroundColor: 'transparent',
+                                        color: 'var(--rp-danger-text)', cursor: 'pointer', fontSize: '13px', fontWeight: 600,
                                     }}
                                 >
                                     Logout

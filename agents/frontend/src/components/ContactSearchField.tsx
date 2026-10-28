@@ -38,12 +38,12 @@ function mapToWorkflowRole(contactType: string, identifiedType?: string): string
 function getRoleBadge(contactType: string, identifiedType?: string): { label: string; color: string; bg: string } {
     const type = identifiedType || contactType;
     switch (type) {
-        case 'MANAGEMENT': return { label: 'Team Member', color: '#60a5fa', bg: 'rgba(59,130,246,0.15)' };
-        case 'PARTNER_AGENT': return { label: 'Agent / Dealer', color: '#f59e0b', bg: 'rgba(245,158,11,0.15)' };
-        case 'REAL_ESTATE_BUILDER': return { label: 'Builder', color: '#a78bfa', bg: 'rgba(167,139,250,0.15)' };
-        case 'LANDLORD': return { label: 'Owner', color: '#34d399', bg: 'rgba(52,211,153,0.15)' };
-        case 'BUYER': return { label: 'Buyer', color: '#fb923c', bg: 'rgba(251,146,60,0.15)' };
-        case 'TENANT': return { label: 'Tenant', color: '#c084fc', bg: 'rgba(192,132,252,0.15)' };
+        case 'MANAGEMENT': return { label: 'Team Member', color: 'var(--blue-400)', bg: 'var(--rp-info-wash)' };
+        case 'PARTNER_AGENT': return { label: 'Agent / Dealer', color: 'var(--rp-warn-text)', bg: 'var(--rp-danger-wash)' };
+        case 'REAL_ESTATE_BUILDER': return { label: 'Builder', color: 'var(--blue-400)', bg: 'var(--rp-info-wash)' };
+        case 'LANDLORD': return { label: 'Owner', color: 'var(--rp-success-text)', bg: 'var(--rp-success-wash)' };
+        case 'BUYER': return { label: 'Buyer', color: 'var(--rp-warn-text)', bg: 'var(--rp-danger-wash)' };
+        case 'TENANT': return { label: 'Tenant', color: 'var(--blue-400)', bg: 'var(--rp-info-wash)' };
         default: return { label: 'Contact', color: 'var(--text-muted)', bg: 'var(--bg-secondary)' };
     }
 }
@@ -267,9 +267,9 @@ export const ContactSearchField: React.FC<ContactSearchFieldProps> = ({
                                     style={{
                                         padding: '10px', borderRadius: '8px', cursor: 'pointer', textAlign: 'center',
                                         fontSize: '13px', fontWeight: newRole === opt.value ? 700 : 500,
-                                        backgroundColor: newRole === opt.value ? '#1e3a5f' : 'var(--bg-primary)',
-                                        color: newRole === opt.value ? '#60a5fa' : 'var(--text-secondary)',
-                                        border: newRole === opt.value ? '1px solid #3b82f6' : '1px solid var(--border-secondary)',
+                                        backgroundColor: newRole === opt.value ? 'var(--blue-900)' : 'var(--bg-primary)',
+                                        color: newRole === opt.value ? 'var(--blue-400)' : 'var(--text-secondary)',
+                                        border: newRole === opt.value ? '1px solid var(--blue-500)' : '1px solid var(--border-secondary)',
                                     }}
                                 >
                                     {opt.label}
@@ -299,12 +299,12 @@ const styles: Record<string, React.CSSProperties> = {
     },
     error: {
         padding: '8px 12px', borderRadius: '8px', fontSize: '13px',
-        backgroundColor: '#7f1d1d', color: '#fca5a5', border: '1px solid #991b1b',
+        backgroundColor: 'var(--rp-danger-text)', color: 'var(--rp-danger-text)', border: '1px solid var(--rp-danger-text)',
         marginTop: '8px',
     },
     foundCard: {
         marginTop: '16px', padding: '16px', borderRadius: '12px',
-        backgroundColor: 'rgba(52,211,153,0.05)', border: '1px solid rgba(52,211,153,0.3)',
+        backgroundColor: 'var(--rp-success-wash)', border: '1px solid var(--rp-success-line)',
     },
     notFoundCard: {
         marginTop: '16px', padding: '20px', borderRadius: '12px',
@@ -312,13 +312,13 @@ const styles: Record<string, React.CSSProperties> = {
     },
     avatar: {
         width: '40px', height: '40px', borderRadius: '50%',
-        backgroundColor: '#1e3a5f', color: '#60a5fa',
+        backgroundColor: 'var(--blue-900)', color: 'var(--blue-400)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         fontSize: '16px', fontWeight: 700, flexShrink: 0,
     },
     primaryBtn: {
         width: '100%', padding: '10px 20px', borderRadius: '8px', cursor: 'pointer',
         fontSize: '14px', fontWeight: 600,
-        backgroundColor: '#059669', color: '#fff', border: 'none',
+        backgroundColor: 'var(--rp-success-text)', color: 'var(--surface-white)', border: 'none',
     },
 };

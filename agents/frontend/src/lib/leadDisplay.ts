@@ -7,21 +7,21 @@
 // Pipeline stage (Contact.lifecycle_stage, or the row's deal status on multi-deal
 // contacts). Shown read-only — the stage itself is driven by the deal pipeline.
 export const STAGE_META: Record<string, { label: string; color: string }> = {
-    NEW: { label: 'New', color: '#3b82f6' },
-    QUALIFIED: { label: 'Qualified', color: '#6366f1' },
-    MATCHED: { label: 'Matched', color: '#8b5cf6' },
-    MATCHING_APPOINTMENT: { label: 'Matching', color: '#8b5cf6' },
-    VISIT_SCHEDULED: { label: 'Visit set', color: '#f59e0b' },
-    VISITED: { label: 'Visited', color: '#14b8a6' },
-    NEGOTIATION: { label: 'Negotiation', color: '#f97316' },
-    CLOSED_WON: { label: 'Won', color: '#22c55e' },
-    CLOSED_LOST: { label: 'Lost', color: '#ef4444' },
-    ON_HOLD: { label: 'On hold', color: '#94a3b8' },
+    NEW: { label: 'New', color: 'var(--rp-info-text)' },
+    QUALIFIED: { label: 'Qualified', color: 'var(--rp-info-text)' },
+    MATCHED: { label: 'Matched', color: 'var(--rp-info-text)' },
+    MATCHING_APPOINTMENT: { label: 'Matching', color: 'var(--rp-info-text)' },
+    VISIT_SCHEDULED: { label: 'Visit set', color: 'var(--rp-info-text)' },
+    VISITED: { label: 'Visited', color: 'var(--rp-info-text)' },
+    NEGOTIATION: { label: 'Negotiation', color: 'var(--rp-info-text)' },
+    CLOSED_WON: { label: 'Won', color: 'var(--rp-success-text)' },
+    CLOSED_LOST: { label: 'Lost', color: 'var(--rp-danger-text)' },
+    ON_HOLD: { label: 'On hold', color: 'var(--rp-warn-text)' },
 };
 
 export const stageInfo = (raw?: string | null): { label: string; color: string } => {
     const key = String(raw || 'NEW').toUpperCase();
-    return STAGE_META[key === 'LEAD' ? 'NEW' : key] || { label: String(raw || 'New'), color: '#6b7280' };
+    return STAGE_META[key === 'LEAD' ? 'NEW' : key] || { label: String(raw || 'New'), color: 'var(--text-secondary)' };
 };
 
 /**
@@ -60,11 +60,11 @@ export const CLIENT_ROLE_LABEL: Record<string, string> = {
 
 /** Badge colors per client role. Unknown/future codes fall back to grey. */
 export const CLIENT_ROLE_COLOR: Record<string, string> = {
-    CLIENT: '#3b82f6',
-    AGENT: '#7c3aed',
-    BUILDER: '#f59e0b',
-    FINANCER: '#14b8a6',
-    CHOKIDAR: '#64748b',
+    CLIENT: 'var(--rp-info-text)',
+    AGENT: 'var(--rp-info-text)',
+    BUILDER: 'var(--rp-info-text)',
+    FINANCER: 'var(--rp-info-text)',
+    CHOKIDAR: 'var(--text-secondary)',
 };
 
 export function clientRoleLabel(raw?: string | null): string | null {
@@ -74,8 +74,8 @@ export function clientRoleLabel(raw?: string | null): string | null {
 }
 
 export function clientRoleColor(raw?: string | null): string {
-    if (!raw) return '#6b7280';
-    return CLIENT_ROLE_COLOR[String(raw).trim().toUpperCase()] || '#6b7280';
+    if (!raw) return 'var(--text-secondary)';
+    return CLIENT_ROLE_COLOR[String(raw).trim().toUpperCase()] || 'var(--text-secondary)';
 }
 
 export interface ClientRoleRow {

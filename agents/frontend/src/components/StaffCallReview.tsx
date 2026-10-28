@@ -288,14 +288,14 @@ export default function StaffCallReview() {
   const statusBadge = (status: string) => {
     switch (status) {
       case 'APPROVED':
-        return { label: 'Approved', bg: '#064e3b', color: '#34d399' };
+        return { label: 'Approved', bg: 'var(--rp-success-bg)', color: 'var(--rp-success-text)' };
       case 'READY_FOR_REVIEW':
-        return { label: 'Ready for Review', bg: '#1e3a5f', color: '#60a5fa' };
+        return { label: 'Ready for Review', bg: 'var(--blue-900)', color: 'var(--blue-400)' };
       case 'PROCESSING':
       case 'TRANSCRIBED':
-        return { label: 'AI Processing', bg: '#451a03', color: '#fbbf24' };
+        return { label: 'AI Processing', bg: 'var(--rp-warn-bg)', color: 'var(--rp-warn-text)' };
       case 'REJECTED':
-        return { label: 'Rejected', bg: '#450a0a', color: '#f87171' };
+        return { label: 'Rejected', bg: 'var(--rp-danger-bg)', color: 'var(--rp-danger-text)' };
       default:
         return { label: status.replace(/_/g, ' '), bg: 'var(--bg-tertiary)', color: 'var(--text-secondary)' };
     }
@@ -330,7 +330,7 @@ export default function StaffCallReview() {
       )}
 
       {successMsg && (
-        <div style={{ backgroundColor: 'rgba(52,211,153,0.15)', color: '#34d399', padding: '10px 14px', borderRadius: '8px', fontSize: '13px', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <div style={{ backgroundColor: 'var(--rp-success-wash)', color: 'var(--rp-success-text)', padding: '10px 14px', borderRadius: '8px', fontSize: '13px', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
           <Check size={16} />
           <span>{successMsg}</span>
         </div>
@@ -418,8 +418,8 @@ export default function StaffCallReview() {
                 padding: '9px 16px',
                 borderRadius: '8px',
                 border: 'none',
-                backgroundColor: busy ? 'var(--bg-tertiary)' : '#2563eb',
-                color: '#fff',
+                backgroundColor: busy ? 'var(--bg-tertiary)' : 'var(--blue-600)',
+                color: 'var(--surface-white)',
                 fontWeight: 600,
                 fontSize: '13px',
                 cursor: busy ? 'not-allowed' : 'pointer',
@@ -488,7 +488,7 @@ export default function StaffCallReview() {
                 <option value="INBOUND">Inbound</option>
                 <option value="OUTBOUND">Outbound</option>
               </select>
-              <span style={{ color: row.status === 'done' ? '#34d399' : row.status === 'error' ? '#ef4444' : 'var(--text-muted)' }}>
+              <span style={{ color: row.status === 'done' ? 'var(--rp-success-text)' : row.status === 'error' ? 'var(--rp-danger-text)' : 'var(--text-muted)' }}>
                 {row.status === 'error' ? row.error : row.status === 'pending' && !row.phone.trim() ? 'Needs a phone number' : row.status}
               </span>
             </div>
@@ -498,7 +498,7 @@ export default function StaffCallReview() {
               type="button"
               disabled={busy || bulk.every(r => r.status === 'done' || !r.phone.trim())}
               onClick={uploadAll}
-              style={{ alignSelf: 'flex-start', padding: '8px 16px', borderRadius: '8px', border: 'none', backgroundColor: '#2563eb', color: '#fff', fontWeight: 600, fontSize: '13px', cursor: busy ? 'not-allowed' : 'pointer' }}
+              style={{ alignSelf: 'flex-start', padding: '8px 16px', borderRadius: '8px', border: 'none', backgroundColor: 'var(--blue-600)', color: 'var(--surface-white)', fontWeight: 600, fontSize: '13px', cursor: busy ? 'not-allowed' : 'pointer' }}
             >
               {busy ? 'Uploading...' : `Upload ${bulk.filter(r => r.status !== 'done' && r.phone.trim()).length} recording(s)`}
             </button>
@@ -600,8 +600,8 @@ export default function StaffCallReview() {
                     padding: '6px 12px',
                     borderRadius: '6px',
                     border: '1px solid var(--border-secondary)',
-                    backgroundColor: isPlaying ? '#2563eb' : 'var(--card-bg)',
-                    color: isPlaying ? '#fff' : 'var(--text-primary)',
+                    backgroundColor: isPlaying ? 'var(--blue-600)' : 'var(--card-bg)',
+                    color: isPlaying ? 'var(--surface-white)' : 'var(--text-primary)',
                     fontSize: '12px',
                     fontWeight: 600,
                     cursor: 'pointer',
@@ -724,9 +724,9 @@ export default function StaffCallReview() {
                   style={{
                     padding: '8px 14px',
                     borderRadius: '6px',
-                    border: '1px solid #ef4444',
+                    border: '1px solid var(--rp-danger-text)',
                     backgroundColor: 'transparent',
-                    color: '#ef4444',
+                    color: 'var(--rp-danger-text)',
                     fontSize: '12px',
                     fontWeight: 600,
                     cursor: busy ? 'not-allowed' : 'pointer',
@@ -742,8 +742,8 @@ export default function StaffCallReview() {
                     padding: '8px 18px',
                     borderRadius: '6px',
                     border: 'none',
-                    backgroundColor: '#16a34a',
-                    color: '#fff',
+                    backgroundColor: 'var(--rp-success-text)',
+                    color: 'var(--surface-white)',
                     fontSize: '12px',
                     fontWeight: 600,
                     cursor: busy ? 'not-allowed' : 'pointer',

@@ -4,13 +4,14 @@ import { getTeamMembers, setMemberPassword, resendSetupLink } from '../../api/cl
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { useConfirm } from '../../contexts/ConfirmContext';
+import { PresentationIcon } from '../ui/PresentationIcon';
 
 const CARD_RADIUS = '12px';
 
 const ROLE_COLORS: Record<string, { bg: string; color: string }> = {
-    super_boss: { bg: '#7f1d1d', color: '#f87171' },
-    manager: { bg: '#78350f', color: '#fbbf24' },
-    employee: { bg: '#14532d', color: '#4ade80' },
+    super_boss: { bg: 'var(--rp-danger-text)', color: 'var(--rp-danger-text)' },
+    manager: { bg: 'var(--rp-warn-bg)', color: 'var(--rp-warn-text)' },
+    employee: { bg: 'var(--rp-success-bg)', color: 'var(--rp-success-text)' },
 };
 
 export function MobileTeamView() {
@@ -100,19 +101,19 @@ export function MobileTeamView() {
                             </span>
                         </div>
                         <div style={{ display: 'flex', gap: '12px', fontSize: '12px', color: 'var(--text-muted)', marginBottom: '10px' }}>
-                            {m.phone && <span>📞 {m.phone}</span>}
-                            {m.department && <span>🏢 {m.department}</span>}
-                            <span>🕐 {lastLogin}</span>
+                            {m.phone && <span><PresentationIcon value="phone" /> {m.phone}</span>}
+                            {m.department && <span><PresentationIcon value="building-2" /> {m.department}</span>}
+                            <span><PresentationIcon value="clock" /> {lastLogin}</span>
                         </div>
                         {/* Actions */}
                         {hasPermission('manage_agents') && m.id !== agent?.id && (
                             <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                                 <button onClick={() => openPasswordModal(m)}
-                                    style={{ padding: '6px 12px', borderRadius: '8px', border: '1px solid var(--border-secondary)', backgroundColor: 'var(--bg-primary)', color: '#4F46E5', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}>
+                                    style={{ padding: '6px 12px', borderRadius: '8px', border: '1px solid var(--border-secondary)', backgroundColor: 'var(--bg-primary)', color: 'var(--blue-600)', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}>
                                     Set Password
                                 </button>
                                 <button onClick={() => handleResendSetup(m)}
-                                    style={{ padding: '6px 12px', borderRadius: '8px', border: '1px solid var(--border-secondary)', backgroundColor: 'var(--bg-primary)', color: '#06b6d4', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}>
+                                    style={{ padding: '6px 12px', borderRadius: '8px', border: '1px solid var(--border-secondary)', backgroundColor: 'var(--bg-primary)', color: 'var(--chart-3)', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}>
                                     Resend Setup
                                 </button>
                             </div>
@@ -123,7 +124,7 @@ export function MobileTeamView() {
 
             {/* Set Password Modal */}
             {showPasswordModal && actionMember && (
-                <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.6)', zIndex: 1000, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}
+                <div style={{ position: 'fixed', inset: 0, backgroundColor: 'var(--rp-overlay-soft)', zIndex: 1000, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}
                     onClick={e => e.target === e.currentTarget && setShowPasswordModal(false)}>
                     <div style={{
                         backgroundColor: 'var(--bg-secondary)', borderRadius: '16px 16px 0 0',
@@ -152,22 +153,22 @@ export function MobileTeamView() {
                                         Cancel
                                     </button>
                                     <button onClick={handleSetPassword} disabled={!newPassword}
-                                        style={{ flex: 1, padding: '12px', borderRadius: '8px', border: 'none', backgroundColor: '#4F46E5', color: '#fff', cursor: 'pointer', fontSize: '14px', fontWeight: 600, opacity: newPassword ? 1 : 0.5 }}>
+                                        style={{ flex: 1, padding: '12px', borderRadius: '8px', border: 'none', backgroundColor: 'var(--blue-600)', color: 'var(--surface-white)', cursor: 'pointer', fontSize: '14px', fontWeight: 600, opacity: newPassword ? 1 : 0.5 }}>
                                         Set Password
                                     </button>
                                 </div>
                             </>
                         ) : (
                             <>
-                                <div style={{ backgroundColor: '#14532d', border: '1px solid #065f46', borderRadius: '8px', padding: '14px', marginBottom: '12px' }}>
-                                    <div style={{ color: '#4ade80', fontWeight: 700, fontSize: '14px', marginBottom: '4px' }}>Password set successfully!</div>
-                                    <div style={{ color: '#86efac', fontSize: '18px', fontFamily: 'monospace', padding: '8px', backgroundColor: '#0f2b1d', borderRadius: '6px', textAlign: 'center', userSelect: 'all' }}>
+                                <div style={{ backgroundColor: 'var(--rp-success-bg)', border: '1px solid var(--rp-success-text)', borderRadius: '8px', padding: '14px', marginBottom: '12px' }}>
+                                    <div style={{ color: 'var(--rp-success-text)', fontWeight: 700, fontSize: '14px', marginBottom: '4px' }}>Password set successfully!</div>
+                                    <div style={{ color: 'var(--rp-success-text)', fontSize: '18px', fontFamily: 'monospace', padding: '8px', backgroundColor: 'var(--rp-success-bg)', borderRadius: '6px', textAlign: 'center', userSelect: 'all' }}>
                                         {passwordResult}
                                     </div>
-                                    <div style={{ color: '#6ee7b7', fontSize: '11px', marginTop: '6px' }}>Save this — won't be shown again</div>
+                                    <div style={{ color: 'var(--rp-success-text)', fontSize: '11px', marginTop: '6px' }}>Save this — won't be shown again</div>
                                 </div>
                                 <button onClick={() => { navigator.clipboard.writeText(passwordResult); showToast('Copied!', 'success'); }}
-                                    style={{ width: '100%', padding: '12px', borderRadius: '8px', border: 'none', backgroundColor: '#4F46E5', color: '#fff', cursor: 'pointer', fontSize: '14px', fontWeight: 600, marginBottom: '8px' }}>
+                                    style={{ width: '100%', padding: '12px', borderRadius: '8px', border: 'none', backgroundColor: 'var(--blue-600)', color: 'var(--surface-white)', cursor: 'pointer', fontSize: '14px', fontWeight: 600, marginBottom: '8px' }}>
                                     Copy Password
                                 </button>
                                 <button onClick={() => setShowPasswordModal(false)}

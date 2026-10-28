@@ -10,6 +10,8 @@ import { PartnerSourceAutocomplete, type SourcePartnerValue } from './PartnerSou
 import { getTaxonomyTree, cloneInventory } from '../api/client';
 import { useConfirm } from '../contexts/ConfirmContext';
 import { useAuth } from '../contexts/AuthContext';
+import { useDialogFocus } from '../hooks/useDialogFocus';
+import { IconText, PresentationIcon } from './ui/PresentationIcon';
 
 interface InventoryModalProps {
     isOpen: boolean;
@@ -162,6 +164,7 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({ isOpen, onClose,
         setOwnerHoldsKey(false);
         onClose();
     }, [phase, wf, onClose]);
+    const modalRef = useDialogFocus(handleClose, isOpen);
 
     const handleBack = useCallback(() => {
         if (phase === 'confirm' || (phase === 'workflow' && wf.done)) {
@@ -273,13 +276,13 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({ isOpen, onClose,
 
     return (
         <div style={styles.overlay}>
-            <div style={styles.modal}>
+            <div ref={modalRef} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="rp-add-inventory-title" style={styles.modal}>
                 {/* Header */}
                 <div style={styles.header}>
-                    <h2 style={styles.title}>Add Inventory</h2>
+                    <h2 id="rp-add-inventory-title" style={styles.title}>Add Inventory</h2>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                        <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>{getCurrentSectionLabel()}</span>
-                        <button style={styles.closeBtn} onClick={handleClose}>&times;</button>
+                        <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}><IconText>{getCurrentSectionLabel()}</IconText></span>
+                        <button aria-label="Close add inventory" style={styles.closeBtn} onClick={handleClose}>&times;</button>
                     </div>
                 </div>
 
@@ -303,8 +306,8 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({ isOpen, onClose,
                             </div>
                             <ContactSearchField onContactSelected={handleContactSelected} />
                             {sourceError && (
-                                <div style={{ marginTop: 12, padding: '10px 12px', borderRadius: 8, backgroundColor: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.4)', color: '#ef4444', fontSize: 13, lineHeight: 1.4 }}>
-                                    ⚠ {sourceError}
+                                <div style={{ marginTop: 12, padding: '12px', borderRadius: 'var(--radius-card)', backgroundColor: 'var(--rp-danger-bg)', border: '1px solid var(--rp-danger-line)', color: 'var(--rp-danger-text)', fontSize: 13, lineHeight: 1.4 }}>
+                                    <PresentationIcon value="circle-alert" /> {sourceError}
                                 </div>
                             )}
                         </div>
@@ -313,7 +316,7 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({ isOpen, onClose,
                     {/* Phase: Prefilling */}
                     {phase === 'prefilling' && (
                         <div style={{ ...styles.phaseContainer, textAlign: 'center', padding: '60px 20px' }}>
-                            <div style={{ fontSize: '24px', marginBottom: '12px' }}>&#8987;</div>
+                            <div style={{ marginBottom: '12px' }}><PresentationIcon value="clock" size={24} /></div>
                             <p style={{ color: 'var(--text-muted)', fontSize: '14px' }}>Setting up workflow...</p>
                         </div>
                     )}
@@ -400,7 +403,7 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({ isOpen, onClose,
                     {/* Phase: Success */}
                     {phase === 'success' && !wf.enrichmentMode && (
                         <div style={{ ...styles.phaseContainer, textAlign: 'center', padding: '40px 20px' }}>
-                            <div style={{ fontSize: '48px', marginBottom: '16px' }}>&#10004;</div>
+                            <div style={{ marginBottom: '16px', color: 'var(--rp-success-text)' }}><PresentationIcon value="check-circle" size={28} /></div>
                             <h2 style={{ fontSize: '20px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '12px' }}>
                                 Property Saved Successfully!
                             </h2>
@@ -412,19 +415,19 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({ isOpen, onClose,
                             {wf.completionPct !== undefined && (
                                 <div style={{ marginBottom: '20px' }}>
                                     <p style={{ color: 'var(--text-muted)', fontSize: '13px', marginBottom: '8px' }}>
-                                        Listing Completion: <strong style={{ color: wf.completionPct > 60 ? '#34d399' : '#f59e0b' }}>{wf.completionPct}%</strong>
+                                        Listing Completion: <strong style={{ color: 'var(--text-primary)' }}>{wf.completionPct}%</strong>
                                     </p>
                                     <div style={{ width: '100%', height: '6px', borderRadius: '3px', background: 'var(--bg-secondary)' }}>
                                         <div style={{
                                             width: `${wf.completionPct}%`, height: '100%', borderRadius: '3px',
-                                            background: wf.completionPct > 60 ? '#34d399' : '#f59e0b',
+                                            background: wf.completionPct > 60 ? 'var(--blue-700)' : 'var(--blue-500)',
                                             transition: 'width 0.5s ease',
                                         }} />
                                     </div>
                                 </div>
                             )}
 
-                            <div style={{ background: 'rgba(52,211,153,0.05)', borderRadius: '12px', padding: '20px', marginBottom: '24px', border: '1px solid rgba(52,211,153,0.2)' }}>
+                            <div style={{ background: 'var(--bg-secondary)', borderRadius: 'var(--radius-card)', padding: '24px', marginBottom: '24px', border: '1px solid var(--border-primary)' }}>
                                 <p style={{ color: 'var(--text-muted)', fontSize: '13px', marginBottom: '12px' }}>
                                     Add pricing, amenities, area, and more to improve listing visibility.
                                 </p>
@@ -459,8 +462,8 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({ isOpen, onClose,
 
                     {/* Task 4b: Clone checklist overlay */}
                     {showCloneChecklist && (
-                        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px' }} onClick={() => !cloning && setShowCloneChecklist(false)}>
-                            <div style={{ background: 'var(--bg-primary)', borderRadius: '14px', padding: '24px', maxWidth: '440px', width: '100%', border: '1px solid var(--border-secondary)', boxShadow: '0 20px 60px rgba(0,0,0,0.35)' }} onClick={e => e.stopPropagation()}>
+                        <div style={{ position: 'fixed', inset: 0, background: 'var(--sheet-backdrop)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '24px' }} onClick={() => !cloning && setShowCloneChecklist(false)}>
+                            <div style={{ background: 'var(--bg-primary)', borderRadius: 'var(--radius-card)', padding: '24px', maxWidth: '440px', width: '100%', border: '1px solid var(--border-secondary)', boxShadow: 'var(--rp-shadow-far)' }} onClick={e => e.stopPropagation()}>
                                 <h3 style={{ fontSize: '17px', fontWeight: 700, color: 'var(--text-primary)', margin: '0 0 6px' }}>Clone this listing</h3>
                                 <p style={{ fontSize: '13px', color: 'var(--text-muted)', margin: '0 0 16px', lineHeight: 1.5 }}>
                                     The same building &amp; features are copied. Tick what differs for the new unit &mdash; those fields start blank and the Edit screen opens so you can fill them in (including a different owner if needed).
@@ -478,7 +481,7 @@ export const InventoryModal: React.FC<InventoryModalProps> = ({ isOpen, onClose,
                                         </label>
                                     ))}
                                 </div>
-                                {cloneError && <p style={{ color: '#ef4444', fontSize: '13px', margin: '0 0 14px' }}>{cloneError}</p>}
+                                {cloneError && <p style={{ color: 'var(--rp-danger-text)', fontSize: '13px', margin: '0 0 16px' }}>{cloneError}</p>}
                                 <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
                                     <button style={{ ...styles.secondaryBtn, background: 'transparent' }} onClick={() => setShowCloneChecklist(false)} disabled={cloning}>Cancel</button>
                                     <button style={styles.primaryBtn} onClick={handleClone} disabled={cloning}>{cloning ? 'Cloning…' : 'Clone & edit new unit'}</button>
@@ -550,13 +553,13 @@ function ProgressBar({ groups, currentStep, done, stepCount }: {
                             style={{
                                 padding: '6px 14px', borderRadius: '16px', flexShrink: 0,
                                 whiteSpace: 'nowrap', fontSize: '12px', fontWeight: isActive ? 700 : 500,
-                                backgroundColor: isDone ? '#064e3b' : isActive ? '#1e3a5f' : 'var(--bg-secondary)',
-                                color: isDone ? '#34d399' : isActive ? '#60a5fa' : 'var(--text-muted)',
-                                border: isActive ? '1px solid #3b82f6' : '1px solid transparent',
+                                backgroundColor: isDone ? 'var(--rp-info-bg)' : isActive ? 'var(--bg-active)' : 'var(--bg-secondary)',
+                                color: isDone ? 'var(--rp-info-text)' : isActive ? 'var(--rp-info-text)' : 'var(--text-muted)',
+                                border: isActive ? '1px solid var(--blue-600)' : '1px solid transparent',
                                 transition: 'all 0.2s ease',
                             }}
                         >
-                            {isActive ? `${g.icon} ${shortLabel}` : isDone ? `${g.icon} ${shortLabel}` : shortLabel}
+                            <IconText>{isActive ? `${g.icon} ${shortLabel}` : isDone ? `${g.icon} ${shortLabel}` : shortLabel}</IconText>
                         </div>
                     );
                 })}
@@ -588,14 +591,14 @@ function KeyHolderStep({ onSelectUploader, onSelectOwner, onSelectSomeoneElse, l
             </p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                 <button style={styles.optionBtn} onClick={onSelectUploader} disabled={loading}>
-                    <span style={{ fontSize: '18px' }}>&#128273;</span>
+                    <PresentationIcon value="key-round" size={18} />
                     <div>
                         <div style={{ fontWeight: 600, fontSize: '14px' }}>I hold the key</div>
                         <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Mere paas hai</div>
                     </div>
                 </button>
                 <button style={styles.optionBtn} onClick={onSelectOwner} disabled={loading}>
-                    <span style={{ fontSize: '18px' }}>&#127968;</span>
+                    <PresentationIcon value="house" size={18} />
                     <div>
                         <div style={{ fontWeight: 600, fontSize: '14px' }}>Owner holds the key</div>
                         <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
@@ -604,7 +607,7 @@ function KeyHolderStep({ onSelectUploader, onSelectOwner, onSelectSomeoneElse, l
                     </div>
                 </button>
                 <button style={styles.optionBtn} onClick={onSelectSomeoneElse} disabled={loading}>
-                    <span style={{ fontSize: '18px' }}>&#128100;</span>
+                    <PresentationIcon value="user-round" size={18} />
                     <div>
                         <div style={{ fontWeight: 600, fontSize: '14px' }}>Someone else</div>
                         <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Kisi aur ke paas hai</div>
@@ -717,7 +720,7 @@ function ConfirmStep({ answers, summary, error, loading, onSubmit, onBack, sourc
                 <PreRentedField value={preRented || { pre_rented: false, rent: '' }} onChange={onPreRentedChange} intent={answers.intent} />
             )}
 
-            {error && <div style={{ padding: '10px 14px', borderRadius: '8px', fontSize: '13px', backgroundColor: '#7f1d1d', color: '#fca5a5', border: '1px solid #991b1b', marginBottom: '12px' }}>{error}</div>}
+            {error && <div style={{ padding: '12px 16px', borderRadius: 'var(--radius-card)', fontSize: '13px', backgroundColor: 'var(--rp-danger-bg)', color: 'var(--rp-danger-text)', border: '1px solid var(--rp-danger-line)', marginBottom: '12px' }}>{error}</div>}
 
             <div style={{ display: 'flex', gap: '12px' }}>
                 <button style={styles.backBtn} onClick={onBack} disabled={loading}>&larr; Back</button>
@@ -753,7 +756,7 @@ function TaxonomyPicker({ value, onSubmit }: { value: any; onSubmit: (v: string)
     const leaf = path.length > 0 ? path[path.length - 1] : null;
     const leafChosen = !!leaf && (!leaf.children || leaf.children.length === 0);
 
-    if (loadErr) return <div style={{ color: '#fca5a5', fontSize: '13px' }}>{loadErr}</div>;
+    if (loadErr) return <div style={{ color: 'var(--rp-danger-text)', fontSize: '13px' }}>{loadErr}</div>;
 
     return (
         <div>
@@ -819,8 +822,8 @@ function SchemaFields({ fields, value, onSubmit }: { fields: SchemaField[]; valu
                                 return (
                                     <button key={o} type="button" onClick={() => toggle(f.key, o)}
                                         style={{ padding: '6px 12px', borderRadius: '999px', fontSize: '12px', cursor: 'pointer',
-                                            border: on ? '1px solid #059669' : '1px solid var(--border-secondary)',
-                                            backgroundColor: on ? '#059669' : 'var(--bg-primary)', color: on ? '#fff' : 'var(--text-primary)' }}>
+                                            border: on ? '1px solid var(--blue-600)' : '1px solid var(--border-secondary)',
+                                            backgroundColor: on ? 'var(--blue-600)' : 'var(--bg-primary)', color: on ? 'var(--surface-white)' : 'var(--text-primary)' }}>
                                         {o}
                                     </button>
                                 );
@@ -916,8 +919,8 @@ function StepPanel({ step, options, metadata, currentValue, secondaryValue, docu
                 {step.input_type === 'owner_block' && (
                     <>
                         {answers?.ownership_type === 'EXTERNAL_AGENT' && (
-                            <div style={{ marginBottom: '16px', padding: '12px', backgroundColor: 'rgba(59,130,246,0.1)', border: '1px solid rgba(59,130,246,0.3)', borderRadius: '8px', fontSize: '13px', color: 'var(--text-primary)', display: 'flex', gap: '8px' }}>
-                                <span>&#8505;&#65039;</span>
+                            <div style={{ marginBottom: '16px', padding: '12px', backgroundColor: 'var(--rp-info-bg)', border: '1px solid var(--rp-info-line)', borderRadius: 'var(--radius-card)', fontSize: '13px', color: 'var(--text-primary)', display: 'flex', gap: '8px' }}>
+                                <PresentationIcon value="info" />
                                 <span>This is the property owner's contact (different from the agent/uploader).</span>
                             </div>
                         )}
@@ -926,7 +929,7 @@ function StepPanel({ step, options, metadata, currentValue, secondaryValue, docu
                 )}
             </div>
 
-            {error && <div style={{ padding: '10px 14px', borderRadius: '8px', fontSize: '13px', backgroundColor: '#7f1d1d', color: '#fca5a5', border: '1px solid #991b1b', marginBottom: '12px' }}>{error}</div>}
+            {error && <div style={{ padding: '12px 16px', borderRadius: 'var(--radius-card)', fontSize: '13px', backgroundColor: 'var(--rp-danger-bg)', color: 'var(--rp-danger-text)', border: '1px solid var(--rp-danger-line)', marginBottom: '12px' }}>{error}</div>}
 
             {/* Navigation */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '8px' }}>
@@ -1013,9 +1016,9 @@ function ConfirmationPanel({ summary, answers, error, submitting, onConfirm, onB
             {(answers.uploader_name || answers.uploader_phone) && (
                 <div style={{
                     padding: '14px 16px', borderRadius: '10px', marginBottom: '16px',
-                    backgroundColor: 'rgba(52,211,153,0.08)', border: '1px solid rgba(52,211,153,0.3)',
+                    backgroundColor: 'var(--rp-info-bg)', border: '1px solid var(--rp-info-line)',
                 }}>
-                    <div style={{ fontSize: '11px', fontWeight: 700, color: '#34d399', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px' }}>
+                    <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--rp-info-text)', marginBottom: '8px' }}>
                         Source Contact / Owner
                     </div>
                     {answers.uploader_name && (
@@ -1062,7 +1065,7 @@ function ConfirmationPanel({ summary, answers, error, submitting, onConfirm, onB
                 <PreRentedField value={preRented || { pre_rented: false, rent: '' }} onChange={onPreRentedChange} intent={answers.intent} />
             )}
 
-            {error && <div style={{ padding: '10px 14px', borderRadius: '8px', fontSize: '13px', backgroundColor: '#7f1d1d', color: '#fca5a5', border: '1px solid #991b1b', marginBottom: '12px' }}>{error}</div>}
+            {error && <div style={{ padding: '12px 16px', borderRadius: 'var(--radius-card)', fontSize: '13px', backgroundColor: 'var(--rp-danger-bg)', color: 'var(--rp-danger-text)', border: '1px solid var(--rp-danger-line)', marginBottom: '12px' }}>{error}</div>}
 
             <div style={{ display: 'flex', gap: '12px' }}>
                 <button style={styles.backBtn} onClick={onBack} disabled={submitting}>&larr; Back</button>
@@ -1097,13 +1100,13 @@ function OptionCards({ options, value, onSelect }: {
                         <button key={opt.value} onClick={() => onSelect(opt.value)} style={{
                             padding: '12px 16px', borderRadius: '8px', cursor: 'pointer', textAlign: 'left',
                             fontSize: '14px', fontWeight: value === opt.value ? 700 : 500,
-                            backgroundColor: value === opt.value ? '#1e3a5f' : 'var(--bg-secondary)',
-                            color: value === opt.value ? '#60a5fa' : 'var(--text-primary)',
-                            border: value === opt.value ? '1px solid #3b82f6' : '1px solid var(--border-secondary)',
+                            backgroundColor: value === opt.value ? 'var(--bg-active)' : 'var(--bg-primary)',
+                            color: value === opt.value ? 'var(--rp-info-text)' : 'var(--text-primary)',
+                            border: value === opt.value ? '1px solid var(--blue-600)' : '1px solid var(--border-secondary)',
                             display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                         }}>
                             <span>{opt.label}</span>
-                            {value === opt.value && <span style={{ fontSize: '16px' }}>&#10003;</span>}
+                            {value === opt.value && <PresentationIcon value="check-circle" />}
                         </button>
                     ))}
                 </div>
@@ -1113,9 +1116,9 @@ function OptionCards({ options, value, onSelect }: {
                         <button key={opt.value} onClick={() => onSelect(opt.value)} style={{
                             padding: '14px', borderRadius: '10px', cursor: 'pointer', textAlign: 'center',
                             fontSize: '14px', fontWeight: value === opt.value ? 700 : 500,
-                            backgroundColor: value === opt.value ? '#1e3a5f' : 'var(--bg-secondary)',
-                            color: value === opt.value ? '#60a5fa' : 'var(--text-primary)',
-                            border: value === opt.value ? '1px solid #3b82f6' : '1px solid var(--border-secondary)',
+                            backgroundColor: value === opt.value ? 'var(--bg-active)' : 'var(--bg-primary)',
+                            color: value === opt.value ? 'var(--rp-info-text)' : 'var(--text-primary)',
+                            border: value === opt.value ? '1px solid var(--blue-600)' : '1px solid var(--border-secondary)',
                         }}>
                             {opt.label}
                         </button>
@@ -1194,9 +1197,9 @@ function MultiSelectField({ options, value, onSubmit }: {
                     <button key={opt.value} onClick={() => setSelected(prev => ({ ...prev, [opt.value]: !prev[opt.value] }))} style={{
                         padding: '10px', borderRadius: '8px', cursor: 'pointer', textAlign: 'center',
                         fontSize: '12px', fontWeight: selected[opt.value] ? 700 : 400,
-                        backgroundColor: selected[opt.value] ? '#064e3b' : 'var(--bg-primary)',
-                        color: selected[opt.value] ? '#34d399' : 'var(--text-secondary)',
-                        border: selected[opt.value] ? '1px solid #065f46' : '1px solid var(--border-secondary)',
+                        backgroundColor: selected[opt.value] ? 'var(--bg-active)' : 'var(--bg-primary)',
+                        color: selected[opt.value] ? 'var(--rp-info-text)' : 'var(--text-secondary)',
+                        border: selected[opt.value] ? '1px solid var(--blue-600)' : '1px solid var(--border-secondary)',
                     }}>
                         {selected[opt.value] ? '+ ' : ''}{opt.label}
                     </button>
@@ -1230,13 +1233,13 @@ function MediaUpload({ value, onSubmit, onUpload }: {
                 <p style={{ color: 'var(--text-muted)', fontSize: '14px' }}>{uploading ? 'Uploading...' : 'Click to upload photos (JPEG, PNG, WebP) — Max 10MB each, up to 10'}</p>
                 <input ref={inputRef} type="file" accept="image/jpeg,image/png,image/webp" multiple style={{ display: 'none' }} onChange={e => handleFiles(e.target.files)} />
             </div>
-            {uploadError && <div style={{ padding: '12px', marginBottom: '12px', backgroundColor: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '8px', color: '#ef4444', fontSize: '14px' }}>{uploadError}</div>}
+            {uploadError && <div style={{ padding: '12px', marginBottom: '12px', backgroundColor: 'var(--rp-danger-bg)', border: '1px solid var(--rp-danger-line)', borderRadius: 'var(--radius-card)', color: 'var(--rp-danger-text)', fontSize: '14px' }}>{uploadError}</div>}
             {urls.length > 0 && (
                 <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '12px' }}>
                     {urls.map((url, i) => (
                         <div key={i} style={{ width: '60px', height: '60px', borderRadius: '8px', overflow: 'hidden', position: 'relative' }}>
                             <img src={url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                            <button onClick={() => setUrls(prev => prev.filter((_, idx) => idx !== i))} style={{ position: 'absolute', top: 0, right: 0, width: '18px', height: '18px', borderRadius: '50%', background: '#ef4444', color: '#fff', border: 'none', fontSize: '10px', cursor: 'pointer' }}>&times;</button>
+                            <button onClick={() => setUrls(prev => prev.filter((_, idx) => idx !== i))} title="Remove photo" style={{ position: 'absolute', top: 0, right: 0, width: '44px', height: '44px', borderRadius: 'var(--radius-control)', background: 'var(--danger)', color: 'var(--surface-white)', border: 'none', fontSize: '16px', cursor: 'pointer' }}>&times;</button>
                         </div>
                     ))}
                 </div>
@@ -1267,13 +1270,13 @@ function VideoUpload({ value, onSubmit, onUpload }: {
                 <p style={{ color: 'var(--text-muted)', fontSize: '14px' }}>{uploading ? 'Uploading...' : 'Click to upload videos (MP4, WebM, MOV, AVI) — Max 50MB each, up to 3'}</p>
                 <input ref={inputRef} type="file" accept="video/mp4,video/quicktime,video/webm,video/3gpp,video/3gpp2,video/x-matroska,video/x-msvideo,video/x-m4v,.mp4,.mov,.webm,.3gp,.mkv,.avi,.m4v" multiple style={{ display: 'none' }} onChange={e => handleFiles(e.target.files)} />
             </div>
-            {uploadError && <div style={{ padding: '12px', marginBottom: '12px', backgroundColor: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '8px', color: '#ef4444', fontSize: '14px' }}>{uploadError}</div>}
+            {uploadError && <div style={{ padding: '12px', marginBottom: '12px', backgroundColor: 'var(--rp-danger-bg)', border: '1px solid var(--rp-danger-line)', borderRadius: 'var(--radius-card)', color: 'var(--rp-danger-text)', fontSize: '14px' }}>{uploadError}</div>}
             {urls.length > 0 && (
                 <div style={{ marginBottom: '12px' }}>
                     {urls.map((_url, i) => (
                         <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', backgroundColor: 'var(--bg-primary)', borderRadius: '8px', marginBottom: '4px', border: '1px solid var(--border-secondary)' }}>
                             <span style={{ fontSize: '13px', color: 'var(--text-primary)' }}>Video {i + 1}</span>
-                            <button onClick={() => setUrls(prev => prev.filter((_, idx) => idx !== i))} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '14px' }}>&times;</button>
+                            <button onClick={() => setUrls(prev => prev.filter((_, idx) => idx !== i))} title="Remove video" style={{ background: 'none', border: 'none', color: 'var(--rp-danger-text)', cursor: 'pointer', fontSize: '16px', minWidth: 44, minHeight: 44 }}>&times;</button>
                         </div>
                     ))}
                 </div>
@@ -1310,13 +1313,13 @@ function DocumentUpload({ value, documentTypes, onSubmit, onUpload }: {
                 <button style={styles.secondaryBtn} onClick={() => inputRef.current?.click()} disabled={uploading}>{uploading ? '...' : '+ Upload'}</button>
             </div>
             <input ref={inputRef} type="file" accept="application/pdf,image/*,.doc,.docx,.xls,.xlsx,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" style={{ display: 'none' }} onChange={e => handleFile(e.target.files)} />
-            {uploadError && <div style={{ padding: '12px', marginBottom: '12px', backgroundColor: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: '8px', color: '#ef4444', fontSize: '14px' }}>{uploadError}</div>}
+            {uploadError && <div style={{ padding: '12px', marginBottom: '12px', backgroundColor: 'var(--rp-danger-bg)', border: '1px solid var(--rp-danger-line)', borderRadius: 'var(--radius-card)', color: 'var(--rp-danger-text)', fontSize: '14px' }}>{uploadError}</div>}
             {docs.length > 0 && (
                 <div style={{ marginBottom: '12px' }}>
                     {docs.map((doc, i) => (
                         <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 12px', backgroundColor: 'var(--bg-primary)', borderRadius: '8px', marginBottom: '4px', border: '1px solid var(--border-secondary)' }}>
                             <span style={{ fontSize: '13px', color: 'var(--text-primary)' }}>{doc.title} ({doc.doc_type?.replace(/_/g, ' ')})</span>
-                            <button onClick={() => setDocs(prev => prev.filter((_, idx) => idx !== i))} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '14px' }}>&times;</button>
+                            <button onClick={() => setDocs(prev => prev.filter((_, idx) => idx !== i))} title="Remove document" style={{ background: 'none', border: 'none', color: 'var(--rp-danger-text)', cursor: 'pointer', fontSize: '16px', minWidth: 44, minHeight: 44 }}>&times;</button>
                         </div>
                     ))}
                 </div>
@@ -1376,7 +1379,7 @@ function AddressBlockField({ value, onSubmit, addressConfig }: {
         <div>
             <AddressFields value={addr} onChange={setAddr} layout={layout} mainCategory={cfg.main_category} slug={cfg.sub_category_slug} />
             <DuplicateAddressWarning value={addr} />
-            {error && <div style={{ fontSize: '12px', color: '#fca5a5', marginBottom: '8px' }}>{error}</div>}
+            {error && <div style={{ fontSize: '12px', color: 'var(--rp-danger-text)', marginBottom: '8px' }}>{error}</div>}
             <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
                 <button type="button" style={styles.primaryBtn} onClick={handleSubmit}>Next &rarr;</button>
             </div>
@@ -1411,15 +1414,15 @@ function OwnerBlockField({ value, onSubmit }: { value: any; onSubmit: (v: any) =
 
     const fieldStyle: React.CSSProperties = { width: '100%', padding: '10px 12px', borderRadius: '8px', fontSize: '14px', backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)', border: '1px solid var(--border-secondary)', outline: 'none', boxSizing: 'border-box' };
     const labelStyle: React.CSSProperties = { fontSize: '12px', color: 'var(--text-muted)', marginBottom: '4px', fontWeight: 600 };
-    const errStyle: React.CSSProperties = { fontSize: '11px', color: '#fca5a5', marginTop: '2px' };
+    const errStyle: React.CSSProperties = { fontSize: '12px', color: 'var(--rp-danger-text)', marginTop: '4px' };
 
     return (
         <div onKeyDown={e => { if (e.key === 'Enter') e.preventDefault(); }}>
             <div style={{ display: 'flex', gap: '12px', marginBottom: '20px' }}>
-                <button type="button" onClick={() => setIsOwner(true)} style={{ flex: 1, padding: '12px', borderRadius: '8px', cursor: 'pointer', textAlign: 'center', fontSize: '14px', fontWeight: isOwner ? 700 : 500, backgroundColor: isOwner ? '#064e3b' : 'var(--bg-primary)', color: isOwner ? '#34d399' : 'var(--text-secondary)', border: isOwner ? '2px solid #065f46' : '1px solid var(--border-secondary)' }}>
+                <button type="button" onClick={() => setIsOwner(true)} style={{ flex: 1, padding: '12px', borderRadius: 'var(--radius-control)', cursor: 'pointer', textAlign: 'center', fontSize: '14px', fontWeight: isOwner ? 600 : 500, backgroundColor: isOwner ? 'var(--bg-active)' : 'var(--bg-primary)', color: isOwner ? 'var(--rp-info-text)' : 'var(--text-secondary)', border: isOwner ? '2px solid var(--blue-600)' : '1px solid var(--border-secondary)' }}>
                     Yes, I am the owner
                 </button>
-                <button type="button" onClick={() => setIsOwner(false)} style={{ flex: 1, padding: '12px', borderRadius: '8px', cursor: 'pointer', textAlign: 'center', fontSize: '14px', fontWeight: !isOwner ? 700 : 500, backgroundColor: !isOwner ? '#1e3a5f' : 'var(--bg-primary)', color: !isOwner ? '#60a5fa' : 'var(--text-secondary)', border: !isOwner ? '2px solid #3b82f6' : '1px solid var(--border-secondary)' }}>
+                <button type="button" onClick={() => setIsOwner(false)} style={{ flex: 1, padding: '12px', borderRadius: 'var(--radius-control)', cursor: 'pointer', textAlign: 'center', fontSize: '14px', fontWeight: !isOwner ? 600 : 500, backgroundColor: !isOwner ? 'var(--bg-active)' : 'var(--bg-primary)', color: !isOwner ? 'var(--rp-info-text)' : 'var(--text-secondary)', border: !isOwner ? '2px solid var(--blue-600)' : '1px solid var(--border-secondary)' }}>
                     No, someone else
                 </button>
             </div>
@@ -1437,7 +1440,7 @@ function OwnerBlockField({ value, onSubmit }: { value: any; onSubmit: (v: any) =
 const styles: Record<string, React.CSSProperties> = {
     overlay: {
         position: 'fixed', inset: 0, zIndex: 1000,
-        backgroundColor: 'rgba(0,0,0,0.6)',
+        backgroundColor: 'var(--sheet-backdrop)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
     },
     modal: {
@@ -1445,7 +1448,7 @@ const styles: Record<string, React.CSSProperties> = {
         backgroundColor: 'var(--bg-primary)',
         borderRadius: '16px', overflow: 'hidden',
         display: 'flex', flexDirection: 'column',
-        boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5)',
+        boxShadow: 'var(--rp-shadow-far)',
         border: '1px solid var(--border-secondary)',
     },
     header: {
@@ -1479,7 +1482,7 @@ const styles: Record<string, React.CSSProperties> = {
     },
     primaryBtn: {
         padding: '10px 20px', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: 600,
-        backgroundColor: '#059669', color: '#fff', border: 'none', whiteSpace: 'nowrap' as const,
+        backgroundColor: 'var(--blue-600)', color: 'var(--surface-white)', border: 'none', whiteSpace: 'nowrap' as const,
     },
     secondaryBtn: {
         padding: '10px 16px', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: 500,

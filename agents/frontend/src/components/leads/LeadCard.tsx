@@ -1,5 +1,6 @@
 import { toDialablePhone, isPlaceholderPhone } from '../../lib/phone';
-import { stageInfo, bhkLabel, dealerFallback, effectiveClientRole, isTemporaryClientRole, clientRoleLabel, clientRoleColor } from '../../lib/leadDisplay';
+import { stageInfo, bhkLabel, dealerFallback, effectiveClientRole, isTemporaryClientRole, clientRoleLabel } from '../../lib/leadDisplay';
+import { PresentationIcon } from '../ui/PresentationIcon';
 
 interface Lead {
     phone_number: string;
@@ -56,7 +57,7 @@ interface LeadCardProps {
 
 const STATUSES = ['cold', 'warm', 'hot', 'closed', 'lost'];
 const statusColors: Record<string, string> = {
-    cold: '#94a3b8', warm: '#f59e0b', hot: '#ef4444', closed: '#22c55e', lost: '#6b7280',
+    cold: 'var(--text-secondary)', warm: 'var(--rp-warn-text)', hot: 'var(--rp-danger-text)', closed: 'var(--rp-success-text)', lost: 'var(--text-secondary)',
 };
 
 export default function LeadCard({
@@ -83,11 +84,12 @@ export default function LeadCard({
         <div
             onClick={() => onSelect(lead.phone_number)}
             style={{
-                backgroundColor: isSelected ? 'rgba(59,130,246,0.08)' : 'var(--bg-secondary, #1e293b)',
-                border: isSelected ? '1px solid #3b82f6' : '1px solid var(--border-secondary, #334155)',
-                borderRadius: '12px',
+                backgroundColor: isSelected ? 'var(--bg-active)' : 'var(--bg-primary)',
+                border: isSelected ? '1px solid var(--blue-600)' : '1px solid var(--border-primary)',
+                borderRadius: 'var(--radius-card)',
                 padding: '12px 14px',
-                paddingRight: dialable ? '76px' : '14px',
+                paddingRight: dialable ? '112px' : '14px',
+                paddingBottom: lead.lead_type === 'PARTNER_REFERRAL' && partnerTel ? '64px' : '12px',
                 cursor: 'pointer',
                 position: 'relative',
                 transition: 'border-color 0.15s',
@@ -95,40 +97,40 @@ export default function LeadCard({
         >
             {/* Row 1: Name + BHK + Subtype + Client-type badges */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px', flexWrap: 'wrap' }}>
-                <span style={{ fontWeight: 600, fontSize: '14px', color: 'var(--text-primary, #f1f5f9)' }}>
+                <button type="button" className="rp-lead-name" style={{ fontWeight: 600, fontSize: '14px', color: 'var(--text-primary)' }}>
                     {identity.name || 'Unknown'}
-                </span>
+                </button>
                 {identity.isDealer && (
                     <span title="Client unknown — showing the dealer who brought this lead"
-                        style={{ backgroundColor: 'rgba(245,158,11,0.15)', color: '#d97706', padding: '1px 6px', borderRadius: '8px', fontSize: '9px', fontWeight: 700 }}>
+                        style={{ backgroundColor: 'var(--rp-info-bg)', color: 'var(--rp-info-text)', padding: '4px 8px', borderRadius: 'var(--radius-control)', fontSize: '12px', fontWeight: 500 }}>
                         Dealer
                     </span>
                 )}
                 {lead.lead_type === 'PARTNER_REFERRAL' && (
-                    <span style={{ backgroundColor: '#ede9fe', color: '#7c3aed', padding: '1px 6px', borderRadius: '8px', fontSize: '9px', fontWeight: 700 }}>
+                    <span style={{ backgroundColor: 'var(--rp-info-bg)', color: 'var(--rp-info-text)', padding: '4px 8px', borderRadius: 'var(--radius-control)', fontSize: '12px', fontWeight: 500 }}>
                         {lead.referral_partner_name || 'Partner'}
                     </span>
                 )}
                 {role && (
                     <span title={isTemporaryClientRole(lead) ? 'Temporary role for this enquiry' : 'Primary role'}
-                        style={{ backgroundColor: `${clientRoleColor(role)}22`, color: clientRoleColor(role), padding: '1px 6px', borderRadius: '8px', fontSize: '9px', fontWeight: 600, textTransform: 'capitalize' }}>
+                        style={{ backgroundColor: 'var(--rp-info-bg)', color: 'var(--rp-info-text)', padding: '4px 8px', borderRadius: 'var(--radius-control)', fontSize: '12px', fontWeight: 500, textTransform: 'capitalize' }}>
                         {clientRoleLabel(role)}
                     </span>
                 )}
                 {!!currentAgentId && lead.shared_with_ids?.includes(currentAgentId) && (
                     <span title="Shared with you by a teammate — the owner is unchanged"
-                        style={{ backgroundColor: '#ede9fe', color: '#7c3aed', padding: '1px 6px', borderRadius: '8px', fontSize: '9px', fontWeight: 700 }}>
-                        🤝 Shared
+                        style={{ backgroundColor: 'var(--rp-info-bg)', color: 'var(--rp-info-text)', padding: '4px 8px', borderRadius: 'var(--radius-control)', fontSize: '12px', fontWeight: 500 }}>
+                        Shared
                     </span>
                 )}
                 {bhk && (
-                    <span style={{ backgroundColor: 'rgba(59,130,246,0.15)', color: '#60a5fa', padding: '1px 6px', borderRadius: '8px', fontSize: '9px', fontWeight: 700 }}>
+                    <span style={{ backgroundColor: 'var(--rp-info-bg)', color: 'var(--rp-info-text)', padding: '4px 8px', borderRadius: 'var(--radius-control)', fontSize: '12px', fontWeight: 500 }}>
                         {bhk}
                     </span>
                 )}
                 {subtype && (
                     <span title="Property subtype"
-                        style={{ backgroundColor: 'rgba(139,92,246,0.15)', color: '#a78bfa', padding: '1px 6px', borderRadius: '8px', fontSize: '9px', fontWeight: 600, textTransform: 'capitalize' }}>
+                        style={{ backgroundColor: 'var(--rp-info-bg)', color: 'var(--rp-info-text)', padding: '4px 8px', borderRadius: 'var(--radius-control)', fontSize: '12px', fontWeight: 500, textTransform: 'capitalize' }}>
                         {subtype}
                     </span>
                 )}
@@ -136,10 +138,10 @@ export default function LeadCard({
 
             {/* Row 2: Phone + Date */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                <span style={{ fontSize: '12px', color: 'var(--text-muted, #94a3b8)' }}>
+                <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
                     {dialable ? (identity.phone as string) : 'No phone'}
                 </span>
-                <span style={{ fontSize: '11px', color: 'var(--text-muted, #94a3b8)' }}>{date}</span>
+                <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{date}</span>
             </div>
 
             {/* Row 3: Source + Status + Stage + Score + Intent */}
@@ -147,11 +149,11 @@ export default function LeadCard({
                 {/* Source badge */}
                 <span style={{
                     display: 'inline-flex', alignItems: 'center', gap: '4px',
-                    backgroundColor: `${sourceColors[lead.source] || '#6b7280'}22`,
-                    color: sourceColors[lead.source] || '#6b7280',
+                    backgroundColor: 'var(--rp-info-bg)',
+                    color: sourceColors[lead.source] || 'var(--text-secondary)',
                     padding: '2px 8px', borderRadius: '10px', fontSize: '10px', fontWeight: 600,
                 }}>
-                    <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: sourceColors[lead.source] || '#6b7280' }} />
+                    <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: sourceColors[lead.source] || 'var(--text-secondary)' }} />
                     {sourceLabels[lead.source] || lead.source}
                 </span>
 
@@ -162,8 +164,8 @@ export default function LeadCard({
                     onChange={(e) => { e.stopPropagation(); onStatusChange(lead.phone_number, e.target.value); }}
                     disabled={updatingPhone === lead.phone_number}
                     style={{
-                        backgroundColor: `${statusColors[lead.lead_status] || '#6b7280'}22`,
-                        color: statusColors[lead.lead_status] || '#6b7280',
+                        backgroundColor: 'var(--bg-primary)',
+                        color: statusColors[lead.lead_status] || 'var(--text-secondary)',
                         border: 'none', borderRadius: '10px', padding: '2px 8px',
                         fontSize: '10px', fontWeight: 600, cursor: 'pointer',
                         opacity: updatingPhone === lead.phone_number ? 0.5 : 1,
@@ -174,32 +176,32 @@ export default function LeadCard({
 
                 {/* Pipeline stage */}
                 <span title="Pipeline stage"
-                    style={{ backgroundColor: `${si.color}22`, color: si.color, padding: '2px 8px', borderRadius: '10px', fontSize: '10px', fontWeight: 700 }}>
+                    style={{ backgroundColor: 'var(--rp-info-bg)', color: 'var(--rp-info-text)', padding: '4px 8px', borderRadius: 'var(--radius-control)', fontSize: '12px', fontWeight: 500 }}>
                     {si.label}
                 </span>
 
                 {/* Score */}
                 {score != null && (
-                    <span style={{ backgroundColor: `${scoreColor(score)}22`, color: scoreColor(score), padding: '2px 6px', borderRadius: '10px', fontSize: '10px', fontWeight: 700 }}>
+                    <span style={{ backgroundColor: 'var(--bg-secondary)', color: scoreColor(score), padding: '4px 8px', borderRadius: 'var(--radius-control)', fontSize: '12px', fontWeight: 500 }}>
                         {score}
                     </span>
                 )}
 
                 {/* Intent */}
                 {lead.intent && (
-                    <span style={{ fontSize: '10px', color: 'var(--text-muted, #94a3b8)', textTransform: 'capitalize' }}>
+                    <span style={{ fontSize: '12px', color: 'var(--text-muted)', textTransform: 'capitalize' }}>
                         {lead.intent}
                     </span>
                 )}
 
                 {/* Quality flags — only for 99acres leads */}
                 {lead.source === '99acres' && !lead.budget_max && (
-                    <span style={{ backgroundColor: '#fef3c722', color: '#d97706', padding: '2px 7px', borderRadius: '10px', fontSize: '10px', fontWeight: 600 }}>
+                    <span style={{ backgroundColor: 'var(--rp-warn-bg)', color: 'var(--rp-warn-text)', padding: '4px 8px', borderRadius: 'var(--radius-control)', fontSize: '12px', fontWeight: 500 }}>
                         No Budget
                     </span>
                 )}
                 {lead.source === '99acres' && (!lead.email || !lead.email.includes('@')) && (
-                    <span style={{ backgroundColor: '#fef3c722', color: '#d97706', padding: '2px 7px', borderRadius: '10px', fontSize: '10px', fontWeight: 600 }}>
+                    <span style={{ backgroundColor: 'var(--rp-warn-bg)', color: 'var(--rp-warn-text)', padding: '4px 8px', borderRadius: 'var(--radius-control)', fontSize: '12px', fontWeight: 500 }}>
                         No Email
                     </span>
                 )}
@@ -207,7 +209,7 @@ export default function LeadCard({
 
             {/* Row 4: Location + Budget */}
             {(lead.preferred_location || lead.budget_min || lead.budget_max) && (
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '6px', fontSize: '11px', color: 'var(--text-muted, #94a3b8)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '8px', fontSize: '12px', color: 'var(--text-muted)' }}>
                     <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '60%' }}>
                         {lead.preferred_location || ''}
                     </span>
@@ -218,14 +220,14 @@ export default function LeadCard({
             )}
 
             {lead._deal?.source_ref && (
-                <div title={lead._deal.source_ref} style={{ marginTop: 6, fontSize: 11, color: 'var(--text-muted, #94a3b8)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    🏠 {lead._deal.source_ref}
+                <div title={lead._deal.source_ref} style={{ marginTop: 8, fontSize: 12, color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    <PresentationIcon value="house" /> {lead._deal.source_ref}
                 </div>
             )}
 
             {/* Row 5: Assigned manager (2026-05-13) */}
-            <div style={{ marginTop: 6, fontSize: 11, color: 'var(--text-muted, #94a3b8)', display: 'flex', alignItems: 'center', gap: 4 }}>
-                <span>👤</span>
+            <div style={{ marginTop: 8, fontSize: 12, color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 4 }}>
+                <PresentationIcon value="user-round" />
                 <span>{lead.assigned_agent?.name || <span style={{ fontStyle: 'italic' }}>Unassigned</span>}</span>
             </div>
 
@@ -240,11 +242,11 @@ export default function LeadCard({
                             aria-label="Open this lead in the Deal Pipeline"
                             style={{
                                 flex: 1, padding: '6px 0', borderRadius: '8px', fontSize: '11px', fontWeight: 700,
-                                backgroundColor: 'rgba(59,130,246,0.12)', color: '#60a5fa',
-                                border: '1px solid rgba(59,130,246,0.4)', cursor: 'pointer',
+                                backgroundColor: 'var(--rp-info-bg)', color: 'var(--rp-info-text)',
+                                border: '1px solid var(--control-line)', cursor: 'pointer',
                             }}
                         >
-                            📊 Pipeline
+                            Pipeline
                         </button>
                     )}
                     {onOpenMatches && (
@@ -255,11 +257,11 @@ export default function LeadCard({
                             aria-label="View matching properties for this lead"
                             style={{
                                 flex: 1, padding: '6px 0', borderRadius: '8px', fontSize: '11px', fontWeight: 700,
-                                backgroundColor: 'rgba(139,92,246,0.12)', color: '#a78bfa',
-                                border: '1px solid rgba(139,92,246,0.4)', cursor: 'pointer',
+                                backgroundColor: 'var(--rp-info-bg)', color: 'var(--rp-info-text)',
+                                border: '1px solid var(--control-line)', cursor: 'pointer',
                             }}
                         >
-                            🏠 {matchCount != null ? `${matchCount} Matches` : 'Matching'}
+                            {matchCount != null ? `${matchCount} Matches` : 'Matching'}
                         </button>
                     )}
                 </div>
@@ -275,14 +277,14 @@ export default function LeadCard({
                     title="Chat on WhatsApp"
                     aria-label="Chat on WhatsApp"
                     style={{
-                        position: 'absolute', top: '10px', right: '44px',
-                        width: '28px', height: '28px', borderRadius: '50%',
-                        backgroundColor: 'rgba(37,211,102,0.15)', color: '#25d366',
+                        position: 'absolute', top: '8px', right: '56px',
+                        width: '44px', height: '44px', borderRadius: 'var(--radius-control)',
+                        backgroundColor: 'var(--rp-info-bg)', color: 'var(--rp-info-text)',
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
                         fontSize: '14px', textDecoration: 'none',
                     }}
                 >
-                    💬
+                    <PresentationIcon value="message-circle" />
                 </a>
             )}
 
@@ -294,14 +296,14 @@ export default function LeadCard({
                     title="Call client"
                     aria-label="Call client"
                     style={{
-                        position: 'absolute', top: '10px', right: '10px',
-                        width: '28px', height: '28px', borderRadius: '50%',
-                        backgroundColor: 'rgba(34,197,94,0.15)', color: '#22c55e',
+                        position: 'absolute', top: '8px', right: '8px',
+                        width: '44px', height: '44px', borderRadius: 'var(--radius-control)',
+                        backgroundColor: 'var(--rp-info-bg)', color: 'var(--rp-info-text)',
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
                         fontSize: '14px', textDecoration: 'none',
                     }}
                 >
-                    📞
+                    <PresentationIcon value="phone" />
                 </a>
             )}
 
@@ -313,13 +315,13 @@ export default function LeadCard({
                     title={`Call partner ${lead.referral_partner_name || ''}`}
                     style={{
                         position: 'absolute', bottom: '10px', right: '10px',
-                        height: '28px', padding: '0 8px', borderRadius: '14px',
-                        backgroundColor: 'rgba(124,58,237,0.15)', color: '#7c3aed',
+                        minWidth: '44px', height: '44px', padding: '0 8px', borderRadius: 'var(--radius-control)',
+                        backgroundColor: 'var(--rp-info-bg)', color: 'var(--rp-info-text)',
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
                         fontSize: '12px', fontWeight: 700, textDecoration: 'none',
                     }}
                 >
-                    🤝📞
+                    <PresentationIcon value="phone" />
                 </a>
             )}
         </div>

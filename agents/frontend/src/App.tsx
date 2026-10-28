@@ -77,10 +77,10 @@ function WelcomePanel({ contacts, agentName, onSelect }: WelcomePanelProps) {
   const today = new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
 
   const statCards = [
-    { label: 'Total Contacts', value: total,   color: 'var(--text-link)', bg: '#1e3a5f' },
-    { label: '🔥 HOT Leads',   value: hot,     color: '#f87171', bg: 'var(--error-bg)' },
+    { label: 'Total Contacts', value: total,   color: 'var(--text-link)', bg: 'var(--blue-900)' },
+    { label: '🔥 HOT Leads',   value: hot,     color: 'var(--rp-danger-text)', bg: 'var(--error-bg)' },
     { label: '🟢 WARM Leads',  value: warm,    color: 'var(--success-text-bright)', bg: 'var(--success-bg)' },
-    { label: '❄️ COLD Leads',  value: cold,    color: '#93c5fd', bg: '#1e3558' },
+    { label: '❄️ COLD Leads',  value: cold,    color: 'var(--blue-300)', bg: 'var(--blue-800)' },
     { label: '❓ No Score',    value: noScore, color: 'var(--text-secondary)', bg: 'var(--bg-secondary)' },
   ];
 
@@ -153,7 +153,7 @@ function WelcomePanel({ contacts, agentName, onSelect }: WelcomePanelProps) {
                   alignItems: 'center', gap: '12px',
                   transition: 'border-color 0.15s',
                 }}
-                onMouseEnter={e => (e.currentTarget as HTMLDivElement).style.borderColor = '#3b82f6'}
+                onMouseEnter={e => (e.currentTarget as HTMLDivElement).style.borderColor = 'var(--blue-500)'}
                 onMouseLeave={e => (e.currentTarget as HTMLDivElement).style.borderColor = 'var(--border-secondary)'}
               >
                 <div style={{
@@ -729,7 +729,7 @@ case 'lead-tasks':
           <a
             href="#main-content"
             style={{ position: 'absolute', left: '-9999px', top: 'auto', width: '1px', height: '1px', overflow: 'hidden' }}
-            onFocus={(e) => { (e.target as HTMLElement).style.cssText = 'position:fixed;top:4px;left:4px;padding:8px 16px;background:#3b82f6;color:white;border-radius:4px;z-index:9999;width:auto;height:auto;overflow:visible'; }}
+            onFocus={(e) => { (e.target as HTMLElement).style.cssText = 'position:fixed;top:4px;left:4px;padding:8px 16px;background:var(--blue-500);color:white;border-radius:4px;z-index:9999;width:auto;height:auto;overflow:visible'; }}
             onBlur={(e) => { (e.target as HTMLElement).style.cssText = 'position:absolute;left:-9999px;top:auto;width:1px;height:1px;overflow:hidden'; }}
           >
             Skip to main content

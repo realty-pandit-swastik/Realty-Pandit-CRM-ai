@@ -9,6 +9,7 @@
  */
 
 import { useState, useEffect } from 'react';
+import { IconText, PresentationIcon } from '../ui/PresentationIcon';
 import client from '../../api/client';
 import { getDealMatchedInventory, shareDealProperties, setDealReminder, type Deal } from '../../api/client';
 import { MatchShareTab } from './MatchShareTab';
@@ -78,12 +79,12 @@ interface OutcomeButton {
 }
 
 const OUTCOMES: OutcomeButton[] = [
-    { id: 'ANSWERED_INTERESTED', emoji: '✅', title: 'Answered — interested',           subtitle: 'Capture requirements & qualify' },
-    { id: 'NOT_INTERESTED',      emoji: '❌', title: 'Not interested',                   subtitle: 'Customer declined' },
-    { id: 'NO_ANSWER',           emoji: '📞', title: 'No answer',                        subtitle: 'AI continues retry cadence' },
-    { id: 'CALLBACK_REQUESTED',  emoji: '📅', title: 'Callback requested',               subtitle: 'Schedule a time to call back' },
-    { id: 'WRONG_OR_SPAM',       emoji: '🚫', title: 'Wrong / spam / banker / partner',  subtitle: 'Mark and close' },
-    { id: 'LANGUAGE_BARRIER',    emoji: '🌐', title: 'Language barrier',                 subtitle: 'Alert manager for handoff' },
+    { id: 'ANSWERED_INTERESTED', emoji: 'check-circle', title: 'Answered — interested',           subtitle: 'Capture requirements & qualify' },
+    { id: 'NOT_INTERESTED',      emoji: 'x', title: 'Not interested',                   subtitle: 'Customer declined' },
+    { id: 'NO_ANSWER',           emoji: 'phone', title: 'No answer',                        subtitle: 'AI continues retry cadence' },
+    { id: 'CALLBACK_REQUESTED',  emoji: 'calendar-days', title: 'Callback requested',               subtitle: 'Schedule a time to call back' },
+    { id: 'WRONG_OR_SPAM',       emoji: 'ban', title: 'Wrong / spam / banker / partner',  subtitle: 'Mark and close' },
+    { id: 'LANGUAGE_BARRIER',    emoji: 'globe', title: 'Language barrier',                 subtitle: 'Alert manager for handoff' },
 ];
 
 const labelStyle: React.CSSProperties = {
@@ -161,8 +162,8 @@ export default function LogCallOverlay({
             <div
                 onClick={onClose}
                 style={{
-                    position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.6)',
-                    zIndex: 200, backdropFilter: 'blur(2px)',
+                    position: 'fixed', inset: 0, backgroundColor: 'var(--rp-overlay-soft)',
+                    zIndex: 200,
                 }}
             />
             {/* Sheet */}
@@ -182,7 +183,7 @@ export default function LogCallOverlay({
                     height: isMobile ? '100%' : 'auto',
                     overflow: 'hidden',
                     zIndex: 201,
-                    boxShadow: '0 25px 60px rgba(0,0,0,0.4)',
+                    boxShadow: '0 25px 60px var(--rp-overlay-soft)',
                     display: 'flex', flexDirection: 'column',
                 }}
             >
@@ -228,7 +229,7 @@ export default function LogCallOverlay({
                     {error && (
                         <div style={{
                             padding: '10px 12px', borderRadius: '8px', marginBottom: '12px',
-                            backgroundColor: 'rgba(239,68,68,0.1)', color: '#ef4444', fontSize: '13px',
+                            backgroundColor: 'var(--rp-danger-wash)', color: 'var(--rp-danger-text)', fontSize: '13px',
                         }}>
                             {error}
                         </div>
@@ -390,7 +391,7 @@ function OutcomePicker({ onPick }: { onPick: (o: CallOutcome) => void }) {
                         cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '12px',
                     }}
                 >
-                    <span style={{ fontSize: '22px' }}>{b.emoji}</span>
+                    <PresentationIcon value={b.emoji} size={22} />
                     <div style={{ flex: 1 }}>
                         <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)' }}>
                             {b.title}
@@ -423,7 +424,7 @@ function NotInterestedPath({ submitting, onSubmit, onCancel }: {
         >
             <div style={{
                 padding: '10px 12px', borderRadius: '8px',
-                backgroundColor: 'rgba(239,68,68,0.08)', fontSize: '13px',
+                backgroundColor: 'var(--rp-danger-wash)', fontSize: '13px',
                 color: 'var(--text-primary)', lineHeight: 1.5,
             }}>
                 This <strong>closes the deal</strong> and removes it from the board. For a "not now, maybe later"
@@ -460,7 +461,7 @@ function NoAnswerPath({ submitting, onSubmit, onCancel }: {
         >
             <div style={{
                 padding: '12px 14px', borderRadius: '8px',
-                backgroundColor: 'rgba(59,130,246,0.08)',
+                backgroundColor: 'var(--rp-info-wash)',
                 fontSize: '13px', color: 'var(--text-primary)', lineHeight: 1.5,
             }}>
                 Deal stays in <strong>NEW</strong>. AI continues its retry cadence
@@ -612,12 +613,12 @@ function PathShell({
                     style={{
                         padding: '10px 16px', borderRadius: '8px', fontSize: '13px', fontWeight: 700,
                         border: 'none',
-                        backgroundColor: (submitting || disabled) ? '#94a3b8' : 'var(--accent-primary)',
-                        color: '#fff',
+                        backgroundColor: (submitting || disabled) ? 'var(--text-muted)' : 'var(--accent-primary)',
+                        color: 'var(--surface-white)',
                         cursor: (submitting || disabled) ? 'not-allowed' : 'pointer',
                     }}
                 >
-                    {submitting ? 'Saving...' : submitLabel}
+                    <IconText>{submitting ? 'Saving...' : submitLabel}</IconText>
                 </button>
             </div>
         </div>
@@ -670,13 +671,13 @@ function AnsweredStep({ onInterested, onNotInterested }: { onInterested: () => v
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
             <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>Call answered — what did the customer say?</div>
-            <button type="button" onClick={onInterested} style={card('#22c55e', 'rgba(34,197,94,0.08)')}>
-                <span style={{ fontSize: '22px' }}>👍</span>
+            <button type="button" onClick={onInterested} style={card('var(--rp-success-text)', 'var(--rp-success-wash)')}>
+                <PresentationIcon value="thumbs-up" size={22} />
                 <div><div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-primary)' }}>Interested</div>
                     <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Capture requirements → qualify → share</div></div>
             </button>
             <button type="button" onClick={onNotInterested} style={card('var(--border-secondary)', 'var(--bg-secondary)')}>
-                <span style={{ fontSize: '22px' }}>👎</span>
+                <PresentationIcon value="thumbs-down" size={22} />
                 <div><div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-primary)' }}>Not interested</div>
                     <div style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Pick a reason and close</div></div>
             </button>
@@ -715,8 +716,8 @@ function NotInterestedReasonsStep({ submitting, onSubmit, onBack, onCancel }: {
                         <button key={r.key} type="button" onClick={() => setReason(r.key)}
                             style={{ padding: '12px 14px', borderRadius: '8px', textAlign: 'left', cursor: 'pointer', fontSize: '13px', fontWeight: 600,
                                 border: reason === r.key ? '1.5px solid var(--accent-primary)' : '1px solid var(--border-secondary)',
-                                backgroundColor: reason === r.key ? 'rgba(59,130,246,0.08)' : 'var(--bg-secondary)', color: 'var(--text-primary)' }}>
-                            {r.label}
+                                backgroundColor: reason === r.key ? 'var(--rp-info-wash)' : 'var(--bg-secondary)', color: 'var(--text-primary)' }}>
+                            <IconText>{r.label}</IconText>
                         </button>
                     ))}
                 </div>
@@ -751,20 +752,20 @@ function NotAnsweredStep({ submitting, noAnswerCount, agents, onSetReminder, onR
     const tab = (active: boolean): React.CSSProperties => ({
         padding: '8px 12px', borderRadius: '8px', fontSize: '12px', fontWeight: 700, cursor: 'pointer',
         border: active ? '1.5px solid var(--accent-primary)' : '1px solid var(--border-secondary)',
-        backgroundColor: active ? 'rgba(59,130,246,0.08)' : 'var(--bg-secondary)', color: 'var(--text-primary)',
+        backgroundColor: active ? 'var(--rp-info-wash)' : 'var(--bg-secondary)', color: 'var(--text-primary)',
     });
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-            <div style={{ padding: '10px 12px', borderRadius: '8px', backgroundColor: 'rgba(59,130,246,0.08)', fontSize: '13px', color: 'var(--text-primary)', lineHeight: 1.5 }}>
+            <div style={{ padding: '10px 12px', borderRadius: '8px', backgroundColor: 'var(--rp-info-wash)', fontSize: '13px', color: 'var(--text-primary)', lineHeight: 1.5 }}>
                 No answer. The AI keeps its retry cadence — set your own reminder so the deal resurfaces for you.
-                {gateOpen && <div style={{ marginTop: '6px', color: '#b45309', fontWeight: 600 }}>⚠ Called {noAnswerCount}× with no answer — consider reassigning or closing.</div>}
+                {gateOpen && <div style={{ marginTop: '8px', color: 'var(--rp-warn-text)', fontWeight: 600 }}><PresentationIcon value="circle-alert" /> Called {noAnswerCount}× with no answer — consider reassigning or closing.</div>}
             </div>
             <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                 {/* Reset the reason on tab switch: a pick made under "Set reminder" must not be
                     silently pre-selected (and submitted) under "Close". */}
-                <button type="button" onClick={() => { setReason(''); setMode('reminder'); }} style={tab(mode === 'reminder')}>⏰ Set reminder</button>
-                {gateOpen && <button type="button" onClick={() => { setReason(''); setMode('reassign'); }} style={tab(mode === 'reassign')}>🔄 Reassign</button>}
-                {gateOpen && <button type="button" onClick={() => { setReason(''); setMode('close'); }} style={tab(mode === 'close')}>❌ Close</button>}
+                <button type="button" onClick={() => { setReason(''); setMode('reminder'); }} style={tab(mode === 'reminder')}>Set reminder</button>
+                {gateOpen && <button type="button" onClick={() => { setReason(''); setMode('reassign'); }} style={tab(mode === 'reassign')}>Reassign</button>}
+                {gateOpen && <button type="button" onClick={() => { setReason(''); setMode('close'); }} style={tab(mode === 'close')}>Close</button>}
             </div>
             {mode === 'reminder' && (<>
                 <NoAnswerReasonSelect value={reason} onChange={setReason} />
@@ -783,7 +784,7 @@ function NotAnsweredStep({ submitting, noAnswerCount, agents, onSetReminder, onR
             </>)}
             {mode === 'close' && (<>
                 <NoAnswerReasonSelect value={reason} onChange={setReason} />
-                <div style={{ padding: '10px 12px', borderRadius: '8px', backgroundColor: 'rgba(239,68,68,0.08)', fontSize: '13px', color: 'var(--text-primary)' }}>
+                <div style={{ padding: '10px 12px', borderRadius: '8px', backgroundColor: 'var(--rp-danger-wash)', fontSize: '13px', color: 'var(--text-primary)' }}>
                     Closes the deal as unreachable — the {noAnswerCount} no-answer call{noAnswerCount === 1 ? '' : 's'} are recorded.
                 </div>
                 <Field label="Note (optional)"><textarea rows={2} value={notes} onChange={e => setNotes(e.target.value)} style={inputStyle} placeholder="Anything to add?" /></Field>
@@ -801,8 +802,8 @@ function ActionRow({ submitting, onCancel, onSubmit, label, disabled, danger }: 
         <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
             <button type="button" onClick={onCancel} disabled={submitting} style={{ padding: '10px 16px', borderRadius: '8px', fontSize: '13px', fontWeight: 600, border: '1px solid var(--border-secondary)', backgroundColor: 'transparent', color: 'var(--text-secondary)', cursor: 'pointer' }}>Cancel</button>
             <button type="button" onClick={onSubmit} disabled={blocked}
-                style={{ padding: '10px 16px', borderRadius: '8px', fontSize: '13px', fontWeight: 700, border: 'none', color: '#fff',
-                    backgroundColor: blocked ? '#94a3b8' : (danger ? '#ef4444' : 'var(--accent-primary)'), cursor: blocked ? 'not-allowed' : 'pointer' }}>
+                style={{ padding: '10px 16px', borderRadius: '8px', fontSize: '13px', fontWeight: 700, border: 'none', color: 'var(--surface-white)',
+                    backgroundColor: blocked ? 'var(--text-muted)' : (danger ? 'var(--rp-danger-text)' : 'var(--accent-primary)'), cursor: blocked ? 'not-allowed' : 'pointer' }}>
                 {submitting ? 'Saving…' : label}
             </button>
         </div>
@@ -832,10 +833,10 @@ export function ShareStep({ dealId, onAdvance, onCancel }: { dealId: string; onA
     if (loading) return <div style={{ padding: '24px', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '13px' }}>Finding matches…</div>;
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            <div style={{ padding: '10px 12px', borderRadius: '8px', backgroundColor: 'rgba(34,197,94,0.08)', fontSize: '13px', color: 'var(--text-primary)' }}>
-                ✅ Qualified. Share matching properties with the client, then set your next reminder.
+            <div style={{ padding: '10px 12px', borderRadius: '8px', backgroundColor: 'var(--rp-success-wash)', fontSize: '13px', color: 'var(--text-primary)' }}>
+                Qualified. Share matching properties with the client, then set your next reminder.
             </div>
-            {done ? <div style={{ padding: '20px', textAlign: 'center', color: '#22c55e', fontWeight: 700 }}>📤 Shared! Continuing…</div> : matches.length === 0 ? (
+            {done ? <div style={{ padding: '20px', textAlign: 'center', color: 'var(--rp-success-text)', fontWeight: 600 }}>Shared. Continuing…</div> : matches.length === 0 ? (
                 <>
                     <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>No suitable inventory matches this requirement yet.</div>
                     <ActionRow submitting={false} onCancel={onCancel} disabled={false} label="No match yet → set reminder" onSubmit={onAdvance} />
@@ -849,10 +850,10 @@ export function ShareStep({ dealId, onAdvance, onCancel }: { dealId: string; onA
                             return (
                                 <button key={m.id} type="button" onClick={() => toggle(m.id)}
                                     style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 12px', borderRadius: '8px', textAlign: 'left', cursor: 'pointer',
-                                        border: sel ? '1.5px solid var(--accent-primary)' : '1px solid var(--border-secondary)', backgroundColor: sel ? 'rgba(59,130,246,0.08)' : 'var(--bg-secondary)' }}>
+                                        border: sel ? '1.5px solid var(--accent-primary)' : '1px solid var(--border-secondary)', backgroundColor: sel ? 'var(--rp-info-wash)' : 'var(--bg-secondary)' }}>
                                     <div style={{ width: 18, height: 18, borderRadius: 4, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
                                         border: sel ? '2px solid var(--accent-primary)' : '2px solid var(--border-secondary)', backgroundColor: sel ? 'var(--accent-primary)' : 'transparent' }}>
-                                        {sel && <span style={{ color: '#fff', fontSize: 11, lineHeight: 1 }}>✓</span>}
+                                        {sel && <span style={{ color: 'var(--surface-white)', fontSize: 11, lineHeight: 1 }}>✓</span>}
                                     </div>
                                     <div style={{ flex: 1, minWidth: 0 }}>
                                         <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>{String(m.type || 'Property').replace(/_/g, ' ')}{m.price ? ` · ${fmtPrice(Number(m.price))}` : ''}</div>
@@ -862,7 +863,7 @@ export function ShareStep({ dealId, onAdvance, onCancel }: { dealId: string; onA
                             );
                         })}
                     </div>
-                    {err && <div style={{ fontSize: '12px', color: '#ef4444' }}>{err}</div>}
+                    {err && <div style={{ fontSize: '12px', color: 'var(--rp-danger-text)' }}>{err}</div>}
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
                         <button type="button" onClick={onAdvance} disabled={sharing} style={{ background: 'none', border: 'none', fontSize: '12px', color: 'var(--text-muted)', cursor: 'pointer', padding: 0 }}>Skip → reminder</button>
                         <ActionRow submitting={sharing} onCancel={onCancel} disabled={selected.size === 0} label={`Share ${selected.size || ''}→ reminder`} onSubmit={share} />
@@ -888,12 +889,12 @@ export function FollowUpReminderStep({ dealId, contactName, onDone, onCancel }: 
     };
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-            <div style={{ padding: '10px 12px', borderRadius: '8px', backgroundColor: 'rgba(59,130,246,0.08)', fontSize: '13px', color: 'var(--text-primary)', lineHeight: 1.5 }}>
+            <div style={{ padding: '10px 12px', borderRadius: '8px', backgroundColor: 'var(--rp-info-wash)', fontSize: '13px', color: 'var(--text-primary)', lineHeight: 1.5 }}>
                 Last step — when will you follow up with {contactName} next? This books your reminder (Google Calendar + Tasks + in-app) and becomes the deal's <strong>Next</strong>.
             </div>
             <Field label="Follow up at *"><input aria-label="Date and time" type="datetime-local" value={remindAt} onChange={e => setRemindAt(e.target.value)} style={inputStyle} /></Field>
             <Field label="Next action (optional)"><textarea rows={2} value={note} onChange={e => setNote(e.target.value)} style={inputStyle} placeholder="e.g. Confirm if they liked the shared options" /></Field>
-            {err && <div style={{ fontSize: '12px', color: '#ef4444' }}>{err}</div>}
+            {err && <div style={{ fontSize: '12px', color: 'var(--rp-danger-text)' }}>{err}</div>}
             <ActionRow submitting={saving} onCancel={onCancel} disabled={!remindAt} label="Finish — set reminder" onSubmit={save} />
         </div>
     );

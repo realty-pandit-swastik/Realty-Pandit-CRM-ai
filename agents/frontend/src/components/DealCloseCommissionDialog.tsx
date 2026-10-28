@@ -225,7 +225,7 @@ const EntryRow: React.FC<RowProps> = ({ entry, agents, partners, onChange, onSea
     const [partnerQuery, setPartnerQuery] = useState('');
 
     return (
-        <div style={{ ...styles.entryRow, borderColor: entry.saved ? 'rgba(34,197,94,0.4)' : 'var(--border-secondary)' }}>
+        <div style={{ ...styles.entryRow, borderColor: entry.saved ? 'var(--rp-success-line)' : 'var(--border-secondary)' }}>
             <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', flexWrap: 'wrap' }}>
                 <select
                     value={entry.partyType}
@@ -334,7 +334,7 @@ const Row: React.FC<{ label: string; value: string; bold?: boolean }> = ({ label
 
 const styles: Record<string, React.CSSProperties> = {
     overlay: {
-        position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.55)',
+        position: 'fixed', inset: 0, backgroundColor: 'var(--rp-overlay-soft)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         zIndex: 100, padding: 16,
     },
@@ -342,7 +342,7 @@ const styles: Record<string, React.CSSProperties> = {
         backgroundColor: 'var(--bg-primary)', borderRadius: 12, padding: 24,
         width: '100%', maxWidth: 620, maxHeight: '90vh', overflowY: 'auto',
         border: '1px solid var(--border-secondary)',
-        boxShadow: '0 12px 40px rgba(0,0,0,0.5)',
+        boxShadow: '0 12px 40px var(--rp-overlay-soft)',
     },
     title: {
         margin: '0 0 8px', fontSize: 18, fontWeight: 700, color: 'var(--text-primary)',
@@ -372,35 +372,35 @@ const styles: Record<string, React.CSSProperties> = {
     },
     addBtn: {
         marginTop: 12, padding: '8px 14px', borderRadius: 8,
-        backgroundColor: 'transparent', color: '#60a5fa',
-        border: '1px dashed #3b82f6', fontSize: 13, fontWeight: 600,
+        backgroundColor: 'transparent', color: 'var(--blue-400)',
+        border: '1px dashed var(--blue-500)', fontSize: 13, fontWeight: 600,
         cursor: 'pointer',
     },
     saveBtn: {
         padding: '6px 12px', borderRadius: 6,
-        backgroundColor: '#3b82f6', color: '#fff', border: 'none',
+        backgroundColor: 'var(--blue-500)', color: 'var(--surface-white)', border: 'none',
         fontSize: 12, fontWeight: 600, cursor: 'pointer',
     },
     removeBtn: {
         padding: '6px 12px', borderRadius: 6,
-        backgroundColor: 'transparent', color: '#fca5a5',
-        border: '1px solid rgba(239,68,68,0.4)',
+        backgroundColor: 'transparent', color: 'var(--rp-danger-text)',
+        border: '1px solid var(--rp-danger-line)',
         fontSize: 12, fontWeight: 600, cursor: 'pointer',
     },
     savedBadge: {
         padding: '6px 12px', borderRadius: 6,
-        backgroundColor: 'rgba(34,197,94,0.1)', color: '#22c55e',
-        border: '1px solid rgba(34,197,94,0.3)',
+        backgroundColor: 'var(--rp-success-wash)', color: 'var(--rp-success-text)',
+        border: '1px solid var(--rp-success-line)',
         fontSize: 12, fontWeight: 600,
     },
     error: {
         marginTop: 6, padding: '6px 10px', borderRadius: 6, fontSize: 12,
-        backgroundColor: 'rgba(239,68,68,0.1)', color: '#fca5a5',
-        border: '1px solid rgba(239,68,68,0.3)',
+        backgroundColor: 'var(--rp-danger-wash)', color: 'var(--rp-danger-text)',
+        border: '1px solid var(--rp-danger-line)',
     },
     primaryBtn: {
         padding: '10px 16px', borderRadius: 8,
-        backgroundColor: '#22c55e', color: '#fff', border: 'none',
+        backgroundColor: 'var(--rp-success-text)', color: 'var(--surface-white)', border: 'none',
         fontSize: 14, fontWeight: 600, cursor: 'pointer',
     },
     secondaryBtn: {

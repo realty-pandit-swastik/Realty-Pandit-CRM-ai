@@ -22,7 +22,7 @@ export default function CloseWonDialog({ open, dealLabel, submitting, onConfirm,
     const invalid = parsed !== undefined && (!isFinite(parsed) || parsed <= 0);
 
     return (
-        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'var(--rp-overlay-soft)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
             onMouseDown={e => { if (e.target === e.currentTarget && !submitting) onClose(); }}>
             <div style={{ backgroundColor: 'var(--bg-primary)', borderRadius: '14px', padding: '24px', width: '420px', maxWidth: '90vw' }}>
                 <div style={{ fontSize: '16px', fontWeight: 700, marginBottom: '4px' }}>✅ Close Deal as Won</div>
@@ -38,7 +38,7 @@ export default function CloseWonDialog({ open, dealLabel, submitting, onConfirm,
                         type="number" inputMode="numeric" autoFocus
                         value={price} onChange={e => setPrice(e.target.value)}
                         placeholder="e.g. 5000000"
-                        style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', fontSize: '14px', border: `1px solid ${invalid ? '#ef4444' : 'var(--border-secondary)'}`, backgroundColor: 'var(--bg-secondary)', color: 'var(--text-primary)', outline: 'none' }}
+                        style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', fontSize: '14px', border: `1px solid ${invalid ? 'var(--rp-danger-text)' : 'var(--border-secondary)'}`, backgroundColor: 'var(--bg-secondary)', color: 'var(--text-primary)', outline: 'none' }}
                     />
                 </div>
                 <p style={{ fontSize: '11px', color: 'var(--text-muted)', margin: '0 0 18px' }}>
@@ -51,7 +51,7 @@ export default function CloseWonDialog({ open, dealLabel, submitting, onConfirm,
                         Cancel
                     </button>
                     <button onClick={() => onConfirm(parsed)} disabled={submitting || invalid}
-                        style={{ flex: 1, padding: '10px', borderRadius: '8px', fontWeight: 700, backgroundColor: (submitting || invalid) ? 'var(--bg-secondary)' : '#22c55e', color: (submitting || invalid) ? 'var(--text-muted)' : '#fff', border: 'none', cursor: (submitting || invalid) ? 'not-allowed' : 'pointer' }}>
+                        style={{ flex: 1, padding: '10px', borderRadius: '8px', fontWeight: 700, backgroundColor: (submitting || invalid) ? 'var(--bg-secondary)' : 'var(--rp-success-text)', color: (submitting || invalid) ? 'var(--text-muted)' : 'var(--surface-white)', border: 'none', cursor: (submitting || invalid) ? 'not-allowed' : 'pointer' }}>
                         {submitting ? 'Saving…' : 'Mark Won'}
                     </button>
                 </div>

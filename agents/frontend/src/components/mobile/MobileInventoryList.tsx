@@ -4,6 +4,7 @@ import { formatInventoryAddress, formatUnitLabel } from '../../lib/address';
 import { getInventory, getTeamMembers, updateInventory, markInventorySold, markInventoryOnHold, rosterForPickers } from '../../api/client';
 import client from '../../api/client';
 import { useAuth } from '../../contexts/AuthContext';
+import { IconText, PresentationIcon } from '../ui/PresentationIcon';
 import { useToast } from '../../contexts/ToastContext';
 import { useConfirm } from '../../contexts/ConfirmContext';
 import ShareToClientModal from '../ShareToClientModal';
@@ -42,9 +43,9 @@ function formatPrice(price: number | null, intent: string): string {
 }
 
 const INTENT_COLORS: Record<string, { bg: string; color: string }> = {
-    sell: { bg: '#4F46E533', color: '#818CF8' },
-    rent: { bg: '#10B98133', color: '#34D399' },
-    lease: { bg: '#F5900B33', color: '#FBBF24' },
+    sell: { bg: 'var(--rp-info-bg)', color: 'var(--rp-info-text)' },
+    rent: { bg: 'var(--rp-info-bg)', color: 'var(--rp-info-text)' },
+    lease: { bg: 'var(--rp-info-bg)', color: 'var(--rp-info-text)' },
 };
 
 export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryListProps) {
@@ -368,9 +369,9 @@ export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryLis
                     <button key={chip.key} onClick={() => { setFilterIntent(chip.key); setPage(1); }}
                         style={{
                             flexShrink: 0, padding: '6px 14px', borderRadius: '20px',
-                            border: filterIntent === chip.key ? '1px solid #4F46E5' : '1px solid var(--border-secondary)',
-                            backgroundColor: filterIntent === chip.key ? '#4F46E5' : 'var(--bg-secondary)',
-                            color: filterIntent === chip.key ? '#fff' : 'var(--text-secondary)',
+                            border: filterIntent === chip.key ? '1px solid var(--blue-600)' : '1px solid var(--border-secondary)',
+                            backgroundColor: filterIntent === chip.key ? 'var(--blue-600)' : 'var(--bg-primary)',
+                            color: filterIntent === chip.key ? 'var(--surface-white)' : 'var(--text-secondary)',
                             fontSize: '13px', fontWeight: 600, cursor: 'pointer',
                         }}>
                         {chip.label}
@@ -381,26 +382,26 @@ export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryLis
                 <button onClick={() => { setFilterBrowseAll(m => !m); setPage(1); }}
                     style={{
                         flexShrink: 0, padding: '6px 14px', borderRadius: '20px',
-                        border: filterBrowseAll ? '1px solid #22c55e' : '1px solid var(--border-secondary)',
-                        backgroundColor: filterBrowseAll ? '#22c55e' : 'var(--bg-secondary)',
-                        color: filterBrowseAll ? '#fff' : 'var(--text-secondary)',
+                        border: filterBrowseAll ? '1px solid var(--rp-success-text)' : '1px solid var(--border-secondary)',
+                        backgroundColor: filterBrowseAll ? 'var(--rp-success-text)' : 'var(--bg-secondary)',
+                        color: filterBrowseAll ? 'var(--surface-white)' : 'var(--text-secondary)',
                         fontSize: '13px', fontWeight: 600, cursor: 'pointer',
                     }}>
-                    🌐 Browse all
+                    Browse all
                 </button>
                 <button onClick={() => setShowFilterSheet(true)}
                     style={{
                         flexShrink: 0, padding: '6px 14px', borderRadius: '20px',
-                        border: activeSheetFilterCount > 0 ? '1px solid #4F46E5' : '1px solid var(--border-secondary)',
-                        backgroundColor: activeSheetFilterCount > 0 ? '#4F46E5' : 'var(--bg-secondary)',
-                        color: activeSheetFilterCount > 0 ? '#fff' : 'var(--text-secondary)',
+                        border: activeSheetFilterCount > 0 ? '1px solid var(--blue-600)' : '1px solid var(--border-secondary)',
+                        backgroundColor: activeSheetFilterCount > 0 ? 'var(--blue-600)' : 'var(--bg-primary)',
+                        color: activeSheetFilterCount > 0 ? 'var(--surface-white)' : 'var(--text-secondary)',
                         fontSize: '13px', fontWeight: 600, cursor: 'pointer',
                     }}>
-                    ⚙ Filters{activeSheetFilterCount > 0 ? ` (${activeSheetFilterCount})` : ''}
+                    <PresentationIcon value="settings" /> Filters{activeSheetFilterCount > 0 ? ` (${activeSheetFilterCount})` : ''}
                     {activeSheetFilterCount > 0 && (
                         <span style={{
                             marginLeft: 6, padding: '1px 7px', borderRadius: 999,
-                            backgroundColor: 'rgba(255,255,255,0.25)', fontWeight: 700, fontSize: '12px',
+                            backgroundColor: 'var(--rp-surface-wash)', fontWeight: 700, fontSize: '12px',
                         }}>
                             {totalCount}
                         </span>
@@ -409,12 +410,12 @@ export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryLis
                 <button onClick={() => { setSelectionMode(p => !p); setSelectedIds(new Set()); }}
                     style={{
                         flexShrink: 0, padding: '6px 14px', borderRadius: '20px',
-                        border: selectionMode ? '1px solid #3b82f6' : '1px solid var(--border-secondary)',
-                        backgroundColor: selectionMode ? 'rgba(59,130,246,0.12)' : 'var(--bg-secondary)',
-                        color: selectionMode ? '#3b82f6' : 'var(--text-secondary)',
+                        border: selectionMode ? '1px solid var(--blue-500)' : '1px solid var(--border-secondary)',
+                        backgroundColor: selectionMode ? 'var(--rp-info-wash)' : 'var(--bg-secondary)',
+                        color: selectionMode ? 'var(--blue-500)' : 'var(--text-secondary)',
                         fontSize: '13px', fontWeight: 600, cursor: 'pointer',
                     }}>
-                    {selectionMode ? `✓ ${selectedIds.size} Selected` : '☐ Select'}
+                    {selectionMode ? `✓ ${selectedIds.size} Selected` : 'Select'}
                 </button>
             </div>
 
@@ -434,7 +435,7 @@ export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryLis
                             return (
                                 <div
                                     key={item.id}
-                                    className="clay-card"
+                                    className="clay-card rp-mobile-property"
                                     onClick={() => selectionMode ? toggleSelect(item.id) : setActiveSheetItem(item)}
                                     style={{
                                         marginBottom: '10px',
@@ -453,12 +454,12 @@ export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryLis
                                             <div
                                                 style={{
                                                     width: '22px', height: '22px', borderRadius: '6px', flexShrink: 0, alignSelf: 'center',
-                                                    border: selectedIds.has(item.id) ? '2px solid #3b82f6' : '2px solid var(--border-secondary)',
-                                                    backgroundColor: selectedIds.has(item.id) ? '#3b82f6' : 'transparent',
+                                                    border: selectedIds.has(item.id) ? '2px solid var(--blue-500)' : '2px solid var(--border-secondary)',
+                                                    backgroundColor: selectedIds.has(item.id) ? 'var(--blue-500)' : 'transparent',
                                                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                                                 }}
                                             >
-                                                {selectedIds.has(item.id) && <span style={{ color: '#fff', fontSize: '14px', lineHeight: 1 }}>✓</span>}
+                                                {selectedIds.has(item.id) && <span style={{ color: 'var(--surface-white)', fontSize: '14px', lineHeight: 1 }}>✓</span>}
                                             </div>
                                         )}
                                         {/* Thumbnail */}
@@ -480,37 +481,40 @@ export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryLis
                                                     {item.intent}
                                                 </span>
                                                 <span style={{
-                                                    backgroundColor: item.status === 'active' ? '#10B98133' : '#EF444433',
-                                                    color: item.status === 'active' ? '#34D399' : '#F87171',
+                                                    backgroundColor: item.status === 'active' ? 'var(--rp-success-bg)' : 'var(--rp-danger-bg)',
+                                                    color: item.status === 'active' ? 'var(--rp-success-text)' : 'var(--rp-danger-text)',
                                                     padding: '2px 8px', borderRadius: '6px', fontSize: '11px', fontWeight: 600,
                                                 }}>
                                                     {item.status}
                                                 </span>
                                                 {relativeAge(item.created_at) && (
                                                     <span style={{ fontSize: '10px', color: 'var(--text-muted)', backgroundColor: 'var(--bg-primary)', padding: '2px 7px', borderRadius: '6px' }} title="Listed">
-                                                        🕐 {relativeAge(item.created_at)}
+                                                        <PresentationIcon value="clock" /> {relativeAge(item.created_at)}
                                                     </span>
                                                 )}
                                                 {item.mine && (
-                                                    <span style={{ fontSize: '10px', fontWeight: 700, color: '#22c55e', backgroundColor: 'rgba(34,197,94,0.15)', padding: '2px 7px', borderRadius: '6px' }} title="You uploaded or are assigned this listing">
-                                                        ⭐ Yours
+                                                    <span style={{ fontSize: '12px', fontWeight: 500, color: 'var(--rp-info-text)', backgroundColor: 'var(--rp-info-bg)', padding: '4px 8px', borderRadius: 'var(--radius-control)' }} title="You uploaded or are assigned this listing">
+                                                        Yours
                                                     </span>
                                                 )}
                                                 {item.needs_owner_fix && (
-                                                    <span style={{ fontSize: '10px', fontWeight: 700, color: '#f59e0b', backgroundColor: 'rgba(245,158,11,0.18)', padding: '2px 7px', borderRadius: '6px' }} title="The owner number is a team member's own number — edit and add the real owner's name & number">
-                                                        ⚠ Add owner
+                                                    <span style={{ fontSize: '12px', fontWeight: 500, color: 'var(--rp-warn-text)', backgroundColor: 'var(--rp-warn-bg)', padding: '4px 8px', borderRadius: 'var(--radius-control)' }} title="The owner number is a team member's own number — edit and add the real owner's name & number">
+                                                        <PresentationIcon value="circle-alert" /> Add owner
                                                     </span>
                                                 )}
                                                 {item.lead_reference?.startsWith('NEEDS_REVIEW') && (
-                                                    <span style={{ fontSize: 10, background: 'rgba(239,68,68,0.15)', color: '#f87171', borderRadius: 4, padding: '2px 6px', fontWeight: 700 }}>Needs Review</span>
+                                                    <span style={{ fontSize: 12, background: 'var(--rp-warn-bg)', color: 'var(--rp-warn-text)', borderRadius: 'var(--radius-control)', padding: '4px 8px', fontWeight: 500 }}>Needs Review</span>
                                                 )}
                                                 {item.roof_rights && (
-                                                    <span style={{ fontSize: 10, background: 'rgba(245,158,11,0.15)', color: '#f59e0b', borderRadius: 4, padding: '2px 6px', fontWeight: 700 }}>🏠 Roof rights</span>
+                                                    <span style={{ fontSize: 12, background: 'var(--rp-info-bg)', color: 'var(--rp-info-text)', borderRadius: 'var(--radius-control)', padding: '4px 8px', fontWeight: 500 }}>Roof rights</span>
                                                 )}
                                             </div>
-                                            <div style={{ fontWeight: 600, fontSize: '13px', color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                            <button type="button" className="rp-lead-name" onClick={e => {
+                                                e.stopPropagation();
+                                                if (selectionMode) toggleSelect(item.id); else setActiveSheetItem(item);
+                                            }} style={{ display: 'block', maxWidth: '100%', fontWeight: 600, fontSize: '15px', color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                                                 {item.taxonomy_node?.name || item.flat_property_type?.name || item.property_type_link?.name || item.type?.replace(/_/g, ' ') || 'Property'}
-                                            </div>
+                                            </button>
                                             <div style={{ fontSize: '11px', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                                 {/* Exact unit first — it is the most specific identifier on the card.
                                                     Absent (or redacted by the API) → '' → nothing renders. (2026-08-08) */}
@@ -523,13 +527,13 @@ export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryLis
                                     </div>
 
                                     {/* Dual Pricing */}
-                                    <div style={{ display: 'flex', gap: '8px', fontSize: '12px', flexWrap: 'wrap', alignItems: 'center' }}>
+                                    <div style={{ display: 'flex', gap: '8px', fontSize: '12px', flexWrap: 'wrap', alignItems: 'center', fontVariantNumeric: 'tabular-nums' }}>
                                         <span style={{ color: 'var(--text-muted)' }}>
                                             Demand: <strong style={{ color: 'var(--text-secondary)' }}>{formatPrice(item.customer_price || item.price, item.intent)}</strong>
                                         </span>
                                         {item.display_price && (
                                             <span style={{ color: 'var(--text-muted)' }}>
-                                                Display: <strong style={{ color: '#4F46E5' }}>{formatPrice(item.display_price, item.intent)}</strong>
+                                                Display: <strong style={{ color: 'var(--text-primary)' }}>{formatPrice(item.display_price, item.intent)}</strong>
                                             </span>
                                         )}
                                         {(() => {
@@ -541,7 +545,7 @@ export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryLis
                                                 return (
                                                     <span style={{
                                                         fontSize: '11px', fontWeight: 600, padding: '1px 5px', borderRadius: '4px',
-                                                        ...(margin > 0 ? { color: '#34d399', backgroundColor: '#34d39920' } : { color: '#f87171', backgroundColor: '#f8717120' })
+                                                        ...(margin > 0 ? { color: 'var(--rp-success-text)', backgroundColor: 'var(--rp-success-bg)' } : { color: 'var(--rp-danger-text)', backgroundColor: 'var(--rp-danger-bg)' })
                                                     }}>
                                                         {margin > 0 ? '+' : ''}{pct}%
                                                     </span>
@@ -559,8 +563,8 @@ export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryLis
                                         return (
                                             <div style={{ display: 'flex', gap: '10px', fontSize: '11px', color: 'var(--text-secondary)', flexWrap: 'wrap' }}>
                                                 {chips.map((c, i) => (
-                                                    <span key={i} style={c.warn ? { color: '#f59e0b', fontWeight: 600 } : undefined}>
-                                                        {c.warn ? '⚠ ' : ''}{c.value}
+                                                    <span key={i} style={c.warn ? { color: 'var(--rp-warn-text)', fontWeight: 600 } : undefined}>
+                                                        {c.warn ? <PresentationIcon value="circle-alert" /> : ''}{c.value}
                                                     </span>
                                                 ))}
                                             </div>
@@ -571,11 +575,11 @@ export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryLis
                                     {item.source && (
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', color: 'var(--text-secondary)', flexWrap: 'wrap' }}>
                                             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                                                {item.source.type === 'DEALER' ? '🤝 Dealer' : item.source.type === 'AGENT_OWNER' ? '👤 Owner (agent)' : '👤 Owner'}
+                                                {item.source.type === 'DEALER' ? 'Dealer' : item.source.type === 'AGENT_OWNER' ? 'Owner (agent)' : 'Owner'}
                                                 {item.source.name ? `: ${item.source.name}` : ''}
                                             </span>
                                             {toDialablePhone(item.source.phone) && (
-                                                <a href={`tel:${toDialablePhone(item.source.phone)}`} onClick={(e) => e.stopPropagation()} title="Call source" style={{ color: '#22c55e', textDecoration: 'none', fontWeight: 700 }}>📞 Call</a>
+                                                <a href={`tel:${toDialablePhone(item.source.phone)}`} onClick={(e) => e.stopPropagation()} title="Call source" style={{ color: 'var(--text-link)', textDecoration: 'none', fontWeight: 600 }}><PresentationIcon value="phone" /> Call</a>
                                             )}
                                         </div>
                                     )}
@@ -583,9 +587,9 @@ export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryLis
                                     {/* Engagement counts — shares / website views / visits (scheduled·visited) */}
                                     {item.stats && (
                                         <div style={{ display: 'flex', gap: '12px', fontSize: '11px', color: 'var(--text-muted)', flexWrap: 'wrap' }}>
-                                            <span title="Times shared with clients">📤 {item.stats.shares}</span>
-                                            <span title="Website views by clients">👁 {item.stats.views}</span>
-                                            <span title="Site visits: scheduled · visited">📅 {item.stats.visits_scheduled}·{item.stats.visits_done}</span>
+                                            <span title="Times shared with clients"><PresentationIcon value="send" /> {item.stats.shares}</span>
+                                            <span title="Website views by clients"><PresentationIcon value="eye" /> {item.stats.views}</span>
+                                            <span title="Site visits: scheduled · visited"><PresentationIcon value="calendar-days" /> {item.stats.visits_scheduled}·{item.stats.visits_done}</span>
                                         </div>
                                     )}
 
@@ -596,12 +600,12 @@ export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryLis
                                             <div style={{
                                                 height: '100%', borderRadius: '2px',
                                                 width: `${item.completion_pct || 0}%`,
-                                                backgroundColor: (item.completion_pct || 0) > 60 ? '#34d399' : (item.completion_pct || 0) > 30 ? '#fbbf24' : '#f87171',
+                                                backgroundColor: (item.completion_pct || 0) > 60 ? 'var(--blue-700)' : (item.completion_pct || 0) > 30 ? 'var(--blue-600)' : 'var(--blue-500)',
                                             }} />
                                         </div>
                                         <span style={{
                                             fontSize: '10px', fontWeight: 700,
-                                            color: (item.completion_pct || 0) > 60 ? '#34d399' : (item.completion_pct || 0) > 30 ? '#fbbf24' : '#f87171',
+                                            color: 'var(--text-secondary)',
                                         }}>
                                             {item.completion_pct || 0}%
                                         </span>
@@ -611,13 +615,13 @@ export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryLis
                                                     href={`tel:${toDialablePhone(item.assigned_agent?.phone || item.uploaded_by_agent?.phone)}`}
                                                     onClick={(e) => e.stopPropagation()}
                                                     title="Call inventory manager"
-                                                    style={{ fontSize: '10px', color: '#38bdf8', textDecoration: 'none', fontWeight: 700 }}
+                                                    style={{ fontSize: '12px', color: 'var(--text-link)', textDecoration: 'none', fontWeight: 600 }}
                                                 >
-                                                    🧑‍💼 {item.assigned_agent?.name || item.uploaded_by_agent?.name} 📞
+                                                    <PresentationIcon value="user-round" /> {item.assigned_agent?.name || item.uploaded_by_agent?.name} <PresentationIcon value="phone" />
                                                 </a>
                                             ) : (
                                                 <span style={{ fontSize: '10px', color: 'var(--text-muted)' }} title="Inventory manager">
-                                                    🧑‍💼 {item.assigned_agent?.name || item.uploaded_by_agent?.name}
+                                                    <PresentationIcon value="user-round" /> {item.assigned_agent?.name || item.uploaded_by_agent?.name}
                                                 </span>
                                             )
                                         )}
@@ -646,13 +650,13 @@ export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryLis
 
             {/* FAB — Add Property (hidden in selection mode to avoid overlapping the action bar) */}
             {!selectionMode && hasPermission('edit_inventory') && (
-                <button type="button" onClick={onAddNew}
+                <button type="button" onClick={onAddNew} aria-label="Add Property"
                     style={{
                         position: 'absolute', bottom: '16px', right: '16px',
                         width: '56px', height: '56px', borderRadius: '28px',
-                        backgroundColor: '#4F46E5', color: '#fff', border: 'none',
+                        backgroundColor: 'var(--blue-600)', color: 'var(--surface-white)', border: 'none',
                         fontSize: '28px', fontWeight: 700, cursor: 'pointer',
-                        boxShadow: '0 4px 16px rgba(79,70,229,0.4)',
+                        boxShadow: 'var(--rp-shadow-far)',
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
                     }}>
                     +
@@ -666,7 +670,7 @@ export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryLis
                 <BookVisitModal item={bookVisitItem} onClose={() => setBookVisitItem(null)} onBooked={() => setBookVisitItem(null)} />
             )}
             {soldItem && (
-                <div style={{position:'fixed', inset:0, background:'rgba(0,0,0,0.6)', zIndex:2000, display:'flex', alignItems:'flex-end', justifyContent:'center'}} onClick={e => e.target === e.currentTarget && setSoldItem(null)}>
+                <div style={{position:'fixed', inset:0, background:'var(--rp-overlay-soft)', zIndex:2000, display:'flex', alignItems:'flex-end', justifyContent:'center'}} onClick={e => e.target === e.currentTarget && setSoldItem(null)}>
                     <div style={{background:'var(--bg-secondary)', borderRadius:'16px 16px 0 0', width:'100%', maxWidth:'520px', padding:'20px 18px 28px', boxSizing:'border-box'}}>
                         <h3 style={{ margin:'0 0 6px', fontSize:'18px', color:'var(--text-primary)' }}>Mark Sold</h3>
                         <p style={{ color:'var(--text-secondary)', fontSize:'13px', margin:'0 0 14px' }}>Moves this listing to Sold. Optionally record the buyer.</p>
@@ -675,13 +679,13 @@ export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryLis
                         <input value={soldPrice} onChange={e => setSoldPrice(e.target.value)} placeholder="Final price (optional)" style={{width:'100%', padding:'10px 12px', borderRadius:'10px', border:'1px solid var(--border-secondary)', backgroundColor:'var(--bg-primary)', color:'var(--text-primary)', fontSize:'15px', boxSizing:'border-box', marginBottom:'10px'}} />
                         <div style={{ display:'flex', gap:'10px', marginTop:'6px' }}>
                             <button onClick={() => setSoldItem(null)} style={{flex:1, padding:'12px', borderRadius:'10px', fontSize:'15px', fontWeight:700, cursor:'pointer', border:'none', background:'var(--border-secondary)', color:'var(--text-secondary)' }}>Cancel</button>
-                            <button disabled={statusBusy} onClick={async () => { setStatusBusy(true); try { await markInventorySold(soldItem.id, { new_owner_phone: soldPhone.trim() || undefined, new_owner_name: soldName.trim() || undefined, final_price: soldPrice.trim() || undefined }); setSoldItem(null); loadData(); showToast('Marked sold', 'success'); } catch (err: any) { showToast(err.response?.data?.error || 'Failed', 'error'); } finally { setStatusBusy(false); } }} style={{flex:1, padding:'12px', borderRadius:'10px', fontSize:'15px', fontWeight:700, cursor:'pointer', border:'none', background:'#16a34a', color:'#fff', opacity: statusBusy ? 0.6 : 1 }}>{statusBusy ? 'Saving…' : 'Confirm Sold'}</button>
+                            <button disabled={statusBusy} onClick={async () => { setStatusBusy(true); try { await markInventorySold(soldItem.id, { new_owner_phone: soldPhone.trim() || undefined, new_owner_name: soldName.trim() || undefined, final_price: soldPrice.trim() || undefined }); setSoldItem(null); loadData(); showToast('Marked sold', 'success'); } catch (err: any) { showToast(err.response?.data?.error || 'Failed', 'error'); } finally { setStatusBusy(false); } }} style={{flex:1, padding:'12px', borderRadius:'10px', fontSize:'15px', fontWeight:700, cursor:'pointer', border:'none', background:'var(--rp-success-text)', color:'var(--surface-white)', opacity: statusBusy ? 0.6 : 1 }}>{statusBusy ? 'Saving…' : 'Confirm Sold'}</button>
                         </div>
                     </div>
                 </div>
             )}
             {holdItem && (
-                <div style={{position:'fixed', inset:0, background:'rgba(0,0,0,0.6)', zIndex:2000, display:'flex', alignItems:'flex-end', justifyContent:'center'}} onClick={e => e.target === e.currentTarget && setHoldItem(null)}>
+                <div style={{position:'fixed', inset:0, background:'var(--rp-overlay-soft)', zIndex:2000, display:'flex', alignItems:'flex-end', justifyContent:'center'}} onClick={e => e.target === e.currentTarget && setHoldItem(null)}>
                     <div style={{background:'var(--bg-secondary)', borderRadius:'16px 16px 0 0', width:'100%', maxWidth:'520px', padding:'20px 18px 28px', boxSizing:'border-box'}}>
                         <h3 style={{ margin:'0 0 6px', fontSize:'18px', color:'var(--text-primary)' }}>Put On Hold</h3>
                         <p style={{ color:'var(--text-secondary)', fontSize:'13px', margin:'0 0 14px' }}>Sets On Hold + creates a follow-up task for the listing agent.</p>
@@ -690,7 +694,7 @@ export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryLis
                         <input value={holdNote} onChange={e => setHoldNote(e.target.value)} placeholder="Note (optional)" style={{width:'100%', padding:'10px 12px', borderRadius:'10px', border:'1px solid var(--border-secondary)', backgroundColor:'var(--bg-primary)', color:'var(--text-primary)', fontSize:'15px', boxSizing:'border-box', marginBottom:'10px'}} />
                         <div style={{ display:'flex', gap:'10px', marginTop:'6px' }}>
                             <button onClick={() => setHoldItem(null)} style={{flex:1, padding:'12px', borderRadius:'10px', fontSize:'15px', fontWeight:700, cursor:'pointer', border:'none', background:'var(--border-secondary)', color:'var(--text-secondary)' }}>Cancel</button>
-                            <button disabled={statusBusy || !holdWhen} onClick={async () => { setStatusBusy(true); try { await markInventoryOnHold(holdItem.id, { follow_up_at: holdWhen, note: holdNote.trim() || undefined }); setHoldItem(null); loadData(); showToast('On hold — follow-up task created', 'success'); } catch (err: any) { showToast(err.response?.data?.error || 'Failed', 'error'); } finally { setStatusBusy(false); } }} style={{flex:1, padding:'12px', borderRadius:'10px', fontSize:'15px', fontWeight:700, cursor:'pointer', border:'none', background:'#f59e0b', color:'#fff', opacity: (statusBusy || !holdWhen) ? 0.6 : 1 }}>{statusBusy ? 'Saving…' : 'Confirm Hold'}</button>
+                            <button disabled={statusBusy || !holdWhen} onClick={async () => { setStatusBusy(true); try { await markInventoryOnHold(holdItem.id, { follow_up_at: holdWhen, note: holdNote.trim() || undefined }); setHoldItem(null); loadData(); showToast('On hold — follow-up task created', 'success'); } catch (err: any) { showToast(err.response?.data?.error || 'Failed', 'error'); } finally { setStatusBusy(false); } }} style={{flex:1, padding:'12px', borderRadius:'10px', fontSize:'15px', fontWeight:700, cursor:'pointer', border:'none', background:'var(--rp-warn-text)', color:'var(--surface-white)', opacity: (statusBusy || !holdWhen) ? 0.6 : 1 }}>{statusBusy ? 'Saving…' : 'Confirm Hold'}</button>
                         </div>
                     </div>
                 </div>
@@ -712,7 +716,7 @@ export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryLis
                     position: 'fixed', bottom: 0, left: 0, right: 0,
                     backgroundColor: 'var(--bg-primary)', borderTop: '1px solid var(--border-secondary)',
                     padding: '12px 16px', display: 'flex', alignItems: 'center', gap: '10px',
-                    boxShadow: '0 -4px 24px rgba(0,0,0,0.2)', zIndex: 1000,
+                    boxShadow: '0 -4px 24px var(--rp-shadow-tint)', zIndex: 1000,
                 }}>
                     <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)', flex: 1 }}>
                         {selectedIds.size} propert{selectedIds.size === 1 ? 'y' : 'ies'} selected
@@ -720,13 +724,13 @@ export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryLis
                     <button
                         type="button"
                         onClick={() => { setShowBatchShareModal(true); setBatchShareResults([]); setBatchShareContact(null); setBatchContactSearch(''); }}
-                        style={{ padding: '10px 18px', borderRadius: '8px', fontSize: '14px', fontWeight: 700, cursor: 'pointer', backgroundColor: '#25d366', border: 'none', color: '#fff' }}
-                    >📲 Share</button>
+                        style={{ padding: '10px 18px', borderRadius: '8px', fontSize: '14px', fontWeight: 700, cursor: 'pointer', backgroundColor: 'var(--rp-success-text)', border: 'none', color: 'var(--surface-white)' }}
+                    >Share</button>
                     <button
                         type="button"
                         onClick={() => { setShowReassignModal(true); setReassignTarget(''); setReassignMsg(''); }}
-                        style={{ padding: '10px 16px', borderRadius: '8px', fontSize: '14px', fontWeight: 700, cursor: 'pointer', backgroundColor: '#8b5cf6', border: 'none', color: '#fff' }}
-                    >🔄 Reassign</button>
+                        style={{ padding: '10px 16px', borderRadius: '8px', fontSize: '14px', fontWeight: 700, cursor: 'pointer', backgroundColor: 'var(--chart-5)', border: 'none', color: 'var(--surface-white)' }}
+                    >Reassign</button>
                     <button
                         type="button"
                         onClick={() => { setSelectedIds(new Set()); setSelectionMode(false); }}
@@ -739,13 +743,13 @@ export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryLis
             {showReassignModal && (
                 <div style={{ position: 'fixed', inset: 0, backgroundColor: 'var(--sheet-backdrop)', zIndex: 2100 }}
                     onClick={() => { if (!reassigning) setShowReassignModal(false); }}>
-                    <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: 'var(--bg-secondary)', borderRadius: '20px 20px 0 0', padding: '0 0 32px', boxShadow: '0 -8px 40px rgba(0,0,0,0.25)', animation: 'slide-up-in 250ms cubic-bezier(0.34,1.2,0.64,1) forwards' }}
+                    <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: 'var(--bg-secondary)', borderRadius: '20px 20px 0 0', padding: '0 0 32px', boxShadow: '0 -8px 40px var(--rp-shadow-tint)', animation: 'slide-up-in 250ms cubic-bezier(0.34,1.2,0.64,1) forwards' }}
                         onClick={e => e.stopPropagation()}>
                         <div style={{ display: 'flex', justifyContent: 'center', padding: '12px 0 8px' }}>
                             <div style={{ width: '40px', height: '4px', borderRadius: '2px', backgroundColor: 'var(--border-secondary)' }} />
                         </div>
                         <div style={{ padding: '0 20px 8px', fontSize: '16px', fontWeight: 700, color: 'var(--text-primary)' }}>
-                            🔄 Reassign {selectedIds.size} listing{selectedIds.size === 1 ? '' : 's'}
+                            Reassign {selectedIds.size} listing{selectedIds.size === 1 ? '' : 's'}
                         </div>
                         <div style={{ padding: '0 20px 16px', fontSize: '12px', color: 'var(--text-muted)' }}>
                             Transfer the selected propert{selectedIds.size === 1 ? 'y' : 'ies'} to another team member — they become the assigned agent.
@@ -756,7 +760,7 @@ export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryLis
                                 <option value="">Select an agent…</option>
                                 {agentsList.map((a: any) => <option key={a.id} value={a.id}>{a.name}{a.role ? ` (${a.role})` : ''}</option>)}
                             </select>
-                            {reassignMsg && <div style={{ fontSize: '12px', color: reassignMsg.startsWith('✅') ? '#22c55e' : '#ef4444', marginBottom: '12px' }}>{reassignMsg}</div>}
+                            {reassignMsg && <div style={{ fontSize: '12px', color: reassignMsg.startsWith('✅') ? 'var(--rp-success-text)' : 'var(--rp-danger-text)', marginBottom: '12px' }}><IconText>{reassignMsg}</IconText></div>}
                             <button type="button" disabled={reassigning || !reassignTarget}
                                 onClick={async () => {
                                     if (!reassignTarget) return;
@@ -771,7 +775,7 @@ export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryLis
                                         setReassignMsg(`❌ ${err?.response?.data?.error || 'Reassign failed'}`);
                                     } finally { setReassigning(false); }
                                 }}
-                                style={{ width: '100%', padding: '14px', borderRadius: '10px', fontWeight: 700, fontSize: '15px', backgroundColor: '#8b5cf6', color: '#fff', border: 'none', cursor: reassignTarget ? 'pointer' : 'not-allowed', opacity: reassignTarget && !reassigning ? 1 : 0.5 }}>
+                                style={{ width: '100%', padding: '14px', borderRadius: '10px', fontWeight: 700, fontSize: '15px', backgroundColor: 'var(--chart-5)', color: 'var(--surface-white)', border: 'none', cursor: reassignTarget ? 'pointer' : 'not-allowed', opacity: reassignTarget && !reassigning ? 1 : 0.5 }}>
                                 {reassigning ? 'Reassigning…' : 'Confirm reassign'}
                             </button>
                         </div>
@@ -790,7 +794,7 @@ export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryLis
                             position: 'absolute', bottom: 0, left: 0, right: 0,
                             backgroundColor: 'var(--bg-secondary)', borderRadius: '20px 20px 0 0',
                             maxHeight: '85vh', overflowY: 'auto', padding: '0 0 32px',
-                            boxShadow: '0 -8px 40px rgba(0,0,0,0.25)',
+                            boxShadow: '0 -8px 40px var(--rp-shadow-tint)',
                             animation: 'slide-up-in 250ms cubic-bezier(0.34,1.2,0.64,1) forwards',
                         }}
                         onClick={e => e.stopPropagation()}
@@ -799,7 +803,7 @@ export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryLis
                             <div style={{ width: '40px', height: '4px', borderRadius: '2px', backgroundColor: 'var(--border-secondary)' }} />
                         </div>
                         <div style={{ padding: '0 20px 16px', fontSize: '16px', fontWeight: 700, color: 'var(--text-primary)' }}>
-                            📲 Share {selectedIds.size} Propert{selectedIds.size === 1 ? 'y' : 'ies'} via WhatsApp
+                            Share {selectedIds.size} Propert{selectedIds.size === 1 ? 'y' : 'ies'} via WhatsApp
                         </div>
                         <div style={{ padding: '0 20px' }}>
                             {batchShareResults.length > 0 ? (
@@ -807,36 +811,36 @@ export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryLis
                                     {batchShareResults.map(r => (
                                         <div key={r.id} style={{ display: 'flex', gap: '10px', padding: '8px 0', borderBottom: '1px solid var(--border-secondary)', alignItems: 'flex-start' }}>
                                             <span style={{ fontSize: '16px' }}>
-                                                {r.status === 'sent' ? '✅' : r.status === 'already_shared' ? '⚠️' : '❌'}
+                                                <PresentationIcon value={r.status === 'sent' ? 'check-circle' : 'circle-alert'} />
                                             </span>
                                             <div>
                                                 <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>{r.title}</div>
-                                                <div style={{ fontSize: '11px', color: r.status === 'already_shared' ? '#f59e0b' : r.status === 'error' ? '#ef4444' : '#22c55e' }}>{r.message}</div>
+                                                <div style={{ fontSize: '11px', color: r.status === 'already_shared' ? 'var(--rp-warn-text)' : r.status === 'error' ? 'var(--rp-danger-text)' : 'var(--rp-success-text)' }}>{r.message}</div>
                                             </div>
                                         </div>
                                     ))}
                                     {batchShareResults.some(r => r.link) && (
-                                        <div style={{ marginTop: '16px', padding: '12px', borderRadius: '10px', backgroundColor: 'rgba(37,211,102,0.08)', border: '1px solid rgba(37,211,102,0.3)' }}>
+                                        <div style={{ marginTop: '16px', padding: '12px', borderRadius: '10px', backgroundColor: 'var(--rp-success-wash)', border: '1px solid var(--rp-success-line)' }}>
                                             <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '8px' }}>
                                                 Want to follow up personally? Share it yourself too — {batchShareMode === 'dealer' ? 'PDF is unbranded for partners' : 'branded PDF for clients'}.
                                             </div>
                                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px' }}>
                                                 <button type="button" onClick={handleOwnWhatsAppShare}
-                                                    style={{ padding: '11px 6px', borderRadius: '10px', fontWeight: 700, fontSize: '12px', backgroundColor: '#128c7e', color: '#fff', border: 'none', cursor: 'pointer' }}
-                                                >📱 My WhatsApp</button>
+                                                    style={{ padding: '11px 6px', borderRadius: '10px', fontWeight: 700, fontSize: '12px', backgroundColor: 'var(--rp-success-text)', color: 'var(--surface-white)', border: 'none', cursor: 'pointer' }}
+                                                >My WhatsApp</button>
                                                 <button type="button" onClick={handlePostSharePdf} disabled={postPdfBusy}
-                                                    style={{ padding: '11px 6px', borderRadius: '10px', fontWeight: 700, fontSize: '12px', backgroundColor: '#ef4444', color: '#fff', border: 'none', cursor: postPdfBusy ? 'wait' : 'pointer', opacity: postPdfBusy ? 0.7 : 1 }}
-                                                >📄 {postPdfBusy ? '…' : 'PDF'}</button>
+                                                    style={{ padding: '11px 6px', borderRadius: '10px', fontWeight: 700, fontSize: '12px', backgroundColor: 'var(--rp-danger-text)', color: 'var(--surface-white)', border: 'none', cursor: postPdfBusy ? 'wait' : 'pointer', opacity: postPdfBusy ? 0.7 : 1 }}
+                                                >{postPdfBusy ? '…' : 'PDF'}</button>
                                                 <button type="button" onClick={handlePostShareLink}
-                                                    style={{ padding: '11px 6px', borderRadius: '10px', fontWeight: 700, fontSize: '12px', backgroundColor: '#3b82f6', color: '#fff', border: 'none', cursor: 'pointer' }}
-                                                >🔗 {postLinkCopied ? 'Copied' : 'Link'}</button>
+                                                    style={{ padding: '11px 6px', borderRadius: '10px', fontWeight: 700, fontSize: '12px', backgroundColor: 'var(--blue-500)', color: 'var(--surface-white)', border: 'none', cursor: 'pointer' }}
+                                                >{postLinkCopied ? 'Copied' : 'Link'}</button>
                                             </div>
                                         </div>
                                     )}
                                     <button
                                         type="button"
                                         onClick={() => { setShowBatchShareModal(false); setSelectionMode(false); setSelectedIds(new Set()); setBatchShareResults([]); setBatchShareMode(null); }}
-                                        style={{ marginTop: '16px', width: '100%', padding: '12px', borderRadius: '10px', fontWeight: 700, backgroundColor: '#3b82f6', color: '#fff', border: 'none', cursor: 'pointer' }}
+                                        style={{ marginTop: '16px', width: '100%', padding: '12px', borderRadius: '10px', fontWeight: 700, backgroundColor: 'var(--blue-500)', color: 'var(--surface-white)', border: 'none', cursor: 'pointer' }}
                                     >Done</button>
                                 </div>
                             ) : !batchShareContact ? (
@@ -857,7 +861,7 @@ export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryLis
                                             onClick={() => { setBatchShareContact(c); setBatchContactSearch(''); setBatchContactResults([]); }}
                                             style={{ padding: '12px', borderRadius: '8px', cursor: 'pointer', margin: '6px 0', backgroundColor: 'var(--bg-primary)', display: 'flex', gap: '10px', alignItems: 'center' }}
                                         >
-                                            <div style={{ width: '36px', height: '36px', borderRadius: '50%', backgroundColor: 'rgba(59,130,246,0.12)', color: '#3b82f6', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '14px', flexShrink: 0 }}>
+                                            <div style={{ width: '36px', height: '36px', borderRadius: '50%', backgroundColor: 'var(--rp-info-wash)', color: 'var(--blue-500)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '14px', flexShrink: 0 }}>
                                                 {(c.name || c.phone_number)[0].toUpperCase()}
                                             </div>
                                             <div>
@@ -867,12 +871,12 @@ export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryLis
                                         </div>
                                     ))}
                                     {!batchContactSearching && batchContactResults.length === 0 && isPhoneish(batchContactSearch) && (
-                                        <div style={{ marginTop: '12px', padding: '12px', borderRadius: '10px', backgroundColor: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.35)' }}>
-                                            <div style={{ fontSize: '13px', color: '#b45309', fontWeight: 600, marginBottom: '8px' }}>📵 Not in our database — add as a new lead?</div>
+                                        <div style={{ marginTop: '12px', padding: '12px', borderRadius: '10px', backgroundColor: 'var(--rp-danger-wash)', border: '1px solid var(--rp-danger-line)' }}>
+                                            <div style={{ fontSize: '13px', color: 'var(--rp-warn-text)', fontWeight: 600, marginBottom: '8px' }}>Not in our database — add as a new lead?</div>
                                             <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
                                                 {(['direct', 'partner'] as const).map(r => (
                                                     <button key={r} type="button" onClick={() => setAddLeadRole(r)}
-                                                        style={{ flex: 1, padding: '10px', borderRadius: '8px', fontSize: '13px', fontWeight: 700, cursor: 'pointer', border: addLeadRole === r ? '2px solid #3b82f6' : '1px solid var(--border-secondary)', backgroundColor: addLeadRole === r ? 'rgba(59,130,246,0.1)' : 'transparent', color: 'var(--text-primary)' }}>
+                                                        style={{ flex: 1, padding: '10px', borderRadius: '8px', fontSize: '13px', fontWeight: 700, cursor: 'pointer', border: addLeadRole === r ? '2px solid var(--blue-500)' : '1px solid var(--border-secondary)', backgroundColor: addLeadRole === r ? 'var(--rp-info-wash)' : 'transparent', color: 'var(--text-primary)' }}>
                                                         {r === 'direct' ? 'Direct client' : 'Partner agent'}
                                                     </button>
                                                 ))}
@@ -889,16 +893,16 @@ export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryLis
                                                 })}
                                             </select>
                                             <button type="button" onClick={handleAddLead} disabled={addLeadLoading}
-                                                style={{ width: '100%', padding: '12px', borderRadius: '8px', fontWeight: 700, fontSize: '14px', backgroundColor: '#f59e0b', color: '#fff', border: 'none', cursor: addLeadLoading ? 'not-allowed' : 'pointer', opacity: addLeadLoading ? 0.7 : 1 }}>
-                                                {addLeadLoading ? 'Adding…' : `➕ Add as ${addLeadRole === 'direct' ? 'direct client' : 'partner agent'} & continue`}
+                                                style={{ width: '100%', padding: '12px', borderRadius: '8px', fontWeight: 700, fontSize: '14px', backgroundColor: 'var(--rp-warn-text)', color: 'var(--surface-white)', border: 'none', cursor: addLeadLoading ? 'not-allowed' : 'pointer', opacity: addLeadLoading ? 0.7 : 1 }}>
+                                                {addLeadLoading ? 'Adding…' : `Add as ${addLeadRole === 'direct' ? 'direct client' : 'partner agent'} & continue`}
                                             </button>
                                         </div>
                                     )}
                                 </div>
                             ) : (
                                 <div>
-                                    <div style={{ padding: '12px', borderRadius: '10px', backgroundColor: 'rgba(37,211,102,0.08)', border: '1px solid rgba(37,211,102,0.3)', marginBottom: '16px' }}>
-                                        <div style={{ fontSize: '12px', color: '#25d366', fontWeight: 600, marginBottom: '4px' }}>Sending to:</div>
+                                    <div style={{ padding: '12px', borderRadius: '10px', backgroundColor: 'var(--rp-success-wash)', border: '1px solid var(--rp-success-line)', marginBottom: '16px' }}>
+                                        <div style={{ fontSize: '12px', color: 'var(--rp-success-text)', fontWeight: 600, marginBottom: '4px' }}>Sending to:</div>
                                         <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-primary)' }}>{batchShareContact.name || batchShareContact.phone_number}</div>
                                         <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{batchShareContact.phone_number}</div>
                                         <button type="button" onClick={() => setBatchShareContact(null)} style={{ marginTop: '8px', fontSize: '11px', color: 'var(--text-muted)', background: 'none', border: 'none', cursor: 'pointer' }}>Change contact</button>
@@ -911,8 +915,8 @@ export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryLis
                                         type="button"
                                         onClick={handleBatchShare}
                                         disabled={batchShareLoading}
-                                        style={{ width: '100%', padding: '14px', borderRadius: '10px', fontWeight: 700, fontSize: '15px', backgroundColor: '#25d366', color: '#fff', border: 'none', cursor: batchShareLoading ? 'not-allowed' : 'pointer', opacity: batchShareLoading ? 0.7 : 1 }}
-                                    >{batchShareLoading ? 'Sending...' : '📲 Send via WhatsApp'}</button>
+                                        style={{ width: '100%', padding: '14px', borderRadius: '10px', fontWeight: 700, fontSize: '15px', backgroundColor: 'var(--rp-success-text)', color: 'var(--surface-white)', border: 'none', cursor: batchShareLoading ? 'not-allowed' : 'pointer', opacity: batchShareLoading ? 0.7 : 1 }}
+                                    >{batchShareLoading ? 'Sending...' : 'Send via WhatsApp'}</button>
                                 </div>
                             )}
                         </div>
@@ -932,7 +936,7 @@ export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryLis
                             backgroundColor: 'var(--bg-secondary)',
                             borderRadius: '20px 20px 0 0',
                             padding: '12px 0 32px',
-                            boxShadow: '0 -8px 40px rgba(0,0,0,0.25)',
+                            boxShadow: '0 -8px 40px var(--rp-shadow-tint)',
                             animation: 'slide-up-in 250ms cubic-bezier(0.34,1.2,0.64,1) forwards',
                         }}
                         onClick={e => e.stopPropagation()}
@@ -993,7 +997,7 @@ export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryLis
                             onClick={() => { setViewItem(activeSheetItem); setActiveSheetItem(null); }}
                             style={{ display: 'block', width: '100%', padding: '16px 24px', backgroundColor: 'transparent', border: 'none', borderBottom: '1px solid var(--border-primary)', color: 'var(--text-primary)', fontSize: '15px', textAlign: 'left', cursor: 'pointer', fontWeight: 500 }}
                         >
-                            👁 View Details
+                            View Details
                         </button>
 
                         {/* Share Listing */}
@@ -1002,7 +1006,7 @@ export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryLis
                             onClick={() => { setSelectedIds(new Set([activeSheetItem.id])); setShowBatchShareModal(true); setBatchShareResults([]); setBatchShareContact(null); setBatchContactSearch(''); setActiveSheetItem(null); }}
                             style={{ display: 'block', width: '100%', padding: '16px 24px', backgroundColor: 'transparent', border: 'none', borderBottom: '1px solid var(--border-primary)', color: 'var(--text-primary)', fontSize: '15px', textAlign: 'left', cursor: 'pointer', fontWeight: 500 }}
                         >
-                            📤 Share Listing
+                            Share Listing
                         </button>
 
                         {/* Match Clients (moved off the tile, 2026-06-19 — fixes the tap-bubbles-to-sheet bug) */}
@@ -1011,7 +1015,7 @@ export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryLis
                             onClick={() => { setMatchInvId(activeSheetItem.id); setActiveSheetItem(null); }}
                             style={{ display: 'block', width: '100%', padding: '16px 24px', backgroundColor: 'transparent', border: 'none', borderBottom: '1px solid var(--border-primary)', color: 'var(--text-primary)', fontSize: '15px', textAlign: 'left', cursor: 'pointer', fontWeight: 500 }}
                         >
-                            🔍 Match Clients
+                            Match Clients
                         </button>
 
                         {/* Schedule Visit */}
@@ -1020,7 +1024,7 @@ export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryLis
                             onClick={() => { setBookVisitItem(activeSheetItem); setActiveSheetItem(null); }}
                             style={{ display: 'block', width: '100%', padding: '16px 24px', backgroundColor: 'transparent', border: 'none', borderBottom: '1px solid var(--border-primary)', color: 'var(--text-primary)', fontSize: '15px', textAlign: 'left', cursor: 'pointer', fontWeight: 500 }}
                         >
-                            📍 Schedule Visit
+                            Schedule Visit
                         </button>
 
                         {/* Edit — only the assigned inventory manager + super_boss (point 3) */}
@@ -1030,7 +1034,7 @@ export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryLis
                                 onClick={() => { onEditItem(activeSheetItem); setActiveSheetItem(null); }}
                                 style={{ display: 'block', width: '100%', padding: '16px 24px', backgroundColor: 'transparent', border: 'none', borderBottom: '1px solid var(--border-primary)', color: 'var(--text-primary)', fontSize: '15px', textAlign: 'left', cursor: 'pointer', fontWeight: 500 }}
                             >
-                                ✏️ Edit Property
+                                Edit Property
                             </button>
                         )}
 
@@ -1038,9 +1042,9 @@ export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryLis
                         {hasPermission('edit_inventory') && activeSheetItem.can_edit && activeSheetItem.status !== 'sold' && (
                             <>
                                 <button type="button" onClick={() => { setSoldName(''); setSoldPhone(''); setSoldPrice(''); setSoldItem(activeSheetItem); setActiveSheetItem(null); }}
-                                    style={{ display:'block', width:'100%', padding:'16px 24px', background:'transparent', border:'none', borderBottom:'1px solid var(--border-primary)', color:'#16a34a', fontSize:'15px', textAlign:'left', cursor:'pointer', fontWeight:600 }}>\u2705 Mark Sold</button>
+                                    style={{ display:'block', width:'100%', padding:'16px 24px', background:'transparent', border:'none', borderBottom:'1px solid var(--border-primary)', color:'var(--rp-success-text)', fontSize:'15px', textAlign:'left', cursor:'pointer', fontWeight:600 }}>\u2705 Mark Sold</button>
                                 <button type="button" onClick={() => { setHoldWhen(plus24hLocal()); setHoldNote(''); setHoldItem(activeSheetItem); setActiveSheetItem(null); }}
-                                    style={{ display:'block', width:'100%', padding:'16px 24px', background:'transparent', border:'none', borderBottom:'1px solid var(--border-primary)', color:'#f59e0b', fontSize:'15px', textAlign:'left', cursor:'pointer', fontWeight:600 }}>\u23f8\ufe0f {activeSheetItem.status === 'on_hold' ? 'On Hold (update)' : 'Put On Hold'}</button>
+                                    style={{ display:'block', width:'100%', padding:'16px 24px', background:'transparent', border:'none', borderBottom:'1px solid var(--border-primary)', color:'var(--rp-warn-text)', fontSize:'15px', textAlign:'left', cursor:'pointer', fontWeight:600 }}>\u23f8\ufe0f {activeSheetItem.status === 'on_hold' ? 'On Hold (update)' : 'Put On Hold'}</button>
                             </>
                         )}
 
@@ -1060,9 +1064,9 @@ export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryLis
                                         showToast(err.response?.data?.error || 'Failed', 'error');
                                     }
                                 }}
-                                style={{ display: 'block', width: '100%', padding: '16px 24px', backgroundColor: 'transparent', border: 'none', color: '#ef4444', fontSize: '15px', textAlign: 'left', cursor: 'pointer', fontWeight: 500 }}
+                                style={{ display: 'block', width: '100%', padding: '16px 24px', backgroundColor: 'transparent', border: 'none', color: 'var(--rp-danger-text)', fontSize: '15px', textAlign: 'left', cursor: 'pointer', fontWeight: 500 }}
                             >
-                                🚫 {activeSheetItem.status === 'active' ? 'Deactivate' : 'Activate'}
+                                {activeSheetItem.status === 'active' ? 'Deactivate' : 'Activate'}
                             </button>
                         )}
                     </div>
@@ -1083,7 +1087,7 @@ export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryLis
                             maxHeight: '85vh', overflowY: 'auto',
                             WebkitOverflowScrolling: 'touch',
                             padding: '0 0 32px',
-                            boxShadow: '0 -8px 40px rgba(0,0,0,0.25)',
+                            boxShadow: '0 -8px 40px var(--rp-shadow-tint)',
                             animation: 'slide-up-in 250ms cubic-bezier(0.34,1.2,0.64,1) forwards',
                         }}
                         onClick={e => e.stopPropagation()}
@@ -1259,7 +1263,7 @@ export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryLis
                         <div style={{ padding: '16px 20px 0' }}>
                             <button type="button"
                                 onClick={() => setShowFilterSheet(false)}
-                                style={{ width: '100%', padding: '14px', borderRadius: '12px', border: 'none', backgroundColor: 'var(--text-link)', color: '#fff', fontWeight: 700, fontSize: '15px', cursor: 'pointer' }}
+                                style={{ width: '100%', padding: '14px', borderRadius: '12px', border: 'none', backgroundColor: 'var(--text-link)', color: 'var(--surface-white)', fontWeight: 700, fontSize: '15px', cursor: 'pointer' }}
                             >
                                 Apply Filters{activeSheetFilterCount > 0 ? ` (${activeSheetFilterCount} active)` : ''}
                             </button>

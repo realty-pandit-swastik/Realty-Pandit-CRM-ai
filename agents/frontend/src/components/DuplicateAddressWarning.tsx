@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { PresentationIcon } from './ui/PresentationIcon';
 import { getInventory } from '../api/client';
 import type { AddressValue } from './AddressFields';
 
@@ -56,7 +57,7 @@ export default function DuplicateAddressWarning({ value }: { value: AddressValue
     return (
         <div style={hintWarn}>
             <div style={{ fontWeight: 700, marginBottom: 4 }}>
-                ⚠️ {matches.length} similar propert{matches.length === 1 ? 'y' : 'ies'} already in inventory
+                <PresentationIcon value="circle-alert" /> {matches.length} similar propert{matches.length === 1 ? 'y' : 'ies'} already in inventory
             </div>
             {matches.map(m => (
                 <div key={m.id} style={{ fontSize: 12, padding: '2px 0' }}>
@@ -71,5 +72,5 @@ export default function DuplicateAddressWarning({ value }: { value: AddressValue
 }
 
 const hintMuted = { fontSize: 12, color: 'var(--text-muted)', padding: '6px 2px' } as const;
-const hintOk = { fontSize: 12, color: '#16a34a', backgroundColor: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.25)', borderRadius: 8, padding: '8px 10px', marginTop: 8 } as const;
-const hintWarn = { color: '#b45309', backgroundColor: 'rgba(245,158,11,0.10)', border: '1px solid rgba(245,158,11,0.35)', borderRadius: 8, padding: '10px 12px', marginTop: 8 } as const;
+const hintOk = { fontSize: 12, color: 'var(--rp-success-text)', backgroundColor: 'var(--rp-success-wash)', border: '1px solid var(--rp-success-line)', borderRadius: 8, padding: '8px 10px', marginTop: 8 } as const;
+const hintWarn = { color: 'var(--rp-warn-text)', backgroundColor: 'var(--rp-danger-wash)', border: '1px solid var(--rp-danger-line)', borderRadius: 8, padding: '10px 12px', marginTop: 8 } as const;

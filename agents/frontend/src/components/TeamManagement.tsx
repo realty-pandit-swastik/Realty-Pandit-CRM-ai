@@ -1,6 +1,8 @@
 
 import { useEffect, useState } from 'react';
 import PhoneInput from './PhoneInput';
+import { PresentationIcon } from './ui/PresentationIcon';
+import { Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import client, { setMemberPassword, resendSetupLink, getTeamMembers } from '../api/client';
 import { useToast } from '../contexts/ToastContext';
@@ -32,10 +34,10 @@ const DEPARTMENTS = [
 ];
 
 const ROLE_COLORS: Record<string, string> = {
-    super_boss: '#ef4444', manager: '#f59e0b', employee: '#22c55e',
+    super_boss: 'var(--blue-800)', manager: 'var(--blue-700)', employee: 'var(--blue-600)',
 };
 const DEPT_COLORS: Record<string, string> = {
-    property_sales: '#3b82f6', operations: '#8b5cf6', management: '#f59e0b', software_sales: '#06b6d4',
+    property_sales: 'var(--blue-700)', operations: 'var(--blue-700)', management: 'var(--blue-700)', software_sales: 'var(--blue-700)',
 };
 
 export function TeamManagement() {
@@ -243,7 +245,7 @@ export function TeamManagement() {
     };
 
     const getRoleBadge = (role: string) => (
-        <span style={{ backgroundColor: ROLE_COLORS[role] || '#6b7280', color: '#fff', padding: '2px 8px', borderRadius: '10px', fontSize: '11px', fontWeight: 600, textTransform: 'uppercase' as const }}>
+        <span style={{ backgroundColor: ROLE_COLORS[role] || 'var(--text-secondary)', color: 'var(--surface-white)', padding: '4px 8px', borderRadius: 'var(--radius-control)', fontSize: '12px', fontWeight: 500, textTransform: 'uppercase' as const }}>
             {role.replace('_', ' ')}
         </span>
     );
@@ -251,7 +253,7 @@ export function TeamManagement() {
     const getDeptBadge = (dept?: string) => {
         if (!dept) return <span style={{ color: 'var(--text-muted)', fontSize: '12px' }}>—</span>;
         const label = DEPARTMENTS.find(d => d.value === dept)?.label || dept;
-        return <span style={{ backgroundColor: DEPT_COLORS[dept] || '#6b7280', color: '#fff', padding: '2px 8px', borderRadius: '10px', fontSize: '11px' }}>{label}</span>;
+        return <span style={{ backgroundColor: DEPT_COLORS[dept] || 'var(--text-secondary)', color: 'var(--surface-white)', padding: '4px 8px', borderRadius: 'var(--radius-control)', fontSize: '12px' }}>{label}</span>;
     };
 
     if (loading) return <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)' }}>Loading team...</div>;
@@ -282,7 +284,7 @@ export function TeamManagement() {
                     </p>
                 </div>
                 {hasPermission('create_agents') && (
-                    <button onClick={() => { setShowAddForm(!showAddForm); setFormError(''); }} style={btnStyle('#3b82f6')}>
+                    <button onClick={() => { setShowAddForm(!showAddForm); setFormError(''); }} style={btnStyle('var(--blue-500)')}>
                         {showAddForm ? '✕ Cancel' : '+ Add Member'}
                     </button>
                 )}
@@ -291,7 +293,7 @@ export function TeamManagement() {
             {/* Warning: Members without phone */}
             {phonelessCount > 0 && (
                 <div style={{
-                    backgroundColor: 'var(--warning-bg)', border: '1px solid #f59e0b', borderRadius: '10px',
+                    backgroundColor: 'var(--warning-bg)', border: '1px solid var(--rp-warn-text)', borderRadius: '10px',
                     padding: '12px 16px', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '10px',
                 }}>
                     <span style={{ fontSize: '20px' }}>&#9888;</span>
@@ -304,9 +306,9 @@ export function TeamManagement() {
 
             {/* Credentials Modal */}
             {createdCredentials && (
-                <div style={{ backgroundColor: 'var(--success-bg)', border: '1px solid #22c55e', borderRadius: '12px', padding: '20px', marginBottom: '24px' }}>
+                <div style={{ backgroundColor: 'var(--success-bg)', border: '1px solid var(--rp-success-text)', borderRadius: '12px', padding: '20px', marginBottom: '24px' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px' }}>
-                        <h3 style={{ color: 'var(--success-text-bright)', margin: 0, fontSize: '15px' }}>✅ Account Ready — Share Credentials Securely</h3>
+                        <h3 style={{ color: 'var(--success-text-bright)', margin: 0, fontSize: '15px' }}>Account Ready — Share Credentials Securely</h3>
                         <button onClick={() => setCreatedCredentials(null)} style={{ background: 'none', border: 'none', color: 'var(--success-text-bright)', cursor: 'pointer', fontSize: '18px' }}>✕</button>
                     </div>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
@@ -317,7 +319,7 @@ export function TeamManagement() {
                             <CredRow label="SMTP" value={`${createdCredentials.smtpHost}:${createdCredentials.smtpPort}`} />
                         </>}
                     </div>
-                    {createdCredentials.note && <p style={{ color: 'var(--success-text)', fontSize: '12px', margin: '12px 0 0' }}>⚠️ {createdCredentials.note}</p>}
+                    {createdCredentials.note && <p style={{ color: 'var(--success-text)', fontSize: '12px', margin: '12px 0 0' }}><PresentationIcon value="circle-alert" /> {createdCredentials.note}</p>}
                 </div>
             )}
 
@@ -327,8 +329,8 @@ export function TeamManagement() {
                     <h3 style={{ color: 'var(--text-primary)', margin: '0 0 16px', fontSize: '15px' }}>New Team Member</h3>
                     {formError && <div style={errorBoxStyle}>{formError}</div>}
                     {emailPreview && (
-                        <div style={{ backgroundColor: 'var(--bg-primary)', border: '1px solid #3b82f6', borderRadius: '8px', padding: '8px 12px', marginBottom: '12px', fontSize: '13px', color: 'var(--text-link)' }}>
-                            📧 Email will be: <strong>{emailPreview}</strong>
+                        <div style={{ backgroundColor: 'var(--bg-primary)', border: '1px solid var(--blue-500)', borderRadius: '8px', padding: '8px 12px', marginBottom: '12px', fontSize: '13px', color: 'var(--text-link)' }}>
+                            Email will be: <strong>{emailPreview}</strong>
                         </div>
                     )}
                     <form onSubmit={handleAddMember} style={{ display: 'grid', gridTemplateColumns: window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap: '12px' }}>
@@ -388,7 +390,7 @@ export function TeamManagement() {
                                 style={{ ...inputStyle, gridColumn: '1 / -1', fontFamily: 'monospace' }}
                             />
                         )}
-                        <button type="submit" disabled={formLoading} style={{ ...btnStyle('#22c55e'), gridColumn: '1 / -1', padding: '12px', opacity: formLoading ? 0.7 : 1 }}>
+                        <button type="submit" disabled={formLoading} style={{ ...btnStyle('var(--rp-success-text)'), gridColumn: '1 / -1', padding: '12px', opacity: formLoading ? 0.7 : 1 }}>
                             {formLoading ? 'Creating...' : '✓ Create Member & Provision Email'}
                         </button>
                     </form>
@@ -397,7 +399,7 @@ export function TeamManagement() {
 
             {/* Edit Modal */}
             {editMember && (
-                <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50 }}>
+                <div style={{ position: 'fixed', inset: 0, backgroundColor: 'var(--rp-overlay-soft)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50 }}>
                     <div style={{ backgroundColor: 'var(--bg-secondary)', borderRadius: '12px', padding: window.innerWidth < 768 ? '16px' : '24px', width: window.innerWidth < 768 ? '90%' : '400px', maxWidth: '400px', border: '1px solid var(--border-secondary)' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
                             <h3 style={{ color: 'var(--text-primary)', margin: 0 }}>Edit: {editMember.name}</h3>
@@ -411,7 +413,7 @@ export function TeamManagement() {
                                 <option value="">No Department</option>
                                 {DEPARTMENTS.map(d => <option key={d.value} value={d.value}>{d.label}</option>)}
                             </select>
-                            <button type="submit" style={btnStyle('#3b82f6')}>Save Changes</button>
+                            <button type="submit" style={btnStyle('var(--blue-500)')}>Save Changes</button>
                         </form>
                     </div>
                 </div>
@@ -419,11 +421,11 @@ export function TeamManagement() {
 
             {/* Set Password Modal */}
             {setPwdMember && (
-                <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50 }}>
+                <div style={{ position: 'fixed', inset: 0, backgroundColor: 'var(--rp-overlay-soft)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50 }}>
                     <div style={{ backgroundColor: 'var(--bg-secondary)', borderRadius: '12px', padding: window.innerWidth < 768 ? '16px' : '24px', width: window.innerWidth < 768 ? '90%' : '420px', maxWidth: '420px', border: '1px solid var(--border-secondary)' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
                             <h3 style={{ color: 'var(--text-primary)', margin: 0 }}>
-                                {setPwdSuccess ? '✅ Password Set' : '🔐 Set Password'}
+                                {setPwdSuccess ? 'Password Set' : 'Set Password'}
                             </h3>
                             <button onClick={closeSetPassword} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '20px' }}>✕</button>
                         </div>
@@ -438,21 +440,21 @@ export function TeamManagement() {
 
                         {setPwdSuccess ? (
                             <div>
-                                <div style={{ backgroundColor: 'var(--success-bg)', border: '1px solid #22c55e', borderRadius: '8px', padding: '14px' }}>
+                                <div style={{ backgroundColor: 'var(--success-bg)', border: '1px solid var(--rp-success-text)', borderRadius: '8px', padding: '14px' }}>
                                     <div style={{ color: 'var(--success-text)', fontSize: '11px', marginBottom: '4px' }}>New Password</div>
-                                    <div style={{ color: '#fff', fontSize: '16px', fontFamily: 'monospace', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <div style={{ color: 'var(--surface-white)', fontSize: '16px', fontFamily: 'monospace', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                         <span>{setPwdValue}</span>
                                         <button
                                             onClick={() => navigator.clipboard.writeText(setPwdValue).catch(() => {})}
                                             style={{ background: 'none', border: 'none', color: 'var(--success-text-bright)', cursor: 'pointer', fontSize: '16px' }}
                                             title="Copy"
-                                        >📋</button>
+                                        ><PresentationIcon value="clipboard-list" /></button>
                                     </div>
                                 </div>
-                                <p style={{ color: '#f59e0b', fontSize: '12px', margin: '12px 0 0', textAlign: 'center' }}>
-                                    ⚠️ Save this password — it won't be shown again.
+                                <p style={{ color: 'var(--rp-warn-text)', fontSize: '12px', margin: '12px 0 0', textAlign: 'center' }}>
+                                    Save this password — it won't be shown again.
                                 </p>
-                                <button onClick={closeSetPassword} style={{ ...btnStyle('#3b82f6'), width: '100%', marginTop: '12px', padding: '10px' }}>
+                                <button onClick={closeSetPassword} style={{ ...btnStyle('var(--blue-500)'), width: '100%', marginTop: '12px', padding: '10px' }}>
                                     Done
                                 </button>
                             </div>
@@ -470,15 +472,15 @@ export function TeamManagement() {
                                         type="button"
                                         onClick={() => setSetPwdShow(!setPwdShow)}
                                         style={{ position: 'absolute', right: '8px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '16px' }}
-                                    >{setPwdShow ? '🙈' : '👁️'}</button>
+                                    >{setPwdShow ? <EyeOff size={18}><title>Hide password</title></EyeOff> : <Eye size={18}><title>Show password</title></Eye>}</button>
                                 </div>
-                                <button type="button" onClick={generateRandomPassword} style={{ ...btnStyle('#6b7280'), padding: '8px' }}>
-                                    🎲 Generate Random Password
+                                <button type="button" onClick={generateRandomPassword} style={{ ...btnStyle('var(--text-muted)'), padding: '8px' }}>
+                                    Generate Random Password
                                 </button>
                                 <button
                                     onClick={handleSetPassword}
                                     disabled={setPwdLoading || setPwdValue.length < 6}
-                                    style={{ ...btnStyle('#22c55e'), padding: '10px', opacity: (setPwdLoading || setPwdValue.length < 6) ? 0.6 : 1 }}
+                                    style={{ ...btnStyle('var(--rp-success-text)'), padding: '10px', opacity: (setPwdLoading || setPwdValue.length < 6) ? 0.6 : 1 }}
                                 >
                                     {setPwdLoading ? 'Setting...' : '✓ Set Password'}
                                 </button>
@@ -492,7 +494,7 @@ export function TeamManagement() {
             <div style={{ backgroundColor: 'var(--bg-secondary)', borderRadius: '12px', padding: '16px', marginBottom: '16px', border: '1px solid var(--border-secondary)' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
                     <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>My Portal Account Email</span>
-                    <span style={{ fontSize: '11px', color: 'var(--text-link)', backgroundColor: 'rgba(59,130,246,0.12)', padding: '2px 8px', borderRadius: '8px' }}>self-service</span>
+                    <span style={{ fontSize: '11px', color: 'var(--text-link)', backgroundColor: 'var(--rp-info-wash)', padding: '2px 8px', borderRadius: '8px' }}>self-service</span>
                 </div>
                 <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: '10px' }}>
                     The Gmail you use to log in to <strong>99acres</strong> / <strong>MagicBricks</strong> / <strong>Housing</strong>. Incoming leads on listings posted under this email will be auto-assigned to you.
@@ -517,13 +519,13 @@ export function TeamManagement() {
                             onClick={savePortalEmail}
                             disabled={portalEmailSaving}
                             style={{ padding: '8px 14px', borderRadius: '8px', fontSize: '12px', fontWeight: 600,
-                                     border: 'none', backgroundColor: 'var(--accent-primary)', color: '#fff', cursor: 'pointer' }}
+                                     border: 'none', backgroundColor: 'var(--accent-primary)', color: 'var(--surface-white)', cursor: 'pointer' }}
                         >
                             {portalEmailSaving ? 'Saving...' : 'Save'}
                         </button>
                     )}
                     {portalEmailLoaded && portalEmail.trim() === portalEmailLoaded && (
-                        <span style={{ fontSize: '11px', color: '#22c55e' }}>✓ saved</span>
+                        <span style={{ fontSize: '11px', color: 'var(--rp-success-text)' }}>✓ saved</span>
                     )}
                 </div>
             </div>
@@ -540,7 +542,7 @@ export function TeamManagement() {
                     </thead>
                     <tbody>
                         {members.map(m => (
-                            <tr key={m.id} style={{ borderBottom: '1px solid var(--bg-secondary)', opacity: m.status === 'inactive' ? 0.5 : 1, backgroundColor: m.id === agent?.id ? 'rgba(59,130,246,0.04)' : undefined }}>
+                            <tr key={m.id} style={{ borderBottom: '1px solid var(--bg-secondary)', opacity: m.status === 'inactive' ? 0.5 : 1, backgroundColor: m.id === agent?.id ? 'var(--rp-info-wash)' : undefined }}>
                                 <td style={cellStyle}>
                                     <div style={{ color: 'var(--text-primary)', fontWeight: 500 }}>
                                         {m.name}
@@ -556,7 +558,7 @@ export function TeamManagement() {
                                 <td style={{ ...cellStyle, fontSize: '13px', color: 'var(--text-secondary)' }}>
                                     {m.reports_to ? (
                                         <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                            <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: ROLE_COLORS[m.reports_to.id ? 'manager' : 'super_boss'] || '#94a3b8', display: 'inline-block', flexShrink: 0 }} />
+                                            <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: ROLE_COLORS[m.reports_to.id ? 'manager' : 'super_boss'] || 'var(--text-muted)', display: 'inline-block', flexShrink: 0 }} />
                                             {m.reports_to.name}
                                         </span>
                                     ) : (
@@ -564,7 +566,7 @@ export function TeamManagement() {
                                     )}
                                 </td>
                                 <td style={cellStyle}>
-                                    <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: m.status === 'active' ? '#22c55e' : '#f59e0b', display: 'inline-block', marginRight: '6px' }} />
+                                    <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: m.status === 'active' ? 'var(--rp-success-text)' : 'var(--rp-warn-text)', display: 'inline-block', marginRight: '6px' }} />
                                     <span style={{ color: 'var(--text-bright)', fontSize: '13px' }}>{m.status}</span>
                                 </td>
                                 <td style={{ ...cellStyle, color: 'var(--text-muted)', fontSize: '12px' }}>
@@ -582,16 +584,16 @@ export function TeamManagement() {
                                 </td>
                                 <td style={{ ...cellStyle, whiteSpace: 'nowrap' as const }}>
                                     <div style={{ display: 'flex', gap: '6px' }}>
-                                        <button onClick={() => setSelectedMemberId(m.id)} style={actionBtnStyle('#6366f1')} title="View Profile">👤</button>
+                                        <button onClick={() => setSelectedMemberId(m.id)} style={actionBtnStyle('var(--text-link)')} title="View Profile"><PresentationIcon value="user-round" /></button>
                                         {hasPermission('manage_team') && m.id !== agent?.id && (
                                             <>
-                                                <button onClick={() => handleEdit(m)} style={actionBtnStyle('#3b82f6')} title="Edit">✏️</button>
-                                                <button onClick={() => handleResetPassword(m)} style={actionBtnStyle('#f59e0b')} title="Reset Password">🔑</button>
-                                                <button onClick={() => openSetPassword(m)} style={actionBtnStyle('#8b5cf6')} title="Set Password">🔐</button>
-                                                <button onClick={() => handleResendSetup(m)} style={actionBtnStyle('#06b6d4')} title="Resend Setup Link">📩</button>
+                                                <button onClick={() => handleEdit(m)} style={actionBtnStyle('var(--text-link)')} title="Edit"><PresentationIcon value="pencil" /></button>
+                                                <button onClick={() => handleResetPassword(m)} style={actionBtnStyle('var(--text-link)')} title="Reset Password"><PresentationIcon value="key-round" /></button>
+                                                <button onClick={() => openSetPassword(m)} style={actionBtnStyle('var(--text-link)')} title="Set Password"><PresentationIcon value="lock-keyhole" /></button>
+                                                <button onClick={() => handleResendSetup(m)} style={actionBtnStyle('var(--text-link)')} title="Resend Setup Link"><PresentationIcon value="mail" /></button>
                                                 {hasPermission('manage_settings') && (
-                                                    <button onClick={() => handleToggleStatus(m)} style={actionBtnStyle(m.status === 'active' ? '#ef4444' : '#22c55e')} title={m.status === 'active' ? 'Deactivate' : 'Reactivate'}>
-                                                        {m.status === 'active' ? '🚫' : '✅'}
+                                                    <button onClick={() => handleToggleStatus(m)} style={actionBtnStyle(m.status === 'active' ? 'var(--rp-danger-text)' : 'var(--rp-success-text)')} title={m.status === 'active' ? 'Deactivate' : 'Reactivate'}>
+                                                        <PresentationIcon value={m.status === 'active' ? 'ban' : 'check-circle'} />
                                                     </button>
                                                 )}
                                             </>
@@ -633,11 +635,11 @@ export function TeamManagement() {
 function CredRow({ label, value }: { label: string; value: string }) {
     const copy = () => navigator.clipboard.writeText(value).catch(() => {});
     return (
-        <div style={{ backgroundColor: 'rgba(0,0,0,0.3)', borderRadius: '6px', padding: '8px 10px' }}>
+        <div style={{ backgroundColor: 'var(--rp-shadow-tint)', borderRadius: '6px', padding: '8px 10px' }}>
             <div style={{ color: 'var(--success-text)', fontSize: '11px', marginBottom: '2px' }}>{label}</div>
-            <div style={{ color: '#fff', fontSize: '13px', fontFamily: 'monospace', display: 'flex', justifyContent: 'space-between' }}>
+            <div style={{ color: 'var(--surface-white)', fontSize: '13px', fontFamily: 'monospace', display: 'flex', justifyContent: 'space-between' }}>
                 <span>{value}</span>
-                <button onClick={copy} style={{ background: 'none', border: 'none', color: 'var(--success-text-bright)', cursor: 'pointer', fontSize: '14px' }}>📋</button>
+                <button onClick={copy} style={{ background: 'none', border: 'none', color: 'var(--success-text-bright)', cursor: 'pointer', fontSize: '14px' }}><PresentationIcon value="clipboard-list" /></button>
             </div>
         </div>
     );
@@ -646,5 +648,5 @@ function CredRow({ label, value }: { label: string; value: string }) {
 const inputStyle: React.CSSProperties = { padding: '10px 12px', backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-secondary)', borderRadius: '8px', color: 'var(--text-primary)', fontSize: '14px', outline: 'none', width: '100%', boxSizing: 'border-box' };
 const cellStyle: React.CSSProperties = { padding: '12px 16px', color: 'var(--text-bright)', fontSize: '14px', verticalAlign: 'middle' };
 const errorBoxStyle: React.CSSProperties = { backgroundColor: 'var(--error-bg)', color: 'var(--error-text)', padding: '8px 12px', borderRadius: '6px', marginBottom: '12px', fontSize: '13px' };
-function btnStyle(bg: string): React.CSSProperties { return { backgroundColor: bg, color: '#fff', border: 'none', padding: '8px 16px', borderRadius: '8px', cursor: 'pointer', fontSize: '14px', fontWeight: 500 }; }
-function actionBtnStyle(bg: string): React.CSSProperties { return { backgroundColor: bg + '22', border: `1px solid ${bg}44`, borderRadius: '6px', cursor: 'pointer', padding: '4px 8px', fontSize: '14px' }; }
+function btnStyle(bg: string): React.CSSProperties { return { backgroundColor: bg, color: 'var(--surface-white)', border: 'none', padding: '8px 16px', borderRadius: '8px', cursor: 'pointer', fontSize: '14px', fontWeight: 500 }; }
+function actionBtnStyle(bg: string): React.CSSProperties { return { backgroundColor: 'var(--bg-primary)', color: bg, border: '1px solid var(--control-line)', borderRadius: 'var(--radius-control)', cursor: 'pointer', padding: '8px', minWidth: 44, minHeight: 44, fontSize: '14px' }; }

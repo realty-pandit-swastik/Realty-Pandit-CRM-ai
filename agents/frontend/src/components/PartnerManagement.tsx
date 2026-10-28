@@ -39,7 +39,7 @@ const initialFormData = {
 };
 
 const PLAN_LABELS: Record<string, string> = { FREE: 'Free', PRO: 'Pro', ADVANCE_PRO: 'Advance Pro' };
-const PLAN_COLORS: Record<string, string> = { FREE: '#6b7280', PRO: '#3b82f6', ADVANCE_PRO: '#f59e0b' };
+const PLAN_COLORS: Record<string, string> = { FREE: 'var(--text-muted)', PRO: 'var(--blue-500)', ADVANCE_PRO: 'var(--rp-warn-text)' };
 
 const isActive = (status: string) => status === 'ACTIVE' || status === 'active';
 
@@ -183,7 +183,7 @@ export function PartnerManagement() {
     };
 
     if (!hasPermission('manage_agents')) {
-        return <div style={{ padding: '24px', color: '#ef4444' }}>Access Denied</div>;
+        return <div style={{ padding: '24px', color: 'var(--rp-danger-text)' }}>Access Denied</div>;
     }
 
     if (loading) {
@@ -219,7 +219,7 @@ export function PartnerManagement() {
                 </div>
                 <button
                     onClick={() => { setShowForm(!showForm); setFormError(''); }}
-                    style={{ backgroundColor: '#3b82f6', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: '8px', cursor: 'pointer', fontSize: '14px', fontWeight: 500 }}
+                    style={{ backgroundColor: 'var(--blue-500)', color: 'var(--surface-white)', border: 'none', padding: '8px 16px', borderRadius: '8px', cursor: 'pointer', fontSize: '14px', fontWeight: 500 }}
                 >
                     {showForm ? '✕ Cancel' : '+ Register Partner'}
                 </button>
@@ -250,14 +250,14 @@ export function PartnerManagement() {
                 {(search || filterPlan || filterStatus) && (
                     <button
                         onClick={() => { setSearch(''); setFilterPlan(''); setFilterStatus(''); }}
-                        style={{ ...filterInputStyle, cursor: 'pointer', backgroundColor: 'transparent', color: '#ef4444', border: '1px solid #ef4444' }}
+                        style={{ ...filterInputStyle, cursor: 'pointer', backgroundColor: 'transparent', color: 'var(--rp-danger-text)', border: '1px solid var(--rp-danger-text)' }}
                     >
                         Clear
                     </button>
                 )}
             </div>
 
-            {error && <div style={{ color: '#ef4444', marginBottom: '16px' }}>{error}</div>}
+            {error && <div style={{ color: 'var(--rp-danger-text)', marginBottom: '16px' }}>{error}</div>}
 
             {/* Registration Form */}
             {showForm && (
@@ -300,11 +300,11 @@ export function PartnerManagement() {
                             <option value="HAS_PROPERTIES">Has Properties</option>
                             <option value="HAS_BUYERS">Has Buyers</option>
                         </select>
-                        <div style={{ gridColumn: '1 / -1', padding: '8px 12px', backgroundColor: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.2)', borderRadius: 6, fontSize: 12, color: 'var(--text-secondary)' }}>
+                        <div style={{ gridColumn: '1 / -1', padding: '8px 12px', backgroundColor: 'var(--rp-success-wash)', border: '1px solid var(--rp-success-wash)', borderRadius: 6, fontSize: 12, color: 'var(--text-secondary)' }}>
                             💡 Free onboarding · unlimited listings · we earn commission on closed deals only
                         </div>
                         <button type="submit" disabled={formLoading}
-                            style={{ gridColumn: '1 / -1', backgroundColor: '#22c55e', color: '#fff', border: 'none', padding: '12px', borderRadius: '8px', cursor: formLoading ? 'not-allowed' : 'pointer', fontSize: '14px', fontWeight: 500, opacity: formLoading ? 0.7 : 1 }}>
+                            style={{ gridColumn: '1 / -1', backgroundColor: 'var(--rp-success-text)', color: 'var(--surface-white)', border: 'none', padding: '12px', borderRadius: '8px', cursor: formLoading ? 'not-allowed' : 'pointer', fontSize: '14px', fontWeight: 500, opacity: formLoading ? 0.7 : 1 }}>
                             {formLoading ? 'Registering...' : '✓ Register Partner Agent'}
                         </button>
                     </form>
@@ -319,25 +319,25 @@ export function PartnerManagement() {
                         <div key={p.id} style={{ backgroundColor: 'var(--bg-secondary)', borderRadius: '12px', padding: '16px', border: '1px solid var(--border-secondary)' }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
                                 <div>
-                                    <div onClick={() => setProfileId(p.id)} title="Open profile" style={{ fontWeight: 600, color: '#60a5fa', fontSize: '15px', cursor: 'pointer' }}>
+                                    <div onClick={() => setProfileId(p.id)} title="Open profile" style={{ fontWeight: 600, color: 'var(--blue-400)', fontSize: '15px', cursor: 'pointer' }}>
                                         {p.name}
                                     </div>
                                     {p.business_name && <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '2px' }}>{p.business_name}</div>}
                                 </div>
-                                <span style={{ color: isActive(p.status) ? '#22c55e' : '#ef4444', fontWeight: 600, fontSize: '12px' }}>{p.status}</span>
+                                <span style={{ color: isActive(p.status) ? 'var(--rp-success-text)' : 'var(--rp-danger-text)', fontWeight: 600, fontSize: '12px' }}>{p.status}</span>
                             </div>
                             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center', marginBottom: '10px' }}>
                                 <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>{p.phone_number}</span>
-                                <span style={{ backgroundColor: p.partner_category === 'COMPANY' ? '#8b5cf6' : '#06b6d4', padding: '2px 8px', borderRadius: '4px', fontSize: '11px', color: '#fff' }}>
+                                <span style={{ backgroundColor: p.partner_category === 'COMPANY' ? 'var(--chart-5)' : 'var(--chart-3)', padding: '2px 8px', borderRadius: '4px', fontSize: '11px', color: 'var(--surface-white)' }}>
                                     {p.partner_category || 'INDIVIDUAL'}
                                 </span>
-                                <span style={{ color: PLAN_COLORS[p.package_type] ?? '#6b7280', fontWeight: 600, fontSize: '12px' }}>
+                                <span style={{ color: PLAN_COLORS[p.package_type] ?? 'var(--text-muted)', fontWeight: 600, fontSize: '12px' }}>
                                     {PLAN_LABELS[p.package_type] ?? p.package_type}
                                 </span>
-                                {!p.verified && <span style={{ fontSize: '10px', backgroundColor: '#fef3c7', color: '#92400e', padding: '1px 6px', borderRadius: '4px' }}>Unverified</span>}
+                                {!p.verified && <span style={{ fontSize: '10px', backgroundColor: 'var(--rp-warn-bg)', color: 'var(--rp-warn-text)', padding: '1px 6px', borderRadius: '4px' }}>Unverified</span>}
                             </div>
                             <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
-                                <button onClick={() => setProfileId(p.id)} style={{ ...btnStyle, backgroundColor: '#6366f1', padding: '6px 12px' }}>Manage</button>
+                                <button onClick={() => setProfileId(p.id)} style={{ ...btnStyle, backgroundColor: 'var(--chart-5)', padding: '6px 12px' }}>Manage</button>
                                 <select value={p.package_type} onChange={e => handlePackageChange(p.id, e.target.value)}
                                     style={{ fontSize: '12px', padding: '6px 8px', borderRadius: '6px', border: '1px solid var(--border-secondary)', backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)', cursor: 'pointer' }}>
                                     <option value="FREE">Free</option>
@@ -352,16 +352,16 @@ export function PartnerManagement() {
                                     <option value="COMPANY">Company (can build a team)</option>
                                 </select>
                                 {!p.verified && (
-                                    <button onClick={() => handleVerify(p.id)} style={{ ...btnStyle, backgroundColor: '#22c55e', padding: '6px 12px' }}>Verify</button>
+                                    <button onClick={() => handleVerify(p.id)} style={{ ...btnStyle, backgroundColor: 'var(--rp-success-text)', padding: '6px 12px' }}>Verify</button>
                                 )}
                                 {isActive(p.status) ? (
-                                    <button onClick={() => handleStatusChange(p.id, 'SUSPENDED')} style={{ ...btnStyle, backgroundColor: '#ef4444', padding: '6px 12px' }}>Suspend</button>
+                                    <button onClick={() => handleStatusChange(p.id, 'SUSPENDED')} style={{ ...btnStyle, backgroundColor: 'var(--rp-danger-text)', padding: '6px 12px' }}>Suspend</button>
                                 ) : (
-                                    <button onClick={() => handleStatusChange(p.id, 'ACTIVE')} style={{ ...btnStyle, backgroundColor: '#3b82f6', padding: '6px 12px' }}>Activate</button>
+                                    <button onClick={() => handleStatusChange(p.id, 'ACTIVE')} style={{ ...btnStyle, backgroundColor: 'var(--blue-500)', padding: '6px 12px' }}>Activate</button>
                                 )}
-                                <button onClick={() => setRevertTarget(p)} title="Undo an accidental conversion — turns them back into a normal customer" style={{ ...btnStyle, backgroundColor: '#f97316', padding: '6px 12px' }}>↩ Revert</button>
+                                <button onClick={() => setRevertTarget(p)} title="Undo an accidental conversion — turns them back into a normal customer" style={{ ...btnStyle, backgroundColor: 'var(--rp-warn-text)', padding: '6px 12px' }}>↩ Revert</button>
                                 {isSuperBoss && (
-                                    <button onClick={() => setReassignTarget(p)} style={{ ...btnStyle, backgroundColor: '#8b5cf6', padding: '6px 12px' }}>Reassign</button>
+                                    <button onClick={() => setReassignTarget(p)} style={{ ...btnStyle, backgroundColor: 'var(--chart-5)', padding: '6px 12px' }}>Reassign</button>
                                 )}
                             </div>
                         </div>
@@ -387,21 +387,21 @@ export function PartnerManagement() {
                             {filtered.map(p => (
                                 <tr key={p.id} style={{ borderBottom: '1px solid var(--bg-primary)' }}>
                                     <td style={cellStyle}>
-                                        <div onClick={() => setProfileId(p.id)} title="Open profile" style={{ fontWeight: 500, color: '#60a5fa', cursor: 'pointer' }}>
+                                        <div onClick={() => setProfileId(p.id)} title="Open profile" style={{ fontWeight: 500, color: 'var(--blue-400)', cursor: 'pointer' }}>
                                             {p.name}
                                         </div>
                                         {p.business_name && <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{p.business_name}</div>}
-                                        {!p.verified && <span style={{ fontSize: '10px', backgroundColor: '#fef3c7', color: '#92400e', padding: '1px 6px', borderRadius: '4px' }}>Unverified</span>}
+                                        {!p.verified && <span style={{ fontSize: '10px', backgroundColor: 'var(--rp-warn-bg)', color: 'var(--rp-warn-text)', padding: '1px 6px', borderRadius: '4px' }}>Unverified</span>}
                                     </td>
                                     <td style={cellStyle}>{p.phone_number}</td>
                                     <td style={cellStyle}>
-                                        <span style={{ backgroundColor: p.partner_category === 'COMPANY' ? '#8b5cf6' : '#06b6d4', padding: '2px 8px', borderRadius: '4px', fontSize: '11px', color: '#fff' }}>
+                                        <span style={{ backgroundColor: p.partner_category === 'COMPANY' ? 'var(--chart-5)' : 'var(--chart-3)', padding: '2px 8px', borderRadius: '4px', fontSize: '11px', color: 'var(--surface-white)' }}>
                                             {p.partner_category || 'INDIVIDUAL'}
                                         </span>
                                     </td>
                                     <td style={cellStyle}>
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                            <span style={{ color: PLAN_COLORS[p.package_type] ?? '#6b7280', fontWeight: 600, fontSize: '13px' }}>
+                                            <span style={{ color: PLAN_COLORS[p.package_type] ?? 'var(--text-muted)', fontWeight: 600, fontSize: '13px' }}>
                                                 {PLAN_LABELS[p.package_type] ?? p.package_type}
                                             </span>
                                             <select
@@ -419,24 +419,24 @@ export function PartnerManagement() {
                                         <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>{p.managing_agent?.name || '—'}</span>
                                     </td>
                                     <td style={cellStyle}>
-                                        <span style={{ color: isActive(p.status) ? '#22c55e' : '#ef4444', fontWeight: 500, fontSize: '13px' }}>
+                                        <span style={{ color: isActive(p.status) ? 'var(--rp-success-text)' : 'var(--rp-danger-text)', fontWeight: 500, fontSize: '13px' }}>
                                             {p.status}
                                         </span>
                                     </td>
                                     <td style={cellStyle}>
                                         <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                                            <button onClick={() => setProfileId(p.id)} style={{ ...btnStyle, backgroundColor: '#6366f1' }}>Manage</button>
+                                            <button onClick={() => setProfileId(p.id)} style={{ ...btnStyle, backgroundColor: 'var(--chart-5)' }}>Manage</button>
                                             {!p.verified && (
-                                                <button onClick={() => handleVerify(p.id)} style={{ ...btnStyle, backgroundColor: '#22c55e' }}>Verify</button>
+                                                <button onClick={() => handleVerify(p.id)} style={{ ...btnStyle, backgroundColor: 'var(--rp-success-text)' }}>Verify</button>
                                             )}
                                             {isActive(p.status) ? (
-                                                <button onClick={() => handleStatusChange(p.id, 'SUSPENDED')} style={{ ...btnStyle, backgroundColor: '#ef4444' }}>Suspend</button>
+                                                <button onClick={() => handleStatusChange(p.id, 'SUSPENDED')} style={{ ...btnStyle, backgroundColor: 'var(--rp-danger-text)' }}>Suspend</button>
                                             ) : (
-                                                <button onClick={() => handleStatusChange(p.id, 'ACTIVE')} style={{ ...btnStyle, backgroundColor: '#3b82f6' }}>Activate</button>
+                                                <button onClick={() => handleStatusChange(p.id, 'ACTIVE')} style={{ ...btnStyle, backgroundColor: 'var(--blue-500)' }}>Activate</button>
                                             )}
-                                            <button onClick={() => setRevertTarget(p)} title="Undo an accidental conversion — turns them back into a normal customer" style={{ ...btnStyle, backgroundColor: '#f97316' }}>↩ Revert</button>
+                                            <button onClick={() => setRevertTarget(p)} title="Undo an accidental conversion — turns them back into a normal customer" style={{ ...btnStyle, backgroundColor: 'var(--rp-warn-text)' }}>↩ Revert</button>
                                             {isSuperBoss && (
-                                                <button onClick={() => setReassignTarget(p)} style={{ ...btnStyle, backgroundColor: '#8b5cf6' }}>Reassign</button>
+                                                <button onClick={() => setReassignTarget(p)} style={{ ...btnStyle, backgroundColor: 'var(--chart-5)' }}>Reassign</button>
                                             )}
                                         </div>
                                     </td>
@@ -514,7 +514,7 @@ const btnStyle: React.CSSProperties = {
     border: 'none',
     padding: '5px 10px',
     borderRadius: '6px',
-    color: '#fff',
+    color: 'var(--surface-white)',
     cursor: 'pointer',
     fontSize: '12px',
     fontWeight: 500

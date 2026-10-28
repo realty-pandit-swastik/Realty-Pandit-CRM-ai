@@ -1,11 +1,11 @@
 import React from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
-import { SERIES, useChartColors, formatNum, formatINR, pct } from './clay';
+import { SERIES, useChartColors, MetricIcon, formatNum, formatINR, pct } from './clay';
 import type { SourceRow, FunnelRow, AgeRow, HealthRow, RankRow, Insight } from './leadData';
 
 export const Empty: React.FC<{ icon?: string; text: string }> = ({ icon = '∅', text }) => (
   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '32px 16px', gap: 8, color: 'var(--text-muted)', textAlign: 'center' }}>
-    <span style={{ fontSize: 28, opacity: 0.5 }}>{icon}</span>
+    <MetricIcon value={icon} />
     <span style={{ fontSize: 13 }}>{text}</span>
   </div>
 );
@@ -15,10 +15,10 @@ export const Empty: React.FC<{ icon?: string; text: string }> = ({ icon = '∅',
 export const SourceDonut: React.FC<{ sources: SourceRow[] }> = ({ sources }) => {
   const c = useChartColors();
   const total = sources.reduce((s, x) => s + x.count, 0);
-  if (!total) return <Empty icon="🎯" text="No leads in this period" />;
+  if (!total) return <Empty icon="target" text="No leads in this period" />;
   const data = sources.slice(0, 8).map((s) => ({ name: s.source, value: s.count }));
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'minmax(180px, 240px) 1fr', gap: 18, alignItems: 'center' }}>
+    <div className="rp-chart-pair">
       <div style={{ position: 'relative', height: 220 }}>
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>
@@ -37,7 +37,7 @@ export const SourceDonut: React.FC<{ sources: SourceRow[] }> = ({ sources }) => 
         {sources.slice(0, 6).map((s, i) => {
           const share = pct(s.count, total);
           const conv = s.conversionRate;
-          const convColor = conv >= 10 ? '#22c55e' : conv >= 5 ? '#f59e0b' : '#94a3b8';
+          const convColor = conv >= 10 ? 'var(--rp-success-text)' : conv >= 5 ? 'var(--rp-warn-text)' : 'var(--text-muted)';
           return (
             <div key={s.source} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <span style={{ width: 9, height: 9, borderRadius: 3, backgroundColor: SERIES[i % SERIES.length], flexShrink: 0 }} />
@@ -61,7 +61,7 @@ export const SourceDonut: React.FC<{ sources: SourceRow[] }> = ({ sources }) => 
 
 // ── Conversion funnel ─────────────────────────────────────────────────────────
 
-const FUNNEL_COLORS = ['#3b82f6', '#6366f1', '#8b5cf6', '#a855f7', '#d946ef', '#22c55e'];
+const FUNNEL_COLORS = ['var(--blue-900)', 'var(--blue-800)', 'var(--blue-700)', 'var(--blue-600)', 'var(--blue-800)', 'var(--blue-700)'];
 
 export const Funnel: React.FC<{ funnel: FunnelRow[] }> = ({ funnel }) => {
   const anyData = funnel.some((f) => f.count > 0);
@@ -74,10 +74,10 @@ export const Funnel: React.FC<{ funnel: FunnelRow[] }> = ({ funnel }) => {
           <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8 }}>
             <div style={{ flex: 1, height: 26, borderRadius: 7, backgroundColor: 'var(--bg-tertiary)', overflow: 'hidden', position: 'relative' }}>
               <div style={{ width: `${Math.max(f.ofTop, f.count > 0 ? 6 : 0)}%`, height: '100%', backgroundColor: FUNNEL_COLORS[i % FUNNEL_COLORS.length], borderRadius: 7, transition: 'width 600ms ease', display: 'flex', alignItems: 'center', paddingLeft: 10 }}>
-                <span style={{ fontSize: 12, fontWeight: 800, color: '#fff' }}>{formatNum(f.count)}</span>
+                <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--surface-white)' }}>{formatNum(f.count)}</span>
               </div>
             </div>
-            <span style={{ width: 64, fontSize: 11, color: f.dropFromPrev != null && f.dropFromPrev > 0 ? '#ef4444' : 'var(--text-muted)', textAlign: 'left', flexShrink: 0 }}>
+            <span style={{ width: 64, fontSize: 11, color: f.dropFromPrev != null && f.dropFromPrev > 0 ? 'var(--rp-danger-text)' : 'var(--text-muted)', textAlign: 'left', flexShrink: 0 }}>
               {f.dropFromPrev != null ? `▼ ${f.dropFromPrev.toFixed(0)}%` : '—'}
             </span>
           </div>
@@ -91,11 +91,11 @@ export const Funnel: React.FC<{ funnel: FunnelRow[] }> = ({ funnel }) => {
 
 export const HealthBar: React.FC<{ health: HealthRow }> = ({ health }) => {
   const { hot, warm, cold, total } = health;
-  if (!total) return <Empty icon="🌡️" text="No active leads to score" />;
+  if (!total) return <Empty icon="thermometer" text="No active leads to score" />;
   const segs = [
-    { label: 'Hot', value: hot, color: '#ef4444', icon: '🔥' },
-    { label: 'Warm', value: warm, color: '#f59e0b', icon: '🟠' },
-    { label: 'Cold', value: cold, color: '#3b82f6', icon: '❄️' },
+    { label: 'Hot', value: hot, color: 'var(--blue-900)', icon: 'flame' },
+    { label: 'Warm', value: warm, color: 'var(--blue-700)', icon: 'circle-alert' },
+    { label: 'Cold', value: cold, color: 'var(--blue-500)', icon: 'snowflake' },
   ];
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -107,8 +107,8 @@ export const HealthBar: React.FC<{ health: HealthRow }> = ({ health }) => {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
         {segs.map((s) => (
           <div key={s.label} style={{ textAlign: 'center' }}>
-            <div style={{ fontSize: 22, fontWeight: 800, color: s.color, lineHeight: 1 }}>{formatNum(s.value)}</div>
-            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 3 }}>{s.icon} {s.label} · {pct(s.value, total).toFixed(0)}%</div>
+            <div style={{ fontSize: 22, fontWeight: 600, color: 'var(--text-primary)', lineHeight: 1 }}>{formatNum(s.value)}</div>
+            <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}><MetricIcon value={s.icon} /> {s.label} · {pct(s.value, total).toFixed(0)}%</div>
           </div>
         ))}
       </div>
@@ -119,8 +119,8 @@ export const HealthBar: React.FC<{ health: HealthRow }> = ({ health }) => {
 // ── Ageing buckets (color-graded urgency) ─────────────────────────────────────
 
 const AGE_COLORS: Record<string, string> = {
-  '0–7d': '#22c55e', '8–15d': '#84cc16', '16–30d': '#eab308',
-  '31–60d': '#f59e0b', '61–90d': '#f97316', '90d+': '#ef4444',
+  '0–7d': 'var(--blue-300)', '8–15d': 'var(--blue-400)', '16–30d': 'var(--blue-500)',
+  '31–60d': 'var(--blue-600)', '61–90d': 'var(--blue-700)', '90d+': 'var(--blue-900)',
 };
 
 export const AgeingBars: React.FC<{ ageing: AgeRow[] }> = ({ ageing }) => {
@@ -132,7 +132,7 @@ export const AgeingBars: React.FC<{ ageing: AgeRow[] }> = ({ ageing }) => {
       {ageing.map((a) => (
         <div key={a.label} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, height: '100%', justifyContent: 'flex-end' }}>
           <span style={{ fontSize: 12, fontWeight: 800, color: 'var(--text-primary)' }}>{formatNum(a.count)}</span>
-          <div style={{ width: '100%', maxWidth: 42, height: `${(a.count / max) * 100}%`, minHeight: a.count > 0 ? 4 : 0, backgroundColor: AGE_COLORS[a.label] || '#3b82f6', borderRadius: '6px 6px 0 0', transition: 'height 600ms ease' }} />
+          <div style={{ width: '100%', maxWidth: 42, height: `${(a.count / max) * 100}%`, minHeight: a.count > 0 ? 4 : 0, backgroundColor: AGE_COLORS[a.label] || 'var(--blue-600)', borderRadius: '6px 6px 0 0', transition: 'height 600ms ease' }} />
           <span style={{ fontSize: 10.5, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{a.label}</span>
         </div>
       ))}
@@ -142,7 +142,7 @@ export const AgeingBars: React.FC<{ ageing: AgeRow[] }> = ({ ageing }) => {
 
 // ── Ranked bars (generic — lost reasons, areas) ───────────────────────────────
 
-export const RankedBars: React.FC<{ rows: RankRow[]; color?: string; emptyIcon?: string; emptyText?: string }> = ({ rows, color = '#8b5cf6', emptyIcon, emptyText }) => {
+export const RankedBars: React.FC<{ rows: RankRow[]; color?: string; emptyIcon?: string; emptyText?: string }> = ({ rows, color = 'var(--blue-600)', emptyIcon, emptyText }) => {
   if (!rows.length) return <Empty icon={emptyIcon} text={emptyText || 'No data'} />;
   const max = Math.max(...rows.map((r) => r.count), 1);
   const total = rows.reduce((s, r) => s + r.count, 0);
@@ -175,10 +175,10 @@ export interface LeaderRow {
 
 const catColor = (cat: string): string => {
   switch (cat) {
-    case 'Excellent': return '#22c55e';
-    case 'Good': return '#3b82f6';
-    case 'Average': return '#f59e0b';
-    default: return '#ef4444';
+    case 'Excellent': return 'var(--rp-success-text)';
+    case 'Good': return 'var(--blue-700)';
+    case 'Average': return 'var(--rp-warn-text)';
+    default: return 'var(--rp-danger-text)';
   }
 };
 
@@ -195,7 +195,7 @@ const ScoreRing: React.FC<{ score: number }> = ({ score }) => {
   );
 };
 
-const MEDALS = ['🥇', '🥈', '🥉'];
+const MEDALS = ['1', '2', '3'];
 
 export const Leaderboard: React.FC<{ rows: LeaderRow[] }> = ({ rows }) => {
   if (!rows.length) return <Empty icon="🏆" text="No agents in scope" />;
@@ -205,11 +205,11 @@ export const Leaderboard: React.FC<{ rows: LeaderRow[] }> = ({ rows }) => {
       {ranked.map((r, i) => (
         <div key={r.agent_id} style={{
           display: 'flex', alignItems: 'center', gap: 12,
-          padding: '10px 12px', borderRadius: 12,
-          backgroundColor: i < 3 ? catColor(r.productivity_category) + '0f' : 'var(--bg-tertiary)',
-          border: `1px solid ${i < 3 ? catColor(r.productivity_category) + '33' : 'transparent'}`,
+          padding: '12px', borderRadius: 'var(--radius-control)',
+          backgroundColor: i < 3 ? 'var(--blue-50)' : 'var(--bg-tertiary)',
+          border: `1px solid ${i < 3 ? 'var(--blue-200)' : 'transparent'}`,
         }}>
-          <span style={{ width: 24, textAlign: 'center', fontSize: i < 3 ? 18 : 13, fontWeight: 700, color: 'var(--text-muted)' }}>{MEDALS[i] || i + 1}</span>
+          <span style={{ width: 24, textAlign: 'center', fontSize: i < 3 ? 18 : 13, fontWeight: 600, color: 'var(--text-muted)' }}>{MEDALS[i] ? <svg width={24} height={24} role="img"><title>{`Rank ${MEDALS[i]}`}</title><text x={12} y={17} textAnchor="middle" fill="currentColor" fontSize={14}>{MEDALS[i]}</text></svg> : i + 1}</span>
           <ScoreRing score={r.productivity_score} />
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.agent_name}</div>
@@ -217,7 +217,7 @@ export const Leaderboard: React.FC<{ rows: LeaderRow[] }> = ({ rows }) => {
               {formatNum(r.leads_assigned)} leads · {formatNum(r.deals_closed)} deals · {formatINR(r.revenue_generated)}
             </div>
           </div>
-          <span style={{ fontSize: 10.5, fontWeight: 700, color: catColor(r.productivity_category), backgroundColor: catColor(r.productivity_category) + '1a', borderRadius: 8, padding: '3px 8px', whiteSpace: 'nowrap', flexShrink: 0 }}>
+          <span style={{ fontSize: 12, fontWeight: 500, color: catColor(r.productivity_category), backgroundColor: 'var(--bg-primary)', borderRadius: 'var(--radius-control)', padding: '4px 8px', whiteSpace: 'nowrap', flexShrink: 0 }}>
             {r.productivity_category}
           </span>
         </div>
@@ -229,9 +229,9 @@ export const Leaderboard: React.FC<{ rows: LeaderRow[] }> = ({ rows }) => {
 // ── AI insight cards ──────────────────────────────────────────────────────────
 
 const TONE: Record<string, { bg: string; border: string; fg: string }> = {
-  good: { bg: 'rgba(34,197,94,0.10)', border: 'rgba(34,197,94,0.35)', fg: '#22c55e' },
-  warn: { bg: 'rgba(245,158,11,0.10)', border: 'rgba(245,158,11,0.35)', fg: '#f59e0b' },
-  info: { bg: 'rgba(59,130,246,0.10)', border: 'rgba(59,130,246,0.30)', fg: '#3b82f6' },
+  good: { bg: 'var(--rp-success-bg)', border: 'var(--rp-success-line)', fg: 'var(--rp-success-text)' },
+  warn: { bg: 'var(--rp-warn-bg)', border: 'var(--rp-warn-line)', fg: 'var(--rp-warn-text)' },
+  info: { bg: 'var(--rp-info-bg)', border: 'var(--rp-info-line)', fg: 'var(--rp-info-text)' },
 };
 
 export const InsightCards: React.FC<{ insights: Insight[] }> = ({ insights }) => {
@@ -241,9 +241,9 @@ export const InsightCards: React.FC<{ insights: Insight[] }> = ({ insights }) =>
       {insights.map((ins, i) => {
         const t = TONE[ins.tone] || TONE.info;
         return (
-          <div key={i} style={{ backgroundColor: t.bg, border: `1px solid ${t.border}`, borderRadius: 14, padding: '14px 16px' }}>
+          <div key={i} style={{ backgroundColor: t.bg, border: `1px solid ${t.border}`, borderRadius: 'var(--radius-card)', padding: '16px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-              <span style={{ fontSize: 16 }}>{ins.icon}</span>
+              <MetricIcon value={ins.icon} />
               <span style={{ fontSize: 12.5, fontWeight: 700, color: t.fg }}>{ins.title}</span>
             </div>
             <div style={{ fontSize: 12.5, color: 'var(--text-secondary)', lineHeight: 1.4 }}>{ins.detail}</div>
@@ -262,7 +262,7 @@ export const CategoryDonut: React.FC<{ data: Array<{ name: string; value: number
   const total = rows.reduce((s, x) => s + x.value, 0);
   if (!total) return <Empty icon="📦" text="No data in this period" />;
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'minmax(160px, 220px) 1fr', gap: 18, alignItems: 'center' }}>
+    <div className="rp-chart-pair">
       <div style={{ position: 'relative', height: 200 }}>
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>

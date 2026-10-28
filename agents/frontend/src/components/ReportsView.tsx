@@ -7,6 +7,8 @@ import { useState, useEffect } from 'react';
 import * as api from '../api/client';
 import { exportToCSV, exportToExcel, exportToPDF, exportSummaryToCSV, exportSummaryToExcel } from '../utils/exportHelpers';
 import { useToast } from '../contexts/ToastContext';
+import { PresentationIcon } from './ui/PresentationIcon';
+import { Menu, X } from 'lucide-react';
 
 // Report Definitions
 interface ReportDefinition {
@@ -308,20 +310,23 @@ export function ReportsView() {
   const [showSidebar, setShowSidebar] = useState(false);
 
   return (
-    <div style={{ display: 'flex', height: '100%', backgroundColor: 'var(--bg-primary)', position: 'relative' }}>
+    <div className="rp-reports" style={{ display: 'flex', height: '100%', minWidth: 0, width: '100%', backgroundColor: 'var(--bg-primary)', position: 'relative' }}>
       {/* Mobile sidebar toggle */}
       <button
         onClick={() => setShowSidebar(!showSidebar)}
+        aria-label={showSidebar ? 'Hide report categories' : 'Show report categories'}
+        aria-expanded={showSidebar}
+        aria-controls="rp-report-categories"
         style={{
           display: 'none',
-          position: 'fixed', bottom: '20px', right: '20px', zIndex: 30,
-          width: '48px', height: '48px', borderRadius: '50%', border: 'none',
-          backgroundColor: 'var(--primary)', color: '#fff', fontSize: '20px', cursor: 'pointer',
-          boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
+          position: 'fixed', bottom: 'calc(80px + env(safe-area-inset-bottom, 0px))', right: '16px', zIndex: 30,
+          width: '48px', height: '48px', borderRadius: 'var(--radius-control)', border: 'none',
+          backgroundColor: 'var(--blue-600)', color: 'var(--surface-white)', fontSize: '20px', cursor: 'pointer',
+          boxShadow: 'var(--rp-shadow-far)',
         }}
         className="mobile-sidebar-toggle"
       >
-        {showSidebar ? 'X' : '\u2630'}
+        {showSidebar ? <X size={20} aria-hidden="true" /> : <Menu size={20} aria-hidden="true" />}
       </button>
       <style>{`
         @media (max-width: 768px) {
@@ -331,10 +336,13 @@ export function ReportsView() {
       `}</style>
 
       {/* Sidebar - Categories */}
-      <div
+      <nav
+        id="rp-report-categories"
+        aria-label="Report categories"
         className="reports-sidebar"
         style={{
           width: '220px',
+          flexShrink: 0,
           backgroundColor: 'var(--bg-secondary)',
           borderRight: '1px solid var(--border-color)',
           display: 'flex',
@@ -351,6 +359,7 @@ export function ReportsView() {
           <button
             key={category.id}
             onClick={() => handleCategorySelect(category.id)}
+            aria-pressed={selectedCategory === category.id}
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -367,36 +376,38 @@ export function ReportsView() {
               transition: 'all 0.2s',
             }}
           >
-            <span style={{ fontSize: '18px' }}>{category.icon}</span>
+            <PresentationIcon value={category.icon} size={18} />
             {category.label}
           </button>
         ))}
-      </div>
+      </nav>
 
       {/* Main Content */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+      <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
         {/* Header with Report Selector */}
         <div
           style={{
-            padding: '20px 32px',
+            padding: 'var(--rp-s-5) clamp(var(--rp-s-4), 3vw, var(--rp-s-8))',
             borderBottom: '1px solid var(--border-color)',
             backgroundColor: 'var(--bg-primary)',
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
+          <h1 style={{ margin: '0 0 var(--rp-s-4)', fontSize: 24, fontWeight: 600, color: 'var(--text-primary)' }}>Reports</h1>
+          <div className="rp-report-toolbar" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
             <select
+              aria-label="Report type"
               value={selectedReport}
               onChange={(e) => setSelectedReport(e.target.value)}
               style={{
                 padding: '8px 12px',
                 borderRadius: '6px',
-                border: '1px solid var(--border-color)',
+                border: '1px solid var(--control-line)',
                 backgroundColor: 'var(--bg-secondary)',
                 color: 'var(--text-primary)',
                 fontSize: '14px',
                 fontWeight: '600',
                 cursor: 'pointer',
-                minWidth: '200px', maxWidth: '100%',
+                flex: '1 1 200px', minWidth: 0, maxWidth: '100%',
               }}
             >
               {currentCategory?.reports.map((report) => (
@@ -410,14 +421,14 @@ export function ReportsView() {
               style={{
                 padding: '8px 16px',
                 borderRadius: '6px',
-                border: '1px solid var(--border-color)',
+                border: '1px solid var(--control-line)',
                 backgroundColor: 'var(--bg-secondary)',
                 color: 'var(--text-primary)',
                 fontSize: '14px',
                 cursor: 'pointer',
               }}
             >
-              🔄 Refresh
+              Refresh
             </button>
 
             {/* Export Button with Dropdown */}
@@ -430,13 +441,13 @@ export function ReportsView() {
                   borderRadius: '6px',
                   border: '1px solid var(--border-color)',
                   backgroundColor: reportData && !loading ? 'var(--primary)' : 'var(--bg-secondary)',
-                  color: reportData && !loading ? '#fff' : 'var(--text-secondary)',
+                  color: reportData && !loading ? 'var(--surface-white)' : 'var(--text-secondary)',
                   fontSize: '14px',
                   cursor: reportData && !loading ? 'pointer' : 'not-allowed',
                   opacity: reportData && !loading ? 1 : 0.6,
                 }}
               >
-                📥 Export
+                Export
               </button>
 
               {showExportMenu && reportData && (
@@ -460,7 +471,7 @@ export function ReportsView() {
                       backgroundColor: 'var(--bg-secondary)',
                       border: '1px solid var(--border-color)',
                       borderRadius: '8px',
-                      boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                      boxShadow: 'var(--rp-shadow-far)',
                       zIndex: 20,
                       minWidth: '160px',
                       overflow: 'hidden',
@@ -487,7 +498,7 @@ export function ReportsView() {
                       onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--bg-active)')}
                       onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
                     >
-                      📄 Export as CSV
+                      Export as CSV
                     </button>
                     <button
                       onClick={() => {
@@ -510,7 +521,7 @@ export function ReportsView() {
                       onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--bg-active)')}
                       onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
                     >
-                      📊 Export as Excel
+                      Export as Excel
                     </button>
                     <button
                       onClick={() => {
@@ -533,7 +544,7 @@ export function ReportsView() {
                       onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--bg-active)')}
                       onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
                     >
-                      📑 Export as PDF
+                      Export as PDF
                     </button>
                   </div>
                 </>
@@ -545,6 +556,8 @@ export function ReportsView() {
           <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
             {currentReport?.hasDateFilter && (
               <>
+                <label className="rp-field">
+                  <span className="rp-label">From Date</span>
                 <input
                   type="date"
                   value={dateFrom}
@@ -553,12 +566,15 @@ export function ReportsView() {
                   style={{
                     padding: '6px 10px',
                     borderRadius: '6px',
-                    border: '1px solid var(--border-color)',
+                    border: '1px solid var(--control-line)',
                     backgroundColor: 'var(--bg-secondary)',
                     color: 'var(--text-primary)',
                     fontSize: '13px',
                   }}
                 />
+                </label>
+                <label className="rp-field">
+                  <span className="rp-label">To Date</span>
                 <input
                   type="date"
                   value={dateTo}
@@ -567,17 +583,19 @@ export function ReportsView() {
                   style={{
                     padding: '6px 10px',
                     borderRadius: '6px',
-                    border: '1px solid var(--border-color)',
+                    border: '1px solid var(--control-line)',
                     backgroundColor: 'var(--bg-secondary)',
                     color: 'var(--text-primary)',
                     fontSize: '13px',
                   }}
                 />
+                </label>
               </>
             )}
 
             {currentReport?.hasStatusFilter && (
               <select
+                aria-label="Report status"
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
                 style={{
@@ -601,6 +619,7 @@ export function ReportsView() {
 
             {currentReport?.hasSourceFilter && (
               <select
+                aria-label="Report source"
                 value={sourceFilter}
                 onChange={(e) => setSourceFilter(e.target.value)}
                 style={{
@@ -624,6 +643,7 @@ export function ReportsView() {
 
             {currentReport?.hasTypeFilter && selectedCategory === 'call' && (
               <select
+                aria-label="Call type"
                 value={typeFilter}
                 onChange={(e) => setTypeFilter(e.target.value)}
                 style={{
@@ -643,6 +663,7 @@ export function ReportsView() {
 
             {currentReport?.hasTypeFilter && selectedCategory === 'property' && (
               <select
+                aria-label="Property type"
                 value={typeFilter}
                 onChange={(e) => setTypeFilter(e.target.value)}
                 style={{
@@ -701,7 +722,7 @@ export function ReportsView() {
               style={{
                 textAlign: 'center',
                 padding: '40px 20px',
-                color: '#ef4444',
+                color: 'var(--rp-danger-text)',
                 backgroundColor: 'var(--error-bg)',
                 borderRadius: '8px',
               }}

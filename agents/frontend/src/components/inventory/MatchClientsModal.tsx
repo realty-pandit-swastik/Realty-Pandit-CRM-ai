@@ -76,7 +76,7 @@ export const MatchClientsModal: React.FC<MatchClientsModalProps> = ({ inventoryI
     };
 
     return (
-        <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 1000, backgroundColor: 'var(--sheet-backdrop, rgba(0,0,0,0.45))', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+        <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 1000, backgroundColor: 'var(--sheet-backdrop, var(--rp-overlay-soft))', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
             <div onClick={(e) => e.stopPropagation()} style={{ backgroundColor: 'var(--bg-secondary)', borderRadius: 'var(--radius-clay, 16px)', boxShadow: 'var(--shadow-clay)', border: '1px solid var(--border-secondary)', width: '100%', maxWidth: 520, maxHeight: '85vh', display: 'flex', flexDirection: 'column' }}>
                 {/* Header */}
                 <div style={{ padding: '16px 18px', borderBottom: '1px solid var(--border-primary)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
@@ -90,7 +90,7 @@ export const MatchClientsModal: React.FC<MatchClientsModalProps> = ({ inventoryI
                 {/* Body */}
                 <div style={{ flex: 1, overflowY: 'auto', padding: '12px 18px' }}>
                     {loading && <div style={{ padding: 24, textAlign: 'center', color: 'var(--text-secondary)' }}>Finding matching clients…</div>}
-                    {error && <div style={{ padding: 16, color: '#ef4444', fontSize: 13 }}>{error}</div>}
+                    {error && <div style={{ padding: 16, color: 'var(--rp-danger-text)', fontSize: 13 }}>{error}</div>}
                     {!loading && !error && matches.length === 0 && (
                         <div style={{ padding: 28, textAlign: 'center', color: 'var(--text-muted)' }}>
                             <div style={{ fontSize: 28, opacity: 0.5 }}>🤷</div>
@@ -113,7 +113,7 @@ export const MatchClientsModal: React.FC<MatchClientsModalProps> = ({ inventoryI
                                             <div style={{ flex: 1, minWidth: 0 }}>
                                                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                                                     <span style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--text-primary)' }}>{m.contact_name || tel || 'Client'}</span>
-                                                    <span style={{ fontSize: 10.5, fontWeight: 700, color: '#3b82f6', backgroundColor: 'rgba(59,130,246,0.12)', borderRadius: 7, padding: '1px 7px' }}>{m.score}% match</span>
+                                                    <span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--blue-500)', backgroundColor: 'var(--rp-info-wash)', borderRadius: 7, padding: '1px 7px' }}>{m.score}% match</span>
                                                 </div>
                                                 <div style={{ fontSize: 11.5, color: 'var(--text-muted)', marginTop: 2 }}>
                                                     {fmtBudget(m.demand_budget_min, m.demand_budget_max)}{m.demand_location ? ` · ${m.demand_location}` : ''} · {m.match_reason}
@@ -124,9 +124,9 @@ export const MatchClientsModal: React.FC<MatchClientsModalProps> = ({ inventoryI
                                                     </div>
                                                 )}
                                                 {m.contact_redacted && <div style={{ fontSize: 11, marginTop: 2, color: 'var(--text-muted)' }}>🔒 Contact hidden — share via company WhatsApp</div>}
-                                                {r && <div style={{ fontSize: 11, marginTop: 3, color: r.status === 'sent' ? '#22c55e' : '#ef4444' }}>{r.status === 'sent' ? '✅' : '❌'} {r.message}</div>}
+                                                {r && <div style={{ fontSize: 11, marginTop: 3, color: r.status === 'sent' ? 'var(--rp-success-text)' : 'var(--rp-danger-text)' }}>{r.status === 'sent' ? '✅' : '❌'} {r.message}</div>}
                                             </div>
-                                            {tel && <a href={`tel:${tel}`} title="Call" style={{ color: '#22c55e', textDecoration: 'none', fontSize: 16 }}>📞</a>}
+                                            {tel && <a href={`tel:${tel}`} title="Call" style={{ color: 'var(--rp-success-text)', textDecoration: 'none', fontSize: 16 }}>📞</a>}
                                         </div>
                                     );
                                 })}
@@ -149,7 +149,7 @@ export const MatchClientsModal: React.FC<MatchClientsModalProps> = ({ inventoryI
                         <button
                             onClick={share}
                             disabled={sharing || selected.size === 0}
-                            style={{ padding: '9px 18px', borderRadius: 10, border: 'none', background: selected.size === 0 ? 'var(--bg-hover)' : '#25d366', color: selected.size === 0 ? 'var(--text-muted)' : '#fff', fontWeight: 700, cursor: sharing || selected.size === 0 ? 'not-allowed' : 'pointer', opacity: sharing ? 0.7 : 1 }}
+                            style={{ padding: '9px 18px', borderRadius: 10, border: 'none', background: selected.size === 0 ? 'var(--bg-hover)' : 'var(--rp-success-text)', color: selected.size === 0 ? 'var(--text-muted)' : 'var(--surface-white)', fontWeight: 700, cursor: sharing || selected.size === 0 ? 'not-allowed' : 'pointer', opacity: sharing ? 0.7 : 1 }}
                         >
                             {sharing ? 'Sharing…' : `📲 Share to ${selected.size} selected`}
                         </button>
