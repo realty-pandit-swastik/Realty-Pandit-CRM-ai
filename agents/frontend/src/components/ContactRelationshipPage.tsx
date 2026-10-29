@@ -2,14 +2,18 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { getContactRelationship } from '../api/client';
 import { toDialablePhone } from '../lib/phone';
 import { clientRoleLabel } from '../lib/leadDisplay';
-import { CONTACT_OPEN_EVENT } from '../lib/contactNavigation';
+import { CONTACT_OPEN_EVENT, navigateFromContact } from '../lib/contactNavigation';
+import { InventoryDetailView } from './InventoryDetailView';
 import './crmRelationships.css';
 
-interface Relationship {
+export interface Relationship {
     contact: { phone_number: string; name: string | null; email: string | null; contact_type: string; client_role: string | null };
-    leads: Array<{ id: string; source: string; source_ref: string | null; status: string; created_at: string;
+    leads: Array<{ id: string; source: string; source_label?: string | null; source_ref: string | null; status: string; created_at: string;
         demand_budget_min: number | string | null; demand_budget_max: number | string | null; demand_location: string | null }>;
-    inventory: Array<{ id: string; display_id: string | null; type: string; location: string | null; city: string | null; relationship: string; status: string }>;
+    inventory: Array<{ id: string; display_id: string | null; type: string; location: string | null; city: string | null; relationship: string; relationships?: string[]; status: string }>;
+    other_links?: Array<{ id: string; type: string; name: string }>;
+    counts?: { leads: number; inventory: number; key_holder: number; deals: number; other: number };
+    has_more_relationships?: boolean;
     timeline: Array<{ id: string; event_type: string; content: string | null; created_at: string; metadata?: Record<string, unknown> }>;
     has_more: boolean;
 }
@@ -17,8 +21,37 @@ interface Relationship {
 const date = (value: string) => new Date(value).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' });
 const money = (value: string | number | null) => value == null ? '—' : `₹${Number(value).toLocaleString('en-IN')}`;
 
-export function ContactRelationshipPage({ phone, onBack }: { phone: string; onBack: () => void }) {
-    const [tab, setTab] = useState<'leads' | 'inventory' | 'timeline'>('leads');
+export function ContactRelationshipSections({ data, onDeal, onMember }: { data: Relationship; onDeal: (id: string) => void; onMember: (id: string) => void }) {
+    const [inventoryId, setInventoryId] = useState<string | null>(null);
+    const has = (item: Relationship['inventory'][number], role: string) => (item.relationships || [item.relationship]).includes(role);
+    const owned = data.inventory.filter(i => has(i, 'Owner'));
+    const held = data.inventory.filter(i => has(i, 'Key holder'));
+    const other = data.inventory.filter(i => has(i, 'Partner') || has(i, 'Enquired'));
+    const pipeline = data.leads.filter(l => !['CLOSED_WON', 'CLOSED_LOST'].includes(l.status));
+    const renderInventory = (items: Relationship['inventory']) => items.map(item => <button type="button" className="crm-card crm-record-link" key={item.id} onClick={() => setInventoryId(item.id)}>
+        <strong>{item.display_id || item.type}</strong><span>{item.type} · {item.location || item.city || 'Location not recorded'} · {item.status}</span>
+    </button>);
+    const renderLeads = (items: Relationship['leads']) => items.map(lead => <button type="button" className="crm-card crm-record-link" key={lead.id} onClick={() => onDeal(lead.id)}>
+        <strong>{lead.source_label || lead.source}{lead.source_ref ? ` · ${lead.source_ref}` : ''}</strong>
+        <span>{lead.status.replaceAll('_', ' ')} · {date(lead.created_at)}</span>
+        <span>{money(lead.demand_budget_min)} – {money(lead.demand_budget_max)} · {lead.demand_location || 'Location not recorded'}</span>
+    </button>);
+    const any = data.leads.length || data.inventory.length || data.other_links?.length;
+    return <div className="contact-relationship-sections">
+        {!any && <p>No accessible relationships for this contact.</p>}
+        {!!data.leads.length && <section aria-label="Leads"><h3>Leads ({data.counts?.leads ?? data.leads.length})</h3>{renderLeads(data.leads)}</section>}
+        {!!owned.length && <section aria-label="Inventory provided"><h3>Inventory provided ({data.counts?.inventory ?? owned.length})</h3>{renderInventory(owned)}</section>}
+        {!!held.length && <section aria-label="Key holder for"><h3>Key holder for ({data.counts?.key_holder ?? held.length})</h3>{renderInventory(held)}</section>}
+        {!!pipeline.length && <section aria-label="Deals in pipeline"><h3>Deals in pipeline ({data.counts?.deals ?? pipeline.length})</h3>{renderLeads(pipeline)}</section>}
+        {!!(other.length || data.other_links?.length) && <section aria-label="Other links"><h3>Other links ({data.counts?.other ?? other.length + (data.other_links?.length || 0)})</h3>{renderInventory(other)}
+            {data.other_links?.map(link => <button type="button" className="crm-card crm-record-link" key={link.id} onClick={() => onMember(link.id)}>{link.type}: {link.name}</button>)}
+        </section>}
+        {inventoryId && <InventoryDetailView inventoryId={inventoryId} onClose={() => setInventoryId(null)} />}
+    </div>;
+}
+
+export function ContactRelationshipPage({ phone, onBack, embedded = false }: { phone: string; onBack: () => void; embedded?: boolean }) {
+    const [tab, setTab] = useState<'leads' | 'timeline'>('leads');
     const [data, setData] = useState<Relationship | null>(null);
     const [page, setPage] = useState(1);
     const [loading, setLoading] = useState(true);
@@ -31,7 +64,10 @@ export function ContactRelationshipPage({ phone, onBack }: { phone: string; onBa
         try {
             const result: Relationship = await getContactRelationship(phone, nextPage);
             if (request !== sequence.current) return;
-            setData(previous => ({ ...result, timeline: nextPage > 1 && previous ? [...previous.timeline, ...result.timeline] : result.timeline }));
+            setData(previous => {
+                const merge = <T extends { id: string }>(old: T[], next: T[]) => [...new Map([...old, ...next].map(item => [item.id, item])).values()];
+                return nextPage > 1 && previous ? { ...result, leads: merge(previous.leads, result.leads), inventory: merge(previous.inventory, result.inventory), timeline: merge(previous.timeline, result.timeline) } : result;
+            });
             setPage(nextPage);
         } catch (e: any) {
             if (request === sequence.current) setError(e.response?.data?.error || 'Could not load contact. Please retry.');
@@ -40,14 +76,14 @@ export function ContactRelationshipPage({ phone, onBack }: { phone: string; onBa
     useEffect(() => { setData(null); setTab('leads'); setPage(1); void load(1); return invalidate; }, [load, invalidate]);
     const tel = toDialablePhone(data?.contact.phone_number);
     return <section className="crm-page relationship-page" aria-label="Contact relationship">
-        <header className="crm-header">
+        {!embedded && <header className="crm-header">
             <button type="button" className="crm-button" onClick={onBack}>← Back</button>
             <h1>Contact relationship</h1>
-        </header>
+        </header>}
         {error && <div className="crm-error" role="alert">{error} <button className="crm-button" onClick={() => void load(data ? page + 1 : 1)}>Retry</button></div>}
         {!data && loading && <p role="status">Loading contact…</p>}
         {data && <>
-            <div className="crm-card">
+            {!embedded && <div className="crm-card">
                 <h2>{data.contact.name || 'Unnamed contact'}</h2>
                 <p>{tel || 'No dialable phone recorded'}</p>
                 <p>{data.contact.email || 'No email recorded'}</p>
@@ -55,24 +91,13 @@ export function ContactRelationshipPage({ phone, onBack }: { phone: string; onBa
                     {Array.from(new Set([clientRoleLabel(data.contact.client_role), data.contact.contact_type.replaceAll('_', ' '), data.inventory.some(i => i.relationship === 'Owner') ? 'Owner' : null])).filter(Boolean).map(tag => <span className="crm-tag" key={tag}>{tag}</span>)}
                 </div>
                 {tel && <div className="crm-actions"><a className="crm-button" href={`tel:${tel}`}>Call</a><a className="crm-button" href={`https://wa.me/${tel.slice(1)}`} target="_blank" rel="noopener noreferrer">WhatsApp</a></div>}
-            </div>
+            </div>}
             <nav className="crm-tabs" aria-label="Contact sections">
-                {(['leads', 'inventory', 'timeline'] as const).map(key => <button type="button" key={key} className="crm-button" aria-current={tab === key ? 'page' : undefined} onClick={() => setTab(key)}>{key[0].toUpperCase() + key.slice(1)}{key === 'leads' ? ` (${data.leads.length})` : key === 'inventory' ? ` (${data.inventory.length})` : ''}</button>)}
+                {(['leads', 'timeline'] as const).map(key => <button type="button" key={key} className="crm-button" aria-current={tab === key ? 'page' : undefined} onClick={() => setTab(key)}>{key === 'leads' ? 'Relationships' : 'Timeline'}</button>)}
             </nav>
-            {tab === 'leads' && <section aria-label="Contact leads">
-                {!data.leads.length && <p>No accessible enquiries for this contact.</p>}
-                {data.leads.map(lead => <article className="crm-card" key={lead.id}>
-                    <h3>{lead.source}{lead.source_ref ? ` · ${lead.source_ref}` : ''}</h3>
-                    <p><span className="crm-tag">{lead.status.replaceAll('_', ' ')}</span> · {date(lead.created_at)}</p>
-                    <p>{money(lead.demand_budget_min)} – {money(lead.demand_budget_max)}</p>
-                    <p>{lead.demand_location || 'Location not recorded'}</p>
-                </article>)}
-            </section>}
-            {tab === 'inventory' && <section aria-label="Contact inventory">
-                {!data.inventory.length && <p>No internal inventory is linked to this contact.</p>}
-                {data.inventory.map(item => <article className="crm-card" key={item.id}><h3>{item.display_id || item.type}</h3><p>{item.type} · {item.location || item.city || 'Location not recorded'}</p><p>{item.relationship} · {item.status}</p></article>)}
-                {data.leads.filter(l => l.source_ref).length > 0 && <div className="crm-card"><h3>Enquired portal properties</h3>{data.leads.filter(l => l.source_ref).map(l => <p key={l.id}>{l.source} · {l.source_ref} · {date(l.created_at)}</p>)}</div>}
-            </section>}
+            {tab === 'leads' && <><ContactRelationshipSections data={data} onDeal={id => navigateFromContact({ entity: 'deals', filter: { deal: id } }, onBack)} onMember={id => navigateFromContact({ entity: 'team', filter: { member: id } }, onBack)} />
+                {data.has_more_relationships && <button type="button" className="crm-button" disabled={loading} onClick={() => void load(page + 1)}>{loading ? 'Loading…' : 'Show more relationships'}</button>}
+            </>}
             {tab === 'timeline' && <section aria-label="Contact timeline">
                 {!data.timeline.length && <p>No recorded activity yet.</p>}
                 <ol className="crm-timeline">{data.timeline.map(event => <li className="crm-card" key={event.id}>

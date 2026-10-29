@@ -147,6 +147,8 @@ model Contact {
   // visibility scopes and filters (BUYER/TENANT/...). A per-enquiry override lives on
   // Transaction.client_role_override and wins for that row only.
   client_role String?
+  client_role_label String?
+  source_label String?
 
   last_channel     String? // whatsapp, voice
   last_interaction DateTime?
@@ -544,6 +546,10 @@ model Inventory {
   key_holder_type  KeyHolderType?
   key_holder_name  String? // Name of key holder (for EXTERNAL type)
   key_holder_phone String? // Phone of key holder (for EXTERNAL type)
+  key_holder_role String?
+  key_holder_role_label String?
+  property_contact_role String?
+  property_contact_role_label String?
 
   // Owner contact ID (for easy reference, already have owner_phone)
   owner_contact_id String?
@@ -1853,6 +1859,7 @@ model Transaction {
   // (e.g. a chokidar on this particular lead). Same vocabulary as Contact.client_role;
   // wins over it wherever the row is rendered. See schema comment on Contact.client_role.
   client_role_override String?
+  source_label String?
 
   // Deal Details
   type     TransactionType // SALE or RENT

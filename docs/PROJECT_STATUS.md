@@ -1,9 +1,33 @@
 # Realty Pandit — Live Project Status
 
-**Last updated:** 2026-10-13
+**Last updated:** 2026-10-26
 **Update trigger:** Significant deployments, phase completions, blockers cleared/added.
 
 > This file is the **live state**. When you see contradictions with anything else in /docs/, this wins. Update the timestamp on each meaningful change.
+
+## Contact identity and relationships — fix-dev implementation, not deployed (2026-10-26)
+
+- Local-only changes on fix-dev separate property contacts from staff/referral attribution,
+  resolve key-holder designations, share role/source options, and reuse the C relationship
+  service/component in Contacts. Additive migration was rehearsed in an isolated database;
+  it has not been applied to production.
+- User-requested production database backup was created and archive/checksum verified.
+  Read-only repair plan identifies 155 proposed staff-partner unlinks and nine owner identities
+  needing manual review; no business-data repair was performed.
+- CRM build and two navigation tests pass. Full backend run: 747 assertions passed, three
+  skipped; image-route fixture cleanup still fails with Windows EPERM. Backend typechecking
+  retains baseline diagnostics; no introduced diagnostics were found in comparison.
+- See [contact-roles-fixes.md](agent/contact-roles-fixes.md) for exact evidence, branch/worktree,
+  confirmed options, migration/rollback notes and outstanding production approval gates.
+- Isolated backup restore verified 104 tables, including 7,174 contacts, 1,057 inventory rows
+  and 6,966 transactions. Forward migration, rolled-back column-write probes, rollback and
+  reapply passed with unchanged counts/data fingerprints. Scratch database/owner role were
+  removed and independently checked absent; production new-column metadata remains unchanged.
+  See [migration rehearsal proof](agent/contact-migration-rehearsal.md).
+- Guardrails added later require target-bound fresh backup/restore evidence, independently verified
+  encrypted off-server backup, exact reviewed approvals and conflict-safe repair journals. The
+  SQL changed after the historical rehearsal, so current SQL needs a fresh rehearsal; production
+  migration/deployment/repairs remain blocked. See [guardrail runbook](runbooks/contact-change-guardrails.md).
 
 ## Dashboard PR #38 — merged and production verified (2026-10-13)
 

@@ -4,6 +4,8 @@
  * and the desktop rows in ExternalLeads.
  */
 
+import { CONTACT_ROLES } from '../../../backend/src/data/contact_catalog';
+
 // Pipeline stage (Contact.lifecycle_stage, or the row's deal status on multi-deal
 // contacts). Shown read-only — the stage itself is driven by the deal pipeline.
 export const STAGE_META: Record<string, { label: string; color: string }> = {
@@ -46,26 +48,13 @@ export function bhkLabel(source: { demand_schema_values?: Record<string, any> | 
 }
 
 /**
- * Client-type vocabulary — who a person IS. CLIENT | AGENT | BUILDER | FINANCER | CHOKIDAR,
- * extensible in this one map (mirrors the backend's Contact.client_role allow-list).
+ * Client-type vocabulary — who a person IS, from the shared backend/CRM catalog.
  * Deliberately separate from contact_type, which is load-bearing for queues/visibility.
  */
-export const CLIENT_ROLE_LABEL: Record<string, string> = {
-    CLIENT: 'Client',
-    AGENT: 'Agent',
-    BUILDER: 'Builder',
-    FINANCER: 'Financer',
-    CHOKIDAR: 'Chokidar',
-};
+export const CLIENT_ROLE_LABEL: Record<string, string> = Object.fromEntries(CONTACT_ROLES.map(r => [r.code, r.label]));
 
 /** Badge colors per client role. Unknown/future codes fall back to grey. */
-export const CLIENT_ROLE_COLOR: Record<string, string> = {
-    CLIENT: '#3b82f6',
-    AGENT: '#7c3aed',
-    BUILDER: '#f59e0b',
-    FINANCER: '#14b8a6',
-    CHOKIDAR: '#64748b',
-};
+export const CLIENT_ROLE_COLOR: Record<string, string> = Object.fromEntries(CONTACT_ROLES.map(r => [r.code, r.color]));
 
 export function clientRoleLabel(raw?: string | null): string | null {
     if (!raw) return null;

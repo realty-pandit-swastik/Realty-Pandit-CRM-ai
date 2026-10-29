@@ -4,6 +4,7 @@ import { getContacts, getInteractions, updateContactType, reportNoShow, markLead
 import { useAuth } from './contexts/AuthContext';
 import { useIsMobile } from './hooks/useIsMobile';
 import { onDrill } from './lib/drill';
+import { TeamMemberProfile } from './components/TeamMemberProfile';
 import { ToastProvider, useToast } from './contexts/ToastContext';
 import { ToastContainer } from './components/ui/Toast';
 import { ConfirmProvider, ConfirmDialogRoot, useConfirm } from './contexts/ConfirmContext';
@@ -219,6 +220,7 @@ function App() {
   // Drill-through (2026-07-16): a one-shot pre-filter passed to InventoryList when a dashboard
   // tile is clicked. Cleared once consumed so a later manual Inventory visit starts clean.
   const [drillFilter, setDrillFilter] = useState<Record<string, string> | null>(null);
+  const [deepLinkTeamMember, setDeepLinkTeamMember] = useState<string | null>(null);
   const [leadsFilter, setLeadsFilter] = useState<Record<string, string> | null>(null);
   const viewRef = useRef(view);
   useEffect(() => { viewRef.current = view; }, [view]);
@@ -281,6 +283,7 @@ function App() {
   // list. Inventory receives a one-shot pre-filter; other entities just navigate (their own
   // filter injection lands in their phase). onDrill returns its unsubscribe as the effect cleanup.
   useEffect(() => onDrill(({ entity, filter }) => {
+    if (entity === 'team') setDeepLinkTeamMember(filter?.member ?? null);
     if (entity === 'inventory') setDrillFilter(filter ?? null);
     if (entity === 'leads') setLeadsFilter(filter ?? null);
     // Lead tiles drill to a specific deal: DealPipeline opens it via initialDealId
@@ -292,7 +295,7 @@ function App() {
       setDeepLinkContactPhone(filter?.contact ?? null);
       setDeepLinkContactName(filter?.name ?? null);
     }
-    setView(entity);
+    setView(entity === 'team' && filter?.member ? 'team-member' : entity);
   }), []);
 
   // PARTNER-SCOPED MODE (2026-07-12): an external partner agent shares this app but may only use
@@ -557,6 +560,8 @@ function App() {
           return <MobileScrollWrapper><MyTeam /></MobileScrollWrapper>;
         case 'team':
           return <MobileTeamView />;
+        case 'team-member':
+          return deepLinkTeamMember ? <MobileScrollWrapper><TeamMemberProfile memberId={deepLinkTeamMember} onBack={() => { setDeepLinkTeamMember(null); setView('team'); }} /></MobileScrollWrapper> : <MobileTeamView />;
         case 'property-map':
           return <MobileScrollWrapper><PropertyMapView /></MobileScrollWrapper>;
         case 'live-status':
@@ -694,6 +699,8 @@ function App() {
         return <MyTeam />;
       case 'team':
         return <TeamManagement />;
+      case 'team-member':
+        return deepLinkTeamMember ? <TeamMemberProfile memberId={deepLinkTeamMember} onBack={() => { setDeepLinkTeamMember(null); setView('team'); }} /> : <TeamManagement />;
       case 'partners':
         return <PartnerManagement />;
       case 'contacts':

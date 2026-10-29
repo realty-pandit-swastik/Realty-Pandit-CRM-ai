@@ -19,7 +19,8 @@ import { normalizePhone, phoneVariants, isPlaceholderPhone } from '../utils/phon
 import { type ClientRole } from '../utils/client_role';
 import { findInventoryIdsByAddress } from '../utils/inventory_search';
 import { generateDisplayId } from '../utils/inventory_id';
-import { inventorySourceKind } from '../utils/inventory_source';
+import { inventoryPartyContext, resolveInventoryParties, assertExternalPartnerPhone, validateInventoryPartyWrite } from '../services/inventory_parties';
+import { validateDesignation, CONTACT_ROLES } from '../data/contact_catalog';
 import { getTeamIds } from '../utils/team_scope';
 import { partnerOwnInventoryWhere } from '../utils/partner_scope';
 import { expandTaxonomyNodeIds, bhkSpecsFilter } from '../utils/taxonomy_filter';
@@ -173,8 +174,9 @@ router.post('/', authMiddleware, checkPermission('edit_inventory'), async (req, 
         if (!owner_phone) {
             return res.status(400).json({ error: 'owner_phone is required' });
         }
+        if (req.body.property_contact_role === 'EMPLOYEE' && !['super_boss', 'manager', 'employee'].includes(req.agent!.role)) return res.status(403).json({ error: 'Only internal staff may link an Employee property contact' });
 
-        const tenant = await prisma.tenant.findFirst();
+        const tenant = await prisma.tenant.findFirst({ where: { id: req.agent!.tenant_id } });
         if (!tenant) return res.status(500).json({ error: 'Tenant configuration missing' });
 
         // Normalize phone
@@ -182,7 +184,15 @@ router.post('/', authMiddleware, checkPermission('edit_inventory'), async (req, 
         if (!phone) return res.status(400).json({ error: 'Invalid owner phone number' });
         // #9 railguard: never store a team member as the property owner.
         const staffOwnerC = await activeStaffOwnerName(phone);
-        if (staffOwnerC) return res.status(400).json({ error: `${staffOwnerC} is a team member and cannot be set as the property owner. Enter the actual owner's number.` });
+        if (staffOwnerC && req.body.property_contact_role !== 'EMPLOYEE') return res.status(400).json({ error: `${staffOwnerC} is a team member and cannot be set as the property owner. Enter the actual owner's number.` });
+        const partyFields: any = { tenant_id: tenant.id, owner_phone: phone,
+            property_contact_role: req.body.property_contact_role, property_contact_role_label: req.body.property_contact_role_label,
+            key_holder_role: req.body.key_holder_role, key_holder_role_label: req.body.key_holder_role_label,
+            referral_partner_id: source_partner_id };
+        try {
+            await validateInventoryPartyWrite(partyFields);
+            if (source_partner_phone) await assertExternalPartnerPhone(source_partner_phone, tenant.id);
+        } catch (error) { return res.status(400).json({ error: (error as Error).message }); }
 
         // Resolve legacy fields from classification IDs
         let legacyCategory = category;
@@ -236,7 +246,6 @@ router.post('/', authMiddleware, checkPermission('edit_inventory'), async (req, 
             where: { phone_number: phone },
             update: {
                 name: owner_name || undefined,
-                contact_type: 'LANDLORD',
                 last_channel: 'admin',
                 last_interaction: new Date(),
             } as any,
@@ -244,7 +253,7 @@ router.post('/', authMiddleware, checkPermission('edit_inventory'), async (req, 
                 phone_number: phone,
                 name: owner_name || null,
                 source: 'admin_created',
-                contact_type: 'LANDLORD',
+                contact_type: (CONTACT_ROLES.find(role => role.code === partyFields.property_contact_role)?.contactType || 'LANDLORD') as any,
                 intent,
                 tenant_id: tenant.id,
                 last_channel: 'admin',
@@ -327,6 +336,10 @@ router.post('/', authMiddleware, checkPermission('edit_inventory'), async (req, 
                 display_floor: display_floor ? String(display_floor).trim() : null,
 
                 // Key holder
+                property_contact_role: partyFields.property_contact_role,
+                property_contact_role_label: partyFields.property_contact_role_label,
+                key_holder_role: partyFields.key_holder_role,
+                key_holder_role_label: partyFields.key_holder_role_label,
                 key_holder_type: key_holder_type || null,
                 key_holder_name: key_holder_name || null,
                 key_holder_phone: key_holder_phone || null,
@@ -788,7 +801,7 @@ router.get('/', authMiddleware, async (req, res) => {
                     // Owner NAME (Inventory has no owner_name column). Redacted for viewers
                     // without owner access like any other contact relation.
                     contact: { select: { name: true, client_role: true } },
-                    key_holder_contact: { select: { name: true, client_role: true, phone_number: true } },
+                    key_holder_contact: { select: { name: true, client_role: true, contact_type: true, phone_number: true } },
                     property_category: { select: { id: true, name: true, slug: true } },
                     property_sub_category: { select: { id: true, name: true, slug: true } },
                     property_type_link: { select: { id: true, name: true, slug: true } },
@@ -920,37 +933,25 @@ router.get('/', authMiddleware, async (req, res) => {
         // the handling manager (assigned_agent) + super_boss. Computed from the RAW row before redaction
         // (which strips the underlying owner/dealer PII), then re-attached.
         const isSB = agent.role === 'super_boss';
+        const parties = await inventoryPartyContext(inventory, agent.tenant_id);
         const data = inventory.map((i: any) => {
             const canSeeSourcePhone = isSB || teamIds.includes(i.assigned_agent_id) || teamIds.includes(i.uploaded_by_agent_id);
             // Source KIND (2026-10-09): ownership_type alone cannot decide dealer-vs-owner — it is
             // NULL on most rows, so partner-attributed listings used to read as "Owner".
-            const sourceKind = inventorySourceKind(i);
-            const isDealer = sourceKind === 'DEALER';
-            const isAgentOwner = sourceKind === 'AGENT_OWNER';
+            const party = resolveInventoryParties(i, parties.staffPhones, parties.people);
             // Owner NAME lives on Contact (Inventory has no owner_name column). Resolved from
             // the relation BEFORE redaction, then re-attached below alongside `source` —
             // previously this fell straight through to uploader_name, so a listing whose owner
             // differed from its uploader displayed the UPLOADER's name as the owner's.
-            const contactName: string | null = i.contact?.name ?? null;
-            const sourceName = (isDealer ? i.referral_partner?.name : contactName) || i.uploader_name || null;
-            const sourcePhoneRaw = isDealer
-                ? (i.referral_partner?.phone_number || i.uploader_phone)
-                : (i.owner_phone || i.uploader_phone);
             const source = {
-                type: sourceKind,
-                designation: isDealer || isAgentOwner ? 'Agent' : (i.contact?.client_role || 'Owner'),
-                name: sourceName,
-                phone: canSeeSourcePhone ? (sourcePhoneRaw || null) : null,
+                ...party.source,
+                phone: canSeeSourcePhone ? party.source.phone : null,
             };
             const redacted = sanitizationService.redactInventoryForStaff(
                 {
                     ...i,
-                    key_holder_name: i.key_holder_type === 'OWNER' ? contactName
-                        : i.key_holder_type === 'UPLOADER' ? i.uploader_name
-                            : i.key_holder_name || i.key_holder_contact?.name || null,
-                    key_holder_phone: i.key_holder_type === 'OWNER' ? i.owner_phone
-                        : i.key_holder_type === 'UPLOADER' ? i.uploader_phone
-                            : i.key_holder_phone || i.key_holder_contact?.phone_number || null,
+                    key_holder_name: party.key_holder_name,
+                    key_holder_phone: party.key_holder_phone,
                     stats: stats[i.id],
                 },
                 { agentId: agent.id, isSuperBoss: isSB, teamIds },
@@ -970,11 +971,9 @@ router.get('/', authMiddleware, async (req, res) => {
             const needs_owner_fix = OWNER_PENDING_PHONES.includes(i.owner_phone)
                 || (!!ownerD && (ownerD === d10(i.uploaded_by_agent?.phone) || ownerD === d10(i.assigned_agent?.phone)));
             return {
-                ...redacted, source, owner_name: contactName, mine, can_edit, needs_owner_fix,
-                key_holder_designation: redacted.key_holder_phone
-                    ? (i.key_holder_type === 'OWNER' ? i.contact?.client_role || 'Owner'
-                        : i.key_holder_type === 'UPLOADER' ? 'Agent' : i.key_holder_contact?.client_role || 'External')
-                    : null,
+                ...redacted, source, owner_name: party.owner_name, mine, can_edit, needs_owner_fix,
+                key_holder_designation: redacted.key_holder_phone ? party.key_holder_designation : null,
+                key_holder_designation_label: redacted.key_holder_phone ? party.key_holder_designation_label : null,
             };
         });
 
@@ -1225,6 +1224,7 @@ router.patch('/:id', authMiddleware, checkPermission('edit_inventory'), async (r
             // Key holder
             'key_holder_type', 'key_holder_name', 'key_holder_phone',
             'key_holder_contact_id',
+            'key_holder_role', 'key_holder_role_label', 'property_contact_role', 'property_contact_role_label',
             // Ownership (Redesign v2)
             'ownership_type', 'upload_source',
             // Owner/Uploader contact correction
@@ -1233,6 +1233,13 @@ router.patch('/:id', authMiddleware, checkPermission('edit_inventory'), async (r
             'owner_phone', 'uploader_phone', 'uploader_name',
         ];
         const updateData: any = {};
+        if (req.body.property_contact_role === 'EMPLOYEE' && !['super_boss', 'manager', 'employee'].includes(req.agent!.role)) return res.status(403).json({ error: 'Only internal staff may link an Employee property contact' });
+        for (const prefix of ['property_contact', 'key_holder']) {
+            if (req.body[`${prefix}_role`] !== undefined || req.body[`${prefix}_role_label`] !== undefined) {
+                try { validateDesignation(req.body[`${prefix}_role`] ?? (existing as any)[`${prefix}_role`], req.body[`${prefix}_role_label`] ?? (existing as any)[`${prefix}_role_label`]); }
+                catch (error) { return res.status(400).json({ error: (error as Error).message }); }
+            }
+        }
         // Handle renovated boolean explicitly (not in allowedFields loop to avoid string coercion)
         if (req.body.renovated !== undefined) {
             updateData.renovated = req.body.renovated === true || req.body.renovated === 'true';
@@ -1379,6 +1386,9 @@ router.patch('/:id', authMiddleware, checkPermission('edit_inventory'), async (r
             }
         }
 
+        // Validate the whole party change before any Contact/Owner side effects.
+        try { await validateInventoryPartyWrite(updateData, existing); }
+        catch (error) { return res.status(400).json({ error: (error as Error).message, error_code: (error as Error & { code?: string }).code }); }
         // Normalize and re-link owner if owner_phone changed
         if (updateData.owner_phone) {
             const normalized = normalizePhone(updateData.owner_phone);
@@ -1386,7 +1396,7 @@ router.patch('/:id', authMiddleware, checkPermission('edit_inventory'), async (r
             // #9 railguard (2026-07-25): the owner must be the ACTUAL owner — never ANY active team
             // member (broadened from the self-only check of 2026-06-20; 313 rows had staff-as-owner).
             const staffOwnerE = await activeStaffOwnerName(normalized);
-            if (staffOwnerE) {
+            if (staffOwnerE && (req.body.property_contact_role ?? (existing as any).property_contact_role) !== 'EMPLOYEE') {
                 // error_code lets the Edit modal explain the rejection inline instead of
                 // relying on a transient toast the user can easily miss.
                 return res.status(400).json({
@@ -1396,8 +1406,14 @@ router.patch('/:id', authMiddleware, checkPermission('edit_inventory'), async (r
             }
             updateData.owner_phone = normalized;
             // Ensure Owner record exists and update FK
-            const tenant = await prisma.tenant.findFirst();
+            const tenant = await prisma.tenant.findFirst({ where: { id: req.agent!.tenant_id } });
             if (tenant) {
+                if (updateData.property_contact_role === 'EMPLOYEE') {
+                    await prisma.contact.upsert({ where: { phone_number: normalized }, update: {}, create: {
+                        phone_number: normalized, tenant_id: tenant.id, name: req.body.owner_name || staffOwnerE || 'Employee',
+                        contact_type: 'MANAGEMENT', source: 'manual',
+                    } });
+                }
                 const ownerId = await ensureOwner(normalized, tenant.id);
                 updateData.owner_id = ownerId;
             }
@@ -3296,17 +3312,22 @@ const enrichmentEngine = new WorkflowEngine(ENRICHMENT_STEPS);
 router.get('/:id/contacts', authMiddleware, async (req, res) => {
     try {
         const inv = await prisma.inventory.findUnique({
-            where: { id: req.params.id },
+            where: { id: String(req.params.id), tenant_id: req.agent!.tenant_id },
             select: {
+                tenant_id: true, ownership_type: true, property_contact_role: true, property_contact_role_label: true,
+                key_holder_type: true, key_holder_role: true, key_holder_role_label: true,
+                uploader_name: true, uploader_phone: true,
                 owner_phone: true,
-                contact: { select: { name: true, phone_number: true } },
+                contact: { select: { name: true, phone_number: true, client_role: true, client_role_label: true } },
                 key_holder_name: true,
                 key_holder_phone: true,
-                key_holder_contact: { select: { name: true, phone_number: true } },
+                key_holder_contact: { select: { name: true, phone_number: true, contact_type: true, client_role: true, client_role_label: true } },
                 assigned_agent: { select: { id: true, name: true, phone: true, role: true } },
             },
         });
         if (!inv) return res.status(404).json({ success: false, error: 'Inventory not found' });
+        const context = await inventoryPartyContext([inv], req.agent!.tenant_id);
+        const party = resolveInventoryParties({ ...inv, ownership_type: 'OWNER' }, context.staffPhones, context.people);
 
         // Privacy (2026-06-12, owner-confirmed): only super_boss + manager get the OWNER /
         // KEY-HOLDER direct contact. Everyone else coordinates through their inventory manager,
@@ -3317,13 +3338,17 @@ router.get('/:id/contacts', authMiddleware, async (req, res) => {
         res.json({
             success: true,
             data: {
-                owner: fullAccess ? {
-                    name: inv.contact?.name ?? null,
-                    phone: inv.owner_phone,
+                owner: fullAccess && party.source.phone ? {
+                    name: party.source.name,
+                    phone: party.source.phone,
+                    designation: party.source.designation,
+                    designation_label: party.source.designation_label,
                 } : null,
                 key_holder: fullAccess ? {
-                    name: inv.key_holder_name ?? inv.key_holder_contact?.name ?? null,
-                    phone: inv.key_holder_phone ?? inv.key_holder_contact?.phone_number ?? null,
+                    name: party.key_holder_name,
+                    phone: party.key_holder_phone,
+                    designation: party.key_holder_designation,
+                    designation_label: party.key_holder_designation_label,
                 } : null,
                 assigned_agent: inv.assigned_agent ?? null,
                 contact_private: !fullAccess,

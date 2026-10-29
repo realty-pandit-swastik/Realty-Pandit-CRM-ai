@@ -35,6 +35,7 @@ export interface EnsureDealArgs {
     contactPhone: string;
     /** Where the lead came from. Free-form, stored on the deal. */
     source: string;
+    sourceLabel?: string | null;
     /** When set (admin manual entry), deal lands in QUALIFIED. */
     createdByAgentId?: string;
     /** Pre-resolved assignment (e.g. portal-email match). When unset, falls back to manager round-robin. */
@@ -166,6 +167,7 @@ export async function ensureDealForLead(args: EnsureDealArgs): Promise<EnsureDea
         type: txType,
         status: status as TransactionStatus,
         source: args.source,
+        source_label: args.sourceLabel ?? null,
         source_ref: sourceRef,
         coordinator_agent_id: assignedAgentId,
         executive_agent_id: assignedAgentId,

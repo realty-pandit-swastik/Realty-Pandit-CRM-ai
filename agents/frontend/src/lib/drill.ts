@@ -12,7 +12,7 @@
  * adds the onClick handlers to individual tiles — verified live in the browser.
  */
 
-export type DrillEntity = 'leads' | 'inventory' | 'deals' | 'tasks';
+export type DrillEntity = 'leads' | 'inventory' | 'deals' | 'tasks' | 'team';
 
 export interface DrillTarget {
   /** which list to open */

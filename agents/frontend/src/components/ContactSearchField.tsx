@@ -1,6 +1,8 @@
-import React, { useState, useCallback, useRef, useEffect } from 'react';
+import React, { useState, useCallback, useRef, useEffect, useId } from 'react';
 import { normalizePhoneInput } from '../lib/phone';
 import client, { ensureContact } from '../api/client';
+import { INVENTORY_CONTACT_ROLES, shortLabel } from '../../../backend/src/data/contact_catalog';
+import { ContactDesignationField } from './ContactDesignationField';
 
 export interface SelectedContact {
     phone: string;
@@ -9,6 +11,8 @@ export interface SelectedContact {
     isNew: boolean;
     contactType?: string; // Raw contact_type from DB
     sourceId?: string;
+    roleLabel?: string;
+    roleExplicit?: boolean;
 }
 
 interface ContactSearchFieldProps {
@@ -21,20 +25,8 @@ interface ContactSearchFieldProps {
 
 // Map identified contact_type to workflow user_role values
 function mapToWorkflowRole(contactType: string, identifiedType?: string): string {
-    if (identifiedType) {
-        switch (identifiedType) {
-            case 'MANAGEMENT': return 'AGENT_DEALER';
-            case 'PARTNER_AGENT': return 'AGENT_DEALER';
-            case 'REAL_ESTATE_BUILDER': return 'BUILDER';
-        }
-    }
-    switch (contactType) {
-        case 'LANDLORD': return 'PROPERTY_OWNER';
-        case 'PARTNER_AGENT': return 'AGENT_DEALER';
-        case 'REAL_ESTATE_BUILDER': return 'BUILDER';
-        case 'MANAGEMENT': return 'AGENT_DEALER';
-        default: return 'PROPERTY_OWNER';
-    }
+    const type = identifiedType || contactType;
+    return INVENTORY_CONTACT_ROLES.find(role => role.contactType !== 'UNKNOWN' && role.contactType === type)?.workflow || '';
 }
 
 function getRoleBadge(contactType: string, identifiedType?: string): { label: string; color: string; bg: string } {
@@ -57,6 +49,7 @@ export const ContactSearchField: React.FC<ContactSearchFieldProps> = ({
     placeholder = 'Enter name or phone number',
     autoFocus = true,
 }) => {
+    const inputId = useId();
     const [query, setQuery] = useState('');
     const [searching, setSearching] = useState(false);
     const [searchResults, setSearchResults] = useState<any[]>([]);
@@ -66,6 +59,7 @@ export const ContactSearchField: React.FC<ContactSearchFieldProps> = ({
     // New contact form (when not found)
     const [newName, setNewName] = useState('');
     const [newRole, setNewRole] = useState('');
+    const [roleLabel, setRoleLabel] = useState('');
     const [creating, setCreating] = useState(false);
     const [error, setError] = useState('');
 
@@ -99,6 +93,7 @@ export const ContactSearchField: React.FC<ContactSearchFieldProps> = ({
         const value = /[a-z]/i.test(val) ? val : normalizePhoneInput(val);
         setSearching(false);
         setQuery(value);
+        setNewRole(''); setRoleLabel('');
         setSearchResults([]);
         setSearchResult(null);
         setNotFound(false);
@@ -119,12 +114,14 @@ export const ContactSearchField: React.FC<ContactSearchFieldProps> = ({
         onContactSelected({
             phone: phoneNum,
             name: searchResult.name || '',
-            role: mapToWorkflowRole(contactType),
+            role: newRole || INVENTORY_CONTACT_ROLES.find(r => r.code === searchResult.client_role)?.workflow || mapToWorkflowRole(contactType),
+            roleLabel: roleLabel || searchResult.client_role_label || '',
+            roleExplicit: !!newRole,
             isNew: false,
             contactType,
             sourceId: searchResult.phone_number,
         });
-    }, [searchResult, query, onContactSelected]);
+    }, [searchResult, newRole, roleLabel, onContactSelected]);
 
     // Create new contact
     const handleCreateContact = useCallback(async () => {
@@ -132,23 +129,21 @@ export const ContactSearchField: React.FC<ContactSearchFieldProps> = ({
             setError('Please enter name and select role');
             return;
         }
+        if (newRole === 'OTHER' && !shortLabel(roleLabel)) { setError('Other requires a label of 2–60 characters'); return; }
         setCreating(true);
         setError('');
 
         // Map role selection to contact_type for DB
-        const contactTypeMap: Record<string, string> = {
-            'PROPERTY_OWNER': 'LANDLORD',
-            'AGENT_DEALER': 'PARTNER_AGENT',
-            'FINANCER': 'LANDLORD',
-        };
+        const chosen = INVENTORY_CONTACT_ROLES.find(role => role.workflow === newRole);
 
         try {
             const phoneNum = normalizePhoneInput(query);
-            await ensureContact(phoneNum, newName.trim(), contactTypeMap[newRole] || 'UNKNOWN');
+            await ensureContact(phoneNum, newName.trim(), chosen?.contactType || 'UNKNOWN', chosen?.code, roleLabel);
             onContactSelected({
                 phone: phoneNum,
                 name: newName.trim(),
                 role: newRole,
+                roleLabel,
                 isNew: true,
             });
         } catch (err: any) {
@@ -156,7 +151,7 @@ export const ContactSearchField: React.FC<ContactSearchFieldProps> = ({
         } finally {
             setCreating(false);
         }
-    }, [query, newName, newRole, onContactSelected]);
+    }, [query, newName, newRole, roleLabel, onContactSelected]);
 
     const badge = searchResult
         ? getRoleBadge(searchResult.contact_type)
@@ -165,10 +160,11 @@ export const ContactSearchField: React.FC<ContactSearchFieldProps> = ({
     return (
         <div>
             {/* Search by name or phone; creating a new contact still requires a full phone. */}
-            <label style={styles.label}>{label}</label>
+            <label htmlFor={inputId} style={styles.label}>{label}</label>
             <div style={{ position: 'relative' }}>
                 <input
                     type="search"
+                    id={inputId}
                     value={query}
                     onChange={e => handleInputChange(e.target.value)}
                     placeholder={placeholder}
@@ -195,12 +191,12 @@ export const ContactSearchField: React.FC<ContactSearchFieldProps> = ({
                 </div>
             )}
 
-            {error && <div style={styles.error}>{error}</div>}
+            {error && <div role="alert" style={styles.error}>{error}</div>}
 
             {searchResults.length > 0 && !searchResult && (
-                <div role="listbox" aria-label="Matching contacts" style={styles.notFoundCard}>
+                <div role="group" aria-label="Matching contacts" style={styles.notFoundCard}>
                     {searchResults.map(contact => (
-                        <button key={contact.phone_number} type="button" role="option" aria-selected={false}
+                        <button key={contact.phone_number} type="button"
                             onClick={() => { ++searchSequence.current; clearTimeout(searchTimeout.current); setSearching(false); setSearchResult(contact); setSearchResults([]); setQuery(normalizePhoneInput(contact.phone_number)); }}
                             style={{ ...styles.primaryBtn, textAlign: 'left', marginBottom: '6px' }}>
                             {contact.name || 'Unknown'} · {contact.phone_number}
@@ -233,7 +229,8 @@ export const ContactSearchField: React.FC<ContactSearchFieldProps> = ({
                             </span>
                         )}
                     </div>
-                    <button style={styles.primaryBtn} onClick={handleSelectFound}>
+                    <ContactDesignationField workflow title="Role on this property" value={newRole || INVENTORY_CONTACT_ROLES.find(r => r.code === searchResult.client_role)?.workflow || mapToWorkflowRole(searchResult.contact_type)} label={roleLabel} onChange={(role, label) => { setNewRole(role); setRoleLabel(label); }} />
+                    <button style={styles.primaryBtn} onClick={handleSelectFound} disabled={newRole === 'OTHER' && !shortLabel(roleLabel)}>
                         Use This Contact &rarr;
                     </button>
                 </div>
@@ -248,9 +245,10 @@ export const ContactSearchField: React.FC<ContactSearchFieldProps> = ({
                     </div>
 
                     <div style={{ marginBottom: '12px' }}>
-                        <label style={styles.label}>Name *</label>
+                        <label htmlFor={`${inputId}-name`} style={styles.label}>Name *</label>
                         <input
                             type="text"
+                            id={`${inputId}-name`}
                             value={newName}
                             onChange={e => setNewName(e.target.value)}
                             placeholder="Enter contact name"
@@ -260,14 +258,11 @@ export const ContactSearchField: React.FC<ContactSearchFieldProps> = ({
 
                     <div style={{ marginBottom: '16px' }}>
                         <label style={styles.label}>This contact is:</label>
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
-                            {[
-                                { value: 'PROPERTY_OWNER', label: 'Owner' },
-                                { value: 'AGENT_DEALER', label: 'Agent / Dealer' },
-                                { value: 'FINANCER', label: 'Financer' },
-                            ].map(opt => (
+                        <div role="group" aria-label="This contact is" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '8px' }}>
+                            {INVENTORY_CONTACT_ROLES.map(role => ({ value: role.workflow, label: role.label })).map(opt => (
                                 <button
                                     key={opt.value}
+                                    type="button" aria-pressed={newRole === opt.value}
                                     onClick={() => setNewRole(opt.value)}
                                     style={{
                                         padding: '10px', borderRadius: '8px', cursor: 'pointer', textAlign: 'center',
@@ -281,6 +276,7 @@ export const ContactSearchField: React.FC<ContactSearchFieldProps> = ({
                                 </button>
                             ))}
                         </div>
+                        {newRole === 'OTHER' && <label>Other role (2–60 characters)<input value={roleLabel} minLength={2} maxLength={60} required onChange={e => setRoleLabel(e.target.value)} style={styles.input} /></label>}
                     </div>
 
                     <button style={styles.primaryBtn} onClick={handleCreateContact} disabled={creating || !newName.trim() || !newRole}>

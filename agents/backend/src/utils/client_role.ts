@@ -2,22 +2,16 @@
  * Client-role vocabulary — who a person IS (Contact.client_role, primary) or the role they
  * play FOR ONE ENQUIRY (Transaction.client_role_override, temporary).
  *
- * CLIENT | AGENT | BUILDER | FINANCER | CHOKIDAR, extensible here. Mirrors the CRM map in
- * frontend lib/leadDisplay.ts (CLIENT_ROLE_LABEL) — a backend/frontend contract test asserts
- * the frontend side, so keep the CODE sets identical when extending.
+ * Codes and labels come from data/contact_catalog.ts, also imported by the CRM.
+ * Existing identifiers (including CHOKIDAR) remain unchanged.
  *
  * Deliberately separate from ContactType, which is load-bearing for lead queues, visibility
  * scopes and filters (BUYER/TENANT/...). A CHECK constraint / Prisma enum can replace the
  * code-level validation later; for now every writer MUST go through parseClientRole so no
  * arbitrary string reaches the column or the tile label.
  */
-export const VALID_CLIENT_ROLES = [
-    'CLIENT',
-    'AGENT',
-    'BUILDER',
-    'FINANCER',
-    'CHOKIDAR',
-] as const;
+import { CONTACT_ROLES } from '../data/contact_catalog';
+export const VALID_CLIENT_ROLES = CONTACT_ROLES.map(role => role.code);
 
 export type ClientRole = typeof VALID_CLIENT_ROLES[number];
 

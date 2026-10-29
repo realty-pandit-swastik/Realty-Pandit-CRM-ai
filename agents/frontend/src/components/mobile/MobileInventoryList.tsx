@@ -14,7 +14,7 @@ import BookVisitModal from '../BookVisitModal';
 import { InventoryDetailView } from '../InventoryDetailView';
 import { toDialablePhone } from '../../lib/phone';
 import { relativeAge } from '../../lib/age';
-import { clientRoleLabel } from '../../lib/leadDisplay';
+import { clientRoleLabel, clientRoleColor } from '../../lib/leadDisplay';
 import { MatchClientsModal } from '../inventory/MatchClientsModal';
 import { pickSpecChips } from '../../lib/specChips';
 import { CopyChip } from '../CopyChip';
@@ -577,10 +577,10 @@ export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryLis
                                         return (
                                             <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', color: 'var(--text-secondary)', flexWrap: 'wrap' }}>
                                                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                                                    {badge.icon} {item.source.name || 'Unknown'}
+                                                    {badge.icon} {item.source.name || item.source.phone || (item.source.linked ? 'Unnamed contact' : 'No contact linked')}
                                                     <ContactButton phone={item.source.phone} name={item.source.name} />
-                                                    <span title={clientRoleLabel(item.source.designation) || badge.label} style={{ backgroundColor: badge.bg, color: 'var(--text-primary)', padding: '1px 6px', borderRadius: '8px', fontSize: '9px', fontWeight: 700 }}>
-                                                        {clientRoleLabel(item.source.designation) || badge.label}
+                                                    <span title={clientRoleLabel(item.source.designation) || 'Role not set'} style={{ backgroundColor: `${clientRoleColor(item.source.designation)}18`, border: `1px solid ${clientRoleColor(item.source.designation)}66`, color: 'var(--text-primary)', padding: '1px 6px', borderRadius: '8px', fontSize: '9px', fontWeight: 700 }}>
+                                                        {item.source.designation_label || clientRoleLabel(item.source.designation) || 'Role not set'}
                                                     </span>
                                                 </span>
                                                 {dialable && (
@@ -596,15 +596,16 @@ export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryLis
                                     {/* Key holder + designation (2026-10-09). Name/phone are redacted server-side
                                         for viewers without access, so an absent row simply means "not visible". */}
                                     {item.key_holder_type ? (() => {
-                                        const typeLabel = clientRoleLabel(item.key_holder_designation) || (item.key_holder_type === 'EXTERNAL' ? 'External' : item.key_holder_type === 'OWNER' ? 'Owner' : 'Uploader');
+                                        const typeLabel = item.key_holder_designation_label || clientRoleLabel(item.key_holder_designation) || 'Role not set';
                                         const dialable = toDialablePhone(item.key_holder_phone);
                                         return (
                                             <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', color: 'var(--text-secondary)', flexWrap: 'wrap' }}>
                                                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                                                     🔑 Key holder: {item.key_holder_name || typeLabel}
-                                                    <span title="Key holder designation" style={{ backgroundColor: 'rgba(59,130,246,0.12)', color: 'var(--text-primary)', padding: '1px 6px', borderRadius: '8px', fontSize: '9px', fontWeight: 700 }}>
+                                                    <span title="Key holder designation" style={{ backgroundColor: `${clientRoleColor(item.key_holder_designation)}18`, border: `1px solid ${clientRoleColor(item.key_holder_designation)}66`, color: 'var(--text-primary)', padding: '1px 6px', borderRadius: '8px', fontSize: '9px', fontWeight: 700 }}>
                                                         {typeLabel}
                                                     </span>
+                                                    {!item.key_holder_designation && item.can_edit && <button type="button" onClick={e => { e.stopPropagation(); onEditItem(item); }} aria-label="Set key-holder designation">Set role</button>}
                                                 </span>
                                                 {dialable && (
                                                     <>
