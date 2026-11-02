@@ -444,6 +444,52 @@ router.get('/lead-sources', authMiddleware, async (req, res) => {
 });
 
 /**
+ * GET /api/analytics/lead-health
+ * Returns open pipeline lead counts grouped by temperature (hot / warm / cold)
+ * Fast, role-scoped SQL aggregation for MainDashboard.
+ */
+router.get('/lead-health', authMiddleware, async (req, res) => {
+  try {
+    const tenantId = req.agent?.tenant_id;
+    if (!tenantId) {
+      return res.status(400).json({ error: 'Tenant ID required' });
+    }
+
+    const ids = await resolveVisibleAgentIds(req.agent?.id, req.agent?.role, tenantId);
+    const healthWhere: any = {
+      tenant_id: tenantId,
+      lifecycle_stage: { notIn: ['CLOSED_WON', 'CLOSED_LOST'] },
+    };
+    const cScopeOR = contactScopeOR(ids);
+    if (cScopeOR) healthWhere.AND = [{ OR: cScopeOR }];
+
+    const rows = await prisma.contact.groupBy({
+      by: ['lead_status'],
+      where: healthWhere,
+      _count: {
+        phone_number: true,
+      },
+    });
+
+    const health = { hot: 0, warm: 0, cold: 0, total: 0 };
+    for (const r of rows) {
+      const s = (r.lead_status || '').toLowerCase();
+      const count = r._count.phone_number || 0;
+      if (s === 'hot') health.hot += count;
+      else if (s === 'warm') health.warm += count;
+      else if (s === 'cold') health.cold += count;
+    }
+    health.total = health.hot + health.warm + health.cold;
+
+    res.json({ success: true, health });
+  } catch (error: any) {
+    captureRouteError(error, req, { route: 'analytics#lead-health' });
+    console.error('[Analytics] Lead health error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
  * GET /api/analytics/property-trends
  * Returns property-related analytics
  */

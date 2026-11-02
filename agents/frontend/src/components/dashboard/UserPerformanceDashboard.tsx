@@ -42,8 +42,8 @@ export const UserPerformanceDashboard: React.FC = () => {
       const span = range.to.getTime() - range.from.getTime();
       const prev = { from: new Date(range.from.getTime() - span).toISOString(), to: new Date(range.from.getTime() - 1).toISOString() };
       return Promise.all([
-        getUserPerformance(fromTo),
-        getUserPerformance(prev),
+        getUserPerformance(fromTo).catch(() => ({ performance: [] })),
+        getUserPerformance(prev).catch(() => ({ performance: [] })),
         getDistribution(fromTo).catch(() => ({ load: [] })),
         getManagementAlerts().catch(() => ({ alerts: [] })),
         getSpeedToLead(fromTo).catch(() => ({ by_agent: [] })),

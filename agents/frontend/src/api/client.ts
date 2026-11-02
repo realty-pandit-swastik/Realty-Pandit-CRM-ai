@@ -931,6 +931,11 @@ export const getManagementAlerts = async () => {
     return res.data;
 };
 
+export const getLeadHealth = async () => {
+    const res = await client.get('/api/analytics/lead-health');
+    return res.data as { success: boolean; health: { hot: number; warm: number; cold: number; total: number } };
+};
+
 export const getDistribution = async (params?: { from?: string; to?: string }) => {
     const res = await client.get('/api/analytics/distribution', { params });
     return res.data;

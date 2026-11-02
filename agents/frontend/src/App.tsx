@@ -318,9 +318,10 @@ function App() {
     try {
       setContactsLoading(true);
       const data = await getContacts();
-      setContacts(data);
+      setContacts(Array.isArray(data) ? data : (data?.data && Array.isArray(data.data) ? data.data : []));
     } catch (err) {
       console.error('Failed to load contacts', err);
+      setContacts([]);
     } finally {
       setContactsLoading(false);
     }
@@ -463,7 +464,8 @@ function App() {
 
   if (window.location.pathname === '/my-whatsapp-setup') return <PersonalWhatsAppSetup />;
 
-  const selectedContact = contacts.find(c => c.phone_number === selectedPhone);
+  const contactsList = Array.isArray(contacts) ? contacts : [];
+  const selectedContact = contactsList.find(c => c.phone_number === selectedPhone);
 
   // PARTNER-SCOPED: never mount a team-only view — not even for the render before the effect above
   // redirects (which would fire team API calls and 403). Everything renders off `safeView`.
@@ -624,7 +626,7 @@ function App() {
             {lostModalPhone && (
               <MarkLostModal
                 phone={lostModalPhone}
-                name={contacts.find((c) => c.phone_number === lostModalPhone)?.name}
+                name={contactsList.find((c) => c.phone_number === lostModalPhone)?.name}
                 onSubmit={submitMarkLost}
                 onClose={() => setLostModalPhone(null)}
               />
@@ -632,8 +634,8 @@ function App() {
             {delayModalPhone && (
               <DelayReasonModal
                 phone={delayModalPhone}
-                name={contacts.find((c) => c.phone_number === delayModalPhone)?.name}
-                current={contacts.find((c) => c.phone_number === delayModalPhone)?.stagnation_reason}
+                name={contactsList.find((c) => c.phone_number === delayModalPhone)?.name}
+                current={contactsList.find((c) => c.phone_number === delayModalPhone)?.stagnation_reason}
                 onSubmit={submitDelayReason}
                 onClose={() => setDelayModalPhone(null)}
               />
@@ -753,7 +755,7 @@ function App() {
           {lostModalPhone && (
             <MarkLostModal
               phone={lostModalPhone}
-              name={contacts.find((c) => c.phone_number === lostModalPhone)?.name}
+              name={contactsList.find((c) => c.phone_number === lostModalPhone)?.name}
               onSubmit={submitMarkLost}
               onClose={() => setLostModalPhone(null)}
             />
@@ -761,8 +763,8 @@ function App() {
           {delayModalPhone && (
             <DelayReasonModal
               phone={delayModalPhone}
-              name={contacts.find((c) => c.phone_number === delayModalPhone)?.name}
-              current={contacts.find((c) => c.phone_number === delayModalPhone)?.stagnation_reason}
+              name={contactsList.find((c) => c.phone_number === delayModalPhone)?.name}
+              current={contactsList.find((c) => c.phone_number === delayModalPhone)?.stagnation_reason}
               onSubmit={submitDelayReason}
               onClose={() => setDelayModalPhone(null)}
             />
