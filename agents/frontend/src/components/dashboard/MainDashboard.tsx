@@ -59,6 +59,9 @@ async function loadCockpit(range: DateRange): Promise<Cockpit> {
   const prevFrom = new Date(from.getTime() - span);
   const prevTo = new Date(from.getTime() - 1);
 
+  // getContacts is the spine — NOT caught (auth failure → ErrorState). Every other source is
+  // tracked individually: a failure must surface as "couldn't load" on its tiles, never as a
+  // plausible 0 / empty list (see AsyncState — a failure is `error`, never collapsed into empty).
   const failed: string[] = [];
   const grab = async <T,>(key: string, p: Promise<T>, fallback: T): Promise<T> => {
     try {
@@ -69,8 +72,8 @@ async function loadCockpit(range: DateRange): Promise<Cockpit> {
       return fallback;
     }
   };
-  const [contactsRes, alertsRes, queueRes, trends, fin, inv, pipeline, activity, stl, healthRes] = await Promise.all([
-    grab('contacts', getContacts().then(d => Array.isArray(d) ? d : (d?.data && Array.isArray(d.data) ? d.data : [])), []),
+  const [contactsRaw, alertsRes, queueRes, trends, fin, inv, pipeline, activity, stl, healthRes] = await Promise.all([
+    getContacts(),
     grab('alerts', getManagementAlerts(), { alerts: [] as Alert[] }),
     grab('tasks', getWorkflowTaskQueue(), { tasks: [] as Task[] }),
     grab('trends', getMarketTrends({ from: iso(prevFrom), to: iso(to) }), { leads: [], visits: [], sales: [] }),
@@ -104,7 +107,7 @@ async function loadCockpit(range: DateRange): Promise<Cockpit> {
   if (healthRes?.success && healthRes.health) {
     t = healthRes.health;
   } else {
-    const contactsList = Array.isArray(contactsRes) ? contactsRes : [];
+    const contactsList = Array.isArray(contactsRaw) ? contactsRaw : ((contactsRaw as any)?.data && Array.isArray((contactsRaw as any).data) ? (contactsRaw as any).data : []);
     const LEAD_TYPES = new Set(['BUYER', 'TENANT', 'UNKNOWN']);
     const leads = contactsList.filter((c: any) => !c?.contact_type || LEAD_TYPES.has(c.contact_type));
     for (const c of leads) {

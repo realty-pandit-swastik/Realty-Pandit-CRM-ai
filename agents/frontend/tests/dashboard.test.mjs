@@ -15,6 +15,7 @@ function dashboard(failing = []) {
     getFinancialSummary: { total_commission: 0 }, getInventory: { total: 0 },
     getDealPipeline: {}, getTeamActivity: { shares: [], appointments: [] },
     getSpeedToLead: { median_minutes: null },
+    getLeadHealth: { success: true, health: { hot: 0, warm: 0, cold: 0, total: 0 } },
   };
   const api = Object.fromEntries(Object.entries(responses).map(([key, value]) => [key, async () => {
     if (failing.includes(key)) throw new Error('Unavailable');
