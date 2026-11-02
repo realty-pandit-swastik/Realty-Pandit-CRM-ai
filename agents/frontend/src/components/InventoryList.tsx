@@ -2026,7 +2026,7 @@ export const InventoryList: React.FC<InventoryListProps> = ({ initialFilter, onF
                                                         >Reject</button>
                                                     </>
                                                 )}
-                                                <button style={{ ...s.actionBtn, color: 'var(--rp-success-text)', borderColor: 'var(--rp-success-text)' }} onClick={() => { setSelectedIds(new Set([item.id])); setShowBatchShareModal(true); }}>Share</button>
+                                                <button style={{ ...s.actionBtn, color: 'var(--rp-success-text)', borderColor: 'var(--rp-success-text)' }} onClick={() => setShareOptionsItem(item)}>Share</button>
                                                 <button style={{ ...s.actionBtn, color: 'var(--chart-5)', borderColor: 'var(--chart-5)' }} onClick={() => setBookVisitItem(item)}>Visit</button>
                                                 {hasPermission('edit_inventory') && item.can_edit && (
                                                     <button style={{ ...s.actionBtn, color: 'var(--text-link)', borderColor: 'var(--text-link)' }} onClick={() => handleEdit(item)}>Edit</button>

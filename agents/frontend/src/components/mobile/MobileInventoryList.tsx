@@ -775,12 +775,16 @@ export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryLis
                     <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)', flex: 1 }}>
                         {selectedIds.size} propert{selectedIds.size === 1 ? 'y' : 'ies'} selected
                     </span>
-                    <button onClick={() => setPersonalShareIds(Array.from(selectedIds))} style={{ padding: '8px 14px', borderRadius: 8, background: '#128c7e', color: '#fff', border: 'none', cursor: 'pointer' }}>My WhatsApp</button>
+                    <button
+                        type="button"
+                        onClick={() => setPersonalShareIds(Array.from(selectedIds))}
+                        style={{ padding: '8px 12px', borderRadius: 8, background: '#128c7e', color: '#fff', border: 'none', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}
+                    >📱 My WhatsApp</button>
                     <button
                         type="button"
                         onClick={() => { setShowBatchShareModal(true); setBatchShareResults([]); setBatchShareContact(null); setBatchContactSearch(''); }}
-                        style={{ padding: '10px 18px', borderRadius: '8px', fontSize: '14px', fontWeight: 700, cursor: 'pointer', backgroundColor: 'var(--rp-success-text)', border: 'none', color: 'var(--surface-white)' }}
-                    >Share</button>
+                        style={{ padding: '8px 12px', borderRadius: '8px', fontSize: '13px', fontWeight: 600, cursor: 'pointer', backgroundColor: 'var(--rp-success-text)', border: 'none', color: 'var(--surface-white)' }}
+                    >🏢 Co. WA</button>
                     <button
                         type="button"
                         onClick={() => { setShowReassignModal(true); setReassignTarget(''); setReassignMsg(''); }}
@@ -1055,14 +1059,22 @@ export function MobileInventoryList({ onEditItem, onAddNew }: MobileInventoryLis
                             View Details
                         </button>
 
-                        {/* Share Listing */}
-                        <button onClick={() => { setPersonalShareIds([activeSheetItem.id]); setActiveSheetItem(null); }} style={{ padding: 12, borderRadius: 8, background: '#128c7e', color: '#fff' }}>My WhatsApp</button>
+                        {/* My WhatsApp (Photos, Videos & PDF) */}
+                        <button
+                            type="button"
+                            onClick={() => { setPersonalShareIds([activeSheetItem.id]); setActiveSheetItem(null); }}
+                            style={{ display: 'block', width: '100%', padding: '16px 24px', backgroundColor: 'transparent', border: 'none', borderBottom: '1px solid var(--border-primary)', color: 'var(--text-primary)', fontSize: '15px', textAlign: 'left', cursor: 'pointer', fontWeight: 600 }}
+                        >
+                            📱 My WhatsApp (Photos, Videos & PDF)
+                        </button>
+
+                        {/* Company WhatsApp (Automated CRM message) */}
                         <button
                             type="button"
                             onClick={() => { setSelectedIds(new Set([activeSheetItem.id])); setShowBatchShareModal(true); setBatchShareResults([]); setBatchShareContact(null); setBatchContactSearch(''); setActiveSheetItem(null); }}
                             style={{ display: 'block', width: '100%', padding: '16px 24px', backgroundColor: 'transparent', border: 'none', borderBottom: '1px solid var(--border-primary)', color: 'var(--text-primary)', fontSize: '15px', textAlign: 'left', cursor: 'pointer', fontWeight: 500 }}
                         >
-                            Share Listing
+                            🏢 Company WhatsApp (Automated Message)
                         </button>
 
                         {/* Match Clients (moved off the tile, 2026-06-19 — fixes the tap-bubbles-to-sheet bug) */}

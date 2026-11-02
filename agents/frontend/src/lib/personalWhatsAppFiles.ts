@@ -55,11 +55,11 @@ export function propertyAttachments(property: { media_urls?: string[]; video_url
 
 export function orderedPropertyAttachments(attachments: PropertyAttachment[], selection: AttachmentSelection): PropertyAttachment[] {
     const chosen = attachments.filter(a => selection.urls.includes(a.url));
-    if (!chosen.length) throw new Error('Select at least one photo or video for each property.');
+    if (!chosen.length) return [];
     if (!chosen.some(a => a.kind === 'image')) return chosen;
-    const cover = chosen.find(a => a.url === selection.firstPhoto && a.kind === 'image');
-    if (!cover) throw new Error('Select a first photo for each property you want to share.');
-    return [cover, ...chosen.filter(a => a.kind === 'image' && a !== cover), ...chosen.filter(a => a.kind === 'video')];
+    const cover = chosen.find(a => a.url === selection.firstPhoto && a.kind === 'image')
+        || chosen.find(a => a.kind === 'image');
+    return cover ? [cover, ...chosen.filter(a => a !== cover && a.kind === 'image'), ...chosen.filter(a => a.kind === 'video')] : chosen;
 }
 
 export function isAndroidDevice(userAgent: string): boolean {
@@ -80,9 +80,10 @@ export function validatePersonalWhatsAppFile(blob: Blob, kind: PreparedWhatsAppF
 }
 
 export function nativePropertyShareSteps(propertyId: string, label: string, text: string, media: File[], pdf?: File): NativePropertyShare[] {
-    if (!media.length) throw new Error('Select at least one photo or video for each property.');
-    return [{ propertyId, label, text, files: media, kind: 'media' },
-        ...(pdf ? [{ propertyId, label, text: '', files: [pdf], kind: 'pdf' as const }] : [])];
+    const steps: NativePropertyShare[] = [];
+    if (media.length) steps.push({ propertyId, label, text, files: media, kind: 'media' });
+    if (pdf) steps.push({ propertyId, label, text: '', files: [pdf], kind: 'pdf' });
+    return steps;
 }
 
 export function validateNativeShares(steps: NativePropertyShare[], canShare: (data: ShareData) => boolean): void {

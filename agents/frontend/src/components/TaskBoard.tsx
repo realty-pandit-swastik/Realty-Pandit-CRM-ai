@@ -6,6 +6,7 @@
 import { useState, useEffect } from 'react';
 import { Calendar, List, LayoutGrid, Plus, X, Save } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { useIsMobile } from '../hooks/useIsMobile';
 import { API_BASE_URL, authedFetch } from '../lib/api';
 import { useConfirm } from '../contexts/ConfirmContext';
 import { defaultReminderDate } from '../lib/defaultReminder';
@@ -58,7 +59,9 @@ const PRIORITY_COLORS: Record<string, string> = {
 export default function TaskBoard() {
   const { agent } = useAuth();
   const confirm = useConfirm();
+  const isMobile = useIsMobile();
   const [viewMode, setViewMode] = useState<'kanban' | 'list' | 'calendar'>('kanban');
+  const [mobileStatusTab, setMobileStatusTab] = useState<string>('TODO');
   const [tasks, setTasks] = useState<Task[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [stats, setStats] = useState<any>(null);
@@ -256,8 +259,119 @@ export default function TaskBoard() {
   };
 
   const renderKanbanView = () => {
+    if (isMobile) {
+      const activeTasks = getTasksByStatus(mobileStatusTab);
+      return (
+        <div className="space-y-3">
+          {/* Mobile Status Segmented Tabs */}
+          <div className="flex gap-1.5 overflow-x-auto pb-1.5 scrollbar-none">
+            {STATUSES.map(status => {
+              const count = getTasksByStatus(status).length;
+              const isActive = mobileStatusTab === status;
+              const cfg = STATUS_LABELS[status];
+              return (
+                <button
+                  key={status}
+                  onClick={() => setMobileStatusTab(status)}
+                  className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors flex-shrink-0 ${
+                    isActive ? 'bg-blue-600 text-white shadow-sm' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  <span>{cfg.label}</span>
+                  <span className={`px-1.5 py-0.5 rounded-full text-[10px] ${isActive ? 'bg-white/25 text-white' : 'bg-gray-300 text-gray-700'}`}>
+                    {count}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Cards for active status */}
+          <div className="space-y-2.5">
+            {activeTasks.map(task => (
+              <div
+                key={task.id}
+                className="bg-white p-3.5 rounded-xl shadow-sm border border-gray-200"
+              >
+                <div className="flex justify-between items-start gap-2 mb-1.5">
+                  <h4 className="font-semibold text-sm text-gray-900 flex-1 leading-snug">{task.title}</h4>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <button
+                      onClick={() => {
+                        setTaskForm(task);
+                        setEditingTask(task);
+                        setIsCreatingTask(true);
+                      }}
+                      className="text-blue-600 p-1 text-xs"
+                      title="Edit task"
+                    >
+                      ✎
+                    </button>
+                    <button
+                      onClick={() => handleDeleteTask(task.id)}
+                      className="text-red-500 p-1 text-xs"
+                      title="Delete task"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                </div>
+
+                {task.description && (
+                  <p className="text-xs text-gray-600 mb-2 line-clamp-2">{task.description}</p>
+                )}
+
+                <div className="flex items-center justify-between text-xs pt-2 border-t border-gray-100 gap-2 flex-wrap">
+                  <div className="flex items-center gap-2">
+                    <span className={`font-semibold ${PRIORITY_COLORS[task.priority]}`}>
+                      {task.priority}
+                    </span>
+                    <span className="text-gray-500">
+                      📅 {new Date(task.due_date).toLocaleDateString()}
+                    </span>
+                    {task.project && (
+                      <span className="text-gray-500 truncate max-w-[120px]">
+                        📁 {task.project.name}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Status switcher right on card for touch */}
+                  <select
+                    value={task.status}
+                    onChange={(e) => handleStatusChange(task.id, e.target.value)}
+                    className="text-xs font-semibold px-2 py-1 rounded bg-gray-100 border border-gray-200 text-gray-700"
+                  >
+                    {STATUSES.map(s => (
+                      <option key={s} value={s}>{STATUS_LABELS[s].label}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {task.tags.length > 0 && (
+                  <div className="mt-2 flex flex-wrap gap-1">
+                    {task.tags.map((tag, idx) => (
+                      <span key={idx} className="text-[10px] bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded">
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+
+            {activeTasks.length === 0 && (
+              <div className="text-center py-10 text-gray-400 text-sm bg-gray-50 rounded-xl border border-dashed border-gray-200">
+                No tasks in {STATUS_LABELS[mobileStatusTab].label}
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+
     return (
-      <div className="flex gap-4 overflow-x-auto pb-4" role="region" aria-label="Task board columns" tabIndex={0}>
+      <div className="flex gap-4 overflow-x-auto pb-4">
         {STATUSES.map(status => {
           const statusTasks = getTasksByStatus(status);
           const statusConfig = STATUS_LABELS[status];
@@ -339,6 +453,63 @@ export default function TaskBoard() {
   };
 
   const renderListView = () => {
+    if (isMobile) {
+      return (
+        <div className="space-y-2.5">
+          {tasks.map(task => (
+            <div key={task.id} className="bg-white p-3.5 rounded-xl shadow-sm border border-gray-200">
+              <div className="flex justify-between items-start gap-2 mb-1.5">
+                <h4 className="font-semibold text-sm text-gray-900 flex-1 leading-snug">{task.title}</h4>
+                <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${STATUS_LABELS[task.status].color}`}>
+                  {STATUS_LABELS[task.status].label}
+                </span>
+              </div>
+              {task.description && (
+                <p className="text-xs text-gray-600 mb-2 line-clamp-2">{task.description}</p>
+              )}
+              <div className="flex items-center justify-between text-xs pt-2 border-t border-gray-100 gap-2 flex-wrap">
+                <div className="flex items-center gap-2">
+                  <span className={`font-semibold ${PRIORITY_COLORS[task.priority]}`}>
+                    {task.priority}
+                  </span>
+                  <span className="text-gray-500">
+                    📅 {new Date(task.due_date).toLocaleDateString()}
+                  </span>
+                  {task.project && (
+                    <span className="text-gray-500 truncate max-w-[120px]">
+                      📁 {task.project.name}
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => {
+                      setTaskForm(task);
+                      setEditingTask(task);
+                      setIsCreatingTask(true);
+                    }}
+                    className="text-blue-600 text-xs font-semibold"
+                  >
+                    Edit
+                  </button>
+                  <button
+                    onClick={() => handleDeleteTask(task.id)}
+                    className="text-red-600 text-xs font-semibold"
+                  >
+                    Delete
+                  </button>
+                </div>
+              </div>
+            </div>
+          ))}
+          {tasks.length === 0 && (
+            <div className="text-center py-12 text-gray-500 bg-white rounded-xl shadow">
+              No tasks found
+            </div>
+          )}
+        </div>
+      );
+    }
     return (
       <div className="bg-white rounded-lg shadow overflow-hidden">
         <table className="w-full">
@@ -505,111 +676,14 @@ export default function TaskBoard() {
   }
 
   return (
-    <div className="rp-analytics rp-task-board p-6 max-w-7xl mx-auto">
+    <div className="p-3 md:p-6 max-w-7xl mx-auto">
       {/* Header */}
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold text-gray-900">Task Management</h1>
-        <p className="text-gray-600 mt-1">Manage tasks, projects, and follow-ups.</p>
-      </div>
-
-      {/* Alerts */}
-      {error && (
-        <div className="mb-4 p-4 bg-red-50 border border-red-200 text-red-700 rounded-lg">
-          {error}
+      <div className="mb-4 md:mb-6 flex justify-between items-center">
+        <div>
+          <h1 className="text-xl md:text-3xl font-bold text-gray-900">📋 Task Management</h1>
+          {!isMobile && <p className="text-gray-600 mt-1">Organize and track all tasks with AI-powered automation</p>}
         </div>
-      )}
-      {success && (
-        <div className="mb-4 p-4 bg-green-50 border border-green-200 text-green-700 rounded-lg">
-          {success}
-        </div>
-      )}
-
-      {/* Stats Cards */}
-      {stats && (
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
-          <div className="bg-white p-4 rounded-lg shadow">
-            <div className="text-2xl font-bold text-gray-900">{stats.total}</div>
-            <div className="text-sm text-gray-600">Total Tasks</div>
-          </div>
-          <div className="bg-blue-50 p-4 rounded-lg shadow">
-            <div className="text-2xl font-bold text-blue-600">{stats?.by_status?.IN_PROGRESS ?? 0}</div>
-            <div className="text-sm text-blue-700">In Progress</div>
-          </div>
-          <div className="bg-green-50 p-4 rounded-lg shadow">
-            <div className="text-2xl font-bold text-green-600">{stats?.by_status?.DONE ?? 0}</div>
-            <div className="text-sm text-green-700">Completed</div>
-          </div>
-          <div className="bg-red-50 p-4 rounded-lg shadow">
-            <div className="text-2xl font-bold text-red-600">{stats?.overdue ?? 0}</div>
-            <div className="text-sm text-red-700">Overdue</div>
-          </div>
-          <div className="bg-orange-50 p-4 rounded-lg shadow">
-            <div className="text-2xl font-bold text-orange-600">{stats?.high_priority ?? 0}</div>
-            <div className="text-sm text-orange-700">High Priority</div>
-          </div>
-        </div>
-      )}
-
-      {/* Toolbar */}
-      <div className="mb-6 flex justify-between items-center">
-        <div className="flex gap-2">
-          <button
-            onClick={() => setViewMode('kanban')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg ${
-              viewMode === 'kanban'
-                ? 'bg-blue-600 text-white'
-                : 'bg-white border hover:bg-gray-50'
-            }`}
-          >
-            <LayoutGrid className="w-4 h-4" />
-            Kanban
-          </button>
-          <button
-            onClick={() => setViewMode('list')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg ${
-              viewMode === 'list'
-                ? 'bg-blue-600 text-white'
-                : 'bg-white border hover:bg-gray-50'
-            }`}
-          >
-            <List className="w-4 h-4" />
-            List
-          </button>
-          <button
-            onClick={() => setViewMode('calendar')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg ${
-              viewMode === 'calendar'
-                ? 'bg-blue-600 text-white'
-                : 'bg-white border hover:bg-gray-50'
-            }`}
-          >
-            <Calendar className="w-4 h-4" />
-            Calendar
-          </button>
-        </div>
-
-        <div className="flex gap-2">
-          <select
-            aria-label="Project filter"
-            value={selectedProject || ''}
-            onChange={(e) => setSelectedProject(e.target.value || null)}
-            className="px-3 py-2 border rounded-lg"
-          >
-            <option value="">All Projects</option>
-            {projects.map(p => (
-              <option key={p.id} value={p.id}>
-                {p.name} ({p._count?.tasks || 0})
-              </option>
-            ))}
-          </select>
-
-          <button
-            onClick={() => setIsCreatingProject(true)}
-            className="px-4 py-2 border rounded-lg hover:bg-gray-50"
-          >
-            New Project
-          </button>
-
+        {isMobile && (
           <button
             onClick={() => {
               setTaskForm({
@@ -624,11 +698,132 @@ export default function TaskBoard() {
               setEditingTask(null);
               setIsCreatingTask(true);
             }}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+            className="flex items-center gap-1 px-3 py-2 bg-blue-600 text-white text-xs font-bold rounded-lg shadow-sm"
           >
-            <Plus className="w-5 h-5" />
+            <Plus className="w-4 h-4" />
             New Task
           </button>
+        )}
+      </div>
+
+      {/* Alerts */}
+      {error && (
+        <div className="mb-4 p-3 md:p-4 bg-red-50 border border-red-200 text-red-700 text-xs md:text-sm rounded-lg">
+          {error}
+        </div>
+      )}
+      {success && (
+        <div className="mb-4 p-3 md:p-4 bg-green-50 border border-green-200 text-green-700 text-xs md:text-sm rounded-lg">
+          {success}
+        </div>
+      )}
+
+      {/* Stats Cards */}
+      {stats && (
+        <div className="flex gap-2 overflow-x-auto pb-2 mb-4 scrollbar-none md:grid md:grid-cols-5 md:gap-4 md:mb-6">
+          <div className="bg-white p-3 md:p-4 rounded-xl shadow-sm border border-gray-100 flex-shrink-0 min-w-[110px] md:min-w-0">
+            <div className="text-xl md:text-2xl font-bold text-gray-900">{stats.total}</div>
+            <div className="text-xs md:text-sm text-gray-600">Total Tasks</div>
+          </div>
+          <div className="bg-blue-50 p-3 md:p-4 rounded-xl shadow-sm border border-blue-100 flex-shrink-0 min-w-[110px] md:min-w-0">
+            <div className="text-xl md:text-2xl font-bold text-blue-600">{stats?.by_status?.IN_PROGRESS ?? 0}</div>
+            <div className="text-xs md:text-sm text-blue-700">In Progress</div>
+          </div>
+          <div className="bg-green-50 p-3 md:p-4 rounded-xl shadow-sm border border-green-100 flex-shrink-0 min-w-[110px] md:min-w-0">
+            <div className="text-xl md:text-2xl font-bold text-green-600">{stats?.by_status?.DONE ?? 0}</div>
+            <div className="text-xs md:text-sm text-green-700">Completed</div>
+          </div>
+          <div className="bg-red-50 p-3 md:p-4 rounded-xl shadow-sm border border-red-100 flex-shrink-0 min-w-[110px] md:min-w-0">
+            <div className="text-xl md:text-2xl font-bold text-red-600">{stats?.overdue ?? 0}</div>
+            <div className="text-xs md:text-sm text-red-700">Overdue</div>
+          </div>
+          <div className="bg-orange-50 p-3 md:p-4 rounded-xl shadow-sm border border-orange-100 flex-shrink-0 min-w-[110px] md:min-w-0">
+            <div className="text-xl md:text-2xl font-bold text-orange-600">{stats?.high_priority ?? 0}</div>
+            <div className="text-xs md:text-sm text-orange-700">High Priority</div>
+          </div>
+        </div>
+      )}
+
+      {/* Toolbar */}
+      <div className="mb-4 md:mb-6 flex flex-col md:flex-row md:justify-between md:items-center gap-2.5">
+        <div className="flex gap-1.5 w-full md:w-auto">
+          <button
+            onClick={() => setViewMode('kanban')}
+            className={`flex-1 md:flex-initial flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs md:text-sm font-semibold transition-colors ${
+              viewMode === 'kanban'
+                ? 'bg-blue-600 text-white shadow-sm'
+                : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-50'
+            }`}
+          >
+            <LayoutGrid className="w-4 h-4" />
+            Kanban
+          </button>
+          <button
+            onClick={() => setViewMode('list')}
+            className={`flex-1 md:flex-initial flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs md:text-sm font-semibold transition-colors ${
+              viewMode === 'list'
+                ? 'bg-blue-600 text-white shadow-sm'
+                : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-50'
+            }`}
+          >
+            <List className="w-4 h-4" />
+            List
+          </button>
+          <button
+            onClick={() => setViewMode('calendar')}
+            className={`flex-1 md:flex-initial flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-xs md:text-sm font-semibold transition-colors ${
+              viewMode === 'calendar'
+                ? 'bg-blue-600 text-white shadow-sm'
+                : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-50'
+            }`}
+          >
+            <Calendar className="w-4 h-4" />
+            Calendar
+          </button>
+        </div>
+
+        <div className="flex gap-2 w-full md:w-auto">
+          <select
+            value={selectedProject || ''}
+            onChange={(e) => setSelectedProject(e.target.value || null)}
+            className="flex-1 md:flex-initial px-3 py-2 border border-gray-200 rounded-lg text-xs md:text-sm bg-white text-gray-800"
+          >
+            <option value="">All Projects</option>
+            {projects.map(p => (
+              <option key={p.id} value={p.id}>
+                {p.name} ({p._count?.tasks || 0})
+              </option>
+            ))}
+          </select>
+
+          <button
+            onClick={() => setIsCreatingProject(true)}
+            className="px-3 py-2 border border-gray-200 rounded-lg text-xs md:text-sm bg-white hover:bg-gray-50 flex-shrink-0 text-gray-700 font-medium"
+          >
+            + Project
+          </button>
+
+          {!isMobile && (
+            <button
+              onClick={() => {
+                setTaskForm({
+                  title: '',
+                  description: '',
+                  assigned_to: agent?.id || '',
+                  due_date: defaultReminderDate(),
+                  priority: 'MEDIUM',
+                  status: 'TODO',
+                  tags: [],
+                });
+                setEditingTask(null);
+                setIsCreatingTask(true);
+              }}
+              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-semibold shadow-sm"
+            >
+              <Plus className="w-5 h-5" />
+              New Task
+            </button>
+          )}
         </div>
       </div>
 
@@ -639,27 +834,25 @@ export default function TaskBoard() {
 
       {/* Task Editor Modal */}
       {isCreatingTask && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-            <div className="p-6 border-b sticky top-0 bg-white z-10">
-              <div className="flex justify-between items-center">
-                <h2 className="text-2xl font-bold">
-                  {editingTask ? 'Edit Task' : 'Create New Task'}
-                </h2>
-                <button onClick={() => setIsCreatingTask(false)} className="text-gray-500 hover:text-gray-700">
-                  <X className="w-6 h-6" />
-                </button>
-              </div>
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-2 md:p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[92vh] overflow-y-auto flex flex-col">
+            <div className="p-4 md:p-6 border-b sticky top-0 bg-white z-10 flex justify-between items-center">
+              <h2 className="text-lg md:text-2xl font-bold text-gray-900">
+                {editingTask ? 'Edit Task' : 'Create New Task'}
+              </h2>
+              <button onClick={() => setIsCreatingTask(false)} className="text-gray-500 hover:text-gray-700 p-1">
+                <X className="w-5 h-5 md:w-6 md:h-6" />
+              </button>
             </div>
 
-            <div className="p-6 space-y-4">
+            <div className="p-4 md:p-6 space-y-4 flex-1">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Title *</label>
                 <input
                   type="text"
                   value={taskForm.title}
                   onChange={(e) => setTaskForm({ ...taskForm, title: e.target.value })}
-                  className="w-full px-3 py-2 border rounded-lg"
+                  className="w-full px-3 py-2 border rounded-lg text-sm"
                   placeholder="Complete property documentation"
                 />
               </div>
@@ -669,19 +862,19 @@ export default function TaskBoard() {
                 <textarea
                   value={taskForm.description || ''}
                   onChange={(e) => setTaskForm({ ...taskForm, description: e.target.value })}
-                  className="w-full px-3 py-2 border rounded-lg"
+                  className="w-full px-3 py-2 border rounded-lg text-sm"
                   rows={3}
                   placeholder="Additional details..."
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Priority</label>
                   <select
                     value={taskForm.priority}
                     onChange={(e) => setTaskForm({ ...taskForm, priority: e.target.value })}
-                    className="w-full px-3 py-2 border rounded-lg"
+                    className="w-full px-3 py-2 border rounded-lg text-sm bg-white"
                   >
                     {PRIORITIES.map(p => (
                       <option key={p} value={p}>{p}</option>
@@ -694,7 +887,7 @@ export default function TaskBoard() {
                   <select
                     value={taskForm.status}
                     onChange={(e) => setTaskForm({ ...taskForm, status: e.target.value })}
-                    className="w-full px-3 py-2 border rounded-lg"
+                    className="w-full px-3 py-2 border rounded-lg text-sm bg-white"
                   >
                     {STATUSES.map(s => (
                       <option key={s} value={s}>{STATUS_LABELS[s].label}</option>
@@ -709,7 +902,7 @@ export default function TaskBoard() {
                   type="date"
                   value={taskForm.due_date}
                   onChange={(e) => setTaskForm({ ...taskForm, due_date: e.target.value })}
-                  className="w-full px-3 py-2 border rounded-lg"
+                  className="w-full px-3 py-2 border rounded-lg text-sm"
                 />
               </div>
 
@@ -719,7 +912,7 @@ export default function TaskBoard() {
                   type="text"
                   value={taskForm.assigned_to}
                   onChange={(e) => setTaskForm({ ...taskForm, assigned_to: e.target.value })}
-                  className="w-full px-3 py-2 border rounded-lg"
+                  className="w-full px-3 py-2 border rounded-lg text-sm"
                   placeholder="Agent ID"
                 />
               </div>
@@ -730,19 +923,19 @@ export default function TaskBoard() {
                   type="text"
                   value={taskForm.tags?.join(', ') || ''}
                   onChange={(e) => setTaskForm({ ...taskForm, tags: e.target.value.split(',').map(t => t.trim()).filter(Boolean) })}
-                  className="w-full px-3 py-2 border rounded-lg"
+                  className="w-full px-3 py-2 border rounded-lg text-sm"
                   placeholder="follow-up, urgent, payment"
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Contact Phone</label>
                   <input
                     type="text"
                     value={taskForm.contact_phone || ''}
                     onChange={(e) => setTaskForm({ ...taskForm, contact_phone: e.target.value })}
-                    className="w-full px-3 py-2 border rounded-lg"
+                    className="w-full px-3 py-2 border rounded-lg text-sm"
                     placeholder="+911234567890"
                   />
                 </div>
@@ -753,23 +946,23 @@ export default function TaskBoard() {
                     type="text"
                     value={taskForm.property_id || ''}
                     onChange={(e) => setTaskForm({ ...taskForm, property_id: e.target.value })}
-                    className="w-full px-3 py-2 border rounded-lg"
+                    className="w-full px-3 py-2 border rounded-lg text-sm"
                     placeholder="property-id"
                   />
                 </div>
               </div>
             </div>
 
-            <div className="p-6 border-t bg-gray-50 flex justify-end gap-3">
+            <div className="p-4 md:p-6 border-t bg-gray-50 flex justify-end gap-3 sticky bottom-0">
               <button
                 onClick={() => setIsCreatingTask(false)}
-                className="px-4 py-2 border rounded-lg hover:bg-gray-100"
+                className="px-4 py-2 border rounded-lg hover:bg-gray-100 text-sm font-medium text-gray-700"
               >
                 Cancel
               </button>
               <button
                 onClick={handleSaveTask}
-                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-semibold shadow-sm"
               >
                 <Save className="w-4 h-4" />
                 Save Task
@@ -781,25 +974,23 @@ export default function TaskBoard() {
 
       {/* Project Creator Modal */}
       {isCreatingProject && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-xl">
-            <div className="p-6 border-b">
-              <div className="flex justify-between items-center">
-                <h2 className="text-2xl font-bold">Create New Project</h2>
-                <button onClick={() => setIsCreatingProject(false)} className="text-gray-500 hover:text-gray-700">
-                  <X className="w-6 h-6" />
-                </button>
-              </div>
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-2 md:p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-xl max-h-[92vh] overflow-y-auto flex flex-col">
+            <div className="p-4 md:p-6 border-b flex justify-between items-center sticky top-0 bg-white z-10">
+              <h2 className="text-lg md:text-2xl font-bold text-gray-900">Create New Project</h2>
+              <button onClick={() => setIsCreatingProject(false)} className="text-gray-500 hover:text-gray-700 p-1">
+                <X className="w-5 h-5 md:w-6 md:h-6" />
+              </button>
             </div>
 
-            <div className="p-6 space-y-4">
+            <div className="p-4 md:p-6 space-y-4 flex-1">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Project Name *</label>
                 <input
                   type="text"
                   value={projectForm.name}
                   onChange={(e) => setProjectForm({ ...projectForm, name: e.target.value })}
-                  className="w-full px-3 py-2 border rounded-lg"
+                  className="w-full px-3 py-2 border rounded-lg text-sm"
                   placeholder="Noida Phase 1 Launch"
                 />
               </div>
@@ -809,20 +1000,20 @@ export default function TaskBoard() {
                 <textarea
                   value={projectForm.description || ''}
                   onChange={(e) => setProjectForm({ ...projectForm, description: e.target.value })}
-                  className="w-full px-3 py-2 border rounded-lg"
+                  className="w-full px-3 py-2 border rounded-lg text-sm"
                   rows={3}
                   placeholder="Project details..."
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
                   <input
                     type="date"
                     value={projectForm.start_date}
                     onChange={(e) => setProjectForm({ ...projectForm, start_date: e.target.value })}
-                    className="w-full px-3 py-2 border rounded-lg"
+                    className="w-full px-3 py-2 border rounded-lg text-sm"
                   />
                 </div>
 
@@ -832,22 +1023,22 @@ export default function TaskBoard() {
                     type="date"
                     value={projectForm.end_date || ''}
                     onChange={(e) => setProjectForm({ ...projectForm, end_date: e.target.value })}
-                    className="w-full px-3 py-2 border rounded-lg"
+                    className="w-full px-3 py-2 border rounded-lg text-sm"
                   />
                 </div>
               </div>
             </div>
 
-            <div className="p-6 border-t bg-gray-50 flex justify-end gap-3">
+            <div className="p-4 md:p-6 border-t bg-gray-50 flex justify-end gap-3 sticky bottom-0">
               <button
                 onClick={() => setIsCreatingProject(false)}
-                className="px-4 py-2 border rounded-lg hover:bg-gray-100"
+                className="px-4 py-2 border rounded-lg hover:bg-gray-100 text-sm font-medium text-gray-700"
               >
                 Cancel
               </button>
               <button
                 onClick={handleSaveProject}
-                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-semibold shadow-sm"
               >
                 <Save className="w-4 h-4" />
                 Create Project
