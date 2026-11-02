@@ -17,7 +17,7 @@
 .personal-wa-help { color: var(--text-muted, #94a3b8); font-size: 13px; }
 .personal-wa-error { color: #ef4444; }
 .personal-wa-actions { margin-top: 20px; }
-.personal-wa-actions button:last-child { background: #15803d; color: white; }
+.personal-wa-actions button.btn-pilot { background: #15803d; color: white; }
 .personal-wa-setup-page { margin: 32px auto; box-sizing: border-box; }
 .personal-wa-setup h2 { font-size: 16px; }
 @media (max-width: 600px) {
