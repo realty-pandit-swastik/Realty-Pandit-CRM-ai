@@ -50,7 +50,7 @@ export default function PersonalWhatsAppShareModal({ inventoryIds, initialPhone,
     const handoffRef = useRef<AndroidHandoff | null>(null);
     const preparingRef = useRef(false);
     const generation = useRef(0);
-    const preparedFilesRef = useRef<{ key: string; files: File[] } | null>(null);
+    const preparedFilesRef = useRef<{ key: string; mediaFiles: File[]; pdfFiles: File[] } | null>(null);
     const [isPreloading, setIsPreloading] = useState(false);
     const [preloadedKey, setPreloadedKey] = useState('');
     const prefetchGen = useRef(0);
@@ -109,6 +109,12 @@ export default function PersonalWhatsAppShareModal({ inventoryIds, initialPhone,
         return `${inv.id}:${sel.firstPhoto}:${sel.urls.slice().sort().join(',')}:${sel.pdf ? '1' : '0'}`;
     }).join('|');
 
+    const hasMedia = chosen.some(inv => (selections[inv.id]?.urls?.length || 0) > 0);
+    const hasPdf = chosen.some(inv => !!selections[inv.id]?.pdf);
+    const isPreloaded = preloadedKey === selectionKey && !!preparedFilesRef.current;
+    const preloadedMediaCount = isPreloaded ? (preparedFilesRef.current?.mediaFiles.length || 0) : 0;
+    const preloadedPdfCount = isPreloaded ? (preparedFilesRef.current?.pdfFiles.length || 0) : 0;
+
     useEffect(() => {
         if (!inventories.length || !chosen.length) {
             preparedFilesRef.current = null;
@@ -125,13 +131,16 @@ export default function PersonalWhatsAppShareModal({ inventoryIds, initialPhone,
             setIsPreloading(true);
 
             try {
-                const files: File[] = [];
+                const mediaFiles: File[] = [];
+                const pdfFiles: File[] = [];
                 let total = 0;
 
                 for (const inv of chosen) {
                     if (currentGen !== prefetchGen.current || !active.current) return;
                     const selection = selections[inv.id];
-                    const ordered = orderedPropertyAttachments(propertyAttachments(inv, apiBase), selection);
+                    const ordered = (selection?.urls?.length)
+                        ? orderedPropertyAttachments(propertyAttachments(inv, apiBase), selection)
+                        : [];
                     const name = `property-${(inv.display_id || inv.id).replace(/[^a-zA-Z0-9-]/g, '')}`;
 
                     const mediaPromises = ordered.map(async (attachment, i) => {
@@ -142,28 +151,34 @@ export default function PersonalWhatsAppShareModal({ inventoryIds, initialPhone,
                         if (!response.ok) throw new Error(`${attachment.label} could not be downloaded.`);
                         const blob = await downloadPersonalWhatsAppBlob(response, MAX_PERSONAL_SHARE_BYTES - total);
                         validatePersonalWhatsAppFile(blob, attachment.kind, attachment.label);
-                        const ext = blob.type.split('/')[1]?.replace('jpeg', 'jpg').replace('quicktime', 'mov') || (attachment.kind === 'video' ? 'mp4' : 'jpg');
-                        return new File([blob], `${name}-${i + 1}.${ext}`, { type: blob.type });
+                        let fileType = (blob.type || '').split(';')[0].trim().toLowerCase();
+                        if (attachment.kind === 'image') {
+                            if (!fileType || fileType === 'application/octet-stream' || fileType === 'image/jpg') fileType = 'image/jpeg';
+                        } else if (attachment.kind === 'video') {
+                            if (!fileType || fileType === 'application/octet-stream') fileType = 'video/mp4';
+                        }
+                        const ext = fileType.includes('png') ? 'png' : fileType.includes('webp') ? 'webp' : (attachment.kind === 'video' ? 'mp4' : 'jpg');
+                        return new File([blob], `${name}-${i + 1}.${ext}`, { type: fileType, lastModified: Date.now() });
                     });
 
                     const downloaded = await Promise.all(mediaPromises);
                     for (const f of downloaded) {
                         total += f.size;
-                        files.push(f);
+                        mediaFiles.push(f);
                     }
 
-                    if (selection.pdf) {
+                    if (selection?.pdf) {
                         if (currentGen !== prefetchGen.current || !active.current) return;
                         const response = await client.post('/api/inventory/share-pdf', { inventory_ids: [inv.id], variant: 'brandless' }, { responseType: 'blob' });
                         const pdfBlob = new Blob([response.data], { type: 'application/pdf' });
                         validatePersonalWhatsAppFile(pdfBlob, 'document', 'brochure.pdf');
                         total += pdfBlob.size;
-                        files.push(new File([pdfBlob], `${name}-brochure.pdf`, { type: 'application/pdf' }));
+                        pdfFiles.push(new File([pdfBlob], `${name}-brochure.pdf`, { type: 'application/pdf', lastModified: Date.now() }));
                     }
                 }
 
                 if (currentGen === prefetchGen.current && active.current) {
-                    preparedFilesRef.current = { key: currentKey, files };
+                    preparedFilesRef.current = { key: currentKey, mediaFiles, pdfFiles };
                     setPreloadedKey(currentKey);
                     setIsPreloading(false);
                 }
@@ -348,65 +363,75 @@ export default function PersonalWhatsAppShareModal({ inventoryIds, initialPhone,
         setProgress(`✓ Property details opened in WhatsApp for +${cleanPhone}! Send the text, then tap Button 2 below to share media.`);
     }
 
-    async function doNativeShare(filesToShare: File[]) {
+    async function doNativeShareMedia(mediaFiles: File[]) {
         if (!window.isSecureContext || !navigator.share) {
             throw new Error('This browser cannot open the share sheet. Please open this CRM in mobile Safari or Chrome over HTTPS.');
         }
 
-        // 1. Try sharing all files (media + PDF)
-        if (navigator.canShare && navigator.canShare({ files: filesToShare })) {
-            await navigator.share({
-                files: filesToShare,
-                title: 'Property Share',
-            });
-            setHandedOff(true);
-            setProgress('✓ Share sheet opened! Select WhatsApp and tap your contact.');
-            onSent?.();
-            return;
+        if (!mediaFiles.length) {
+            throw new Error('No photos or videos selected to share.');
         }
 
-        // 2. Fallback: try sharing media files only (photos & videos)
-        const mediaOnly = filesToShare.filter(f => f.type !== 'application/pdf');
-        if (mediaOnly.length && navigator.canShare && navigator.canShare({ files: mediaOnly })) {
-            await navigator.share({
-                files: mediaOnly,
-                title: 'Property Media',
-            });
-            setHandedOff(true);
-            setProgress('✓ Photos/videos opened in Share Sheet! Select WhatsApp and tap your contact.');
-            onSent?.();
-            return;
+        if (navigator.canShare && !navigator.canShare({ files: mediaFiles })) {
+            throw new Error('This browser cannot share this combination of photos. Try selecting fewer photos.');
         }
 
-        if (navigator.canShare && !navigator.canShare({ files: filesToShare })) {
-            throw new Error('This browser cannot share this combination of files. Try selecting fewer photos.');
-        }
-
-        await navigator.share({ files: filesToShare });
+        // CRITICAL FOR WHATSAPP MEDIA CAROUSEL:
+        // Do NOT pass `title`, `text`, or PDF document files here!
+        // When sharing purely image files without title/text, Android Chrome fires an ACTION_SEND_MULTIPLE
+        // intent with MIME type "image/*" (or "image/jpeg"). WhatsApp recognizes this as a media intent
+        // and opens MediaPreviewActivity — the native photo carousel preview!
+        await navigator.share({
+            files: mediaFiles,
+        });
         setHandedOff(true);
-        setProgress('✓ Files opened in Share Sheet! Select WhatsApp.');
+        setProgress(hasPdf
+            ? '✓ Photos opened in WhatsApp carousel! Next: tap Step 3 below to share the brochure PDF.'
+            : '✓ Photos opened in WhatsApp carousel! Select WhatsApp, tap your contact, and send.');
         onSent?.();
     }
 
-    async function shareMediaAndPdf() {
+    async function doNativeSharePdf(pdfFiles: File[]) {
+        if (!window.isSecureContext || !navigator.share) {
+            throw new Error('This browser cannot open the share sheet. Please open this CRM in mobile Safari or Chrome over HTTPS.');
+        }
+
+        if (!pdfFiles.length) {
+            throw new Error('No PDF brochure available to share.');
+        }
+
+        if (navigator.canShare && !navigator.canShare({ files: pdfFiles })) {
+            throw new Error('This browser cannot share the PDF brochure.');
+        }
+
+        await navigator.share({
+            files: pdfFiles,
+            title: 'Property Brochure PDF',
+        });
+        setHandedOff(true);
+        setProgress('✓ Brochure PDF opened in Share Sheet! Select WhatsApp and tap your contact.');
+        onSent?.();
+    }
+
+    async function shareMedia() {
         setError('');
-        if (!chosen.length) {
-            setError('Select at least one property photo, video, or PDF.');
+        if (!hasMedia) {
+            setError('Select at least one property photo or video.');
             return;
         }
 
         const currentKey = selectionKey;
         const cached = preparedFilesRef.current;
 
-        // FAST PATH: If files are already cached in memory, share immediately!
+        // FAST PATH: If media files are already cached in memory, share immediately!
         // No async network delays before navigator.share preserves transient user activation.
-        if (cached && cached.key === currentKey && cached.files.length > 0) {
+        if (cached && cached.key === currentKey && cached.mediaFiles.length > 0) {
             try {
-                await doNativeShare(cached.files);
+                await doNativeShareMedia(cached.mediaFiles);
             } catch (err: any) {
                 if (active.current) {
                     if (err?.name === 'AbortError') {
-                        setProgress('Share sheet closed. Files remain ready to share again.');
+                        setProgress('Share sheet closed. Photos remain ready to share again.');
                     } else if (err?.name === 'NotAllowedError') {
                         setError('Permission expired or denied. Tap Step 2 again to open the Share Sheet.');
                     } else {
@@ -417,15 +442,17 @@ export default function PersonalWhatsAppShareModal({ inventoryIds, initialPhone,
             return;
         }
 
-        // SLOW PATH (Fallback if tapped before background preloading finished):
+        // SLOW PATH if tapped before background preloading finished:
         setBusy(true);
-        setProgress('Preparing selected media and PDF in memory for Share Sheet…');
+        setProgress('Preparing selected photos/videos in memory for carousel…');
         try {
-            const filesToShare: File[] = [];
+            const mediaFiles: File[] = [];
             let total = 0;
             for (const inv of chosen) {
                 const selection = selections[inv.id];
-                const ordered = orderedPropertyAttachments(propertyAttachments(inv, apiBase), selection);
+                const ordered = (selection?.urls?.length)
+                    ? orderedPropertyAttachments(propertyAttachments(inv, apiBase), selection)
+                    : [];
                 const name = `property-${(inv.display_id || inv.id).replace(/[^a-zA-Z0-9-]/g, '')}`;
                 for (let i = 0; i < ordered.length; i++) {
                     const attachment = ordered[i];
@@ -438,33 +465,106 @@ export default function PersonalWhatsAppShareModal({ inventoryIds, initialPhone,
                     const blob = await downloadPersonalWhatsAppBlob(response, MAX_PERSONAL_SHARE_BYTES - total);
                     total += blob.size;
                     validatePersonalWhatsAppFile(blob, attachment.kind, attachment.label);
-                    const ext = blob.type.split('/')[1]?.replace('jpeg', 'jpg').replace('quicktime', 'mov') || (attachment.kind === 'video' ? 'mp4' : 'jpg');
-                    filesToShare.push(new File([blob], `${name}-${i + 1}.${ext}`, { type: blob.type }));
-                }
-                if (selection.pdf) {
-                    setProgress('Generating property brochure PDF…');
-                    const response = await client.post('/api/inventory/share-pdf', { inventory_ids: [inv.id], variant: 'brandless' }, { responseType: 'blob' });
-                    const pdfBlob = new Blob([response.data], { type: 'application/pdf' });
-                    validatePersonalWhatsAppFile(pdfBlob, 'document', 'brochure.pdf');
-                    filesToShare.push(new File([pdfBlob], `${name}-brochure.pdf`, { type: 'application/pdf' }));
+                    let fileType = (blob.type || '').split(';')[0].trim().toLowerCase();
+                    if (attachment.kind === 'image') {
+                        if (!fileType || fileType === 'application/octet-stream' || fileType === 'image/jpg') fileType = 'image/jpeg';
+                    } else if (attachment.kind === 'video') {
+                        if (!fileType || fileType === 'application/octet-stream') fileType = 'video/mp4';
+                    }
+                    const ext = fileType.includes('png') ? 'png' : fileType.includes('webp') ? 'webp' : (attachment.kind === 'video' ? 'mp4' : 'jpg');
+                    mediaFiles.push(new File([blob], `${name}-${i + 1}.${ext}`, { type: fileType, lastModified: Date.now() }));
                 }
             }
-            if (!filesToShare.length) {
-                throw new Error('Select at least one photo, video, or PDF to share.');
+            if (!mediaFiles.length) {
+                throw new Error('Select at least one photo or video to share.');
             }
 
-            preparedFilesRef.current = { key: currentKey, files: filesToShare };
+            if (preparedFilesRef.current?.key === currentKey) {
+                preparedFilesRef.current.mediaFiles = mediaFiles;
+            } else {
+                preparedFilesRef.current = { key: currentKey, mediaFiles, pdfFiles: [] };
+            }
             setPreloadedKey(currentKey);
 
-            await doNativeShare(filesToShare);
+            await doNativeShareMedia(mediaFiles);
         } catch (err: any) {
             if (active.current) {
                 if (err?.name === 'AbortError') {
-                    setProgress('Share sheet closed. Files remain ready to share.');
+                    setProgress('Share sheet closed. Photos remain ready to share.');
                 } else if (err?.name === 'NotAllowedError') {
-                    setProgress('⚡ Files are ready in memory! Tap Step 2 to open the Share Sheet now.');
+                    setProgress('⚡ Photos are ready in memory! Tap Step 2 to open the Share Sheet now.');
                 } else {
-                    setError(err instanceof Error ? err.message : 'Could not share files.');
+                    setError(err instanceof Error ? err.message : 'Could not share photos.');
+                    setProgress('');
+                }
+            }
+        } finally {
+            if (active.current) setBusy(false);
+        }
+    }
+
+    async function sharePdf() {
+        setError('');
+        if (!hasPdf) {
+            setError('No property brochure PDF selected.');
+            return;
+        }
+
+        const currentKey = selectionKey;
+        const cached = preparedFilesRef.current;
+
+        // FAST PATH:
+        if (cached && cached.key === currentKey && cached.pdfFiles.length > 0) {
+            try {
+                await doNativeSharePdf(cached.pdfFiles);
+            } catch (err: any) {
+                if (active.current) {
+                    if (err?.name === 'AbortError') {
+                        setProgress('Share sheet closed. PDF remains ready to share again.');
+                    } else if (err?.name === 'NotAllowedError') {
+                        setError('Permission expired or denied. Tap to open the Share Sheet again.');
+                    } else {
+                        setError(err instanceof Error ? err.message : 'Could not open share sheet for PDF.');
+                    }
+                }
+            }
+            return;
+        }
+
+        // SLOW PATH:
+        setBusy(true);
+        setProgress('Generating property brochure PDF…');
+        try {
+            const pdfFiles: File[] = [];
+            for (const inv of chosen) {
+                const selection = selections[inv.id];
+                if (!selection?.pdf) continue;
+                const name = `property-${(inv.display_id || inv.id).replace(/[^a-zA-Z0-9-]/g, '')}`;
+                const response = await client.post('/api/inventory/share-pdf', { inventory_ids: [inv.id], variant: 'brandless' }, { responseType: 'blob' });
+                const pdfBlob = new Blob([response.data], { type: 'application/pdf' });
+                validatePersonalWhatsAppFile(pdfBlob, 'document', 'brochure.pdf');
+                pdfFiles.push(new File([pdfBlob], `${name}-brochure.pdf`, { type: 'application/pdf', lastModified: Date.now() }));
+            }
+            if (!pdfFiles.length) {
+                throw new Error('Could not generate property PDF.');
+            }
+
+            if (preparedFilesRef.current?.key === currentKey) {
+                preparedFilesRef.current.pdfFiles = pdfFiles;
+            } else {
+                preparedFilesRef.current = { key: currentKey, mediaFiles: [], pdfFiles };
+            }
+            setPreloadedKey(currentKey);
+
+            await doNativeSharePdf(pdfFiles);
+        } catch (err: any) {
+            if (active.current) {
+                if (err?.name === 'AbortError') {
+                    setProgress('Share sheet closed. PDF remains ready to share.');
+                } else if (err?.name === 'NotAllowedError') {
+                    setProgress('⚡ PDF is ready in memory! Tap to open the Share Sheet now.');
+                } else {
+                    setError(err instanceof Error ? err.message : 'Could not share PDF.');
                     setProgress('');
                 }
             }
@@ -482,9 +582,6 @@ export default function PersonalWhatsAppShareModal({ inventoryIds, initialPhone,
         if (event.shiftKey && (document.activeElement === first || document.activeElement === panel.current)) { event.preventDefault(); last.focus(); }
         else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
     }
-
-    const isPreloaded = preloadedKey === selectionKey && chosen.length > 0;
-    const preloadedCount = isPreloaded ? (preparedFilesRef.current?.files.length || 0) : 0;
 
     return <div className="personal-wa-overlay" onKeyDown={keyboard}>
         <div className="personal-wa-panel" ref={panel} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="personal-wa-title">
@@ -515,13 +612,17 @@ export default function PersonalWhatsAppShareModal({ inventoryIds, initialPhone,
                         <option value="com.whatsapp">WhatsApp</option><option value="com.whatsapp.w4b">WhatsApp Business</option>
                     </select></label></>}
 
-                {/* 2-Button Direct WhatsApp Share Flow */}
+                {/* WhatsApp Direct Sharing Flow */}
                 <div style={{ backgroundColor: 'var(--bg-secondary)', border: '2px solid #25D366', borderRadius: '12px', padding: '16px', margin: '16px 0' }}>
                     <div style={{ fontWeight: 700, fontSize: '15px', color: '#25D366', marginBottom: '6px' }}>
-                        ⚡ 2-Button WhatsApp Sharing Flow
+                        ⚡ WhatsApp Sharing Flow
                     </div>
                     <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '12px' }}>
-                        Step 1 opens WhatsApp with the property details and puts this contact at the top. Step 2 opens the Android Share Sheet to send your selected photos, videos, or PDF brochure to that same contact.
+                        {hasMedia && hasPdf
+                            ? 'Step 1 sends property details via WhatsApp. Step 2 opens the native WhatsApp photo carousel (sent as inline images). Step 3 shares the brochure PDF.'
+                            : hasMedia
+                                ? 'Step 1 sends property details via WhatsApp. Step 2 opens the Android Share Sheet to share photos directly into the WhatsApp carousel (inline images in chat).'
+                                : 'Step 1 sends property details via WhatsApp. Step 2 opens the Share Sheet to send the brochure PDF document.'}
                     </div>
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '10px' }}>
                         <button
@@ -533,25 +634,52 @@ export default function PersonalWhatsAppShareModal({ inventoryIds, initialPhone,
                                 backgroundColor: '#25D366', color: '#ffffff', fontSize: '13px', fontWeight: 700, cursor: 'pointer', textAlign: 'center'
                             }}
                         >
-                            1️⃣ Step 1: Send Property Details (WhatsApp)
+                            1️⃣ Step 1: Send Details (WhatsApp)
                         </button>
-                        <button
-                            type="button"
-                            onClick={shareMediaAndPdf}
-                            disabled={busy || !chosen.length}
-                            style={{
-                                padding: '12px 16px', borderRadius: '8px', border: 'none',
-                                backgroundColor: isPreloaded ? '#059669' : '#128c7e', color: '#ffffff', fontSize: '13px', fontWeight: 700, cursor: (!chosen.length || busy) ? 'not-allowed' : 'pointer', textAlign: 'center',
-                                opacity: (!chosen.length || busy) ? 0.6 : 1,
-                                boxShadow: isPreloaded ? '0 0 10px rgba(5, 150, 105, 0.4)' : undefined,
-                            }}
-                        >
-                            {isPreloaded
-                                ? `2️⃣ Step 2: Share Media & PDF (${preloadedCount} Ready) ⚡`
-                                : isPreloading
-                                    ? '⏳ Preparing files in background…'
-                                    : '2️⃣ Step 2: Share Media & PDF (Share Sheet)'}
-                        </button>
+                        {hasMedia && (
+                            <button
+                                type="button"
+                                onClick={shareMedia}
+                                disabled={busy || (!preloadedMediaCount && isPreloading)}
+                                style={{
+                                    padding: '12px 16px', borderRadius: '8px', border: 'none',
+                                    backgroundColor: isPreloaded && preloadedMediaCount > 0 ? '#059669' : '#128c7e', color: '#ffffff', fontSize: '13px', fontWeight: 700, cursor: busy ? 'not-allowed' : 'pointer', textAlign: 'center',
+                                    boxShadow: isPreloaded && preloadedMediaCount > 0 ? '0 0 10px rgba(5, 150, 105, 0.4)' : undefined,
+                                }}
+                            >
+                                {isPreloaded && preloadedMediaCount > 0
+                                    ? `2️⃣ Step 2: Share Photos (Carousel) (${preloadedMediaCount} Ready) ⚡`
+                                    : isPreloading
+                                        ? '⏳ Preparing photos in background…'
+                                        : '2️⃣ Step 2: Share Photos (Carousel)'}
+                            </button>
+                        )}
+                        {hasPdf && (
+                            <button
+                                type="button"
+                                onClick={sharePdf}
+                                disabled={busy || (!preloadedPdfCount && isPreloading)}
+                                style={{
+                                    padding: '12px 16px', borderRadius: '8px', border: 'none',
+                                    backgroundColor: isPreloaded && preloadedPdfCount > 0 ? '#0284c7' : '#0369a1', color: '#ffffff', fontSize: '13px', fontWeight: 700, cursor: busy ? 'not-allowed' : 'pointer', textAlign: 'center',
+                                    boxShadow: isPreloaded && preloadedPdfCount > 0 ? '0 0 10px rgba(2, 132, 199, 0.4)' : undefined,
+                                }}
+                            >
+                                {hasMedia ? (
+                                    isPreloaded && preloadedPdfCount > 0
+                                        ? `3️⃣ Step 3: Share Brochure PDF (Document) ⚡`
+                                        : isPreloading
+                                            ? '⏳ Preparing PDF brochure…'
+                                            : '3️⃣ Step 3: Share Brochure PDF (Document)'
+                                ) : (
+                                    isPreloaded && preloadedPdfCount > 0
+                                        ? `2️⃣ Step 2: Share Brochure PDF (Document) ⚡`
+                                        : isPreloading
+                                            ? '⏳ Preparing PDF brochure…'
+                                            : '2️⃣ Step 2: Share Brochure PDF (Document)'
+                                )}
+                            </button>
+                        )}
                     </div>
                 </div>
 
@@ -562,7 +690,7 @@ export default function PersonalWhatsAppShareModal({ inventoryIds, initialPhone,
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
                             <h3>{inv.display_id || inv.locality || inv.location || 'Property'}</h3>
                             <div style={{ display: 'flex', gap: '6px' }}>
-                                <button type="button" onClick={() => update(inv.id, { urls: attachments.map(a => a.url), firstPhoto: attachments.find(a => a.kind === 'image')?.url || '', pdf: true })} style={{ fontSize: '11px', padding: '4px 8px' }}>Select All</button>
+                                <button type="button" onClick={() => update(inv.id, { urls: attachments.map(a => a.url), firstPhoto: attachments.find(a => a.kind === 'image')?.url || '', pdf: selection.pdf })} style={{ fontSize: '11px', padding: '4px 8px' }}>Select All Photos</button>
                                 <button type="button" onClick={() => update(inv.id, EMPTY_ATTACHMENT_SELECTION)} style={{ fontSize: '11px', padding: '4px 8px' }}>Deselect All</button>
                             </div>
                         </div>
@@ -624,18 +752,48 @@ export default function PersonalWhatsAppShareModal({ inventoryIds, initialPhone,
                                 >
                                     1️⃣ Step 1: Send Details (WhatsApp)
                                 </button>
-                                <button
-                                    type="button"
-                                    onClick={shareMediaAndPdf}
-                                    disabled={busy || !chosen.length}
-                                    style={{
-                                        padding: '10px 14px', borderRadius: '8px', border: 'none',
-                                        backgroundColor: isPreloaded ? '#059669' : '#128c7e', color: '#ffffff', fontSize: '12px', fontWeight: 700, cursor: (!chosen.length || busy) ? 'not-allowed' : 'pointer', textAlign: 'center',
-                                        opacity: (!chosen.length || busy) ? 0.6 : 1,
-                                    }}
-                                >
-                                    {isPreloaded ? `2️⃣ Step 2: Share Media & PDF (${preloadedCount} Ready) ⚡` : isPreloading ? '⏳ Preparing files…' : '2️⃣ Step 2: Share Media & PDF'}
-                                </button>
+                                {hasMedia && (
+                                    <button
+                                        type="button"
+                                        onClick={shareMedia}
+                                        disabled={busy || (!preloadedMediaCount && isPreloading)}
+                                        style={{
+                                            padding: '10px 14px', borderRadius: '8px', border: 'none',
+                                            backgroundColor: isPreloaded && preloadedMediaCount > 0 ? '#059669' : '#128c7e', color: '#ffffff', fontSize: '12px', fontWeight: 700, cursor: busy ? 'not-allowed' : 'pointer', textAlign: 'center',
+                                        }}
+                                    >
+                                        {isPreloaded && preloadedMediaCount > 0
+                                            ? `2️⃣ Step 2: Share Photos (Carousel) (${preloadedMediaCount} Ready) ⚡`
+                                            : isPreloading
+                                                ? '⏳ Preparing photos…'
+                                                : '2️⃣ Step 2: Share Photos (Carousel)'}
+                                    </button>
+                                )}
+                                {hasPdf && (
+                                    <button
+                                        type="button"
+                                        onClick={sharePdf}
+                                        disabled={busy || (!preloadedPdfCount && isPreloading)}
+                                        style={{
+                                            padding: '10px 14px', borderRadius: '8px', border: 'none',
+                                            backgroundColor: isPreloaded && preloadedPdfCount > 0 ? '#0284c7' : '#0369a1', color: '#ffffff', fontSize: '12px', fontWeight: 700, cursor: busy ? 'not-allowed' : 'pointer', textAlign: 'center',
+                                        }}
+                                    >
+                                        {hasMedia ? (
+                                            isPreloaded && preloadedPdfCount > 0
+                                                ? `3️⃣ Step 3: Share Brochure PDF (Document) ⚡`
+                                                : isPreloading
+                                                    ? '⏳ Preparing PDF…'
+                                                    : '3️⃣ Step 3: Share Brochure PDF (Document)'
+                                        ) : (
+                                            isPreloaded && preloadedPdfCount > 0
+                                                ? `2️⃣ Step 2: Share Brochure PDF (Document) ⚡`
+                                                : isPreloading
+                                                    ? '⏳ Preparing PDF…'
+                                                    : '2️⃣ Step 2: Share Brochure PDF (Document)'
+                                        )}
+                                    </button>
+                                )}
                             </div>
                         </> : <p>Select only the photos and videos you want to send.</p>}
                     </section>;
