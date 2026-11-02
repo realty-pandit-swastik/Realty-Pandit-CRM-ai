@@ -20,7 +20,7 @@
  * via onSubmit. Two backend endpoints (PATCH /api/leads/:phone/requirements and
  * /api/deals/:id/requirements) already accept the canonical fields after Phase 1.
  */
-import React, { useEffect, useMemo, useRef, useState, forwardRef, useImperativeHandle } from 'react';
+import React, { useEffect, useMemo, useRef, useState, useId, forwardRef, useImperativeHandle } from 'react';
 import { getTaxonomyTree, getNodeFields } from '../../api/client';
 import ParkingListField from '../ParkingListField';
 import { loadGoogleMaps } from '../../lib/loadGoogleMaps';
@@ -89,11 +89,11 @@ const TIMELINE_OPTIONS = [
 ];
 
 const labelStyle: React.CSSProperties = {
-    fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)',
-    textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '4px', display: 'block',
+    fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)',
+    marginBottom: 'var(--rp-s-2)', display: 'block',
 };
 const inputStyle: React.CSSProperties = {
-    width: '100%', padding: '8px 10px', borderRadius: '6px',
+    width: '100%', padding: 'var(--rp-s-3)', borderRadius: '8px',
     border: '1px solid var(--border-secondary)', backgroundColor: 'var(--bg-secondary)',
     color: 'var(--text-primary)', fontSize: '13px', boxSizing: 'border-box',
 };
@@ -102,6 +102,7 @@ const DemandRequirementsForm = forwardRef<DemandRequirementsFormHandle, DemandRe
     initial, onSubmit, onCancel,
     submitLabel = 'Save Requirements', submitting = false, hideSubmitButton = false,
 }, ref) {
+    const fieldId = useId();
 
     // ── Universal fields ──────────────────────────────────────────────────────
     // Normalize a non-canonical stored intent to a valid dropdown option so the form can't
@@ -313,7 +314,7 @@ const DemandRequirementsForm = forwardRef<DemandRequirementsFormHandle, DemandRe
         padding: '6px 12px', borderRadius: '999px', fontSize: '12px', cursor: 'pointer',
         border: on ? '1px solid var(--text-link)' : '1px solid var(--border-secondary)',
         background: on ? 'var(--text-link)' : 'var(--bg-tertiary)',
-        color: on ? '#fff' : 'var(--text-primary)',
+        color: on ? 'var(--surface-white)' : 'var(--text-primary)',
     });
 
     // ── Schema field setter helpers (mirror of InventoryList.tsx:1977-1999) ───
@@ -353,12 +354,12 @@ const DemandRequirementsForm = forwardRef<DemandRequirementsFormHandle, DemandRe
     useImperativeHandle(ref, () => ({ submit: handleSubmit }));
 
     return (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+        <div className="rp-demand-form" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--rp-s-5)' }}>
 
             {/* ── Universal: Intent ─────────────────────────────────────────── */}
             <div>
-                <label style={labelStyle}>Intent (Buy / Rent)</label>
-                <select style={inputStyle} value={intent} onChange={e => setIntent(e.target.value)}>
+                <label htmlFor={`${fieldId}-intent`} style={labelStyle}>Intent (Buy / Rent)</label>
+                <select id={`${fieldId}-intent`} style={inputStyle} value={intent} onChange={e => setIntent(e.target.value)}>
                     <option value="buy">Buy</option>
                     <option value="rent">Rent</option>
                     <option value="lease">Lease</option>
@@ -368,28 +369,28 @@ const DemandRequirementsForm = forwardRef<DemandRequirementsFormHandle, DemandRe
             {/* ── Budget ───────────────────────────────────────────────────── */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                 <div>
-                    <label style={labelStyle}>Budget Min (₹)</label>
-                    <input style={inputStyle} type="number" value={budgetMin} onChange={e => setBudgetMin(e.target.value)} placeholder="e.g. 5000000" />
+                    <label htmlFor={`${fieldId}-budget-min`} style={labelStyle}>Budget Min (₹)</label>
+                    <input id={`${fieldId}-budget-min`} style={inputStyle} type="number" value={budgetMin} onChange={e => setBudgetMin(e.target.value)} placeholder="e.g. 5000000" />
                 </div>
                 <div>
-                    <label style={labelStyle}>Budget Max (₹)</label>
-                    <input style={inputStyle} type="number" value={budgetMax} onChange={e => setBudgetMax(e.target.value)} placeholder="e.g. 8000000" />
+                    <label htmlFor={`${fieldId}-budget-max`} style={labelStyle}>Budget Max (₹)</label>
+                    <input id={`${fieldId}-budget-max`} style={inputStyle} type="number" value={budgetMax} onChange={e => setBudgetMax(e.target.value)} placeholder="e.g. 8000000" />
                 </div>
             </div>
 
             {/* ── Area ─────────────────────────────────────────────────────── */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' }}>
                 <div>
-                    <label style={labelStyle}>Area Min</label>
-                    <input style={inputStyle} type="number" value={areaMin} onChange={e => setAreaMin(e.target.value)} placeholder="500" />
+                    <label htmlFor={`${fieldId}-area-min`} style={labelStyle}>Area Min</label>
+                    <input id={`${fieldId}-area-min`} style={inputStyle} type="number" value={areaMin} onChange={e => setAreaMin(e.target.value)} placeholder="500" />
                 </div>
                 <div>
-                    <label style={labelStyle}>Area Max</label>
-                    <input style={inputStyle} type="number" value={areaMax} onChange={e => setAreaMax(e.target.value)} placeholder="2000" />
+                    <label htmlFor={`${fieldId}-area-max`} style={labelStyle}>Area Max</label>
+                    <input id={`${fieldId}-area-max`} style={inputStyle} type="number" value={areaMax} onChange={e => setAreaMax(e.target.value)} placeholder="2000" />
                 </div>
                 <div>
-                    <label style={labelStyle}>Unit</label>
-                    <select style={inputStyle} value={areaUnit} onChange={e => setAreaUnit(e.target.value)}>
+                    <label htmlFor={`${fieldId}-unit`} style={labelStyle}>Unit</label>
+                    <select id={`${fieldId}-unit`} style={inputStyle} value={areaUnit} onChange={e => setAreaUnit(e.target.value)}>
                         <option value="sqft">sqft</option>
                         <option value="sqmtr">sqmtr</option>
                         <option value="sqyd">sqyd</option>
@@ -400,19 +401,20 @@ const DemandRequirementsForm = forwardRef<DemandRequirementsFormHandle, DemandRe
 
             {/* ── Timeline ─────────────────────────────────────────────────── */}
             <div>
-                <label style={labelStyle}>Timeline</label>
-                <select style={inputStyle} value={timeline} onChange={e => setTimeline(e.target.value)}>
+                <label htmlFor={`${fieldId}-timeline`} style={labelStyle}>Timeline</label>
+                <select id={`${fieldId}-timeline`} style={inputStyle} value={timeline} onChange={e => setTimeline(e.target.value)}>
                     {TIMELINE_OPTIONS.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
                 </select>
             </div>
 
             {/* ── Preferred Location (Google Places autocomplete → lat/lng) ──── */}
             <div>
-                <label style={labelStyle}>Preferred Location</label>
+                <label htmlFor={`${fieldId}-location`} style={labelStyle}>Preferred Location</label>
                 <div style={{ position: 'relative' }}>
                     <input
+                        id={`${fieldId}-location`}
                         ref={locationRef}
-                        style={{ ...(preferredLat != null ? { ...inputStyle, backgroundColor: 'rgba(34,197,94,0.08)' } : inputStyle), paddingRight: '34px' }}
+                        style={{ ...(preferredLat != null ? { ...inputStyle, backgroundColor: 'var(--rp-success-wash)' } : inputStyle), paddingRight: '34px' }}
                         type="text"
                         value={preferredLocation}
                         onChange={e => { setPreferredLocation(e.target.value); setPreferredLat(null); setPreferredLng(null); }}
@@ -427,7 +429,7 @@ const DemandRequirementsForm = forwardRef<DemandRequirementsFormHandle, DemandRe
                     )}
                 </div>
                 {preferredLat != null && (
-                    <div style={{ fontSize: '11px', color: '#22c55e', marginTop: '3px' }}>
+                    <div style={{ fontSize: '11px', color: 'var(--rp-success-text)', marginTop: '3px' }}>
                         📍 Geo-tagged: {preferredLat.toFixed(4)}, {preferredLng?.toFixed(4)}
                     </div>
                 )}
@@ -444,7 +446,7 @@ const DemandRequirementsForm = forwardRef<DemandRequirementsFormHandle, DemandRe
                             <button key={t.k} type="button" onClick={() => setKey(t.k, on ? undefined : true)}
                                 style={{ padding: '6px 12px', borderRadius: '999px', fontSize: '12px', cursor: 'pointer',
                                     border: on ? '1px solid var(--text-link)' : '1px solid var(--border-secondary)',
-                                    background: on ? 'var(--text-link)' : 'var(--bg-tertiary)', color: on ? '#fff' : 'var(--text-primary)' }}>
+                                    background: on ? 'var(--text-link)' : 'var(--bg-tertiary)', color: on ? 'var(--surface-white)' : 'var(--text-primary)' }}>
                                 {t.l}
                             </button>
                         );
@@ -455,19 +457,19 @@ const DemandRequirementsForm = forwardRef<DemandRequirementsFormHandle, DemandRe
             <div style={{ borderTop: '1px solid var(--border-secondary)', paddingTop: '12px' }}>
                 <label style={{ ...labelStyle, marginBottom: '8px' }}>Property Type</label>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '8px' }}>
-                    <select style={inputStyle} value={catId} onChange={e => onPickCat(e.target.value)}>
+                    <select aria-label="Property category" style={inputStyle} value={catId} onChange={e => onPickCat(e.target.value)}>
                         <option value="">Category…</option>
                         {cats.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                     </select>
-                    <select style={inputStyle} value={subCatId} onChange={e => onPickSubCat(e.target.value)} disabled={subCats.length === 0}>
+                    <select aria-label="Property subcategory" style={inputStyle} value={subCatId} onChange={e => onPickSubCat(e.target.value)} disabled={subCats.length === 0}>
                         <option value="">Any sub…</option>
                         {subCats.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                     </select>
-                    <select style={inputStyle} value={typeId} onChange={e => onPickType(e.target.value)} disabled={types.length === 0}>
+                    <select aria-label="Property type" style={inputStyle} value={typeId} onChange={e => onPickType(e.target.value)} disabled={types.length === 0}>
                         <option value="">Any type…</option>
                         {types.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
                     </select>
-                    <select style={inputStyle} value={(leaves.find(l => l.id === nodeId)?.id) || ''} onChange={e => onPickLeaf(e.target.value)} disabled={leaves.length === 0}>
+                    <select aria-label="Property classification" style={inputStyle} value={(leaves.find(l => l.id === nodeId)?.id) || ''} onChange={e => onPickLeaf(e.target.value)} disabled={leaves.length === 0}>
                         <option value="">Any specific…</option>
                         {leaves.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
                     </select>
@@ -539,7 +541,7 @@ const DemandRequirementsForm = forwardRef<DemandRequirementsFormHandle, DemandRe
                                                         padding: '6px 12px', borderRadius: '999px', fontSize: '12px', cursor: 'pointer',
                                                         border: on ? '1px solid var(--text-link)' : '1px solid var(--border-secondary)',
                                                         background: on ? 'var(--text-link)' : 'var(--bg-tertiary)',
-                                                        color: on ? '#fff' : 'var(--text-primary)',
+                                                        color: on ? 'var(--surface-white)' : 'var(--text-primary)',
                                                     }}
                                                 >
                                                     {o}
@@ -548,12 +550,12 @@ const DemandRequirementsForm = forwardRef<DemandRequirementsFormHandle, DemandRe
                                         })}
                                     </div>
                                 ) : Array.isArray(f.options) && f.options.length > 0 ? (
-                                    <select style={inputStyle} value={schemaValues[f.key] ?? ''} onChange={e => setKey(f.key, e.target.value)}>
+                                    <select aria-label={f.label} style={inputStyle} value={schemaValues[f.key] ?? ''} onChange={e => setKey(f.key, e.target.value)}>
                                         <option value="">Select…</option>
                                         {f.options.map(o => <option key={o} value={o}>{o}</option>)}
                                     </select>
                                 ) : (
-                                    <input style={inputStyle} type={f.input_type === 'number' ? 'number' : 'text'} value={schemaValues[f.key] ?? ''} onChange={e => setKey(f.key, e.target.value)} placeholder={f.unit || ''} />
+                                    <input aria-label={f.label} style={inputStyle} type={f.input_type === 'number' ? 'number' : 'text'} value={schemaValues[f.key] ?? ''} onChange={e => setKey(f.key, e.target.value)} placeholder={f.unit || ''} />
                                 )}
                             </div>
                         ))}
@@ -580,7 +582,7 @@ const DemandRequirementsForm = forwardRef<DemandRequirementsFormHandle, DemandRe
                         type="button"
                         onClick={handleSubmit}
                         disabled={submitting}
-                        style={{ padding: '8px 16px', borderRadius: '6px', border: 'none', background: 'var(--text-link)', color: '#fff', cursor: submitting ? 'not-allowed' : 'pointer', fontSize: '13px', fontWeight: 600 }}
+                        style={{ padding: '8px 16px', borderRadius: '6px', border: 'none', background: 'var(--text-link)', color: 'var(--surface-white)', cursor: submitting ? 'not-allowed' : 'pointer', fontSize: '13px', fontWeight: 600 }}
                     >
                         {submitting ? 'Saving…' : submitLabel}
                     </button>

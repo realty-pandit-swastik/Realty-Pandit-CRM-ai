@@ -1,17 +1,20 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-const hooks = vi.hoisted(() => ({ value: null as any, mint: vi.fn() }));
+const hooks = vi.hoisted(() => ({ value: null as any, mint: vi.fn(), validate: vi.fn(), lookup: vi.fn() }));
 vi.mock('@prisma/client', () => ({ PrismaClient: class {
+    inventory = { findUnique: hooks.lookup };
     $extends(value: any) { hooks.value = value.query.inventory; return {}; }
 } }));
 vi.mock('../utils/inventory_id', () => ({ generateDisplayId: hooks.mint }));
+vi.mock('../services/inventory_parties', () => ({ validateInventoryPartyWrite: hooks.validate }));
 beforeAll(async () => { await vi.importActual('../db'); });
-beforeEach(() => { hooks.mint.mockReset().mockResolvedValue('RP-DEL-RES-20001'); });
+beforeEach(() => { hooks.mint.mockReset().mockResolvedValue('RP-DEL-RES-20001'); hooks.validate.mockReset().mockResolvedValue(undefined); hooks.lookup.mockReset().mockResolvedValue(null); });
 describe('Property ID coverage', () => {
     it('direct create generates an ID at the shared write boundary', async () => {
         const args: any = { data: { city: 'Delhi', category: 'residential' } };
         await hooks.value.create({ args, query: vi.fn(async () => ({ status: 'pending_approval' })) });
         expect(args.data.display_id).toBe('RP-DEL-RES-20001');
         expect(hooks.mint).toHaveBeenCalledWith('Delhi', 'residential');
+        expect(hooks.validate).toHaveBeenCalledWith(args.data);
     });
     it('bulk create preserves existing IDs and fills missing IDs', async () => {
         const args: any = { data: [{ display_id: 'RP-EXISTING' }, { city: 'Delhi' }] };
@@ -30,5 +33,11 @@ describe('Property ID coverage', () => {
         await hooks.value.create({ args, query: vi.fn(async () => ({ status: 'pending_approval' })) });
         expect(args.data.display_id).toBe('RP-EXISTING');
         expect(hooks.mint).not.toHaveBeenCalled();
+    });
+    it('does not mint an ID or write when the shared property-party guard rejects a create', async () => {
+        hooks.validate.mockRejectedValue(new Error('Internal staff cannot be used as an external property contact'));
+        const query = vi.fn();
+        await expect(hooks.value.create({ args: { data: { tenant_id: 'tenant', owner_phone: '+919000000002' } }, query })).rejects.toThrow(/Internal staff/);
+        expect(query).not.toHaveBeenCalled(); expect(hooks.mint).not.toHaveBeenCalled();
     });
 });

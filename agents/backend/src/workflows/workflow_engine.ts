@@ -17,6 +17,8 @@
 import prisma from '../db';
 import logger from '../utils/logger';
 import { ensureOwner } from '../services/ensure_owner';
+import { INVENTORY_CONTACT_ROLES, validateDesignation } from '../data/contact_catalog';
+import { validateInventoryPartyWrite, assertExternalPartnerPhone } from '../services/inventory_parties';
 import { ensurePartnerAgent } from '../services/partner_auto_create';
 import { generateUniqueSlug } from '../utils/slug';
 import { promotePendingMedia } from '../utils/media_promote';
@@ -505,17 +507,18 @@ export class WorkflowEngine {
         // (2026-06-20) Hard guard on the RESOLVED owner number — no matter which step set it (source
         // contact OR owner-details override), an ADMIN team member can never list their OWN number as
         // the owner/partner. This is the root fix for the 317 "agent is the owner" listings.
-        if (source === 'admin' && agentId) {
-            const meOwner = await prisma.agent.findUnique({ where: { id: agentId }, select: { phone: true } });
-            const myOwnerDigits = (normalizePhone(meOwner?.phone || '') || '').replace(/\D/g, '').slice(-10);
-            if (myOwnerDigits && ownerPhone.replace(/\D/g, '').slice(-10) === myOwnerDigits) {
-                throw new ValidationError('You cannot use your own number as the property owner. Enter the actual owner number (or the partner agent number).');
-            }
-        }
-
         // Get tenant
-        const tenant = await prisma.tenant.findFirst();
+        const actor = agentId ? await prisma.agent.findUnique({ where: { id: agentId }, select: { tenant_id: true } }) : null;
+        const tenant = actor?.tenant_id ? await prisma.tenant.findFirst({ where: { id: actor.tenant_id } }) : await prisma.tenant.findFirst();
         if (!tenant) throw new Error('No tenant found');
+        const selectedRole = INVENTORY_CONTACT_ROLES.find(role => role.workflow === answers.user_role);
+        if (answers.user_role && !selectedRole) throw new ValidationError('Choose a valid property contact role');
+        const propertyRole = validateDesignation(answers.property_contact_role || selectedRole?.code, answers.property_contact_role_label);
+        if (propertyRole.role === 'EMPLOYEE' && (source !== 'admin' || !actor || partnerAgentId)) throw new ValidationError('Only internal staff may explicitly link an Employee property contact');
+        const keyRole = validateDesignation(answers.key_holder_role, answers.key_holder_role_label);
+        await validateInventoryPartyWrite({ tenant_id: tenant.id, owner_phone: ownerPhone,
+            property_contact_role: propertyRole.role, referral_partner_id: answers.source_partner_id });
+        if (answers.source_partner_phone) await assertExternalPartnerPhone(String(answers.source_partner_phone), tenant.id);
 
         // ─── 2c. Taxonomy path (admin v1 — Phase 1d) ───
         // When a leaf TYPE node was chosen, re-use the EXISTING flat-type → legacy
@@ -668,7 +671,9 @@ export class WorkflowEngine {
                 phone_number: ownerPhone,
                 tenant_id: tenant.id,
                 name: ownerName || null,
-                contact_type: 'LANDLORD',
+                contact_type: (selectedRole?.contactType || 'LANDLORD') as any,
+                client_role: propertyRole.role,
+                client_role_label: propertyRole.label,
                 // 2026-05-12 Bug D fix: don't write lead_status='NEW' (mixes up lifecycle_stage with
                 // lead_status). Landlords aren't buyer leads — let the schema default 'cold' apply.
             },
@@ -853,6 +858,10 @@ export class WorkflowEngine {
                 tenant_id: tenant.id,
                 owner_id: ownerId,
                 owner_phone: ownerPhone,
+                property_contact_role: propertyRole.role,
+                property_contact_role_label: propertyRole.label,
+                key_holder_role: keyRole.role,
+                key_holder_role_label: keyRole.label,
                 intent,
 
                 // Display ID (v3)

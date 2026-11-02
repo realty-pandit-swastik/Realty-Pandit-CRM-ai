@@ -147,7 +147,7 @@ export function SharedTab({ deal, onAppointmentBooked }: Props) {
                                         onClick={() => { setBookingFor(share.inventory_id); setDate(''); setTime(''); setExpandedId(null); }}
                                         style={{
                                             padding: '5px 10px', borderRadius: 6, fontSize: 11, fontWeight: 700, cursor: 'pointer',
-                                            backgroundColor: 'rgba(34,197,94,0.1)', border: '1.5px solid rgba(34,197,94,0.4)', color: '#16a34a',
+                                            backgroundColor: 'var(--rp-success-wash)', border: '1.5px solid var(--rp-success-line)', color: 'var(--rp-success-text)',
                                             whiteSpace: 'nowrap',
                                         }}>
                                         📅 Book
@@ -191,7 +191,7 @@ export function SharedTab({ deal, onAppointmentBooked }: Props) {
                                     <input type="time" style={inputStyle} value={time} onChange={e => setTime(e.target.value)} />
                                     <button onClick={() => handleBook(share.inventory_id)} disabled={booking || !date || !time} style={{
                                         padding: '6px 14px', borderRadius: 7, fontSize: 12, fontWeight: 700, cursor: 'pointer',
-                                        backgroundColor: 'var(--accent-primary)', color: '#fff', border: 'none',
+                                        backgroundColor: 'var(--accent-primary)', color: 'var(--surface-white)', border: 'none',
                                         opacity: booking ? 0.7 : 1,
                                     }}>
                                         {booking ? 'Booking…' : '✅ Confirm'}

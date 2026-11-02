@@ -97,7 +97,7 @@ describe('client role precedence', () => {
             expect(clientRoleColor(code)).toBeTruthy();
         }
         expect(clientRoleLabel('SOMETHING_NEW')).toBe('SOMETHING_NEW');
-        expect(clientRoleColor('SOMETHING_NEW')).toBe('#6b7280');
+        expect(clientRoleColor('SOMETHING_NEW')).toBe('var(--text-secondary)');
         expect(clientRoleLabel(null)).toBeNull();
     });
 

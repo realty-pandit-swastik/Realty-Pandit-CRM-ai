@@ -8,6 +8,7 @@
 import prisma from '../db';
 import logger from '../utils/logger';
 import { normalizePhone } from '../utils/phone';
+import { assertExternalPartnerPhone } from './inventory_parties';
 
 export interface PartnerAutoCreateResult {
     partnerId: string;
@@ -34,6 +35,8 @@ export async function ensurePartnerAgent(
         throw new Error(`Invalid partner phone number: ${phone}`);
     }
 
+    // Check before the existing-profile early return: old staff/partner collisions also count.
+    await assertExternalPartnerPhone(normalizedPhone, tenantId);
     // Check if PartnerAgent already exists
     const existing = await prisma.partnerAgent.findUnique({
         where: { phone_number: normalizedPhone },

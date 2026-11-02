@@ -7,9 +7,9 @@ export type ShareContent = { photos: boolean; videos: boolean; pdf: boolean };
 export const DEFAULT_SHARE_CONTENT: ShareContent = { photos: true, videos: true, pdf: false };
 
 const OPTIONS: { key: keyof ShareContent; label: string }[] = [
-    { key: 'photos', label: '🖼️ Photos' },
-    { key: 'videos', label: '🎬 Videos' },
-    { key: 'pdf', label: '📄 PDF' },
+    { key: 'photos', label: 'Photos' },
+    { key: 'videos', label: 'Videos' },
+    { key: 'pdf', label: 'PDF' },
 ];
 
 export default function ShareContentPicker({ value, onChange, disabled }: {

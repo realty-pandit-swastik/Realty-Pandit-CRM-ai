@@ -18,11 +18,11 @@ const FALLBACK: TargetVals = { leads: 30, appointments: 15, inventory: 10, conve
 const inputStyle: React.CSSProperties = {
   width: '100%', padding: '8px 10px', fontSize: 14, fontWeight: 700,
   color: 'var(--text-primary)', backgroundColor: 'var(--bg-primary)',
-  border: '1px solid var(--border-primary)', borderRadius: 8, outline: 'none',
+  border: '1px solid var(--control-line)', borderRadius: 'var(--radius-control)',
 };
 const labelStyle: React.CSSProperties = {
-  fontSize: 11, fontWeight: 700, color: 'var(--text-muted)',
-  textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 5, display: 'block',
+  fontSize: 12, fontWeight: 500, color: 'var(--text-secondary)',
+  marginBottom: 8, display: 'block',
 };
 
 export const TargetsEditor: React.FC<{ onSaved?: () => void }> = ({ onSaved }) => {
@@ -72,18 +72,18 @@ export const TargetsEditor: React.FC<{ onSaved?: () => void }> = ({ onSaved }) =
       disabled={busy}
       style={{
         padding: '7px 14px', fontSize: 13, fontWeight: 700, cursor: busy ? 'default' : 'pointer',
-        borderRadius: 8, border: `1px solid ${primary ? '#8b5cf6' : 'var(--border-primary)'}`,
-        color: primary ? '#fff' : 'var(--text-secondary)',
-        backgroundColor: primary ? '#8b5cf6' : 'transparent', opacity: busy ? 0.6 : 1,
+        borderRadius: 'var(--radius-control)', border: `1px solid ${primary ? 'var(--blue-600)' : 'var(--border-primary)'}`,
+        color: primary ? 'var(--surface-white)' : 'var(--text-secondary)',
+        backgroundColor: primary ? 'var(--blue-600)' : 'transparent', opacity: busy ? 0.6 : 1,
       }}
     >{label}</button>
   );
 
   return (
     <ClayCard
-      title="🎯 Monthly Targets"
+      title="Monthly Targets"
       subtitle="Your team is scored against these. Monthly figures are pro-rated to the selected date range."
-      accent="#8b5cf6"
+      accent="var(--blue-600)"
       right={
         open
           ? <div style={{ display: 'flex', gap: 8 }}>{btn('Cancel', () => setOpen(false))}{btn(busy ? 'Saving…' : 'Save', save, true)}</div>
@@ -92,18 +92,18 @@ export const TargetsEditor: React.FC<{ onSaved?: () => void }> = ({ onSaved }) =
     >
       {open ? (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 14, marginTop: 4 }}>
-          <div><label style={labelStyle}>Leads / mo</label>
+          <div><label style={labelStyle}>Leads / mo
             <input type="number" min={0} style={inputStyle} value={v.leads}
-              onChange={(e) => set('leads', parseInt(e.target.value, 10))} /></div>
-          <div><label style={labelStyle}>Appointments / mo</label>
+              onChange={(e) => set('leads', parseInt(e.target.value, 10))} /></label></div>
+          <div><label style={labelStyle}>Appointments / mo
             <input type="number" min={0} style={inputStyle} value={v.appointments}
-              onChange={(e) => set('appointments', parseInt(e.target.value, 10))} /></div>
-          <div><label style={labelStyle}>Inventory / mo</label>
+              onChange={(e) => set('appointments', parseInt(e.target.value, 10))} /></label></div>
+          <div><label style={labelStyle}>Inventory / mo
             <input type="number" min={0} style={inputStyle} value={v.inventory}
-              onChange={(e) => set('inventory', parseInt(e.target.value, 10))} /></div>
-          <div><label style={labelStyle}>Conversion %</label>
+              onChange={(e) => set('inventory', parseInt(e.target.value, 10))} /></label></div>
+          <div><label style={labelStyle}>Conversion %
             <input type="number" min={0} max={100} style={inputStyle} value={Math.round(v.conversion_rate * 100)}
-              onChange={(e) => set('conversion_rate', (parseFloat(e.target.value) || 0) / 100)} /></div>
+              onChange={(e) => set('conversion_rate', (parseFloat(e.target.value) || 0) / 100)} /></label></div>
         </div>
       ) : (
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 22, marginTop: 2 }}>

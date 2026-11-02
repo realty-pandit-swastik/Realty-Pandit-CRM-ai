@@ -70,7 +70,7 @@ export default function ConfirmDialog({
     if (e.target === dialogRef.current) onCancel();
   };
 
-  const confirmColor = variant === 'danger' ? '#ef4444' : variant === 'warning' ? '#f59e0b' : '#3b82f6';
+  const confirmColor = variant === 'danger' ? 'var(--danger)' : variant === 'warning' ? 'var(--warning)' : 'var(--blue-600)';
 
   return (
     <dialog
@@ -81,26 +81,26 @@ export default function ConfirmDialog({
       onClick={handleBackdropClick}
       onKeyDown={(e) => e.key === 'Escape' && onCancel()}
       style={{
-        border: 'none', borderRadius: '12px', padding: '24px', maxWidth: '400px', width: '90%',
-        background: 'var(--bg-secondary, #1e293b)', color: 'var(--text-primary, #f1f5f9)',
-        boxShadow: '0 25px 50px rgba(0,0,0,0.5)',
+        border: '1px solid var(--border-primary)', borderRadius: 'var(--radius-card)', padding: '24px', maxWidth: '400px', width: '90%',
+        background: 'var(--bg-primary)', color: 'var(--text-primary)',
+        boxShadow: 'var(--rp-shadow-far)',
       }}
     >
       <h2 id="confirm-title" style={{ fontSize: '18px', fontWeight: 600, marginBottom: '8px' }}>{title}</h2>
-      <p id="confirm-message" style={{ color: 'var(--text-secondary, #94a3b8)', marginBottom: '24px', lineHeight: 1.5 }}>{message}</p>
+      <p id="confirm-message" style={{ color: 'var(--text-secondary)', marginBottom: '24px', lineHeight: 1.5 }}>{message}</p>
       <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
         <button
           ref={cancelRef}
           type="button"
           onClick={onCancel}
-          style={{ padding: '10px 20px', borderRadius: '8px', border: '1px solid var(--border-primary, #334155)', background: 'transparent', color: 'var(--text-primary, #f1f5f9)', cursor: 'pointer', fontSize: '14px', minWidth: '44px', minHeight: '44px' }}
+          style={{ padding: '10px 20px', borderRadius: 'var(--radius-control)', border: '1px solid var(--control-line)', background: 'transparent', color: 'var(--text-primary)', cursor: 'pointer', fontSize: '14px', minWidth: '44px', minHeight: '44px' }}
         >
           {cancelLabel}
         </button>
         <button
           type="button"
           onClick={onConfirm}
-          style={{ padding: '10px 20px', borderRadius: '8px', border: 'none', background: confirmColor, color: 'white', cursor: 'pointer', fontSize: '14px', fontWeight: 600, minWidth: '44px', minHeight: '44px' }}
+          style={{ padding: '10px 20px', borderRadius: 'var(--radius-control)', border: 'none', background: confirmColor, color: 'var(--surface-white)', cursor: 'pointer', fontSize: '14px', fontWeight: 600, minWidth: '44px', minHeight: '44px' }}
         >
           {confirmLabel}
         </button>

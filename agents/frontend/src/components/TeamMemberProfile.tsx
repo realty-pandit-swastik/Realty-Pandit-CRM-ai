@@ -1,6 +1,7 @@
 
 import { useEffect, useState } from 'react';
 import PhoneInput from './PhoneInput';
+import { IconText, PresentationIcon } from './ui/PresentationIcon';
 import { useAuth } from '../contexts/AuthContext';
 import { EmailAccountCard } from './EmailAccountCard';
 import { GoogleAccountCard } from './GoogleAccountCard';
@@ -42,12 +43,12 @@ const DEPARTMENTS = [
 ];
 
 const ROLE_COLORS: Record<string, string> = {
-    super_boss: '#ef4444', manager: '#f59e0b', employee: '#22c55e',
+    super_boss: 'var(--rp-danger-text)', manager: 'var(--rp-warn-text)', employee: 'var(--rp-success-text)',
 };
 
 // Phase 5D — productivity category → colour (mirrors UserPerformanceDashboard).
 const catColor = (cat: string): string =>
-    cat === 'Excellent' ? '#22c55e' : cat === 'Good' ? '#3b82f6' : cat === 'Average' ? '#f59e0b' : '#ef4444';
+    cat === 'Excellent' ? 'var(--rp-success-text)' : cat === 'Good' ? 'var(--blue-500)' : cat === 'Average' ? 'var(--rp-warn-text)' : 'var(--rp-danger-text)';
 
 interface AgentPerf {
     agent_id: string;
@@ -316,7 +317,7 @@ export function TeamMemberProfile({
                             </h2>
                             <RoleBadge role={profile.role} />
                             {profile.status === 'inactive' && (
-                                <span style={{ backgroundColor: '#f87171', color: '#fff', borderRadius: '10px', padding: '2px 8px', fontSize: '11px', fontWeight: 600 }}>INACTIVE</span>
+                                <span style={{ backgroundColor: 'var(--rp-danger-text)', color: 'var(--surface-white)', borderRadius: '10px', padding: '2px 8px', fontSize: '11px', fontWeight: 600 }}>INACTIVE</span>
                             )}
                         </div>
                         <div style={{ color: 'var(--text-muted)', fontSize: '13px' }}>{profile.email}</div>
@@ -324,9 +325,9 @@ export function TeamMemberProfile({
 
                     {/* Stats */}
                     <div style={{ display: 'flex', gap: '16px', flexShrink: 0, alignItems: 'center' }}>
-                        <StatPill label="Leads" value={profile._count?.assigned_leads ?? 0} color="#3b82f6" />
-                        <StatPill label="Joined" value={new Date(profile.created_at).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })} color="#94a3b8" />
-                        <StatPill label="Last Login" value={profile.last_login_at ? new Date(profile.last_login_at).toLocaleDateString('en-IN') : 'Never'} color="#94a3b8" />
+                        <StatPill label="Leads" value={profile._count?.assigned_leads ?? 0} color="var(--blue-500)" />
+                        <StatPill label="Joined" value={new Date(profile.created_at).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })} color="var(--text-muted)" />
+                        <StatPill label="Last Login" value={profile.last_login_at ? new Date(profile.last_login_at).toLocaleDateString('en-IN') : 'Never'} color="var(--text-muted)" />
                     </div>
                 </div>
             </div>
@@ -347,10 +348,10 @@ export function TeamMemberProfile({
                     {perf ? (
                         <>
                             <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(4, 1fr)', gap: '12px', marginBottom: '16px' }}>
-                                <StatPill label="Deals" value={formatNum(perf.deals_closed)} color="#22c55e" />
-                                <StatPill label="Revenue" value={formatINR(perf.revenue_generated)} color="#f59e0b" />
-                                <StatPill label="Commission" value={formatINR(perf.commission ?? 0)} color="#8b5cf6" />
-                                <StatPill label="Avg Response" value={formatMins(perf.avg_response_min)} color="#06b6d4" />
+                                <StatPill label="Deals" value={formatNum(perf.deals_closed)} color="var(--rp-success-text)" />
+                                <StatPill label="Revenue" value={formatINR(perf.revenue_generated)} color="var(--rp-warn-text)" />
+                                <StatPill label="Commission" value={formatINR(perf.commission ?? 0)} color="var(--chart-5)" />
+                                <StatPill label="Avg Response" value={formatMins(perf.avg_response_min)} color="var(--chart-3)" />
                             </div>
                             {perf.components && (
                                 <>
@@ -362,7 +363,7 @@ export function TeamMemberProfile({
                                             { label: 'Appointments', count: perf.components.appointments },
                                             { label: 'Inventory', count: perf.components.inventory },
                                         ]}
-                                        color="#8b5cf6"
+                                        color="var(--chart-5)"
                                     />
                                 </>
                             )}
@@ -384,7 +385,7 @@ export function TeamMemberProfile({
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
                     <span style={{ fontWeight: 600, fontSize: '14px', color: 'var(--text-primary)' }}>Profile Details</span>
                     {canEditDetails && !editMode && (
-                        <button onClick={startEdit} style={smallBtnStyle('#3b82f6')}>✏️ Edit</button>
+                        <button onClick={startEdit} style={smallBtnStyle('var(--blue-600)')}>Edit</button>
                     )}
                 </div>
 
@@ -458,10 +459,10 @@ export function TeamMemberProfile({
                         </Field>
 
                         <div style={{ gridColumn: '1 / -1', display: 'flex', gap: '10px', marginTop: '4px' }}>
-                            <button onClick={handleSaveDetails} disabled={editLoading} style={{ ...smallBtnStyle('#22c55e'), opacity: editLoading ? 0.7 : 1, padding: '8px 20px' }}>
+                            <button onClick={handleSaveDetails} disabled={editLoading} style={{ ...smallBtnStyle('var(--blue-600)'), opacity: editLoading ? 0.7 : 1, padding: '8px 20px' }}>
                                 {editLoading ? 'Saving...' : '✓ Save Changes'}
                             </button>
-                            <button onClick={() => { setEditMode(false); setEditError(''); }} style={{ ...smallBtnStyle('#6b7280'), padding: '8px 16px' }}>
+                            <button onClick={() => { setEditMode(false); setEditError(''); }} style={{ ...smallBtnStyle('var(--ink-secondary)'), padding: '8px 16px' }}>
                                 Cancel
                             </button>
                         </div>
@@ -500,7 +501,7 @@ export function TeamMemberProfile({
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
                         <span style={{ fontWeight: 600, fontSize: '14px', color: 'var(--text-primary)' }}>Reports To (Manager)</span>
                         {!editingManager && (
-                            <button onClick={() => setEditingManager(true)} style={smallBtnStyle('#3b82f6')}>Change</button>
+                            <button onClick={() => setEditingManager(true)} style={smallBtnStyle('var(--blue-600)')}>Change</button>
                         )}
                     </div>
 
@@ -513,8 +514,8 @@ export function TeamMemberProfile({
                                 ))}
                             </select>
                             <div style={{ display: 'flex', gap: '8px' }}>
-                                <button onClick={handleSaveManager} disabled={savingManager} style={smallBtnStyle('#22c55e')}>{savingManager ? 'Saving...' : '✓ Save'}</button>
-                                <button onClick={() => { setEditingManager(false); setSelectedManagerId(profile.reports_to?.id || ''); }} style={smallBtnStyle('#6b7280')}>Cancel</button>
+                                <button onClick={handleSaveManager} disabled={savingManager} style={smallBtnStyle('var(--blue-600)')}>{savingManager ? 'Saving...' : '✓ Save'}</button>
+                                <button onClick={() => { setEditingManager(false); setSelectedManagerId(profile.reports_to?.id || ''); }} style={smallBtnStyle('var(--ink-secondary)')}>Cancel</button>
                             </div>
                         </div>
                     ) : (
@@ -576,13 +577,13 @@ export function TeamMemberProfile({
                 <div style={{ backgroundColor: 'var(--bg-secondary)', borderRadius: '12px', padding: '20px', marginBottom: '16px', border: '1px solid var(--border-secondary)' }}>
                     <div style={{ fontWeight: 600, fontSize: '14px', color: 'var(--text-primary)', marginBottom: '14px' }}>Account Actions</div>
                     <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-                        <button onClick={handleResetPassword} style={actionBtnStyle('#f59e0b')}>🔑 Reset Password</button>
-                        <button onClick={handleResendSetup} style={actionBtnStyle('#06b6d4')}>📩 Resend Setup Link</button>
-                        <button onClick={() => { setShowPwdPanel(!showPwdPanel); setPwdSuccess(false); setSetPwdValue(''); setPwdError(''); setPwdLoading(false); }} style={actionBtnStyle('#8b5cf6')}>
-                            🔐 Set Custom Password
+                        <button onClick={handleResetPassword} style={actionBtnStyle('var(--text-link)')}>Reset Password</button>
+                        <button onClick={handleResendSetup} style={actionBtnStyle('var(--text-link)')}>Resend Setup Link</button>
+                        <button onClick={() => { setShowPwdPanel(!showPwdPanel); setPwdSuccess(false); setSetPwdValue(''); setPwdError(''); setPwdLoading(false); }} style={actionBtnStyle('var(--text-link)')}>
+                            Set Custom Password
                         </button>
-                        <button onClick={handleToggleStatus} style={actionBtnStyle(profile.status === 'active' ? '#ef4444' : '#22c55e')}>
-                            {profile.status === 'active' ? '🚫 Deactivate' : '✅ Reactivate'}
+                        <button onClick={handleToggleStatus} style={actionBtnStyle(profile.status === 'active' ? 'var(--rp-danger-text)' : 'var(--text-link)')}>
+                            {profile.status === 'active' ? 'Deactivate' : 'Reactivate'}
                         </button>
                     </div>
 
@@ -590,18 +591,18 @@ export function TeamMemberProfile({
                         <div style={{ marginTop: '16px', backgroundColor: 'var(--bg-primary)', borderRadius: '10px', padding: '16px', border: '1px solid var(--border-secondary)' }}>
                             {pwdSuccess ? (
                                 <div>
-                                    <div style={{ backgroundColor: 'var(--success-bg)', border: '1px solid #22c55e', borderRadius: '8px', padding: '12px' }}>
+                                    <div style={{ backgroundColor: 'var(--success-bg)', border: '1px solid var(--rp-success-text)', borderRadius: '8px', padding: '12px' }}>
                                         <div style={{ color: 'var(--success-text)', fontSize: '11px', marginBottom: '4px' }}>Password set</div>
-                                        <div style={{ color: '#fff', fontSize: '15px', fontFamily: 'monospace', display: 'flex', justifyContent: 'space-between' }}>
+                                        <div style={{ color: 'var(--surface-white)', fontSize: '15px', fontFamily: 'monospace', display: 'flex', justifyContent: 'space-between' }}>
                                             <span>{setPwdValue}</span>
-                                            <button onClick={() => navigator.clipboard.writeText(setPwdValue).catch(() => {})} style={{ background: 'none', border: 'none', color: 'var(--success-text-bright)', cursor: 'pointer' }}>📋</button>
+                                            <button onClick={() => navigator.clipboard.writeText(setPwdValue).catch(() => {})} style={{ background: 'none', border: 'none', color: 'var(--success-text-bright)', cursor: 'pointer' }} title="Copy password"><PresentationIcon value="clipboard-list" /></button>
                                         </div>
                                     </div>
-                                    <p style={{ color: '#f59e0b', fontSize: '11px', margin: '8px 0 0' }}>Save this — it won't be shown again.</p>
+                                    <p style={{ color: 'var(--rp-warn-text)', fontSize: '11px', margin: '8px 0 0' }}>Save this — it won't be shown again.</p>
                                 </div>
                             ) : (
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                                    {pwdError && <div style={{ color: '#f87171', fontSize: '12px' }}>{pwdError}</div>}
+                                    {pwdError && <div style={{ color: 'var(--rp-danger-text)', fontSize: '12px' }}>{pwdError}</div>}
                                     <div style={{ position: 'relative' }}>
                                         <input
                                             type={setPwdShow ? 'text' : 'password'}
@@ -611,12 +612,12 @@ export function TeamMemberProfile({
                                             style={{ ...inputStyle, paddingRight: '40px', fontFamily: setPwdShow ? 'monospace' : 'inherit' }}
                                         />
                                         <button type="button" onClick={() => setSetPwdShow(!setPwdShow)} style={{ position: 'absolute', right: '8px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '14px' }}>
-                                            {setPwdShow ? '🙈' : '👁️'}
+                                            <IconText>{setPwdShow ? '🙈' : '👁️'}</IconText>
                                         </button>
                                     </div>
                                     <div style={{ display: 'flex', gap: '8px' }}>
-                                        <button onClick={generateRandomPassword} style={smallBtnStyle('#6b7280')}>🎲 Generate</button>
-                                        <button onClick={handleSetPassword} disabled={pwdLoading || setPwdValue.length < 6} style={{ ...smallBtnStyle('#22c55e'), opacity: (pwdLoading || setPwdValue.length < 6) ? 0.5 : 1 }}>
+                                        <button onClick={generateRandomPassword} style={smallBtnStyle('var(--ink-secondary)')}>Generate</button>
+                                        <button onClick={handleSetPassword} disabled={pwdLoading || setPwdValue.length < 6} style={{ ...smallBtnStyle('var(--blue-600)'), opacity: (pwdLoading || setPwdValue.length < 6) ? 0.5 : 1 }}>
                                             {pwdLoading ? 'Setting...' : '✓ Set Password'}
                                         </button>
                                     </div>
@@ -635,7 +636,7 @@ export function TeamMemberProfile({
 function RoleBadge({ role, small }: { role: string; small?: boolean }) {
     return (
         <span style={{
-            backgroundColor: ROLE_COLORS[role] || '#6b7280', color: '#fff',
+            backgroundColor: ROLE_COLORS[role] || 'var(--text-muted)', color: 'var(--surface-white)',
             borderRadius: '10px', fontSize: small ? '10px' : '11px', fontWeight: 600,
             padding: small ? '1px 6px' : '2px 8px', textTransform: 'uppercase' as const, whiteSpace: 'nowrap' as const,
         }}>
@@ -685,8 +686,8 @@ const errorBoxStyle: React.CSSProperties = {
     padding: '8px 12px', borderRadius: '6px', fontSize: '13px',
 };
 function smallBtnStyle(bg: string): React.CSSProperties {
-    return { backgroundColor: bg, color: '#fff', border: 'none', padding: '6px 14px', borderRadius: '7px', cursor: 'pointer', fontSize: '12px', fontWeight: 500 };
+    return { backgroundColor: bg, color: 'var(--surface-white)', border: 'none', padding: '8px 16px', borderRadius: 'var(--radius-control)', cursor: 'pointer', fontSize: '12px', fontWeight: 500 };
 }
 function actionBtnStyle(bg: string): React.CSSProperties {
-    return { backgroundColor: bg + '22', border: `1px solid ${bg}55`, color: 'var(--text-primary)', borderRadius: '8px', padding: '8px 14px', cursor: 'pointer', fontSize: '13px', fontWeight: 500 };
+    return { backgroundColor: 'var(--bg-primary)', border: '1px solid var(--control-line)', color: bg, borderRadius: 'var(--radius-control)', padding: '8px 16px', cursor: 'pointer', fontSize: '13px', fontWeight: 500 };
 }

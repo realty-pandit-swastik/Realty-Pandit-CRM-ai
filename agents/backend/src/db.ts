@@ -39,6 +39,8 @@ const prisma = basePrisma.$extends({
         inventory: {
             async create({ args, query }) {
                 const data: any = args.data;
+                const { validateInventoryPartyWrite } = await import('./services/inventory_parties');
+                await validateInventoryPartyWrite(data);
                 if (data && !data.display_id) {
                     const { generateDisplayId } = await import('./utils/inventory_id');
                     data.display_id = await generateDisplayId(data.city || data.locality || data.district || '', data.category || 'residential');
@@ -69,8 +71,10 @@ const prisma = basePrisma.$extends({
                 return created;
             },
             async createMany({ args, query }) {
+                const { validateInventoryPartyWrite } = await import('./services/inventory_parties');
                 const { generateDisplayId } = await import('./utils/inventory_id');
                 for (const data of (Array.isArray(args.data) ? args.data : [args.data]) as any[]) {
+                    await validateInventoryPartyWrite(data);
                     if (!data.display_id) data.display_id = await generateDisplayId(data.city || data.locality || data.district || '', data.category || 'residential');
                     if (data.assigned_agent_id === undefined && data.uploaded_by_agent_id) data.assigned_agent_id = data.uploaded_by_agent_id;
                 }
@@ -83,6 +87,11 @@ const prisma = basePrisma.$extends({
             },
             async upsert({ args, query }) {
                 const data: any = args.create;
+                const { validateInventoryPartyWrite } = await import('./services/inventory_parties');
+                const existing = await basePrisma.inventory.findUnique({ where: args.where });
+                // Validate both branches: a concurrent delete can turn an update into a create.
+                await validateInventoryPartyWrite(data);
+                if (existing) await validateInventoryPartyWrite(args.update, existing);
                 if (!data.display_id) {
                     const { generateDisplayId } = await import('./utils/inventory_id');
                     data.display_id = await generateDisplayId(data.city || data.locality || data.district || '', data.category || 'residential');
@@ -94,6 +103,11 @@ const prisma = basePrisma.$extends({
                 return updated;
             },
             async update({ args, query }) {
+                const changedParty = Object.keys(args.data).some(key => ['contact', 'referral_partner', 'key_holder_contact', 'key_holder_contact_id', 'owner_phone', 'referral_partner_id', 'property_contact_role', 'property_contact_role_label', 'key_holder_role', 'key_holder_role_label'].includes(key));
+                if (changedParty) {
+                    const { validateInventoryPartyWrite } = await import('./services/inventory_parties');
+                    await validateInventoryPartyWrite(args.data, await basePrisma.inventory.findUnique({ where: args.where }));
+                }
                 const updated: any = await query(args);
                 const changed = args.data as Record<string, unknown>;
                 if (updated?.tenant_id && ['status', 'price', 'customer_price', 'intent', 'location', 'locality', 'sub_locality', 'city', 'specs', 'taxonomy_node_id'].some(key => key in changed)) {
@@ -104,6 +118,9 @@ const prisma = basePrisma.$extends({
             },
             async updateMany({ args, query }) {
                 const changed = args.data as Record<string, unknown>;
+                if (Object.keys(changed).some(key => ['owner_phone', 'key_holder_contact_id', 'referral_partner_id', 'property_contact_role', 'property_contact_role_label', 'key_holder_role', 'key_holder_role_label'].includes(key))) {
+                    throw new Error('Change property-party identities individually so each relationship can be validated');
+                }
                 const relevant = ['status', 'price', 'customer_price', 'intent', 'location', 'locality', 'sub_locality', 'city', 'specs', 'taxonomy_node_id'].some(key => key in changed);
                 const tenants = relevant ? await basePrisma.inventory.findMany({ where: args.where, distinct: ['tenant_id'], select: { tenant_id: true } }) : [];
                 const result = await query(args);

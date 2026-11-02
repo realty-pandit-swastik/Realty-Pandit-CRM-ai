@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { InventoryPreviewModal } from './MatchShareTab';
 import { noAnswerReasonLabel } from '../../lib/callOutcomes';
+import { PresentationIcon } from '../ui/PresentationIcon';
 
 // Raw timeline event exactly as returned by GET /api/deals/:id/timeline
 interface RawEvent {
@@ -80,7 +81,7 @@ function renderEvent(ev: RawEvent, onPreview?: (id: string) => void): { icon: st
             const action = ev.action || '';
             if (action === 'STATUS_CHANGED') {
                 return {
-                    icon: '🔄',
+                    icon: 'refresh-cw',
                     label: 'Status changed',
                     detail: <span><strong>{ev.old_status}</strong> → <strong>{ev.new_status}</strong>{ev.performed_by ? ` · by ${ev.performed_by}` : ''}</span>,
                 };
@@ -88,7 +89,7 @@ function renderEvent(ev: RawEvent, onPreview?: (id: string) => void): { icon: st
             if (action === 'REQUIREMENTS_UPDATED') {
                 const changes = ev.details?.changes || {};
                 return {
-                    icon: '✏️',
+                    icon: 'pencil',
                     label: 'Requirements updated',
                     detail: Object.keys(changes).length > 0 ? (
                         <div>
@@ -101,21 +102,21 @@ function renderEvent(ev: RawEvent, onPreview?: (id: string) => void): { icon: st
                     ) : null,
                 };
             }
-            if (action === 'DEAL_CREATED') return { icon: '🟢', label: 'Deal created', detail: null };
-            if (action === 'PAUSED_AI')   return { icon: '⏸', label: 'AI paused', detail: ev.performed_by ? <span>by {ev.performed_by}</span> : null };
-            if (action === 'RESUMED_AI')  return { icon: '▶️', label: 'AI resumed', detail: ev.performed_by ? <span>by {ev.performed_by}</span> : null };
-            return { icon: '📋', label: action.replace(/_/g, ' '), detail: ev.details ? <span style={{ fontSize: 11 }}>{JSON.stringify(ev.details).substring(0, 80)}</span> : null };
+            if (action === 'DEAL_CREATED') return { icon: 'check-circle', label: 'Deal created', detail: null };
+            if (action === 'PAUSED_AI')   return { icon: 'pause', label: 'AI paused', detail: ev.performed_by ? <span>by {ev.performed_by}</span> : null };
+            if (action === 'RESUMED_AI')  return { icon: 'play', label: 'AI resumed', detail: ev.performed_by ? <span>by {ev.performed_by}</span> : null };
+            return { icon: 'clipboard-list', label: action.replace(/_/g, ' '), detail: ev.details ? <span style={{ fontSize: 11 }}>{JSON.stringify(ev.details).substring(0, 80)}</span> : null };
         }
 
         case 'team_action': {
             const type = ev.action_type || '';
             const icons: Record<string, string> = {
-                CALL_LOGGED: '📞', LOG_CALL: '📞', SCHEDULED_VISIT: '📅',
-                CONFIRMED_VISIT: '✅', REMINDER_GIVEN: '🔔', OUTCOME_SUBMITTED: '📝',
-                TRANSFER: '🔄', NOTE_ADDED: '💬',
+                CALL_LOGGED: 'phone', LOG_CALL: 'phone', SCHEDULED_VISIT: 'calendar-days',
+                CONFIRMED_VISIT: 'check-circle', REMINDER_GIVEN: 'bell', OUTCOME_SUBMITTED: 'notebook-pen',
+                TRANSFER: 'refresh-cw', NOTE_ADDED: 'message-circle',
             };
             return {
-                icon: icons[type] || '👤',
+                icon: icons[type] || 'user-round',
                 label: type.replace(/_/g, ' ').toLowerCase().replace(/^\w/, c => c.toUpperCase()),
                 detail: (
                     <div>
@@ -130,14 +131,14 @@ function renderEvent(ev: RawEvent, onPreview?: (id: string) => void): { icon: st
         case 'appointment': {
             const ts = ev.scheduled_at ? formatTs(ev.scheduled_at) : '—';
             return {
-                icon: '📅',
+                icon: 'calendar-days',
                 label: `Visit scheduled`,
                 detail: <span>{ts} · {ev.status || 'SCHEDULED'}</span>,
             };
         }
 
         case 'whatsapp': {
-            const dir = ev.direction === 'inbound' ? '📥' : '📤';
+            const dir = ev.direction === 'inbound' ? 'message-circle' : 'send';
             const label = ev.direction === 'inbound' ? 'Customer replied on WhatsApp' : 'WhatsApp sent';
             return {
                 icon: dir,
@@ -149,7 +150,7 @@ function renderEvent(ev: RawEvent, onPreview?: (id: string) => void): { icon: st
         }
 
         case 'call': {
-            const dir = ev.direction === 'inbound' ? '📲' : '📞';
+            const dir = ev.direction === 'inbound' ? 'phone' : 'phone';
             return {
                 icon: dir,
                 label: `Voice call${ev.call_status ? ` · ${ev.call_status}` : ''}`,
@@ -164,12 +165,12 @@ function renderEvent(ev: RawEvent, onPreview?: (id: string) => void): { icon: st
 
         case 'query': {
             return {
-                icon: '❓',
+                icon: 'circle-help',
                 label: `Query: ${ev.subject || '—'}`,
                 detail: (
                     <div>
                         {ev.message && <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{ev.message.substring(0, 80)}</div>}
-                        {ev.answer && <div style={{ fontSize: 11, color: '#22c55e', marginTop: 2 }}>Answer: {ev.answer.substring(0, 80)}</div>}
+                        {ev.answer && <div style={{ fontSize: 12, color: 'var(--rp-success-text)', marginTop: 4 }}>Answer: {ev.answer.substring(0, 80)}</div>}
                     </div>
                 ),
             };
@@ -178,11 +179,11 @@ function renderEvent(ev: RawEvent, onPreview?: (id: string) => void): { icon: st
         case 'interaction': {
             const etype = ev.event_type || '';
             const icons: Record<string, string> = {
-                property_shared: '🏠',
-                property_share_exhausted: '📦',
-                pipeline_cold_nudge: '💬',
-                call_initiated: '📞',
-                deal_created: '🟢',
+                property_shared: 'house',
+                property_share_exhausted: 'inbox',
+                pipeline_cold_nudge: 'message-circle',
+                call_initiated: 'phone',
+                deal_created: 'check-circle',
             };
             const labels: Record<string, string> = {
                 property_shared: 'Property shared with customer',
@@ -200,10 +201,10 @@ function renderEvent(ev: RawEvent, onPreview?: (id: string) => void): { icon: st
                     marginTop: contentNode ? 4 : 0, background: 'none', border: 'none',
                     color: 'var(--accent-primary)', fontSize: 11, cursor: 'pointer', padding: 0,
                     fontWeight: 600, display: 'block',
-                }}>👁 View Property</button>
+                }}>View Property</button>
                 : null;
             return {
-                icon: icons[etype] || '💡',
+                icon: icons[etype] || 'info',
                 label: labels[etype] || (ev.content || etype.replace(/_/g, ' ')),
                 detail: (contentNode || viewBtn) ? <div>{contentNode}{viewBtn}</div> : null,
             };
@@ -227,7 +228,7 @@ function renderEvent(ev: RawEvent, onPreview?: (id: string) => void): { icon: st
                 ? (ev.budget_min ? `${formatBudget(ev.budget_min)} – ${formatBudget(ev.budget_max)}` : `Up to ${formatBudget(ev.budget_max)}`)
                 : null;
             return {
-                icon: '🌐',
+                icon: 'globe',
                 label: `Lead received from ${srcLabel}`,
                 detail: (
                     <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 2 }}>
@@ -244,7 +245,7 @@ function renderEvent(ev: RawEvent, onPreview?: (id: string) => void): { icon: st
         }
 
         default:
-            return { icon: '•', label: 'Event', detail: null };
+            return { icon: 'circle', label: 'Event', detail: null };
     }
 }
 
@@ -276,7 +277,7 @@ export function TimelineTab({ events, loading }: Props) {
                                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                                 fontSize: 13, zIndex: 1,
                             }}>
-                                {icon}
+                                <PresentationIcon value={icon} />
                             </div>
 
                             {/* Content */}

@@ -104,9 +104,9 @@ export function EmailAccountCard({ isMobile, readOnly }: { isMobile?: boolean; r
     return (
         <div style={{ backgroundColor: 'var(--bg-secondary)', borderRadius: '12px', padding: '20px', marginBottom: '16px', border: '1px solid var(--border-secondary)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
-                <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--text-primary)' }}>✉️ Email Sending Account</div>
+                <div style={{ fontWeight: 600, fontSize: 16, color: 'var(--text-primary)' }}>Email Sending Account</div>
                 {cfg?.configured_at && (
-                    <span style={{ fontSize: 11, color: '#10b981', fontWeight: 600 }}>● Connected</span>
+                    <span style={{ fontSize: 11, color: 'var(--rp-success-text)', fontWeight: 600 }}>● Connected</span>
                 )}
             </div>
 
@@ -119,7 +119,7 @@ export function EmailAccountCard({ isMobile, readOnly }: { isMobile?: boolean; r
                     <div style={{
                         fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.6,
                         padding: '10px 12px', borderRadius: 8, marginBottom: 16,
-                        backgroundColor: 'rgba(59,130,246,0.06)', border: '1px solid rgba(59,130,246,0.2)',
+                        backgroundColor: 'var(--rp-info-wash)', border: '1px solid var(--rp-info-wash)',
                     }}>
                         Use these settings to add your mailbox in <strong>Outlook</strong> (or any
                         mail app) and manage your emails. These are managed by your admin —
@@ -154,7 +154,7 @@ export function EmailAccountCard({ isMobile, readOnly }: { isMobile?: boolean; r
                     <div style={{
                         fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.6,
                         padding: '10px 12px', borderRadius: 8, marginBottom: 16,
-                        backgroundColor: 'rgba(59,130,246,0.06)', border: '1px solid rgba(59,130,246,0.2)',
+                        backgroundColor: 'var(--rp-info-wash)', border: '1px solid var(--rp-info-wash)',
                     }}>
                         Connect your own Outlook / Microsoft 365 mailbox so emails you send from
                         the CRM go out as <strong>{cfg?.account_email}</strong>.
@@ -214,7 +214,7 @@ export function EmailAccountCard({ isMobile, readOnly }: { isMobile?: boolean; r
                             disabled={saving}
                             style={{
                                 padding: '10px 18px', borderRadius: 8, fontSize: 13, fontWeight: 700,
-                                backgroundColor: 'var(--accent-primary)', color: '#fff', border: 'none',
+                                backgroundColor: 'var(--accent-primary)', color: 'var(--surface-white)', border: 'none',
                                 cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.6 : 1,
                             }}
                         >
@@ -227,7 +227,7 @@ export function EmailAccountCard({ isMobile, readOnly }: { isMobile?: boolean; r
                                 disabled={saving}
                                 style={{
                                     padding: '10px 18px', borderRadius: 8, fontSize: 13, cursor: 'pointer',
-                                    backgroundColor: 'transparent', border: '1px solid #f87171', color: '#f87171',
+                                    backgroundColor: 'transparent', border: '1px solid var(--rp-danger-text)', color: 'var(--rp-danger-text)',
                                 }}
                             >
                                 Disconnect

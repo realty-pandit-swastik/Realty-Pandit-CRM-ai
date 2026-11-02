@@ -239,7 +239,7 @@ const styles: Record<string, React.CSSProperties> = {
         listStyle: 'none', margin: 0, padding: '4px 0', zIndex: 50,
         backgroundColor: 'var(--bg-secondary)', borderRadius: '8px',
         border: '1px solid var(--border-secondary)', maxHeight: '260px', overflowY: 'auto',
-        boxShadow: '0 6px 18px rgba(0,0,0,0.3)',
+        boxShadow: '0 6px 18px var(--rp-shadow-tint)',
     },
     item: {
         padding: '8px 12px', cursor: 'pointer',
@@ -250,12 +250,12 @@ const styles: Record<string, React.CSSProperties> = {
     },
     addBtn: {
         padding: '8px 14px', borderRadius: '8px', cursor: 'pointer',
-        backgroundColor: '#1e3a5f', color: '#60a5fa', border: '1px solid #3b82f6',
+        backgroundColor: 'var(--blue-900)', color: 'var(--blue-400)', border: '1px solid var(--blue-500)',
         fontSize: '13px', fontWeight: 600,
     },
     primaryBtn: {
         padding: '8px 14px', borderRadius: '8px', cursor: 'pointer',
-        backgroundColor: '#059669', color: '#fff', border: 'none',
+        backgroundColor: 'var(--rp-success-text)', color: 'var(--surface-white)', border: 'none',
         fontSize: '13px', fontWeight: 600,
     },
     secondaryBtn: {
@@ -265,7 +265,7 @@ const styles: Record<string, React.CSSProperties> = {
         fontSize: '13px', fontWeight: 600,
     },
     selectedBadge: {
-        marginTop: '6px', fontSize: '12px', color: 'var(--success-text, #34d399)',
+        marginTop: '6px', fontSize: '12px', color: 'var(--success-text, var(--rp-success-text))',
         fontWeight: 600,
     },
 };

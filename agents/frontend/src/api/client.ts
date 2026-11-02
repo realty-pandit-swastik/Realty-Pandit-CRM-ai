@@ -252,8 +252,8 @@ export const searchContactByPhone = async (phone: string) => {
 };
 
 // Ensure contact exists (upsert by phone)
-export const ensureContact = async (phone: string, name?: string, contact_type?: string) => {
-    const res = await client.post('/api/contacts/ensure', { phone, name, contact_type });
+export const ensureContact = async (phone: string, name?: string, contact_type?: string, client_role?: string, client_role_label?: string) => {
+    const res = await client.post('/api/contacts/ensure', { phone, name, contact_type, client_role, client_role_label });
     return res.data;
 };
 

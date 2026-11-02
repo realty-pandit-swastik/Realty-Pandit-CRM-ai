@@ -22,7 +22,8 @@ export function inventorySourceKind(row: InventorySourceRow | null | undefined):
     const ownership = String(row?.ownership_type || '').trim().toUpperCase();
     if (ownership === 'EXTERNAL_AGENT') return 'DEALER';
     if (ownership === 'AGENT_OWNER') return 'AGENT_OWNER';
-    // Explicit OWNER (or nothing set) + a partner attribution → the listing came via a dealer.
+    if (ownership === 'OWNER') return 'OWNER';
+    // A referral is only a fallback when no explicit property relationship was recorded.
     const partnerId = String((row as any)?.referral_partner_id || '').trim();
     const partnerPhone = String((row as any)?.referral_partner?.phone_number || '').trim();
     if (partnerId || partnerPhone) return 'DEALER';

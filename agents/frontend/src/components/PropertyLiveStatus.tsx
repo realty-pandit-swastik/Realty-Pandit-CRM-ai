@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { getInventory, updateInventory } from '../api/client';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../contexts/ToastContext';
+import { PresentationIcon } from './ui/PresentationIcon';
 
 interface Unit {
   id: string;
@@ -13,11 +14,11 @@ interface Unit {
 }
 
 const STATUS_COLORS = {
-  active: { bg: '#dcfce7', border: '#10b981', text: '#166534', label: 'Available' },
-  sold: { bg: '#fee2e2', border: '#ef4444', text: '#991b1b', label: 'Sold' },
-  rented: { bg: '#fef3c7', border: '#f59e0b', text: '#92400e', label: 'Rented' },
-  withdrawn: { bg: '#f3f4f6', border: '#6b7280', text: '#374151', label: 'Withdrawn' },
-  hold: { bg: '#dbeafe', border: '#3b82f6', text: '#1e40af', label: 'On Hold' },
+  active: { bg: 'var(--rp-success-bg)', border: 'var(--rp-success-text)', text: 'var(--rp-success-text)', label: 'Available' },
+  sold: { bg: 'var(--rp-danger-bg)', border: 'var(--rp-danger-text)', text: 'var(--rp-danger-text)', label: 'Sold' },
+  rented: { bg: 'var(--rp-warn-bg)', border: 'var(--rp-warn-text)', text: 'var(--rp-warn-text)', label: 'Rented' },
+  withdrawn: { bg: 'var(--bg-secondary)', border: 'var(--text-muted)', text: 'var(--text-secondary)', label: 'Withdrawn' },
+  hold: { bg: 'var(--blue-100)', border: 'var(--blue-500)', text: 'var(--blue-800)', label: 'On Hold' },
 };
 
 export const PropertyLiveStatus: React.FC = () => {
@@ -280,7 +281,7 @@ export const PropertyLiveStatus: React.FC = () => {
                     }}
                     onMouseEnter={(e) => {
                       e.currentTarget.style.transform = 'translateY(-2px)';
-                      e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.1)';
+                      e.currentTarget.style.boxShadow = '0 4px 12px var(--rp-shadow-tint)';
                     }}
                     onMouseLeave={(e) => {
                       e.currentTarget.style.transform = 'translateY(0)';
@@ -316,7 +317,7 @@ export const PropertyLiveStatus: React.FC = () => {
           style={{
             position: 'fixed',
             inset: 0,
-            backgroundColor: 'rgba(0,0,0,0.5)',
+            backgroundColor: 'var(--rp-overlay-soft)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -333,7 +334,7 @@ export const PropertyLiveStatus: React.FC = () => {
               width: '90%',
               maxHeight: '80vh',
               overflowY: 'auto',
-              boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
+              boxShadow: '0 20px 60px var(--rp-shadow-tint)',
             }}
             onClick={(e) => e.stopPropagation()}
           >
@@ -373,14 +374,14 @@ export const PropertyLiveStatus: React.FC = () => {
                 <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '8px' }}>Specifications</div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
                   {selectedUnit.specs.bedrooms && (
-                    <div style={{ fontSize: '14px', color: 'var(--text-primary)' }}>🛏️ {selectedUnit.specs.bedrooms} BHK</div>
+                    <div style={{ fontSize: '14px', color: 'var(--text-primary)' }}><PresentationIcon value="bed-double" /> {selectedUnit.specs.bedrooms} BHK</div>
                   )}
                   {selectedUnit.specs.bathrooms && (
-                    <div style={{ fontSize: '14px', color: 'var(--text-primary)' }}>🚿 {selectedUnit.specs.bathrooms} Bath</div>
+                    <div style={{ fontSize: '14px', color: 'var(--text-primary)' }}><PresentationIcon value="bath" /> {selectedUnit.specs.bathrooms} Bath</div>
                   )}
                   {selectedUnit.specs.area && (
                     <div style={{ fontSize: '14px', color: 'var(--text-primary)' }}>
-                      📐 {selectedUnit.specs.area} {selectedUnit.specs.unit || 'sqft'}
+                      <PresentationIcon value="ruler" /> {selectedUnit.specs.area} {selectedUnit.specs.unit || 'sqft'}
                     </div>
                   )}
                 </div>

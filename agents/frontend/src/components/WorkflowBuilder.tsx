@@ -7,6 +7,7 @@ import { useState, useEffect } from 'react';
 import { Save, Plus, Trash2, Power, PowerOff, TestTube, X, Play, ChevronRight } from 'lucide-react';
 import { API_BASE_URL, authedFetch } from '../lib/api';
 import { useConfirm } from '../contexts/ConfirmContext';
+import './AdvancedAnalytics.css';
 
 interface WorkflowCondition {
   field: string;
@@ -291,11 +292,11 @@ export default function WorkflowBuilder() {
   }
 
   return (
-    <div className="p-6 max-w-7xl mx-auto">
+    <div className="rp-analytics rp-workflows p-6 max-w-7xl mx-auto">
       {/* Header */}
       <div className="mb-6 flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">🤖 AI Workflow Automation</h1>
+          <h1 className="text-3xl font-bold text-gray-900">AI Workflow Automation</h1>
           <p className="text-gray-600 mt-1">Configure Panditji to automate lead handling, assignments, and follow-ups</p>
         </div>
         <button
@@ -445,7 +446,7 @@ export default function WorkflowBuilder() {
                       >
                         {ACTION_TYPES.map((at) => (
                           <option key={at.value} value={at.value}>
-                            {at.icon} {at.label}
+                            {at.label}
                           </option>
                         ))}
                       </select>
@@ -765,7 +766,7 @@ export default function WorkflowBuilder() {
 
       {/* Example Workflows Guide */}
       <div className="mt-6 bg-blue-50 border border-blue-200 rounded-lg p-6">
-        <h3 className="text-lg font-semibold mb-3 text-blue-900">💡 Example Automation Workflows</h3>
+        <h3 className="text-lg font-semibold mb-3 text-blue-900">Example Automation Workflows</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
           <div className="bg-white p-3 rounded">
             <strong className="text-blue-700">Auto-assign 99Acres leads</strong>

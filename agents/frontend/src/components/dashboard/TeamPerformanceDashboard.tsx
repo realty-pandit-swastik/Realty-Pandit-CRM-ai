@@ -28,7 +28,7 @@ interface TeamRow {
 type SortKey = 'score' | 'deals' | 'revenue' | 'conversion';
 
 const catColor = (cat: string): string =>
-  cat === 'Excellent' ? '#22c55e' : cat === 'Good' ? '#3b82f6' : cat === 'Average' ? '#f59e0b' : '#ef4444';
+  cat === 'Excellent' ? 'var(--rp-success-text)' : cat === 'Good' ? 'var(--blue-700)' : cat === 'Average' ? 'var(--rp-warn-text)' : 'var(--rp-danger-text)';
 
 export const TeamPerformanceDashboard: React.FC = () => {
   const { agent } = useAuth();
@@ -106,9 +106,9 @@ export const TeamPerformanceDashboard: React.FC = () => {
   ];
 
   return (
-    <div style={{ flex: 1, overflowY: 'auto', padding: pad, backgroundColor: 'var(--bg-primary)' }}>
+    <div className="rp-dashboard" style={{ flex: 1, minWidth: 0, overflowY: 'auto', padding: pad, backgroundColor: 'var(--bg-secondary)' }}>
       <div>
-        <h1 style={{ fontSize: isMobile ? 20 : 24, fontWeight: 800, margin: 0, color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>🏆 Team Performance</h1>
+        <h1 style={{ fontSize: isMobile ? 20 : 24, fontWeight: 600, margin: 0, color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>Team Performance</h1>
         <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: '4px 0 0' }}>{scopeNote}</p>
       </div>
 
@@ -119,23 +119,23 @@ export const TeamPerformanceDashboard: React.FC = () => {
         <div>
           <SectionLabel icon="⚡">Structure & Distribution</SectionLabel>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 'var(--bento-gap)' }}>
-            <KpiCard label="Unassigned Agents" value={formatNum(unassignedAgents)} accent="#f59e0b" icon="👤" />
+            <KpiCard label="Unassigned Agents" value={formatNum(unassignedAgents)} icon="👤" />
             <div role="button" tabIndex={0} style={{ cursor: 'pointer' }} title="View unassigned leads →" onClick={() => drillTo({ entity: 'leads' })}>
-              <KpiCard label="Unassigned Leads" value={formatNum(unassignedLeads)} accent="#ef4444" icon="📥" />
+              <KpiCard label="Unassigned Leads" value={formatNum(unassignedLeads)} icon="📥" />
             </div>
-            <KpiCard label="Teams Off-Target" value={formatNum(teamsOffTarget)} accent="#8b5cf6" icon="🎯" />
+            <KpiCard label="Teams Off-Target" value={formatNum(teamsOffTarget)} icon="🎯" />
           </div>
         </div>
 
         <div>
           <SectionLabel icon="📊">Across All Teams</SectionLabel>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 'var(--bento-gap)' }}>
-            <KpiCard label="Teams" value={formatNum(totals.teams)} accent="#6366f1" icon="🏢" />
-            <KpiCard label="Leads" value={formatNum(totals.leads)} accent="#3b82f6" icon="👥" />
-            <KpiCard label="Deals" value={formatNum(totals.deals)} accent="#22c55e" icon="✅" />
-            <KpiCard label="Revenue" value={formatINR(totals.revenue)} accent="#f59e0b" icon="₹" />
-            <KpiCard label="Conversion" value={`${totals.conv.toFixed(1)}%`} accent="#8b5cf6" icon="🎯" />
-            <KpiCard label="Top Score" value={Math.round(totals.topScore)} accent="#ec4899" icon="⭐" />
+            <KpiCard label="Teams" value={formatNum(totals.teams)} icon="🏢" />
+            <KpiCard label="Leads" value={formatNum(totals.leads)} icon="👥" />
+            <KpiCard label="Deals" value={formatNum(totals.deals)} icon="✅" />
+            <KpiCard label="Revenue" value={formatINR(totals.revenue)} icon="₹" />
+            <KpiCard label="Conversion" value={`${totals.conv.toFixed(1)}%`} icon="🎯" />
+            <KpiCard label="Top Score" value={Math.round(totals.topScore)} icon="⭐" />
           </div>
         </div>
 
@@ -144,29 +144,29 @@ export const TeamPerformanceDashboard: React.FC = () => {
         </ClayCard>
 
         {/* Distribution */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 14 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 320px), 1fr))', gap: 'var(--rp-s-4)' }}>
           <ClayCard title="Lead Load per Agent" subtitle="Active leads assigned — surfaces imbalance">
-            <RankedBars rows={load.slice(0, 12).map((l) => ({ label: l.agent_name, count: l.active_leads }))} color="#3b82f6" emptyIcon="⚖️" emptyText="No assigned load in scope" />
+            <RankedBars rows={load.slice(0, 12).map((l) => ({ label: l.agent_name, count: l.active_leads }))} color="var(--blue-600)" emptyIcon="⚖️" emptyText="No assigned load in scope" />
           </ClayCard>
           <ClayCard title="Lead Distribution by Channel" subtitle="How leads arrive (by acquisition channel)">
-            <RankedBars rows={byRoute.map((r) => ({ label: r.route, count: r.count }))} color="#14b8a6" emptyIcon="🔀" emptyText="No distribution data" />
+            <RankedBars rows={byRoute.map((r) => ({ label: r.route, count: r.count }))} color="var(--blue-600)" emptyIcon="🔀" emptyText="No distribution data" />
           </ClayCard>
           <ClayCard title="Lead Distribution by Routing Method" subtitle="How leads were assigned (fills forward; legacy rows unlabelled)">
-            <RankedBars rows={byMethod.map((r) => ({ label: r.method, count: r.count }))} color="#8b5cf6" emptyIcon="🧭" emptyText="No routing-method data yet" />
+            <RankedBars rows={byMethod.map((r) => ({ label: r.method, count: r.count }))} color="var(--blue-600)" emptyIcon="🧭" emptyText="No routing-method data yet" />
           </ClayCard>
         </div>
 
         {/* Pipeline Outlook — directional weighted-GCI estimate (Phase 5E). Explicitly NOT a committed forecast. */}
         {gci && (
           <ClayCard
-            title="🔭 Pipeline Outlook — directional GCI estimate"
+            title="Pipeline Outlook — directional GCI estimate"
             subtitle="A planning estimate, NOT a committed forecast — weighted by assumed stage-probabilities × 2% commission on stated buyer budgets"
-            accent="#f59e0b"
+            accent="var(--blue-600)"
           >
             <div style={{ display: 'flex', gap: 28, flexWrap: 'wrap', alignItems: 'flex-end', marginBottom: 16 }}>
               <div>
                 <div style={{ fontSize: 30, fontWeight: 800, color: 'var(--text-primary)', lineHeight: 1 }}>{formatINR(gci.weighted_gci)}</div>
-                <div style={{ fontSize: 11, fontWeight: 700, color: '#f59e0b', textTransform: 'uppercase', letterSpacing: '0.06em', marginTop: 5 }}>Weighted GCI · directional</div>
+                <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginTop: 8 }}>Weighted GCI · directional</div>
               </div>
               <div>
                 <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-secondary)' }}>{formatINR(gci.raw_ceiling)}</div>
@@ -181,7 +181,7 @@ export const TeamPerformanceDashboard: React.FC = () => {
             <ValueBars
               rows={(gci.by_stage || []).map((s: any) => ({ label: `${s.stage} · ${Math.round(s.probability * 100)}% · ${s.count} deals`, value: s.weighted_gci }))}
               format={formatINR}
-              color="#f59e0b"
+              color="var(--blue-600)"
               emptyIcon="🔭"
               emptyText="No open deals with budgets"
             />
@@ -200,7 +200,7 @@ export const TeamPerformanceDashboard: React.FC = () => {
             </div>
           }
         >
-          <div style={{ overflowX: 'auto' }}>
+          <div className="rp-table-scroll" role="region" aria-label="Team performance table" tabIndex={0} style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 720 }}>
               <thead>
                 <tr style={{ borderBottom: '1px solid var(--border-primary)' }}>
@@ -221,14 +221,14 @@ export const TeamPerformanceDashboard: React.FC = () => {
                     <td style={{ ...td, textAlign: 'left', fontWeight: 600 }}>{t.team_name}</td>
                     <td style={td}>{formatNum(t.member_count)}</td>
                     <td style={td}>{formatNum(t.leads)}</td>
-                    <td style={{ ...td, color: '#ef4444' }}>{formatNum(t.hot_leads)}</td>
+                    <td style={{ ...td, color: 'var(--text-primary)' }}>{formatNum(t.hot_leads)}</td>
                     <td style={td}>{formatNum(t.appointments_completed)}/{formatNum(t.appointments)}</td>
                     <td style={{ ...td, fontWeight: 700 }}>{formatNum(t.deals_closed)}</td>
                     <td style={td}>{t.conversion_rate.toFixed(1)}%</td>
                     <td style={{ ...td, fontWeight: 700 }}>{formatINR(t.revenue)}</td>
                     <td style={td}>
                       <span style={{ fontWeight: 800, marginRight: 6 }}>{Math.round(t.team_score)}</span>
-                      <span style={{ fontSize: 10.5, fontWeight: 700, color: catColor(t.team_category), backgroundColor: catColor(t.team_category) + '1a', borderRadius: 7, padding: '2px 7px' }}>{t.team_category}</span>
+                      <span style={{ fontSize: 12, fontWeight: 500, color: catColor(t.team_category), backgroundColor: 'var(--bg-primary)', borderRadius: 'var(--radius-control)', padding: '4px 8px' }}>{t.team_category}</span>
                     </td>
                   </tr>
                 ))}

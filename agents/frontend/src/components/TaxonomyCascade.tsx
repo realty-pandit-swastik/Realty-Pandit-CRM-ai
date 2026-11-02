@@ -59,7 +59,7 @@ export default function TaxonomyCascade({
         opts = path[i]?.children || [];
     }
 
-    if (loadErr) return <div style={{ color: '#f87171', fontSize: '13px' }}>{loadErr}</div>;
+    if (loadErr) return <div style={{ color: 'var(--rp-danger-text)', fontSize: '13px' }}>{loadErr}</div>;
 
     return (
         <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>

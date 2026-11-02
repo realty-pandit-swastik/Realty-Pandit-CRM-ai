@@ -39,3 +39,7 @@
 .relationship-dialog { position: fixed; inset: 0; width: 100%; max-width: none; height: 100dvh; max-height: 100dvh; margin: 0; padding: 0; border: 0; color: var(--text-primary); background: var(--bg-primary); overflow-y: auto; }
 .relationship-dialog::backdrop { background: var(--bg-primary); }
 @media (min-width: 768px) { .relationship-page { max-width: 960px; margin: 0 auto; } }
+.crm-record-link { display: grid; gap: 6px; width: 100%; text-align: left; color: var(--text-primary); cursor: pointer; font: inherit; }
+.crm-record-link:focus-visible { outline: 2px solid var(--text-link, #4f46e5); outline-offset: 2px; }
+.contact-relationship-sections section { margin-block: 16px; }
+.contact-relationship-sections h3 { font-size: 14px; }

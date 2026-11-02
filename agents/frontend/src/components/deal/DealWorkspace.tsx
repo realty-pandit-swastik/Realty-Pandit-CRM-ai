@@ -12,6 +12,7 @@ import { ConvertToPartnerModal } from '../ConvertToPartnerModal';
 import { ReminderModal } from './ReminderModal';
 import { useToast } from '../../contexts/ToastContext';
 import CallerDossier from '../CallerDossier';
+import { PresentationIcon } from '../ui/PresentationIcon';
 
 // These constants are exported from DealPipeline and re-imported here.
 // They are defined inline to avoid circular deps during initial render.
@@ -85,7 +86,7 @@ export function DealWorkspace({
     // Referral partner (the partner agent this lead was added on behalf of) — denormalized on the contact.
     const partnerTel = toDialablePhone((deal.demand_contact as any)?.referral_partner_phone);
     const partnerName = (deal.demand_contact as any)?.referral_partner_name as string | undefined;
-    const stageColor = stageColors[deal.status] || '#6b7280';
+    const stageColor = stageColors[deal.status] || 'var(--text-secondary)';
 
     const tabs: { key: Tab; label: string }[] = [
         { key: 'detail',   label: 'Detail' },
@@ -99,8 +100,8 @@ export function DealWorkspace({
         <>
             {/* Backdrop */}
             <div onClick={onClose} style={{
-                position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.55)',
-                zIndex: 100, backdropFilter: 'blur(2px)',
+                position: 'fixed', inset: 0, backgroundColor: 'var(--rp-overlay-soft)',
+                zIndex: 100,
             }} />
 
             {/* Modal */}
@@ -109,7 +110,7 @@ export function DealWorkspace({
                 backgroundColor: 'var(--bg-primary)', borderRadius: '16px',
                 width: '720px', maxWidth: '96vw', maxHeight: '90vh',
                 overflow: 'hidden', zIndex: 101,
-                boxShadow: '0 25px 60px rgba(0,0,0,0.35)',
+                boxShadow: '0 25px 60px var(--rp-overlay-soft)',
                 display: 'flex', flexDirection: 'column',
             }}>
 
@@ -125,7 +126,7 @@ export function DealWorkspace({
                                 </span>
                                 <span style={{
                                     padding: '2px 8px', borderRadius: 10, fontSize: 11, fontWeight: 600,
-                                    backgroundColor: stageColor + '18', color: stageColor,
+                                    backgroundColor: 'var(--bg-primary)', color: stageColor,
                                 }}>
                                     {stageLabels[deal.status] || deal.status}
                                 </span>
@@ -142,21 +143,21 @@ export function DealWorkspace({
                             {/* Quick action buttons */}
                             {phone && (
                                 <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                                    {customerTel && <a href={`tel:${customerTel}`} style={quickBtnStyle('#22c55e')}>📞 Call</a>}
-                                    {customerTel && <a href={`https://wa.me/${customerTel.slice(1)}`} target="_blank" rel="noreferrer" style={quickBtnStyle('#25d366')}>💬 WA</a>}
+                                    {customerTel && <a href={`tel:${customerTel}`} style={quickBtnStyle('var(--text-link)')}>Call</a>}
+                                    {customerTel && <a href={`https://wa.me/${customerTel.slice(1)}`} target="_blank" rel="noreferrer" style={quickBtnStyle('var(--text-link)')}>WA</a>}
                                     {deal.status === 'NEW' ? (
-                                        onLogCall && <button onClick={() => onLogCall(deal)} style={quickBtnStyle('var(--accent-primary)', true)}>📋 Log Call</button>
+                                        onLogCall && <button onClick={() => onLogCall(deal)} style={quickBtnStyle('var(--text-link)', true)}>Log Call</button>
                                     ) : (
-                                        <button onClick={() => setShowCallLog(true)} style={quickBtnStyle('var(--accent-primary)', true)}>📋 Log Call</button>
+                                        <button onClick={() => setShowCallLog(true)} style={quickBtnStyle('var(--text-link)', true)}>Log Call</button>
                                     )}
                                     {onTransfer && (
-                                        <button onClick={() => onTransfer(deal)} style={quickBtnStyle('#f59e0b', true)}>🔄 Transfer</button>
+                                        <button onClick={() => onTransfer(deal)} style={quickBtnStyle('var(--text-link)', true)}>Transfer</button>
                                     )}
-                                    <button type="button" onClick={() => setShowReassign(true)} style={quickBtnStyle('#6366f1', true)}>👤 Reassign</button>
-                                    <button type="button" onClick={() => setShowReminder(true)} style={quickBtnStyle('#0ea5e9', true)}>⏰ Reminder</button>
+                                    <button type="button" onClick={() => setShowReassign(true)} style={quickBtnStyle('var(--text-link)', true)}>Reassign</button>
+                                    <button type="button" onClick={() => setShowReminder(true)} style={quickBtnStyle('var(--text-link)', true)}>Reminder</button>
                                     {deal.demand_contact?.contact_type !== 'PARTNER_AGENT'
                                         && deal.status !== 'CLOSED_WON' && deal.status !== 'CLOSED_LOST' && (
-                                        <button type="button" onClick={() => setShowConvert(true)} style={quickBtnStyle('#10b981', true)}>🤝 Convert to Partner</button>
+                                        <button type="button" onClick={() => setShowConvert(true)} style={quickBtnStyle('var(--text-link)', true)}>Convert to Partner</button>
                                     )}
                                 </div>
                             )}
@@ -169,8 +170,8 @@ export function DealWorkspace({
                                     <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Coordinator</div>
                                     <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>{deal.coordinator.name}</div>
                                     {coordinatorTel && (
-                                        <a href={`tel:${coordinatorTel}`} style={{ fontSize: 11, color: '#22c55e', textDecoration: 'none' }}>
-                                            📞 {coordinatorTel}
+                                        <a href={`tel:${coordinatorTel}`} style={{ fontSize: 11, color: 'var(--rp-success-text)', textDecoration: 'none' }}>
+                                            <PresentationIcon value="phone" /> {coordinatorTel}
                                         </a>
                                     )}
                                 </>
@@ -182,10 +183,10 @@ export function DealWorkspace({
                         {/* Partner block (top-right) — call the partner agent this lead was added on behalf of */}
                         {partnerTel && (
                             <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                                <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>🤝 Partner</div>
+                                <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)' }}>Partner</div>
                                 {partnerName && <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>{partnerName}</div>}
-                                <a href={`tel:${partnerTel}`} title={`Call partner ${partnerName || ''} ${partnerTel}`} style={{ fontSize: 11, color: '#7c3aed', textDecoration: 'none', fontWeight: 700 }}>
-                                    📞 Call partner
+                                <a href={`tel:${partnerTel}`} title={`Call partner ${partnerName || ''} ${partnerTel}`} style={{ fontSize: 11, color: 'var(--blue-700)', textDecoration: 'none', fontWeight: 700 }}>
+                                    Call partner
                                 </a>
                             </div>
                         )}
@@ -216,16 +217,16 @@ export function DealWorkspace({
                 {/* ── Simple Call Log Modal (QUALIFIED+ stages) ── */}
                 {showCallLog && (
                     <div style={{
-                        position: 'absolute', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)',
+                        position: 'absolute', inset: 0, backgroundColor: 'var(--rp-overlay-soft)',
                         zIndex: 10, display: 'flex', alignItems: 'center', justifyContent: 'center',
                         borderRadius: 16,
                     }}>
                         <div style={{
                             backgroundColor: 'var(--bg-primary)', borderRadius: 12, padding: 24,
-                            width: 400, maxWidth: '90%', boxShadow: '0 8px 32px rgba(0,0,0,0.3)',
+                            width: 400, maxWidth: '90%', boxShadow: '0 8px 32px var(--rp-shadow-tint)',
                         }}>
                             <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 16 }}>
-                                📋 Log Call — {deal.demand_contact?.name || 'Lead'}
+                                Log Call — {deal.demand_contact?.name || 'Lead'}
                             </div>
                             <div style={{ marginBottom: 10 }}>
                                 <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 4, textTransform: 'uppercase' }}>Outcome</div>
@@ -256,10 +257,10 @@ export function DealWorkspace({
                             <div style={{ display: 'flex', gap: 8 }}>
                                 <button onClick={handleLogCallNote} disabled={savingCall || !callNotes.trim()} style={{
                                     flex: 1, padding: '8px 16px', borderRadius: 7, fontSize: 13, fontWeight: 700,
-                                    backgroundColor: 'var(--accent-primary)', color: '#fff', border: 'none', cursor: 'pointer',
+                                    backgroundColor: 'var(--accent-primary)', color: 'var(--surface-white)', border: 'none', cursor: 'pointer',
                                     opacity: (savingCall || !callNotes.trim()) ? 0.6 : 1,
                                 }}>
-                                    {savingCall ? 'Saving…' : '✅ Save to Timeline'}
+                                    {savingCall ? 'Saving…' : 'Save to Timeline'}
                                 </button>
                                 <button onClick={() => { setShowCallLog(false); setCallNotes(''); setCallOutcome(''); }} style={{
                                     padding: '8px 16px', borderRadius: 7, fontSize: 13, cursor: 'pointer',
@@ -355,7 +356,7 @@ function quickBtnStyle(color: string, isButton?: boolean): React.CSSProperties {
     return {
         display: 'inline-flex', alignItems: 'center', gap: 4,
         padding: '4px 9px', borderRadius: 6, fontSize: 11, fontWeight: 600,
-        backgroundColor: color + '18', border: `1.5px solid ${color}55`,
+        backgroundColor: 'var(--bg-primary)', border: '1px solid var(--control-line)',
         color: color, textDecoration: 'none', cursor: 'pointer',
         background: isButton ? undefined : undefined,
     };

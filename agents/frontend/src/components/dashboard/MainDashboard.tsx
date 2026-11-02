@@ -5,7 +5,7 @@ import {
 } from '../../api/client';
 import { useAuth } from '../../contexts/AuthContext';
 import { useIsMobile } from '../../hooks/useIsMobile';
-import { ClayCard, SectionLabel, KpiCard, formatNum, formatINR, formatMins } from './analytics/clay';
+import { ClayCard, SectionLabel, KpiCard, MetricIcon, formatNum, formatINR, formatMins } from './analytics/clay';
 import { HealthBar } from './analytics/charts';
 import { RangeBar, defaultRange, type DateRange } from './analytics/FilterBar';
 import { useAsyncData, LoadingState, ErrorState } from './analytics/AsyncState';
@@ -143,7 +143,7 @@ async function loadCockpit(range: DateRange): Promise<Cockpit> {
 const HouseRow: React.FC<{ label: string; count: number }> = ({ label, count }) => (
   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '9px 12px', borderRadius: 10, backgroundColor: 'var(--bg-tertiary)' }}>
     <span style={{ fontSize: 12.5, color: 'var(--text-secondary)' }}>{label}</span>
-    <span style={{ fontSize: 14, fontWeight: 800, color: count > 0 ? '#f59e0b' : 'var(--text-muted)' }}>{formatNum(count)}</span>
+    <span style={{ fontSize: 14, fontWeight: 600, color: count > 0 ? 'var(--rp-warn-text)' : 'var(--text-muted)' }}>{formatNum(count)}</span>
   </div>
 );
 
@@ -202,9 +202,9 @@ export const MainDashboard: React.FC = () => {
     : `${formatNum(d.pulse.leads.cur)} new leads · ${formatNum(d.pulse.visits.cur)} visits · ${formatNum(d.pulse.deals.cur)} deals closed this period — ${formatNum(actionTotal)} things need action.`;
 
   return (
-    <div style={{ flex: 1, overflowY: 'auto', padding: pad, backgroundColor: 'var(--bg-primary)' }}>
+    <div className="rp-cockpit rp-dashboard" style={{ flex: 1, minWidth: 0, overflowY: 'auto', padding: pad, backgroundColor: 'var(--bg-secondary)' }}>
       <div>
-        <h1 style={{ fontSize: isMobile ? 20 : 24, fontWeight: 800, margin: 0, color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>{greeting}, {firstName} 👋</h1>
+        <h1 style={{ fontSize: isMobile ? 20 : 24, fontWeight: 600, margin: 0, color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>{greeting}, {firstName}</h1>
         <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: '4px 0 0' }}>{today} · {stateLine}</p>
       </div>
 
@@ -258,7 +258,7 @@ export const MainDashboard: React.FC = () => {
                   const overdue = tk.due_date && new Date(tk.due_date).getTime() < now;
                   return (
                     <div key={tk.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 12px', borderRadius: 10, backgroundColor: 'var(--bg-tertiary)' }}>
-                      <span style={{ fontSize: 11, fontWeight: 800, color: overdue ? '#ef4444' : 'var(--text-muted)', width: 58, flexShrink: 0 }}>{overdue ? 'OVERDUE' : (tk.priority || 'MEDIUM')}</span>
+                      <span style={{ fontSize: 11, fontWeight: 600, color: overdue ? 'var(--rp-danger-text)' : 'var(--text-muted)', width: 58, flexShrink: 0 }}>{overdue ? 'OVERDUE' : (tk.priority || 'MEDIUM')}</span>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{tk.task_type.replace(/_/g, ' ')}</div>
                         <div style={{ fontSize: 11.5, color: 'var(--text-muted)' }}>{tk.contact?.name || tk.contact?.phone_number || '—'}</div>
@@ -280,7 +280,7 @@ export const MainDashboard: React.FC = () => {
               <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
                 {d.activity.map((e, i) => (
                   <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 12.5, color: 'var(--text-secondary)' }}>
-                    <span>{e.icon}</span><span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.text}</span>
+                    <MetricIcon value={e.icon} /><span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.text}</span>
                   </div>
                 ))}
               </div>

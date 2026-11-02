@@ -7,6 +7,8 @@ import { useState, useEffect } from 'react';
 import { Send, Save, Calendar, Users, FileText, Play, Trash2, Plus, X, Copy } from 'lucide-react';
 import { API_BASE_URL, authedFetch } from '../lib/api';
 import { useConfirm } from '../contexts/ConfirmContext';
+import { PresentationIcon } from './ui/PresentationIcon';
+import './AdvancedAnalytics.css';
 
 interface CampaignTemplate {
   id?: string;
@@ -43,10 +45,10 @@ interface Campaign {
 }
 
 const CHANNELS = [
-  { value: 'whatsapp', label: 'WhatsApp', icon: '💬' },
-  { value: 'email', label: 'Email', icon: '📧' },
-  { value: 'sms', label: 'SMS', icon: '📱' },
-  { value: 'voice', label: 'Voice Call', icon: '📞' },
+  { value: 'whatsapp', label: 'WhatsApp', icon: 'message-circle' },
+  { value: 'email', label: 'Email', icon: 'mail' },
+  { value: 'sms', label: 'SMS', icon: 'phone' },
+  { value: 'voice', label: 'Voice Call', icon: 'phone' },
 ];
 
 const CAMPAIGN_TYPES = [
@@ -302,10 +304,10 @@ export default function MarketingCampaign() {
   }
 
   return (
-    <div className="p-6 max-w-7xl mx-auto">
+    <div className="rp-analytics rp-marketing p-6 max-w-7xl mx-auto">
       {/* Header */}
       <div className="mb-6">
-        <h1 className="text-3xl font-bold text-gray-900">📢 Marketing Campaign Builder</h1>
+        <h1 className="text-3xl font-bold text-gray-900">Marketing Campaign Builder</h1>
         <p className="text-gray-600 mt-1">Create targeted campaigns and reusable templates for Panditji AI</p>
       </div>
 
@@ -398,7 +400,7 @@ export default function MarketingCampaign() {
                           {campaign.status.toUpperCase()}
                         </span>
                         <span className="px-2 py-1 bg-purple-100 text-purple-700 rounded text-xs">
-                          {CHANNELS.find(c => c.value === campaign.channel)?.icon} {campaign.channel}
+                          <PresentationIcon value={CHANNELS.find(c => c.value === campaign.channel)?.icon || ''} /> {campaign.channel}
                         </span>
                       </div>
                       <div className="flex gap-6 text-sm text-gray-600">
@@ -505,7 +507,7 @@ export default function MarketingCampaign() {
                               : 'border hover:bg-gray-50'
                           }`}
                         >
-                          {ch.icon} {ch.label}
+                          {ch.label}
                         </button>
                       ))}
                     </div>
@@ -681,7 +683,7 @@ export default function MarketingCampaign() {
                       <h3 className="font-semibold">{template.name}</h3>
                       <div className="flex gap-2 mt-1">
                         <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">
-                          {CHANNELS.find(c => c.value === template.channel)?.icon} {template.channel}
+                          <PresentationIcon value={CHANNELS.find(c => c.value === template.channel)?.icon || ''} /> {template.channel}
                         </span>
                         {template.category && (
                           <span className="text-xs bg-gray-100 text-gray-700 px-2 py-1 rounded">
@@ -695,7 +697,7 @@ export default function MarketingCampaign() {
                   <div className="flex justify-between items-center text-xs text-gray-500 mb-3">
                     <span>Used {template.times_used || 0} times</span>
                     {template.avg_score && (
-                      <span className="text-green-600">⭐ {template.avg_score.toFixed(1)}</span>
+                      <span className="text-gray-900">Rating: {template.avg_score.toFixed(1)}</span>
                     )}
                   </div>
                   <div className="flex gap-2">
@@ -782,7 +784,7 @@ export default function MarketingCampaign() {
                               : 'border hover:bg-gray-50'
                           }`}
                         >
-                          {ch.icon} {ch.label}
+                          {ch.label}
                         </button>
                       ))}
                     </div>

@@ -166,17 +166,17 @@ export function LogActionModal({ dealId, actionType, onClose, onSuccess, deal }:
         <div
             onClick={e => { if (e.target === e.currentTarget) onClose(); }}
             style={{
-                position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)',
+                position: 'fixed', inset: 0, background: 'var(--rp-overlay-soft)',
                 zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
             }}
         >
             <div style={{
-                background: '#1e2536', borderRadius: 14, width: '100%', maxWidth: 460,
-                padding: '20px 20px 24px', boxShadow: '0 20px 60px rgba(0,0,0,0.4)',
+                background: 'var(--bg-primary)', borderRadius: 14, width: '100%', maxWidth: 460,
+                padding: '20px 20px 24px', boxShadow: '0 20px 60px var(--rp-overlay-soft)',
             }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
-                    <h3 style={{ margin: 0, fontSize: 16, color: '#f3f4f6' }}>{title[actionType]}</h3>
-                    <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#6b7280', fontSize: 20, cursor: 'pointer' }}>✕</button>
+                    <h3 style={{ margin: 0, fontSize: 16, color: 'var(--bg-secondary)' }}>{title[actionType]}</h3>
+                    <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: 20, cursor: 'pointer' }}>✕</button>
                 </div>
 
                 {/* CALLED — outcome selector */}
@@ -186,7 +186,7 @@ export function LogActionModal({ dealId, actionType, onClose, onSuccess, deal }:
                         {OUTCOME_LABELS.CALLED.map(o => (
                             <label key={o} style={radioRowStyle}>
                                 <input type="radio" name="outcome" value={o} checked={outcome === o} onChange={() => setOutcome(o)} />
-                                <span style={{ marginLeft: 8, color: '#d1d5db', fontSize: 14 }}>{OUTCOME_DISPLAY[o]}</span>
+                                <span style={{ marginLeft: 8, color: 'var(--text-secondary)', fontSize: 14 }}>{OUTCOME_DISPLAY[o]}</span>
                             </label>
                         ))}
                     </div>
@@ -203,7 +203,7 @@ export function LogActionModal({ dealId, actionType, onClose, onSuccess, deal }:
                                     checked={meetingType === `${m.value}:${i}`}
                                     onChange={() => setMeetingType(m.value)}
                                 />
-                                <span style={{ marginLeft: 8, color: '#d1d5db', fontSize: 14 }}>{m.label}</span>
+                                <span style={{ marginLeft: 8, color: 'var(--text-secondary)', fontSize: 14 }}>{m.label}</span>
                             </label>
                         ))}
                     </div>
@@ -214,9 +214,9 @@ export function LogActionModal({ dealId, actionType, onClose, onSuccess, deal }:
                     <div style={{ marginBottom: 14 }}>
                         <label style={labelStyle}>Which shared property is this visit for?</label>
                         {sharesLoading ? (
-                            <div style={{ fontSize: 13, color: '#9ca3af', padding: '6px 0' }}>Loading shared properties…</div>
+                            <div style={{ fontSize: 13, color: 'var(--text-muted)', padding: '6px 0' }}>Loading shared properties…</div>
                         ) : shares.length === 0 ? (
-                            <div style={{ fontSize: 13, color: '#9ca3af', padding: '6px 0' }}>
+                            <div style={{ fontSize: 13, color: 'var(--text-muted)', padding: '6px 0' }}>
                                 No properties shared yet — the visit will be logged without a linked property.
                             </div>
                         ) : (
@@ -232,13 +232,13 @@ export function LogActionModal({ dealId, actionType, onClose, onSuccess, deal }:
                                             onClick={() => setSelectedInventoryId(sel ? '' : sh.inventory_id)}
                                             style={{
                                                 display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', cursor: 'pointer',
-                                                borderRadius: 8, border: sel ? '1.5px solid #3b82f6' : '1px solid #374151',
-                                                background: sel ? 'rgba(59,130,246,0.12)' : '#111827',
+                                                borderRadius: 8, border: sel ? '1.5px solid var(--blue-500)' : '1px solid var(--text-secondary)',
+                                                background: sel ? 'var(--rp-info-wash)' : 'var(--text-primary)',
                                             }}>
                                             <input type="radio" name="sched_property" checked={sel} readOnly style={{ pointerEvents: 'none' }} />
                                             <span style={{ minWidth: 0 }}>
-                                                <span style={{ display: 'block', fontSize: 13, color: '#f3f4f6', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{lbl} — {soc}</span>
-                                                <span style={{ display: 'block', fontSize: 11, color: '#9ca3af' }}>{inv.location || '—'}</span>
+                                                <span style={{ display: 'block', fontSize: 13, color: 'var(--bg-secondary)', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{lbl} — {soc}</span>
+                                                <span style={{ display: 'block', fontSize: 11, color: 'var(--text-muted)' }}>{inv.location || '—'}</span>
                                             </span>
                                         </div>
                                     );
@@ -246,7 +246,7 @@ export function LogActionModal({ dealId, actionType, onClose, onSuccess, deal }:
                             </div>
                         )}
                         {selectedInventoryId && (
-                            <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 6 }}>
+                            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6 }}>
                                 ✅ A visit will be booked for this property. Customer, coordinator &amp; key holder are notified automatically.
                             </div>
                         )}
@@ -285,7 +285,7 @@ export function LogActionModal({ dealId, actionType, onClose, onSuccess, deal }:
                 </div>
 
                 {error && (
-                    <div style={{ color: '#f87171', fontSize: 13, marginBottom: 12 }}>{error}</div>
+                    <div style={{ color: 'var(--rp-danger-text)', fontSize: 13, marginBottom: 12 }}>{error}</div>
                 )}
 
                 <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
@@ -300,22 +300,22 @@ export function LogActionModal({ dealId, actionType, onClose, onSuccess, deal }:
 }
 
 const labelStyle: React.CSSProperties = {
-    display: 'block', fontSize: 12, color: '#9ca3af',
+    display: 'block', fontSize: 12, color: 'var(--text-muted)',
     marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.04em',
 };
 const radioRowStyle: React.CSSProperties = {
     display: 'flex', alignItems: 'center', padding: '5px 0', cursor: 'pointer',
 };
 const inputStyle: React.CSSProperties = {
-    width: '100%', background: '#111827', border: '1px solid #374151',
-    borderRadius: 8, color: '#f3f4f6', fontSize: 14, padding: '8px 10px',
+    width: '100%', background: 'var(--text-primary)', border: '1px solid var(--text-secondary)',
+    borderRadius: 8, color: 'var(--bg-secondary)', fontSize: 14, padding: '8px 10px',
     outline: 'none', boxSizing: 'border-box',
 };
 const cancelBtnStyle: React.CSSProperties = {
-    background: 'transparent', border: '1px solid #374151', borderRadius: 8,
-    color: '#9ca3af', fontSize: 14, padding: '8px 18px', cursor: 'pointer',
+    background: 'transparent', border: '1px solid var(--text-secondary)', borderRadius: 8,
+    color: 'var(--text-muted)', fontSize: 14, padding: '8px 18px', cursor: 'pointer',
 };
 const submitBtnStyle: React.CSSProperties = {
-    background: '#3b82f6', border: 'none', borderRadius: 8,
-    color: '#fff', fontSize: 14, padding: '8px 20px', cursor: 'pointer', fontWeight: 600,
+    background: 'var(--blue-500)', border: 'none', borderRadius: 8,
+    color: 'var(--surface-white)', fontSize: 14, padding: '8px 20px', cursor: 'pointer', fontWeight: 600,
 };

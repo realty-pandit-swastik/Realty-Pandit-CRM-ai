@@ -105,6 +105,7 @@ export default defineConfig({
     sourcemap: 'hidden',
   },
   server: {
+    fs: { allow: [resolve(__dirname), resolve(__dirname, '../backend/src/data')] },
     proxy: {
       '/api': {
         target: 'http://localhost:7071',

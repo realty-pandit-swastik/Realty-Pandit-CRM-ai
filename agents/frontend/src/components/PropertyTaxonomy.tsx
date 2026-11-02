@@ -36,7 +36,7 @@ export function PropertyTaxonomy() {
                 {(['fields', 'review'] as const).map((t) => (
                     <button key={t} onClick={() => setTab(t)} style={{
                         padding: '8px 16px', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer', border: 'none',
-                        backgroundColor: tab === t ? 'var(--accent-primary)' : 'var(--bg-secondary)', color: tab === t ? '#fff' : 'var(--text-secondary)',
+                        backgroundColor: tab === t ? 'var(--blue-600)' : 'var(--bg-primary)', color: tab === t ? 'var(--surface-white)' : 'var(--text-secondary)',
                     }}>{t === 'fields' ? 'Field Schema' : 'Needs Review'}</button>
                 ))}
             </div>
@@ -90,7 +90,7 @@ function FieldSchemaTab() {
                             <input style={{ ...inp, flex: 1 }} value={r.label} onChange={(e) => setRows(rows.map((x, j) => j === i ? { ...x, label: e.target.value } : x))} placeholder="Label (e.g. BHK / Rooms)" />
                             <label style={{ fontSize: 12, color: 'var(--text-secondary)' }}><input type="checkbox" checked={r.required} onChange={(e) => setRows(rows.map((x, j) => j === i ? { ...x, required: e.target.checked } : x))} /> req</label>
                             <input style={{ ...inp, flex: 1 }} value={(r.options || []).join(', ')} onChange={(e) => setRows(rows.map((x, j) => j === i ? { ...x, options: e.target.value ? e.target.value.split(',').map((s) => s.trim()) : null } : x))} placeholder="options (comma-sep)" />
-                            <button onClick={() => setRows(rows.filter((_, j) => j !== i))} style={{ ...inp, cursor: 'pointer', color: '#ef4444' }}>✕</button>
+                            <button onClick={() => setRows(rows.filter((_, j) => j !== i))} style={{ ...inp, cursor: 'pointer', color: 'var(--rp-danger-text)' }}>✕</button>
                         </div>
                     ))}
                     <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
@@ -98,7 +98,7 @@ function FieldSchemaTab() {
                             <option value="">+ Add field…</option>
                             {catalog.filter((c) => !rows.some((r) => r.key === c.key)).map((c) => <option key={c.key} value={c.key}>{c.label} ({c.key})</option>)}
                         </select>
-                        <button onClick={save} disabled={saving} style={{ ...inp, cursor: 'pointer', fontWeight: 700, background: '#10b981', color: '#fff', border: 'none' }}>{saving ? 'Saving…' : 'Save fields'}</button>
+                        <button onClick={save} disabled={saving} style={{ ...inp, cursor: 'pointer', fontWeight: 600, background: 'var(--blue-600)', color: 'var(--surface-white)', border: 'none' }}>{saving ? 'Saving…' : 'Save fields'}</button>
                     </div>
                 </div>
             )}
@@ -134,7 +134,7 @@ function ReviewTab() {
                             <option value="">Reassign all to…</option>
                             {types.map((t) => <option key={t.id} value={t.id}>{t.path}</option>)}
                         </select>
-                        <button onClick={() => bulk(g.node_id || 'none')} style={{ ...inp, cursor: 'pointer', fontWeight: 700, background: 'var(--accent-primary)', color: '#fff', border: 'none' }}>Reassign all {g.count}</button>
+                        <button onClick={() => bulk(g.node_id || 'none')} style={{ ...inp, cursor: 'pointer', fontWeight: 600, background: 'var(--blue-600)', color: 'var(--surface-white)', border: 'none' }}>Reassign all {g.count}</button>
                     </div>
                 </div>
             ))}

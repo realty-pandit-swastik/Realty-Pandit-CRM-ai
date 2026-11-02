@@ -2,9 +2,9 @@ import React, { useEffect, useState } from 'react';
 import { getManagementAlerts } from '../../api/client';
 
 const SEV: Record<string, { bg: string; border: string; fg: string; icon: string }> = {
-  high: { bg: '#3b1f1f', border: 'rgba(239,68,68,0.4)', fg: '#fca5a5', icon: '🔴' },
-  medium: { bg: '#3a2f1a', border: 'rgba(245,158,11,0.4)', fg: '#fcd34d', icon: '🟠' },
-  low: { bg: '#1e3558', border: 'rgba(147,197,253,0.3)', fg: '#93c5fd', icon: '🔵' },
+  high: { bg: 'var(--rp-danger-bg)', border: 'var(--rp-danger-line)', fg: 'var(--rp-danger-text)', icon: '🔴' },
+  medium: { bg: 'var(--rp-warn-bg)', border: 'var(--rp-danger-line)', fg: 'var(--rp-warn-text)', icon: '🟠' },
+  low: { bg: 'var(--blue-800)', border: 'var(--rp-info-line)', fg: 'var(--blue-300)', icon: '🔵' },
 };
 
 /**

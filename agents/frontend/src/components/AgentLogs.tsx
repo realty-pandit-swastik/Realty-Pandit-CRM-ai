@@ -34,16 +34,16 @@ interface QALog {
 const PAGE_SIZE = 25;
 
 const STATUS_COLORS: Record<string, string> = {
-    success: '#22c55e',
-    failed: '#ef4444',
-    escalated: '#f59e0b',
+    success: 'var(--rp-success-text)',
+    failed: 'var(--rp-danger-text)',
+    escalated: 'var(--rp-warn-text)',
 };
 
 const SENTIMENT_COLORS: Record<string, string> = {
-    positive: '#22c55e',
-    neutral: '#f59e0b',
-    negative: '#ef4444',
-    frustrated: '#dc2626',
+    positive: 'var(--rp-success-text)',
+    neutral: 'var(--rp-warn-text)',
+    negative: 'var(--rp-danger-text)',
+    frustrated: 'var(--rp-danger-text)',
 };
 
 export function AgentLogs() {
@@ -190,7 +190,7 @@ export function AgentLogs() {
                     {actionLoading ? (
                         <div style={{ color: 'var(--text-secondary)', textAlign: 'center', padding: '40px' }}>Loading...</div>
                     ) : (
-                        <div style={{ backgroundColor: 'var(--bg-secondary)', borderRadius: '12px', border: '1px solid var(--border-secondary)', overflow: 'hidden', overflowX: 'auto' }}>
+                        <div className="rp-table-scroll" tabIndex={0} role="region" aria-label="Agent action logs" style={{ backgroundColor: 'var(--bg-secondary)', borderRadius: '12px', border: '1px solid var(--border-secondary)', overflow: 'hidden', overflowX: 'auto' }}>
                             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                                 <thead>
                                     <tr style={{ borderBottom: '1px solid var(--border-secondary)' }}>
@@ -237,7 +237,7 @@ export function AgentLogs() {
                                                 <td style={{ padding: '8px 12px' }}>
                                                     {log.quality_score !== null ? (
                                                         <span style={{
-                                                            color: log.quality_score >= 7 ? '#22c55e' : log.quality_score >= 5 ? '#f59e0b' : '#ef4444',
+                                                            color: log.quality_score >= 7 ? 'var(--rp-success-text)' : log.quality_score >= 5 ? 'var(--rp-warn-text)' : 'var(--rp-danger-text)',
                                                             fontSize: '13px', fontWeight: 600,
                                                         }}>
                                                             {log.quality_score}
@@ -266,7 +266,7 @@ export function AgentLogs() {
                                                             )}
                                                             {log.error_message && (
                                                                 <div style={{ gridColumn: 'span 2' }}>
-                                                                    <div style={{ color: '#ef4444', fontSize: '11px', fontWeight: 600, marginBottom: '4px' }}>ERROR</div>
+                                                                    <div style={{ color: 'var(--rp-danger-text)', fontSize: '11px', fontWeight: 600, marginBottom: '4px' }}>ERROR</div>
                                                                     <div style={{ color: 'var(--error-text)', fontSize: '13px', whiteSpace: 'pre-wrap' }}>{log.error_message}</div>
                                                                 </div>
                                                             )}
@@ -344,7 +344,7 @@ export function AgentLogs() {
                     {qaLoading ? (
                         <div style={{ color: 'var(--text-secondary)', textAlign: 'center', padding: '40px' }}>Loading...</div>
                     ) : (
-                        <div style={{ backgroundColor: 'var(--bg-secondary)', borderRadius: '12px', border: '1px solid var(--border-secondary)', overflow: 'hidden', overflowX: 'auto' }}>
+                        <div className="rp-table-scroll" role="region" aria-label="Quality review logs" tabIndex={0} style={{ backgroundColor: 'var(--bg-secondary)', borderRadius: '12px', border: '1px solid var(--border-secondary)', overflow: 'hidden', overflowX: 'auto' }}>
                             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                                 <thead>
                                     <tr style={{ borderBottom: '1px solid var(--border-secondary)' }}>
@@ -361,10 +361,10 @@ export function AgentLogs() {
                                                 onClick={() => setExpandedRow(expandedRow === log.id ? null : log.id)}
                                                 style={{
                                                     borderBottom: '1px solid var(--bg-secondary)', cursor: 'pointer',
-                                                    backgroundColor: log.flagged ? '#7f1d1d15' : 'transparent',
+                                                    backgroundColor: log.flagged ? 'var(--rp-danger-bg)' : 'transparent',
                                                 }}
-                                                onMouseEnter={e => (e.currentTarget.style.backgroundColor = log.flagged ? '#7f1d1d25' : '#253345')}
-                                                onMouseLeave={e => (e.currentTarget.style.backgroundColor = log.flagged ? '#7f1d1d15' : 'transparent')}
+                                                onMouseEnter={e => (e.currentTarget.style.backgroundColor = log.flagged ? 'var(--rp-danger-bg)' : 'var(--bg-secondary)')}
+                                                onMouseLeave={e => (e.currentTarget.style.backgroundColor = log.flagged ? 'var(--rp-danger-bg)' : 'transparent')}
                                             >
                                                 <td style={{ padding: '8px 12px', color: 'var(--text-secondary)', fontSize: '12px', whiteSpace: 'nowrap' }}>
                                                     {formatTime(log.created_at)}
@@ -377,7 +377,7 @@ export function AgentLogs() {
                                                 </td>
                                                 <td style={{ padding: '8px 12px' }}>
                                                     <span style={{
-                                                        color: log.quality_score >= 7 ? '#22c55e' : log.quality_score >= 5 ? '#f59e0b' : '#ef4444',
+                                                        color: log.quality_score >= 7 ? 'var(--rp-success-text)' : log.quality_score >= 5 ? 'var(--rp-warn-text)' : 'var(--rp-danger-text)',
                                                         fontSize: '14px', fontWeight: 700,
                                                     }}>
                                                         {log.quality_score}
@@ -398,7 +398,7 @@ export function AgentLogs() {
                                                     ) : <span style={{ color: 'var(--text-muted)' }}>-</span>}
                                                 </td>
                                                 <td style={{ padding: '8px 12px', fontSize: '16px' }}>
-                                                    {log.flagged ? <span title="Flagged for review" style={{ color: '#ef4444' }}>!</span> : <span style={{ color: 'var(--border-secondary)' }}>-</span>}
+                                                    {log.flagged ? <span title="Flagged for review" style={{ color: 'var(--rp-danger-text)' }}>!</span> : <span style={{ color: 'var(--border-secondary)' }}>-</span>}
                                                 </td>
                                                 <td style={{ padding: '8px 12px', color: 'var(--text-secondary)', fontSize: '12px' }}>
                                                     {log.reviewed_by || '-'}
@@ -418,7 +418,7 @@ export function AgentLogs() {
                                                                         backgroundColor: 'var(--bg-secondary)', borderRadius: '8px', padding: '10px 14px',
                                                                         marginBottom: '6px', border: '1px solid var(--border-secondary)',
                                                                     }}>
-                                                                        <span style={{ color: '#ef4444', fontSize: '12px', fontWeight: 600, marginRight: '8px' }}>
+                                                                        <span style={{ color: 'var(--rp-danger-text)', fontSize: '12px', fontWeight: 600, marginRight: '8px' }}>
                                                                             {issue.type || 'Issue'}
                                                                         </span>
                                                                         <span style={{ color: 'var(--text-secondary)', fontSize: '13px' }}>

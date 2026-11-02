@@ -1,6 +1,10 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import request from 'supertest';
 import app from '../app';
+import prisma from '../db';
+beforeEach(() => {
+    Object.assign(prisma, { $queryRawUnsafe: vi.fn().mockResolvedValue([{ name: 'test_db', oid: '123', started: '2026-01-01 00:00:00' }]) });
+});
 
 describe('App Security', () => {
     it('returns security headers from helmet', async () => {
@@ -16,12 +20,11 @@ describe('App Security', () => {
     });
 
     it('health check returns ok', async () => {
-        const prisma = (await import('../db')).default;
-        (prisma.$queryRaw as any).mockResolvedValueOnce([{ '?column?': 1 }]);
-
         const res = await request(app).get('/health');
         expect(res.status).toBe(200);
         expect(res.body.status).toBe('ok');
+        expect(res.body.db.fingerprint).toMatch(/^[a-f0-9]{64}$/);
+        expect(res.body.db.name).toBeUndefined();
     });
 
     it('reports degraded when Redis is unavailable', async () => {
@@ -32,6 +35,18 @@ describe('App Security', () => {
         expect(res.status).toBe(503);
         expect(res.body.status).toBe('degraded');
         expect(res.body.redis.status).toBe('unavailable');
+    });
+    it('fails closed without exposing database error details', async () => {
+        vi.mocked(prisma.$queryRawUnsafe).mockRejectedValueOnce(new Error('private connection detail'));
+        const res = await request(app).get('/health');
+        expect(res.status).toBe(503);
+        expect(res.body.db.status).toBe('disconnected');
+        expect(JSON.stringify(res.body)).not.toContain('private connection detail');
+    });
+    it('does not report a successful ping with missing identity as ready', async () => {
+        vi.mocked(prisma.$queryRawUnsafe).mockResolvedValueOnce([{ '?column?': 1 }]);
+        const res = await request(app).get('/health');
+        expect(res.status).toBe(503);
     });
 
     it('root route serves the API status page', async () => {

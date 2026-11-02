@@ -1,5 +1,6 @@
 
 import React, { useState } from 'react';
+import { PresentationIcon } from './ui/PresentationIcon';
 
 interface LeadScore {
     total_score: number;
@@ -24,21 +25,21 @@ interface Props {
 }
 
 const TYPE_BADGE: Record<string, { label: string; color: string; bg: string }> = {
-    'BUYER':               { label: 'Buyer',    color: '#1d4ed8', bg: '#dbeafe' },
-    'TENANT':              { label: 'Tenant',   color: '#6d28d9', bg: '#ede9fe' },
-    'LANDLORD':            { label: 'Landlord', color: '#15803d', bg: '#dcfce7' },
-    'PARTNER_AGENT':       { label: 'Partner',  color: '#a16207', bg: '#fef9c3' },
-    'REAL_ESTATE_BUILDER': { label: 'Builder',  color: '#b91c1c', bg: '#fee2e2' },
-    'MANAGEMENT':          { label: 'Team',     color: '#475569', bg: '#f1f5f9' },
-    'UNKNOWN':             { label: 'Unknown',  color: '#6b7280', bg: '#f3f4f6' },
+    'BUYER':               { label: 'Buyer',    color: 'var(--blue-700)', bg: 'var(--blue-100)' },
+    'TENANT':              { label: 'Tenant',   color: 'var(--blue-700)', bg: 'var(--blue-50)' },
+    'LANDLORD':            { label: 'Landlord', color: 'var(--rp-success-text)', bg: 'var(--rp-success-bg)' },
+    'PARTNER_AGENT':       { label: 'Partner',  color: 'var(--rp-warn-text)', bg: 'var(--rp-warn-bg)' },
+    'REAL_ESTATE_BUILDER': { label: 'Builder',  color: 'var(--rp-danger-text)', bg: 'var(--rp-danger-bg)' },
+    'MANAGEMENT':          { label: 'Team',     color: 'var(--text-secondary)', bg: 'var(--bg-secondary)' },
+    'UNKNOWN':             { label: 'Unknown',  color: 'var(--text-muted)', bg: 'var(--bg-secondary)' },
 };
 
 const getScoreBadge = (score?: LeadScore) => {
     if (!score) return null;
     const s = score.total_score;
-    if (s >= 70) return { emoji: '🔥', label: `HOT ${s}`, bg: 'var(--error-bg)', color: 'var(--error-text)' };
-    if (s >= 40) return { emoji: '🟢', label: `WARM ${s}`, bg: 'var(--success-bg)', color: 'var(--success-text)' };
-    return { emoji: '❄️', label: `COLD ${s}`, bg: '#1e3a5f', color: '#93c5fd' };
+    if (s >= 70) return { emoji: 'flame', label: `HOT ${s}`, bg: 'var(--error-bg)', color: 'var(--error-text)' };
+    if (s >= 40) return { emoji: 'circle', label: `WARM ${s}`, bg: 'var(--success-bg)', color: 'var(--success-text)' };
+    return { emoji: 'snowflake', label: `COLD ${s}`, bg: 'var(--blue-900)', color: 'var(--blue-300)' };
 };
 
 const formatDate = (dateStr: string) => {
@@ -77,7 +78,7 @@ export const ContactList: React.FC<Props> = ({ contacts, selectedPhone, onSelect
                     <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
                         {hotCount > 0 && (
                             <span style={{ backgroundColor: 'var(--error-bg)', color: 'var(--error-text)', fontSize: '11px', padding: '2px 7px', borderRadius: '10px', fontWeight: 600 }}>
-                                🔥 {hotCount} hot
+                                <PresentationIcon value="flame" /> {hotCount} hot
                             </span>
                         )}
                         <span style={{ backgroundColor: 'var(--bg-secondary)', color: 'var(--text-secondary)', fontSize: '11px', padding: '2px 7px', borderRadius: '10px' }}>
@@ -86,7 +87,7 @@ export const ContactList: React.FC<Props> = ({ contacts, selectedPhone, onSelect
                     </div>
                 </div>
                 <input
-                    placeholder="🔍  Search by name or phone..."
+                    placeholder="Search by name or phone..."
                     value={search}
                     onChange={e => setSearch(e.target.value)}
                     style={{
@@ -119,7 +120,7 @@ export const ContactList: React.FC<Props> = ({ contacts, selectedPhone, onSelect
                                 borderBottom: '1px solid var(--border-secondary)',
                                 cursor: 'pointer',
                                 backgroundColor: isSelected ? 'var(--bg-active)' : 'transparent',
-                                borderLeft: isSelected ? '3px solid #3b82f6' : '3px solid transparent',
+                                borderLeft: isSelected ? '3px solid var(--blue-500)' : '3px solid transparent',
                                 transition: 'background-color 0.15s',
                             }}
                             onMouseEnter={e => { if (!isSelected) (e.currentTarget as HTMLDivElement).style.backgroundColor = 'var(--bg-secondary)'; }}
@@ -155,7 +156,7 @@ export const ContactList: React.FC<Props> = ({ contacts, selectedPhone, onSelect
                                         backgroundColor: scoreBadge.bg, color: scoreBadge.color,
                                         padding: '2px 7px', borderRadius: '4px',
                                     }}>
-                                        {scoreBadge.emoji} {scoreBadge.label}
+                                        <PresentationIcon value={scoreBadge.emoji} /> {scoreBadge.label}
                                     </span>
                                 )}
                                 <span style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'capitalize' }}>

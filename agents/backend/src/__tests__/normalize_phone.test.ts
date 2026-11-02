@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { normalizePhone, isPlaceholderPhone } from '../utils/phone';
+import { normalizePhone, isPlaceholderPhone, isUnresolvedPropertyContactPhone } from '../utils/phone';
 
 // Regression guard for the partner-lead "incorrect number" bug: normalizePhone used to fall through
 // to `+${clean}` for ANY input, so names/partials became contact keys like "+ChiragWadhwa" / "+1" / "+"
@@ -32,5 +32,13 @@ describe('isPlaceholderPhone — unchanged contract', () => {
         expect(isPlaceholderPhone('TEMP_123_x')).toBe(true);
         expect(isPlaceholderPhone('+919958804559')).toBe(false);
         expect(isPlaceholderPhone('')).toBe(false);
+    });
+});
+describe('unresolved property contacts', () => {
+    it('does not treat legacy zero-number placeholders as verified owners after normalization', () => {
+        for (const phone of ['', 'PENDING-test', 'TEMP_test', '+910000000000', '910000000000', '+91-0000000001', '0000000001']) {
+            expect(isUnresolvedPropertyContactPhone(phone)).toBe(true);
+        }
+        expect(isUnresolvedPropertyContactPhone('+919000000001')).toBe(false);
     });
 });

@@ -56,4 +56,37 @@ describe('contact relationship', () => {
         expect(result.timeline.some(e => e.content?.includes('NEW → QUALIFIED'))).toBe(true);
         expect(JSON.stringify(result)).not.toContain('redact-me');
     });
+
+    it('returns key-holder, owner and partner relationships from the same permission-scoped query', async () => {
+        vi.mocked(prisma.inventory.findMany).mockResolvedValue([
+            { id: 'both', owner_phone: phone, key_holder_phone: '9000000001', assigned_agent_id: 'agent-1', status: 'active' },
+            { id: 'partner-property', owner_phone: '+919000000009', referral_partner: { phone_number: phone }, assigned_agent_id: 'agent-1', status: 'active' },
+        ] as any);
+        const result = await contactRelationship(phone, viewer, 1);
+        expect(result.inventory[0].relationships).toEqual(['Owner', 'Key holder']);
+        expect(result.inventory[1].relationships).toEqual(['Partner']);
+        expect(result.counts).toMatchObject({ inventory: 1, key_holder: 1, leads: 2, deals: 2, other: 1 });
+        expect(prisma.inventory.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: {
+            AND: [expect.objectContaining({ tenant_id: 'tenant-1', OR: expect.any(Array) }), expect.objectContaining({ OR: expect.any(Array) })],
+        } }));
+        expect(JSON.stringify(result.inventory)).not.toContain('phone_number');
+        expect(JSON.stringify(result.inventory)).not.toContain('owner_phone');
+    });
+
+    it('caps relation pages and retains total counts without losing relationships on show more', async () => {
+        vi.mocked(prisma.inventory.findMany).mockResolvedValue(Array.from({ length: 65 }, (_, i) => ({ id: `inv-${i}`, owner_phone: phone, assigned_agent_id: 'agent-1', status: 'active' })) as any);
+        const first = await contactRelationship(phone, viewer, 1);
+        const second = await contactRelationship(phone, viewer, 2);
+        expect(first.inventory).toHaveLength(50); expect(first.has_more_relationships).toBe(true);
+        expect(second.inventory).toHaveLength(15); expect(second.has_more_relationships).toBe(false);
+        expect(first.counts.inventory).toBe(65);
+    });
+
+    it('keeps empty relationships distinct from an inaccessible contact', async () => {
+        vi.mocked(prisma.transaction.findMany).mockResolvedValue([]);
+        vi.mocked(prisma.interaction.findMany).mockResolvedValue([]);
+        const result = await contactRelationship(phone, viewer, 1);
+        expect(result.leads).toEqual([]); expect(result.inventory).toEqual([]);
+        expect(result.counts).toEqual({ leads: 0, inventory: 0, key_holder: 0, deals: 0, other: 0 });
+    });
 });

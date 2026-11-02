@@ -30,6 +30,7 @@ const OWNER_FIELDS = [
     'key_holder_name',
     'key_holder_phone',
     'key_holder_contact_id',
+    'key_holder_role', 'key_holder_role_label', 'property_contact_role', 'property_contact_role_label',
     // Uploader PII (may be the owner themselves)
     'uploader_phone',
     'uploader_name',
@@ -80,6 +81,7 @@ const STAFF_HIDDEN_INVENTORY_FIELDS = [
     'owner', 'owner_contact', 'contact', 'key_holder', 'key_holder_contact',
     'owner_phone', 'owner_name', 'owner_email', 'owner_id', 'owner_contact_id',
     'key_holder_name', 'key_holder_phone', 'key_holder_contact_id',
+    'key_holder_role', 'key_holder_role_label', 'property_contact_role', 'property_contact_role_label',
     // Source PII — the uploader/dealer NUMBER stays gated to the handling manager + super_boss.
     // (The displayable owner/dealer NAME is surfaced separately via the computed `source` field,
     // which carries its own per-viewer phone gate — see the inventory list route.)

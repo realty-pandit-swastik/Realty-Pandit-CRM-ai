@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { toDialablePhone } from '../lib/phone';
+import { PresentationIcon } from './ui/PresentationIcon';
 
 interface Person {
     name: string;
@@ -39,30 +40,30 @@ export function QuickCallStrip({ lead, coordinator, owner, keyHolder, stage }: Q
             <div
                 style={{
                     display: 'flex', alignItems: 'center', gap: 6, padding: '6px 8px',
-                    borderTop: '1px solid rgba(255,255,255,0.08)', cursor: 'pointer',
+                    borderTop: '1px solid var(--border-primary)', cursor: 'pointer',
                     flexWrap: 'wrap',
                 }}
                 onClick={() => setExpanded(true)}
                 title="Tap to see contact numbers"
             >
-                <span style={{ fontSize: 11, color: '#9ca3af', marginRight: 2 }}>📞</span>
+                <span style={{ color: 'var(--text-secondary)', marginRight: 4 }}><PresentationIcon value="phone" /></span>
                 {people.map(p => (
                     <span key={p.phone} style={{
-                        fontSize: 11, background: 'rgba(255,255,255,0.07)', borderRadius: 10,
-                        padding: '2px 7px', color: '#d1d5db',
+                        fontSize: 12, background: 'var(--bg-primary)', borderRadius: 'var(--radius-control)',
+                        padding: '4px 8px', color: 'var(--text-secondary)',
                     }}>{p.role}</span>
                 ))}
-                <span style={{ fontSize: 11, color: '#6b7280', marginLeft: 'auto' }}>▾</span>
+                <span style={{ fontSize: 12, color: 'var(--text-secondary)', marginLeft: 'auto' }}>▾</span>
             </div>
         );
     }
 
     return (
-        <div style={{ borderTop: '1px solid rgba(255,255,255,0.08)', padding: '6px 8px' }}>
+        <div style={{ borderTop: '1px solid var(--border-primary)', padding: '8px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                <span style={{ fontSize: 11, color: '#9ca3af' }}>Contacts</span>
+                <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Contacts</span>
                 <span
-                    style={{ fontSize: 11, color: '#6b7280', cursor: 'pointer' }}
+                    style={{ fontSize: 12, color: 'var(--text-secondary)', cursor: 'pointer' }}
                     onClick={() => setExpanded(false)}
                 >▴ collapse</span>
             </div>
@@ -71,31 +72,31 @@ export function QuickCallStrip({ lead, coordinator, owner, keyHolder, stage }: Q
                 return (
                 <div key={p.phone} style={{
                     display: 'flex', alignItems: 'center', gap: 6,
-                    padding: '4px 0', borderBottom: '1px solid rgba(255,255,255,0.04)',
+                    padding: '8px 0', borderBottom: '1px solid var(--border-primary)',
                 }}>
-                    <span style={{ fontSize: 11, color: '#9ca3af', width: 64, flexShrink: 0 }}>{p.role}</span>
-                    <span style={{ fontSize: 12, color: '#e5e7eb', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</span>
+                    <span style={{ fontSize: 12, color: 'var(--text-secondary)', width: 64, flexShrink: 0 }}>{p.role}</span>
+                    <span style={{ fontSize: 12, color: 'var(--text-primary)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</span>
                     {dialable ? (
                         <>
                             <button
                                 onClick={() => handleCall(p.phone)}
                                 style={{
-                                    background: 'rgba(34,197,94,0.15)', border: 'none', borderRadius: 8,
-                                    color: '#22c55e', fontSize: 13, padding: '3px 8px', cursor: 'pointer',
+                                    background: 'var(--rp-info-bg)', border: '1px solid var(--control-line)', borderRadius: 'var(--radius-control)',
+                                    color: 'var(--rp-info-text)', fontSize: 13, padding: '8px', minWidth: 44, minHeight: 44, cursor: 'pointer',
                                 }}
                                 title={`Call ${p.name}`}
-                            >📞</button>
+                            ><PresentationIcon value="phone" /></button>
                             <button
                                 onClick={() => handleWA(p.phone)}
                                 style={{
-                                    background: 'rgba(37,211,102,0.12)', border: 'none', borderRadius: 8,
-                                    color: '#25d366', fontSize: 13, padding: '3px 8px', cursor: 'pointer',
+                                    background: 'var(--rp-info-bg)', border: '1px solid var(--control-line)', borderRadius: 'var(--radius-control)',
+                                    color: 'var(--rp-info-text)', fontSize: 13, padding: '8px', minWidth: 44, minHeight: 44, cursor: 'pointer',
                                 }}
                                 title={`WhatsApp ${p.name}`}
-                            >💬</button>
+                            ><PresentationIcon value="message-circle" /></button>
                         </>
                     ) : (
-                        <span style={{ fontSize: 10, color: '#6b7280', fontStyle: 'italic' }}>no phone</span>
+                        <span style={{ fontSize: 12, color: 'var(--text-muted)', fontStyle: 'italic' }}>no phone</span>
                     )}
                 </div>
                 );
