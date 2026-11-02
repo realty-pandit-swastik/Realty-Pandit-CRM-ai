@@ -566,17 +566,45 @@ export default function PersonalWhatsAppShareModal({ inventoryIds, initialPhone,
                                 <button type="button" onClick={() => update(inv.id, EMPTY_ATTACHMENT_SELECTION)} style={{ fontSize: '11px', padding: '4px 8px' }}>Deselect All</button>
                             </div>
                         </div>
-                        <div className="personal-wa-gallery">{attachments.map(item => <div className="personal-wa-card" key={item.url}>
-                            {item.kind === 'image' ? <img src={item.url} alt={item.label} loading="lazy" />
-                                : <video src={item.url} controls playsInline preload="metadata" aria-label={item.label} />}
-                            <label><input type="checkbox" checked={selection.urls.includes(item.url)} onChange={() => {
-                                const urls = selection.urls.includes(item.url) ? selection.urls.filter(url => url !== item.url) : [...selection.urls, item.url];
-                                const firstPhoto = urls.includes(selection.firstPhoto) ? selection.firstPhoto : attachments.find(a => a.kind === 'image' && urls.includes(a.url))?.url || '';
-                                update(inv.id, { ...selection, urls, firstPhoto });
-                            }} />{item.label}</label>
-                            {item.kind === 'image' && selection.urls.includes(item.url) && <label><input type="radio" name={`first-${inv.id}`} checked={selection.firstPhoto === item.url}
-                                onChange={() => update(inv.id, { ...selection, firstPhoto: item.url })} />First photo with details</label>}
-                        </div>)}</div>
+                        <div className="personal-wa-gallery">{attachments.map(item => {
+                            const thumbUrl = item.kind === 'image'
+                                ? item.url.replace(/(\.[^.]+)$/, '_thumb$1')
+                                : item.url;
+                            return <div className="personal-wa-card" key={item.url}>
+                                {item.kind === 'image' ? (
+                                    <img
+                                        src={thumbUrl}
+                                        alt={item.label}
+                                        loading="lazy"
+                                        crossOrigin="anonymous"
+                                        onError={(e) => {
+                                            const img = e.currentTarget;
+                                            if (!img.dataset.triedOriginal) {
+                                                img.dataset.triedOriginal = '1';
+                                                img.src = item.url;
+                                            } else if (!img.dataset.triedRelative) {
+                                                img.dataset.triedRelative = '1';
+                                                try {
+                                                    const parsed = new URL(item.url);
+                                                    img.src = parsed.pathname + parsed.search;
+                                                } catch {
+                                                    // no-op
+                                                }
+                                            }
+                                        }}
+                                    />
+                                ) : (
+                                    <video src={item.url} controls playsInline preload="metadata" aria-label={item.label} />
+                                )}
+                                <label><input type="checkbox" checked={selection.urls.includes(item.url)} onChange={() => {
+                                    const urls = selection.urls.includes(item.url) ? selection.urls.filter(url => url !== item.url) : [...selection.urls, item.url];
+                                    const firstPhoto = urls.includes(selection.firstPhoto) ? selection.firstPhoto : attachments.find(a => a.kind === 'image' && urls.includes(a.url))?.url || '';
+                                    update(inv.id, { ...selection, urls, firstPhoto });
+                                }} />{item.label}</label>
+                                {item.kind === 'image' && selection.urls.includes(item.url) && <label><input type="radio" name={`first-${inv.id}`} checked={selection.firstPhoto === item.url}
+                                    onChange={() => update(inv.id, { ...selection, firstPhoto: item.url })} />First photo with details</label>}
+                            </div>;
+                        })}</div>
                         {!attachments.length && <p>No property media available.</p>}
                         <label><input type="checkbox" checked={selection.pdf} onChange={e => update(inv.id, { ...selection, pdf: e.target.checked })} />Include property PDF</label>
                         {selection.urls.length > 0 || selection.pdf ? <>

@@ -40,7 +40,7 @@ export const TeamPerformanceDashboard: React.FC = () => {
     () => {
       const fromTo = { from: range.from.toISOString(), to: range.to.toISOString() };
       return Promise.all([
-        getTeamPerformance(fromTo),
+        getTeamPerformance(fromTo).catch(() => ({ teams: [] })),
         getDistribution(fromTo).catch(() => ({ load: [], unassigned_leads: 0, by_route: [], by_method: [] })),
         getGciForecast().catch(() => null),
       ]).then(([tp, dist, gciRes]) => ({

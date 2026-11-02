@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   getContacts, getManagementAlerts, getWorkflowTaskQueue, getMarketTrends,
   getFinancialSummary, getInventory, getDealPipeline, getTeamActivity, getSpeedToLead,
+  getLeadHealth,
 } from '../../api/client';
 import { useAuth } from '../../contexts/AuthContext';
 import { useIsMobile } from '../../hooks/useIsMobile';
@@ -58,9 +59,6 @@ async function loadCockpit(range: DateRange): Promise<Cockpit> {
   const prevFrom = new Date(from.getTime() - span);
   const prevTo = new Date(from.getTime() - 1);
 
-  // getContacts is the spine — NOT caught (auth failure → ErrorState). Every other source is
-  // tracked individually: a failure must surface as "couldn't load" on its tiles, never as a
-  // plausible 0 / empty list (see AsyncState — a failure is `error`, never collapsed into empty).
   const failed: string[] = [];
   const grab = async <T,>(key: string, p: Promise<T>, fallback: T): Promise<T> => {
     try {
@@ -71,8 +69,8 @@ async function loadCockpit(range: DateRange): Promise<Cockpit> {
       return fallback;
     }
   };
-  const [contacts, alertsRes, queueRes, trends, fin, inv, pipeline, activity, stl] = await Promise.all([
-    getContacts(),
+  const [contactsRes, alertsRes, queueRes, trends, fin, inv, pipeline, activity, stl, healthRes] = await Promise.all([
+    grab('contacts', getContacts().then(d => Array.isArray(d) ? d : (d?.data && Array.isArray(d.data) ? d.data : [])), []),
     grab('alerts', getManagementAlerts(), { alerts: [] as Alert[] }),
     grab('tasks', getWorkflowTaskQueue(), { tasks: [] as Task[] }),
     grab('trends', getMarketTrends({ from: iso(prevFrom), to: iso(to) }), { leads: [], visits: [], sales: [] }),
@@ -81,6 +79,7 @@ async function loadCockpit(range: DateRange): Promise<Cockpit> {
     grab('pipeline', getDealPipeline(), {} as Record<string, number>),
     grab('activity', getTeamActivity({ from: iso(from), to: iso(to), limit: 20 }), { shares: [], appointments: [] }),
     grab('stl', getSpeedToLead({ from: iso(from), to: iso(to) }), { median_minutes: null }),
+    grab('health', getLeadHealth(), null as any),
   ]);
 
   // pulse deltas — bucket the market-trends daily series into current vs previous windows
@@ -94,45 +93,52 @@ async function loadCockpit(range: DateRange): Promise<Cockpit> {
   };
   const CLOSED = new Set(['CLOSED_WON', 'CLOSED_LOST']);
   // /api/deals/pipeline returns { success, data: { [status]: count } } — counts are nested under .data.
-  const pipelineCounts = ((pipeline as any).data || pipeline) as Record<string, number>;
-  const openDeals = Object.entries(pipelineCounts)
-    .filter(([s]) => !CLOSED.has(s)).reduce((n, [, c]) => n + (Number(c) || 0), 0);
+  const pipelineCounts = (((pipeline as any)?.data ?? pipeline) || {}) as Record<string, number>;
+  const openDeals = (typeof pipelineCounts === 'object' && pipelineCounts !== null)
+    ? Object.entries(pipelineCounts)
+        .filter(([s]) => !CLOSED.has(s)).reduce((n, [, c]) => n + (Number(c) || 0), 0)
+    : 0;
 
-  // lead temperature (client-side over role-scoped contacts)
-  const LEAD_TYPES = new Set(['BUYER', 'TENANT', 'UNKNOWN']);
-  const leads = contacts.filter((c: any) => !c.contact_type || LEAD_TYPES.has(c.contact_type));
-  const t = { hot: 0, warm: 0, cold: 0, total: 0 };
-  for (const c of leads) {
-    if (c.lead_status === 'hot') t.hot++;
-    else if (c.lead_status === 'warm') t.warm++;
-    else if (c.lead_status === 'cold') t.cold++;
+  // lead temperature — prefer fast server aggregation; fallback to client contacts
+  let t = { hot: 0, warm: 0, cold: 0, total: 0 };
+  if (healthRes?.success && healthRes.health) {
+    t = healthRes.health;
+  } else {
+    const contactsList = Array.isArray(contactsRes) ? contactsRes : [];
+    const LEAD_TYPES = new Set(['BUYER', 'TENANT', 'UNKNOWN']);
+    const leads = contactsList.filter((c: any) => !c?.contact_type || LEAD_TYPES.has(c.contact_type));
+    for (const c of leads) {
+      if (c?.lead_status === 'hot') t.hot++;
+      else if (c?.lead_status === 'warm') t.warm++;
+      else if (c?.lead_status === 'cold') t.cold++;
+    }
+    t.total = t.hot + t.warm + t.cold;
   }
-  t.total = t.hot + t.warm + t.cold;
 
   // activity: merge shares + visits into one timeline
   const feed: Cockpit['activity'] = [];
-  for (const s of (activity as any).shares || []) {
-    const prop = s.inventory?.location || s.inventory?.display_id;
-    feed.push({ ts: new Date(s.created_at).getTime(), icon: '📤',
-      text: `${s.agent?.name || 'Someone'} shared${prop ? ` ${prop}` : ' a listing'}${s.contact?.name ? ` with ${s.contact.name}` : ''}` });
+  for (const s of (activity as any)?.shares || []) {
+    const prop = s?.inventory?.location || s?.inventory?.display_id;
+    feed.push({ ts: new Date(s?.created_at || Date.now()).getTime(), icon: '📤',
+      text: `${s?.agent?.name || 'Someone'} shared${prop ? ` ${prop}` : ' a listing'}${s?.contact?.name ? ` with ${s.contact.name}` : ''}` });
   }
-  for (const a of (activity as any).appointments || []) {
-    feed.push({ ts: new Date(a.scheduled_at).getTime(), icon: '📅',
-      text: `Visit ${a.contact?.name ? `with ${a.contact.name}` : 'scheduled'}${a.property?.location ? ` · ${a.property.location}` : ''}` });
+  for (const a of (activity as any)?.appointments || []) {
+    feed.push({ ts: new Date(a?.scheduled_at || Date.now()).getTime(), icon: '📅',
+      text: `Visit ${a?.contact?.name ? `with ${a.contact.name}` : 'scheduled'}${a?.property?.location ? ` · ${a.property.location}` : ''}` });
   }
   feed.sort((x, y) => y.ts - x.ts);
 
   return {
-    alerts: (alertsRes as any).alerts || [],
-    tasks: (queueRes as any).tasks || [],
+    alerts: (alertsRes as any)?.alerts || [],
+    tasks: (queueRes as any)?.tasks || [],
     pulse: {
-      leads: bucket((trends as any).leads),
-      visits: bucket((trends as any).visits),
-      deals: bucket((trends as any).sales),
-      commission: (fin as any).total_commission || 0,
-      activeListings: (inv as any).total || 0,
+      leads: bucket((trends as any)?.leads || []),
+      visits: bucket((trends as any)?.visits || []),
+      deals: bucket((trends as any)?.sales || []),
+      commission: (fin as any)?.total_commission || 0,
+      activeListings: (inv as any)?.total || 0,
       openDeals,
-      stl_median: (stl as any).median_minutes ?? null,
+      stl_median: (stl as any)?.median_minutes ?? null,
     },
     temperature: t,
     activity: feed.slice(0, 15),

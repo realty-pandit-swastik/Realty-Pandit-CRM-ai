@@ -46,9 +46,19 @@ export async function downloadPersonalWhatsAppBlob(response: Response, remaining
 
 export function propertyAttachments(property: { media_urls?: string[]; video_urls?: string[] }, baseUrl: string): PropertyAttachment[] {
     const video = (url: string) => /\.(mp4|mov|webm|avi|mkv|m4v|3gp)(?:[?#]|$)/i.test(url);
-    const resolve = (path: string) => new URL(path.startsWith('http') ? path : `/${path.replace(/^\//, '')}`, baseUrl).href;
-    const photos = [...new Set((property.media_urls || []).filter(url => !video(url)).map(resolve))];
-    const videos = [...new Set([...(property.video_urls || []), ...(property.media_urls || []).filter(video)].map(resolve))];
+    const resolve = (path: string) => {
+        let clean = (path || '').trim();
+        if (!clean) return '';
+        // Strip localhost / 127.0.0.1 / 0.0.0.0 remnants from dev uploads
+        clean = clean.replace(/^https?:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0)(:\d+)?/i, '');
+        try {
+            return new URL(clean.startsWith('http') ? clean : `/${clean.replace(/^\//, '')}`, baseUrl).href;
+        } catch {
+            return clean;
+        }
+    };
+    const photos = [...new Set((property.media_urls || []).filter(url => !video(url)).map(resolve).filter(Boolean))];
+    const videos = [...new Set([...(property.video_urls || []), ...(property.media_urls || []).filter(video)].map(resolve).filter(Boolean))];
     return [...photos.map((url, i) => ({ url, kind: 'image' as const, label: `Photo ${i + 1}` })),
         ...videos.map((url, i) => ({ url, kind: 'video' as const, label: `Video ${i + 1}` }))];
 }
