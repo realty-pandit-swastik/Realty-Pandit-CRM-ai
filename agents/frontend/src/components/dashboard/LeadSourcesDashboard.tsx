@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 import { getLeadSources } from '../../api/client';
 
-const COLORS = ['#3b82f6', '#8b5cf6', '#10b981', '#f59e0b', '#ef4444', '#6366f1', '#ec4899', '#14b8a6'];
+const COLORS = ['var(--blue-500)', 'var(--chart-5)', 'var(--rp-success-text)', 'var(--rp-warn-text)', 'var(--rp-danger-text)', 'var(--chart-5)', 'var(--chart-7)', 'var(--chart-3)'];
 
 export const LeadSourcesDashboard: React.FC = () => {
   const [sources, setSources] = useState<any[]>([]);
@@ -62,7 +62,7 @@ export const LeadSourcesDashboard: React.FC = () => {
           }}
         >
           <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '8px' }}>Total Leads</div>
-          <div style={{ fontSize: '32px', fontWeight: '700', color: '#3b82f6' }}>{totalLeads}</div>
+          <div style={{ fontSize: '32px', fontWeight: '700', color: 'var(--blue-500)' }}>{totalLeads}</div>
         </div>
         <div
           style={{
@@ -73,7 +73,7 @@ export const LeadSourcesDashboard: React.FC = () => {
           }}
         >
           <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '8px' }}>Converted</div>
-          <div style={{ fontSize: '32px', fontWeight: '700', color: '#10b981' }}>{totalConverted}</div>
+          <div style={{ fontSize: '32px', fontWeight: '700', color: 'var(--rp-success-text)' }}>{totalConverted}</div>
         </div>
         <div
           style={{
@@ -84,7 +84,7 @@ export const LeadSourcesDashboard: React.FC = () => {
           }}
         >
           <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '8px' }}>Conversion Rate</div>
-          <div style={{ fontSize: '32px', fontWeight: '700', color: '#f59e0b' }}>{overallConversionRate}%</div>
+          <div style={{ fontSize: '32px', fontWeight: '700', color: 'var(--rp-warn-text)' }}>{overallConversionRate}%</div>
         </div>
         <div
           style={{
@@ -95,7 +95,7 @@ export const LeadSourcesDashboard: React.FC = () => {
           }}
         >
           <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '8px' }}>Active Sources</div>
-          <div style={{ fontSize: '32px', fontWeight: '700', color: '#8b5cf6' }}>{sources.length}</div>
+          <div style={{ fontSize: '32px', fontWeight: '700', color: 'var(--chart-5)' }}>{sources.length}</div>
         </div>
       </div>
 
@@ -122,7 +122,7 @@ export const LeadSourcesDashboard: React.FC = () => {
                   labelLine={false}
                   label={({ name, percent }) => `${name}: ${percent ? (percent * 100).toFixed(0) : 0}%`}
                   outerRadius={100}
-                  fill="#8884d8"
+                  fill="var(--chart-5)"
                   dataKey="value"
                 >
                   {chartData.map((_entry, index) => (
@@ -227,14 +227,14 @@ export const LeadSourcesDashboard: React.FC = () => {
                     <td style={{ padding: '12px', fontSize: '14px', color: 'var(--text-primary)', textAlign: 'right' }}>
                       {source.count}
                     </td>
-                    <td style={{ padding: '12px', fontSize: '14px', color: '#10b981', textAlign: 'right' }}>
+                    <td style={{ padding: '12px', fontSize: '14px', color: 'var(--rp-success-text)', textAlign: 'right' }}>
                       {source.converted}
                     </td>
                     <td
                       style={{
                         padding: '12px',
                         fontSize: '14px',
-                        color: source.conversion_rate >= 10 ? '#10b981' : source.conversion_rate >= 5 ? '#f59e0b' : '#ef4444',
+                        color: source.conversion_rate >= 10 ? 'var(--rp-success-text)' : source.conversion_rate >= 5 ? 'var(--rp-warn-text)' : 'var(--rp-danger-text)',
                         fontWeight: '600',
                         textAlign: 'right',
                       }}

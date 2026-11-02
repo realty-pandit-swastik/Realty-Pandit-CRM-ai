@@ -22,7 +22,7 @@ interface PerfRow extends LeaderRow {
 type SortKey = 'score' | 'deals' | 'revenue' | 'leads';
 
 const catColor = (cat: string): string =>
-  cat === 'Excellent' ? '#22c55e' : cat === 'Good' ? '#3b82f6' : cat === 'Average' ? '#f59e0b' : '#ef4444';
+  cat === 'Excellent' ? 'var(--rp-success-text)' : cat === 'Good' ? 'var(--blue-700)' : cat === 'Average' ? 'var(--rp-warn-text)' : 'var(--rp-danger-text)';
 
 export const UserPerformanceDashboard: React.FC = () => {
   const { agent, hasPermission } = useAuth();
@@ -124,9 +124,9 @@ export const UserPerformanceDashboard: React.FC = () => {
   ];
 
   return (
-    <div style={{ flex: 1, overflowY: 'auto', padding: pad, backgroundColor: 'var(--bg-primary)' }}>
+    <div className="rp-dashboard" style={{ flex: 1, minWidth: 0, overflowY: 'auto', padding: pad, backgroundColor: 'var(--bg-secondary)' }}>
       <div>
-        <h1 style={{ fontSize: isMobile ? 20 : 24, fontWeight: 800, margin: 0, color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>👥 {heading.title}</h1>
+        <h1 style={{ fontSize: isMobile ? 20 : 24, fontWeight: 600, margin: 0, color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>{heading.title}</h1>
         <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: '4px 0 0' }}>{heading.sub}</p>
       </div>
 
@@ -140,10 +140,10 @@ export const UserPerformanceDashboard: React.FC = () => {
         <div>
           <SectionLabel icon="⚡">Coaching Signals</SectionLabel>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 'var(--bento-gap)' }}>
-            <KpiCard label="Below Target" value={formatNum(belowTarget)} accent="#ef4444" icon="📉" />
-            <KpiCard label="Inactive Agents" value={formatNum(inactiveCount)} accent="#f59e0b" icon="😴" />
-            <KpiCard label="Overloaded (150+)" value={formatNum(overloaded)} accent="#8b5cf6" icon="🥵" />
-            <KpiCard label="Slow Responders (>1h)" value={formatNum(slowResponders)} accent="#f43f5e" icon="🐌" />
+            <KpiCard label="Below Target" value={formatNum(belowTarget)} icon="📉" />
+            <KpiCard label="Inactive Agents" value={formatNum(inactiveCount)} icon="😴" />
+            <KpiCard label="Overloaded (150+)" value={formatNum(overloaded)} icon="🥵" />
+            <KpiCard label="Slow Responders (>1h)" value={formatNum(slowResponders)} icon="🐌" />
           </div>
         </div>
 
@@ -151,22 +151,22 @@ export const UserPerformanceDashboard: React.FC = () => {
         <div>
           <SectionLabel icon="📊">Team Totals</SectionLabel>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 'var(--bento-gap)' }}>
-            <KpiCard label="Leads" value={formatNum(totals.leads)} delta={delta(totals.leads, prevTotals.leads)} accent="#3b82f6" icon="👥" />
-            <KpiCard label="Deals Closed" value={formatNum(totals.deals)} delta={delta(totals.deals, prevTotals.deals)} accent="#22c55e" icon="✅" />
-            <KpiCard label="Revenue" value={formatINR(totals.revenue)} delta={delta(totals.revenue, prevTotals.revenue)} accent="#f59e0b" icon="₹" />
-            <KpiCard label="Appts Done" value={formatNum(totals.appts)} accent="#06b6d4" icon="📅" />
-            <KpiCard label="Hot Leads" value={formatNum(totals.hot)} accent="#ef4444" icon="🔥" />
-            <KpiCard label="Avg Score" value={Math.round(totals.score)} delta={totals.score - prevTotals.score} deltaSuffix="pt" accent="#8b5cf6" icon="⭐" />
+            <KpiCard label="Leads" value={formatNum(totals.leads)} delta={delta(totals.leads, prevTotals.leads)} icon="👥" />
+            <KpiCard label="Deals Closed" value={formatNum(totals.deals)} delta={delta(totals.deals, prevTotals.deals)} icon="✅" />
+            <KpiCard label="Revenue" value={formatINR(totals.revenue)} delta={delta(totals.revenue, prevTotals.revenue)} icon="₹" />
+            <KpiCard label="Appts Done" value={formatNum(totals.appts)} icon="📅" />
+            <KpiCard label="Hot Leads" value={formatNum(totals.hot)} icon="🔥" />
+            <KpiCard label="Avg Score" value={Math.round(totals.score)} delta={totals.score - prevTotals.score} deltaSuffix="pt" icon="⭐" />
           </div>
         </div>
 
         {/* Score composition */}
         <ClayCard title="Score Composition" subtitle="Workforce-average of the 4 score components (0–100 each)">
-          <RankedBars rows={composition} color="#8b5cf6" emptyIcon="⭐" emptyText="No scored agents in scope" />
+          <RankedBars rows={composition} color="var(--blue-600)" emptyIcon="⭐" emptyText="No scored agents in scope" />
         </ClayCard>
 
         {/* Distribution + Leaderboard */}
-        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'minmax(260px, 340px) 1fr', gap: 14 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'minmax(0, 1fr) minmax(0, 2fr)', gap: 'var(--rp-s-4)' }}>
           <ClayCard title="Productivity Mix" subtitle="How the team is distributed">
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               {Object.entries(dist).map(([cat, n]) => {
@@ -220,19 +220,19 @@ export const UserPerformanceDashboard: React.FC = () => {
               <tbody>
                 {sorted.map((p) => (
                   <tr key={p.agent_id} style={{ borderBottom: '1px solid var(--border-primary)' }}>
-                    <td style={{ ...td, textAlign: 'left', fontWeight: 600, color: '#3b82f6', cursor: 'pointer' }} title="View this agent's leads →" onClick={() => drillTo({ entity: 'leads', filter: { agent_id: p.agent_id } })}>{p.agent_name}</td>
+                    <td style={{ ...td, textAlign: 'left', fontWeight: 600, color: 'var(--text-link)', cursor: 'pointer' }} title="View this agent's leads →" onClick={() => drillTo({ entity: 'leads', filter: { agent_id: p.agent_id } })}>{p.agent_name}</td>
                     <td style={td}>{formatNum(p.leads_assigned)}</td>
-                    <td style={{ ...td, color: '#ef4444' }}>{formatNum(p.hot_leads)}</td>
+                    <td style={{ ...td, color: 'var(--text-primary)' }}>{formatNum(p.hot_leads)}</td>
                     <td style={td}>{formatNum(p.appointments_scheduled)}</td>
-                    <td style={{ ...td, color: '#22c55e' }}>{formatNum(p.appointments_completed)}</td>
+                    <td style={{ ...td, color: 'var(--text-primary)' }}>{formatNum(p.appointments_completed)}</td>
                     <td style={{ ...td, fontWeight: 700 }}>{formatNum(p.deals_closed)}</td>
                     <td style={{ ...td, fontWeight: 700 }}>{formatINR(p.revenue_generated)}</td>
-                    <td style={{ ...td, fontWeight: 700, color: '#f59e0b' }}>{formatINR(p.commission || 0)}</td>
+                    <td style={{ ...td, fontWeight: 600, color: 'var(--text-primary)' }}>{formatINR(p.commission || 0)}</td>
                     <td style={td}>{formatNum(p.inventory_added)}</td>
                     <td style={td}>{formatMins(stlMap.get(p.agent_id))}</td>
                     <td style={td}>
                       <span style={{ fontWeight: 800, marginRight: 6 }}>{Math.round(p.productivity_score ?? 0)}</span>
-                      <span style={{ fontSize: 10.5, fontWeight: 700, color: catColor(p.productivity_category), backgroundColor: catColor(p.productivity_category) + '1a', borderRadius: 7, padding: '2px 7px' }}>{p.productivity_category}</span>
+                      <span style={{ fontSize: 12, fontWeight: 500, color: catColor(p.productivity_category), backgroundColor: 'var(--bg-primary)', borderRadius: 'var(--radius-control)', padding: '4px 8px' }}>{p.productivity_category}</span>
                     </td>
                   </tr>
                 ))}

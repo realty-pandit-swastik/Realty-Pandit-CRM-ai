@@ -68,8 +68,11 @@ const MultiSelect: React.FC<MultiSelectProps> = ({ label, options, selected, onC
     onChange(next.length === options.length ? null : next);
   };
   return (
-    <div style={{ position: 'relative' }}>
+    <div style={{ position: 'relative' }} onKeyDown={e => {
+      if (e.key === 'Escape') { setOpen(false); e.currentTarget.querySelector('button')?.focus(); }
+    }}>
       <button
+        type="button" aria-expanded={open}
         onClick={() => setOpen((o) => !o)}
         className="chip chip-inactive"
         style={{ minHeight: 36 }}
@@ -96,6 +99,7 @@ const MultiSelect: React.FC<MultiSelectProps> = ({ label, options, selected, onC
               return (
                 <button
                   key={o.value}
+                  type="button" aria-pressed={on}
                   onClick={() => toggle(o.value)}
                   style={{ width: '100%', textAlign: 'left', padding: '8px 10px', borderRadius: 8, border: 'none', cursor: 'pointer', background: 'transparent', color: 'var(--text-primary)', fontSize: 13, display: 'flex', alignItems: 'center', gap: 8 }}
                 >
@@ -141,7 +145,7 @@ export const FilterBar: React.FC<FilterBarProps> = ({
   return (
     <div style={{
       position: 'sticky', top: 0, zIndex: 30,
-      backgroundColor: 'var(--bg-primary)',
+      backgroundColor: 'var(--bg-secondary)',
       borderBottom: '1px solid var(--border-primary)',
       padding: '12px 0', marginBottom: 4,
       display: 'flex', flexDirection: 'column', gap: 10,
@@ -150,6 +154,7 @@ export const FilterBar: React.FC<FilterBarProps> = ({
         {PRESETS.map((p) => (
           <button
             key={p.key}
+            type="button" aria-pressed={range.preset === p.key}
             onClick={() => pickPreset(p.key)}
             className={`chip ${range.preset === p.key ? 'chip-active' : 'chip-inactive'}`}
             style={{ minHeight: 34, fontSize: 13, padding: '5px 12px' }}
@@ -161,10 +166,10 @@ export const FilterBar: React.FC<FilterBarProps> = ({
 
       {range.preset === 'custom' && (
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-          <input type="date" value={customFrom} onChange={(e) => setCustomFrom(e.target.value)}
+          <input type="date" aria-label="From date" value={customFrom} onChange={(e) => setCustomFrom(e.target.value)}
             style={{ padding: '6px 10px', borderRadius: 8, border: '1px solid var(--border-secondary)', background: 'var(--bg-input)', color: 'var(--text-primary)' }} />
           <span style={{ color: 'var(--text-muted)' }}>→</span>
-          <input type="date" value={customTo} onChange={(e) => setCustomTo(e.target.value)}
+          <input type="date" aria-label="To date" value={customTo} onChange={(e) => setCustomTo(e.target.value)}
             style={{ padding: '6px 10px', borderRadius: 8, border: '1px solid var(--border-secondary)', background: 'var(--bg-input)', color: 'var(--text-primary)' }} />
           <button onClick={() => pickPreset('custom')} className="chip chip-active" style={{ minHeight: 34 }}>Apply</button>
         </div>
@@ -189,12 +194,12 @@ export const RangeBar: React.FC<{ range: DateRange; onRange: (r: DateRange) => v
   return (
     <div style={{
       position: 'sticky', top: 0, zIndex: 30,
-      backgroundColor: 'var(--bg-primary)', borderBottom: '1px solid var(--border-primary)',
+      backgroundColor: 'var(--bg-secondary)', borderBottom: '1px solid var(--border-primary)',
       padding: '12px 0', marginBottom: 4, display: 'flex', flexDirection: 'column', gap: 10,
     }}>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
         {PRESETS.map((p) => (
-          <button key={p.key} onClick={() => pickPreset(p.key)}
+          <button type="button" aria-pressed={range.preset === p.key} key={p.key} onClick={() => pickPreset(p.key)}
             className={`chip ${range.preset === p.key ? 'chip-active' : 'chip-inactive'}`}
             style={{ minHeight: 34, fontSize: 13, padding: '5px 12px' }}>
             {p.label}
@@ -204,10 +209,10 @@ export const RangeBar: React.FC<{ range: DateRange; onRange: (r: DateRange) => v
       </div>
       {range.preset === 'custom' && (
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-          <input type="date" value={customFrom} onChange={(e) => setCustomFrom(e.target.value)}
+          <input type="date" aria-label="From date" value={customFrom} onChange={(e) => setCustomFrom(e.target.value)}
             style={{ padding: '6px 10px', borderRadius: 8, border: '1px solid var(--border-secondary)', background: 'var(--bg-input)', color: 'var(--text-primary)' }} />
           <span style={{ color: 'var(--text-muted)' }}>→</span>
-          <input type="date" value={customTo} onChange={(e) => setCustomTo(e.target.value)}
+          <input type="date" aria-label="To date" value={customTo} onChange={(e) => setCustomTo(e.target.value)}
             style={{ padding: '6px 10px', borderRadius: 8, border: '1px solid var(--border-secondary)', background: 'var(--bg-input)', color: 'var(--text-primary)' }} />
           <button onClick={() => pickPreset('custom')} className="chip chip-active" style={{ minHeight: 34 }}>Apply</button>
         </div>

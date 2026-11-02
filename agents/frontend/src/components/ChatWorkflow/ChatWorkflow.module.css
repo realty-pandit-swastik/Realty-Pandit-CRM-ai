@@ -53,7 +53,7 @@
 .headerTitleSuccess {
     font-weight: 600;
     font-size: 16px;
-    color: #059669;
+    color: var(--text-link);
 }
 
 /* ── Success Screen ──────────────────────────────────────────────────────── */
@@ -84,14 +84,14 @@
 .successId {
     font-family: monospace;
     font-size: 20px;
-    color: #059669;
+    color: var(--text-link);
     font-weight: bold;
     margin-bottom: 24px;
 }
 
 .successCard {
-    background: linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 100%);
-    border: 2px solid #059669;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-primary);
     border-radius: 12px;
     padding: 20px;
     margin-bottom: 20px;
@@ -101,7 +101,7 @@
 .successCardTitle {
     font-weight: 600;
     font-size: 15px;
-    color: #059669;
+    color: var(--text-link);
     margin-bottom: 8px;
 }
 
@@ -122,16 +122,16 @@
     padding: 4px 10px;
     border-radius: 12px;
     font-size: 11px;
-    background-color: #d1fae5;
-    color: #065f46;
+    background-color: var(--rp-info-bg);
+    color: var(--rp-info-text);
 }
 
 .successPrimaryBtn {
     width: 100%;
     padding: 10px;
     border-radius: 8px;
-    background-color: #059669;
-    color: #fff;
+    background-color: var(--blue-600);
+    color: var(--surface-white);
     font-weight: 600;
     font-size: 14px;
     border: none;
@@ -203,13 +203,13 @@
 }
 
 .progressBar::-webkit-progress-value {
-    background-color: #059669;
+    background-color: var(--blue-600);
     border-radius: 2px;
     transition: width 0.4s ease;
 }
 
 .progressBar::-moz-progress-bar {
-    background-color: #059669;
+    background-color: var(--blue-600);
     border-radius: 2px;
 }
 
@@ -239,21 +239,21 @@
 }
 
 .bubbleUser {
-    background-color: #059669;
-    color: #fff;
+    background-color: var(--blue-600);
+    color: var(--surface-white);
     margin-left: auto;
     border-top-right-radius: 4px;
 }
 
 .bubbleError {
-    background-color: var(--error-bg, #fef2f2);
-    color: var(--error-text, #dc2626);
+    background-color: var(--error-bg);
+    color: var(--error-text);
     border-top-left-radius: 4px;
 }
 
 .bubbleSuccess {
-    background-color: var(--success-bg, #f0fdf4);
-    color: var(--success-text, #16a34a);
+    background-color: var(--success-bg);
+    color: var(--success-text);
     border-top-left-radius: 4px;
 }
 
@@ -292,16 +292,16 @@
     border-radius: 16px;
     font-size: 12px;
     font-weight: 500;
-    border: 1px solid #059669;
+    border: 1px solid var(--control-line);
     background-color: transparent;
-    color: #059669;
+    color: var(--text-link);
     cursor: pointer;
     transition: all 0.15s;
 }
 
 .quickReplyBtn:hover:not(:disabled) {
-    background-color: #059669;
-    color: #fff;
+    background-color: var(--blue-600);
+    color: var(--surface-white);
 }
 
 .quickReplyBtn:disabled {
@@ -357,7 +357,7 @@
 
 .pricePreview {
     font-size: 12px;
-    color: #059669;
+    color: var(--text-link);
     font-weight: 600;
     padding: 0 4px;
 }
@@ -394,8 +394,8 @@
 
 .sendBtnActive {
     cursor: pointer;
-    background-color: #059669;
-    color: #fff;
+    background-color: var(--blue-600);
+    color: var(--surface-white);
 }
 
 /* ── Shared Widget ───────────────────────────────────────────────────────── */
@@ -426,8 +426,8 @@
     cursor: pointer;
     font-size: 12px;
     font-weight: 600;
-    background-color: #059669;
-    color: #fff;
+    background-color: var(--blue-600);
+    color: var(--surface-white);
     border: none;
     display: flex;
     align-items: center;
@@ -469,7 +469,7 @@
     display: flex;
     align-items: center;
     gap: 8px;
-    color: #059669;
+    color: var(--text-link);
 }
 
 .widgetDropzone {
@@ -586,7 +586,7 @@
 
 .locationWarning {
     font-size: 11px;
-    color: #dc2626;
+    color: var(--rp-danger-text);
     margin: 0 0 6px;
 }
 
@@ -594,7 +594,7 @@
 
 .summaryCardHeader {
     padding: 10px 14px;
-    background-color: var(--success-bg, #f0fdf4);
+    background-color: var(--success-bg);
     border-bottom: 1px solid var(--border-secondary);
     display: flex;
     align-items: center;
@@ -604,7 +604,7 @@
 .summaryCardTitle {
     font-size: 13px;
     font-weight: 600;
-    color: #059669;
+    color: var(--text-link);
 }
 
 .summaryRow {
@@ -663,9 +663,9 @@
 }
 
 .multiSelectBtnSelected {
-    border-color: #059669;
-    background-color: #059669;
-    color: #fff;
+    border-color: var(--blue-600);
+    background-color: var(--blue-600);
+    color: var(--surface-white);
 }
 
 /* ── Contact Form Widget ─────────────────────────────────────────────────── */

@@ -1,5 +1,6 @@
 
 // MobileDashboard
+import { PresentationIcon } from '../ui/PresentationIcon';
 
 interface MobileDashboardProps {
     contacts: any[];
@@ -7,12 +8,12 @@ interface MobileDashboardProps {
     onSelectContact: (phone: string) => void;
 }
 
-const CARD_RADIUS = '12px';
+const CARD_RADIUS = 'var(--radius-card)';
 const PADDING = '16px';
 const GAP = '12px';
 
 const TYPE_ICON: Record<string, string> = {
-    BUYER: '🏠', TENANT: '🛋️', LANDLORD: '🔑', PARTNER_AGENT: '🤝', REAL_ESTATE_BUILDER: '🏗️', MANAGEMENT: '👔', UNKNOWN: '👤',
+    BUYER: 'house', TENANT: 'sofa', LANDLORD: 'key-round', PARTNER_AGENT: 'handshake', REAL_ESTATE_BUILDER: 'construction', MANAGEMENT: 'briefcase-business', UNKNOWN: 'user-round',
 };
 const TYPE_LABEL: Record<string, string> = {
     BUYER: 'Buyer', TENANT: 'Tenant', LANDLORD: 'Landlord', PARTNER_AGENT: 'Partner', REAL_ESTATE_BUILDER: 'Builder', MANAGEMENT: 'Team', UNKNOWN: '?',
@@ -36,7 +37,7 @@ export function MobileDashboard({ contacts, agentName, onSelectContact }: Mobile
             {/* Greeting */}
             <div>
                 <h2 style={{ margin: 0, fontSize: '20px', color: 'var(--text-primary)' }}>
-                    {greeting}, {firstName} 👋
+                    {greeting}, {firstName}
                 </h2>
                 <p style={{ margin: '4px 0 0', fontSize: '13px', color: 'var(--text-muted)' }}>
                     {new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })}
@@ -45,9 +46,9 @@ export function MobileDashboard({ contacts, agentName, onSelectContact }: Mobile
 
             {/* Stat Cards — 3 in a row */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: GAP }}>
-                <StatCard label="Total" value={total} color="#4F46E5" bg="#1e3a5f" />
-                <StatCard label="Hot" value={hot} color="#f87171" bg="#7f1d1d" icon="🔥" />
-                <StatCard label="Warm" value={warm} color="#4ade80" bg="#14532d" icon="🟢" />
+                <StatCard label="Total" value={total} color="var(--text-primary)" bg="var(--bg-primary)" />
+                <StatCard label="Hot" value={hot} color="var(--rp-danger-text)" bg="var(--rp-danger-bg)" icon="flame" />
+                <StatCard label="Warm" value={warm} color="var(--rp-warn-text)" bg="var(--rp-warn-bg)" icon="circle-alert" />
             </div>
 
             {/* Recent Contacts */}
@@ -72,7 +73,7 @@ export function MobileDashboard({ contacts, agentName, onSelectContact }: Mobile
                                     backgroundColor: 'var(--bg-primary)', display: 'flex', alignItems: 'center',
                                     justifyContent: 'center', fontSize: '18px', flexShrink: 0,
                                 }}>
-                                    {TYPE_ICON[c.contact_type] || '👤'}
+                                    <PresentationIcon value={TYPE_ICON[c.contact_type] || 'user-round'} size={18} />
                                 </div>
                                 <div style={{ flex: 1, minWidth: 0 }}>
                                     <div style={{ color: 'var(--text-primary)', fontWeight: 600, fontSize: '14px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -84,8 +85,8 @@ export function MobileDashboard({ contacts, agentName, onSelectContact }: Mobile
                                 </div>
                                 {c.lead_score?.total_score != null && (
                                     <div style={{
-                                        backgroundColor: c.lead_score.total_score >= 70 ? '#7f1d1d' : c.lead_score.total_score >= 40 ? '#14532d' : 'var(--bg-primary)',
-                                        color: c.lead_score.total_score >= 70 ? '#f87171' : c.lead_score.total_score >= 40 ? '#4ade80' : 'var(--text-muted)',
+                                        backgroundColor: c.lead_score.total_score >= 70 ? 'var(--rp-danger-bg)' : c.lead_score.total_score >= 40 ? 'var(--rp-warn-bg)' : 'var(--bg-primary)',
+                                        color: c.lead_score.total_score >= 70 ? 'var(--rp-danger-text)' : c.lead_score.total_score >= 40 ? 'var(--rp-warn-text)' : 'var(--text-muted)',
                                         padding: '2px 8px', borderRadius: '10px', fontSize: '12px', fontWeight: 700,
                                     }}>
                                         {c.lead_score.total_score}
@@ -105,11 +106,11 @@ function StatCard({ label, value, color, bg, icon }: { label: string; value: num
     return (
         <div style={{
             backgroundColor: bg, borderRadius: CARD_RADIUS, padding: '14px 10px',
-            textAlign: 'center', border: `1px solid ${color}33`,
+            textAlign: 'center', border: '1px solid var(--border-primary)',
         }}>
             <div style={{ fontSize: '24px', fontWeight: 700, color, lineHeight: 1 }}>{value}</div>
             <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '4px' }}>
-                {icon ? `${icon} ` : ''}{label}
+                {icon && <PresentationIcon value={icon} />} {label}
             </div>
         </div>
     );

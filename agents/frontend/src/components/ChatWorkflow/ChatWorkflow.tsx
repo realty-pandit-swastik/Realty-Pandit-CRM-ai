@@ -71,7 +71,7 @@ export const ChatWorkflowPanel: React.FC<ChatWorkflowPanelProps> = ({ onBack, on
                         <ArrowLeft size={16} />
                     </button>
                     <div className={styles.headerInfo}>
-                        <CheckCircle2 size={18} style={{ color: '#059669' }} />
+                        <CheckCircle2 size={18} style={{ color: 'var(--rp-success-text)' }} />
                         <span className={styles.headerTitleSuccess}>Property Saved!</span>
                     </div>
                 </div>
@@ -133,7 +133,7 @@ export const ChatWorkflowPanel: React.FC<ChatWorkflowPanelProps> = ({ onBack, on
                     <ArrowLeft size={16} />
                 </button>
                 <div className={styles.headerInfo}>
-                    <MessageSquare size={18} style={{ color: '#059669' }} />
+                    <MessageSquare size={18} style={{ color: 'var(--rp-success-text)' }} />
                     <span className={styles.headerTitlePrimary}>Add Property (Chat)</span>
                 </div>
                 <ProgressBadge progress={chat.progress} />
@@ -490,7 +490,7 @@ function LocationPickerWidget({ onSubmit, sending }: { onSubmit: (json: string) 
     return (
         <div className={styles.widget}>
             <div className={styles.locationSearchRow}>
-                <MapPin size={16} style={{ color: '#059669', flexShrink: 0 }} />
+                <MapPin size={16} style={{ color: 'var(--rp-success-text)', flexShrink: 0 }} />
                 <GooglePlacesInput
                     value={searchText}
                     onChange={setSearchText}
@@ -542,7 +542,7 @@ function SummaryCardWidget({ summary, onConfirm, onEdit, sending }: { summary: R
     return (
         <div className={styles.widget}>
             <div className={styles.summaryCardHeader}>
-                <CheckCircle2 size={14} style={{ color: '#059669' }} />
+                <CheckCircle2 size={14} style={{ color: 'var(--rp-success-text)' }} />
                 <span className={styles.summaryCardTitle}>Property Summary</span>
             </div>
             <div>

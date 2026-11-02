@@ -234,20 +234,20 @@ const Row: React.FC<{ label: string; value: number; bold?: boolean }> = ({ label
         color: bold ? 'var(--text-primary)' : 'var(--text-secondary)',
     }}>
         <span>{label}</span>
-        <span style={{ color: bold ? '#f59e0b' : 'var(--text-primary)' }}>{value}</span>
+        <span style={{ color: bold ? 'var(--rp-warn-text)' : 'var(--text-primary)' }}>{value}</span>
     </div>
 );
 
 const styles: Record<string, React.CSSProperties> = {
     overlay: {
-        position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.55)',
+        position: 'fixed', inset: 0, backgroundColor: 'var(--rp-overlay-soft)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         zIndex: 100, padding: 16,
     },
     modal: {
         backgroundColor: 'var(--bg-primary)', borderRadius: 12, padding: 24,
         width: '100%', maxWidth: 480, border: '1px solid var(--border-secondary)',
-        boxShadow: '0 12px 40px rgba(0,0,0,0.5)',
+        boxShadow: '0 12px 40px var(--rp-overlay-soft)',
     },
     title: {
         margin: '0 0 8px', fontSize: 18, fontWeight: 700, color: 'var(--text-primary)',
@@ -264,8 +264,8 @@ const styles: Record<string, React.CSSProperties> = {
     },
     error: {
         marginTop: 12, padding: '8px 12px', borderRadius: 6, fontSize: 13,
-        backgroundColor: 'rgba(239,68,68,0.1)', color: '#fca5a5',
-        border: '1px solid rgba(239,68,68,0.3)',
+        backgroundColor: 'var(--rp-danger-wash)', color: 'var(--rp-danger-text)',
+        border: '1px solid var(--rp-danger-line)',
     },
     select: {
         width: '100%', padding: '8px 10px', borderRadius: 6,
@@ -274,12 +274,12 @@ const styles: Record<string, React.CSSProperties> = {
     },
     primaryBtn: {
         flex: 1, padding: '10px 16px', borderRadius: 8,
-        backgroundColor: '#2563eb', color: '#fff', border: 'none',
+        backgroundColor: 'var(--blue-600)', color: 'var(--surface-white)', border: 'none',
         fontSize: 14, fontWeight: 600,
     },
     dangerBtn: {
         flex: 1, padding: '10px 16px', borderRadius: 8,
-        backgroundColor: '#ef4444', color: '#fff', border: 'none',
+        backgroundColor: 'var(--rp-danger-text)', color: 'var(--surface-white)', border: 'none',
         fontSize: 14, fontWeight: 600,
     },
     secondaryBtn: {

@@ -96,7 +96,7 @@ export function WhatsAppChatTab({ phone, isMobile }: { phone: string; isMobile?:
     };
 
     if (loading) return <div style={{ color: 'var(--text-muted)', fontSize: 13, padding: 16 }}>Loading conversation…</div>;
-    if (error) return <div style={{ color: '#f87171', fontSize: 13, padding: 16 }}>{error}</div>;
+    if (error) return <div style={{ color: 'var(--rp-danger-text)', fontSize: 13, padding: 16 }}>{error}</div>;
     if (rows.length === 0) {
         return <div style={{ color: 'var(--text-muted)', fontSize: 13, padding: 20, textAlign: 'center' }}>No WhatsApp messages with this customer yet.</div>;
     }
@@ -116,11 +116,11 @@ export function WhatsAppChatTab({ phone, isMobile }: { phone: string; isMobile?:
                             <div key={m.id || i} style={{ display: 'flex', justifyContent: inbound ? 'flex-start' : 'flex-end', marginBottom: 6 }}>
                                 <div style={{
                                     maxWidth: isMobile ? '82%' : '74%',
-                                    backgroundColor: inbound ? 'var(--bg-secondary)' : 'rgba(37,211,102,0.18)',
-                                    border: `1px solid ${inbound ? 'var(--border-secondary)' : 'rgba(37,211,102,0.4)'}`,
+                                    backgroundColor: inbound ? 'var(--bg-secondary)' : 'var(--rp-success-wash)',
+                                    border: `1px solid ${inbound ? 'var(--border-secondary)' : 'var(--rp-success-line)'}`,
                                     borderRadius: 10, padding: '8px 11px',
                                 }}>
-                                    <div style={{ fontSize: 10, fontWeight: 700, color: inbound ? 'var(--text-secondary)' : '#16a34a', marginBottom: 3, display: 'flex', gap: 6, alignItems: 'center' }}>
+                                    <div style={{ fontSize: 10, fontWeight: 700, color: inbound ? 'var(--text-secondary)' : 'var(--rp-success-text)', marginBottom: 3, display: 'flex', gap: 6, alignItems: 'center' }}>
                                         {inbound ? 'Customer' : 'Panditji / Team'}
                                         {label && (
                                             <span style={{ fontWeight: 600, color: 'var(--text-muted)', backgroundColor: 'var(--bg-primary)', padding: '0 6px', borderRadius: 6, textTransform: 'uppercase', fontSize: 9 }}>{label}</span>

@@ -153,10 +153,10 @@ export const EnrichmentPanel: React.FC<EnrichmentPanelProps> = ({ inventoryId, o
             <div style={{ marginBottom: '24px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
                     <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>Listing Completion</span>
-                    <span style={{ fontSize: '13px', fontWeight: 'bold', color: completionPct > 60 ? '#34d399' : '#f59e0b' }}>{completionPct}%</span>
+                    <span style={{ fontSize: '13px', fontWeight: 'bold', color: completionPct > 60 ? 'var(--rp-success-text)' : 'var(--rp-warn-text)' }}>{completionPct}%</span>
                 </div>
                 <div style={{ height: '6px', background: 'var(--bg-secondary)', borderRadius: '3px', overflow: 'hidden' }}>
-                    <div style={{ height: '100%', width: `${completionPct}%`, background: completionPct > 60 ? '#34d399' : '#f59e0b', borderRadius: '3px', transition: 'width 0.3s ease' }} />
+                    <div style={{ height: '100%', width: `${completionPct}%`, background: completionPct > 60 ? 'var(--rp-success-text)' : 'var(--rp-warn-text)', borderRadius: '3px', transition: 'width 0.3s ease' }} />
                 </div>
             </div>
 
@@ -167,11 +167,11 @@ export const EnrichmentPanel: React.FC<EnrichmentPanelProps> = ({ inventoryId, o
                     border: '1px solid var(--border-color)',
                     borderRadius: '10px',
                     padding: '16px',
-                    background: savedSections.has(section.id) ? 'rgba(52, 211, 153, 0.05)' : 'var(--bg-primary)',
+                    background: savedSections.has(section.id) ? 'var(--rp-success-wash)' : 'var(--bg-primary)',
                 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
                         <h4 style={{ margin: 0, fontSize: '15px', fontWeight: 600, color: 'var(--text-primary)' }}>
-                            {savedSections.has(section.id) && <span style={{ color: '#34d399', marginRight: '6px' }}>&#10004;</span>}
+                            {savedSections.has(section.id) && <span style={{ color: 'var(--rp-success-text)', marginRight: '6px' }}>&#10004;</span>}
                             {section.label}
                         </h4>
                         <button
@@ -179,8 +179,8 @@ export const EnrichmentPanel: React.FC<EnrichmentPanelProps> = ({ inventoryId, o
                                 padding: '6px 16px',
                                 borderRadius: '6px',
                                 border: 'none',
-                                background: saving === section.id ? 'var(--bg-secondary)' : '#2563eb',
-                                color: '#fff',
+                                background: saving === section.id ? 'var(--bg-secondary)' : 'var(--blue-600)',
+                                color: 'var(--surface-white)',
                                 cursor: 'pointer',
                                 fontSize: '13px',
                             }}
@@ -237,9 +237,9 @@ export const EnrichmentPanel: React.FC<EnrichmentPanelProps> = ({ inventoryId, o
                                                 padding: '6px 16px',
                                                 borderRadius: '6px',
                                                 border: '1px solid',
-                                                borderColor: editValues[field.key] === opt.value ? '#2563eb' : 'var(--border-color)',
-                                                background: editValues[field.key] === opt.value ? 'rgba(37, 99, 235, 0.1)' : 'transparent',
-                                                color: editValues[field.key] === opt.value ? '#2563eb' : 'var(--text-primary)',
+                                                borderColor: editValues[field.key] === opt.value ? 'var(--blue-600)' : 'var(--border-color)',
+                                                background: editValues[field.key] === opt.value ? 'var(--rp-info-wash)' : 'transparent',
+                                                color: editValues[field.key] === opt.value ? 'var(--blue-600)' : 'var(--text-primary)',
                                                 cursor: 'pointer',
                                                 fontSize: '13px',
                                             }}
@@ -262,9 +262,9 @@ export const EnrichmentPanel: React.FC<EnrichmentPanelProps> = ({ inventoryId, o
                                                     padding: '6px 12px',
                                                     borderRadius: '20px',
                                                     border: '1px solid',
-                                                    borderColor: isSelected ? '#34d399' : 'var(--border-color)',
-                                                    background: isSelected ? 'rgba(52, 211, 153, 0.1)' : 'transparent',
-                                                    color: isSelected ? '#34d399' : 'var(--text-muted)',
+                                                    borderColor: isSelected ? 'var(--rp-success-text)' : 'var(--border-color)',
+                                                    background: isSelected ? 'var(--rp-success-wash)' : 'transparent',
+                                                    color: isSelected ? 'var(--rp-success-text)' : 'var(--text-muted)',
                                                     cursor: 'pointer',
                                                     fontSize: '12px',
                                                 }}
@@ -288,8 +288,8 @@ export const EnrichmentPanel: React.FC<EnrichmentPanelProps> = ({ inventoryId, o
                         padding: '10px 24px',
                         borderRadius: '8px',
                         border: 'none',
-                        background: '#2563eb',
-                        color: '#fff',
+                        background: 'var(--blue-600)',
+                        color: 'var(--surface-white)',
                         cursor: 'pointer',
                         fontSize: '14px',
                     }}

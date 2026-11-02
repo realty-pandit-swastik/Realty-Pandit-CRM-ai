@@ -98,12 +98,12 @@ export const ChatView: React.FC<Props> = ({ contact, interactions, onReportNoSho
                     {/* Score */}
                     {score && (
                         <div style={{ fontSize: '12px', color: 'var(--text-secondary)', display: 'flex', gap: '12px', alignItems: 'center' }}>
-                            <span>Score: <b style={{ color: score.total_score >= 70 ? 'var(--error-text)' : score.total_score >= 40 ? 'var(--success-text)' : '#93c5fd' }}>{score.total_score}</b></span>
+                            <span>Score: <b style={{ color: score.total_score >= 70 ? 'var(--error-text)' : score.total_score >= 40 ? 'var(--success-text)' : 'var(--blue-300)' }}>{score.total_score}</b></span>
                             <span style={{ color: 'var(--text-muted)' }}>Intent {score.intent_score}</span>
                             <span style={{ color: 'var(--text-muted)' }}>Eng {score.engagement_score}</span>
                             <span style={{ color: 'var(--text-muted)' }}>Rel {score.reliability_score}</span>
                             {score.no_show_count > 0 && (
-                                <span style={{ color: '#ef4444', fontWeight: 600 }}>⚠️ {score.no_show_count} no-show{score.no_show_count > 1 ? 's' : ''}</span>
+                                <span style={{ color: 'var(--rp-danger-text)', fontWeight: 600 }}>⚠️ {score.no_show_count} no-show{score.no_show_count > 1 ? 's' : ''}</span>
                             )}
                         </div>
                     )}
@@ -114,7 +114,7 @@ export const ChatView: React.FC<Props> = ({ contact, interactions, onReportNoSho
                         style={{
                             padding: '7px 14px',
                             backgroundColor: 'var(--error-bg)', color: 'var(--error-text)',
-                            border: '1px solid #ef4444', borderRadius: '8px',
+                            border: '1px solid var(--rp-danger-text)', borderRadius: '8px',
                             cursor: 'pointer', fontWeight: 600, fontSize: '12px',
                             whiteSpace: 'nowrap',
                         }}
@@ -128,7 +128,7 @@ export const ChatView: React.FC<Props> = ({ contact, interactions, onReportNoSho
                             style={{
                                 padding: '7px 14px',
                                 backgroundColor: 'var(--warning-bg)', color: 'var(--warning-text)',
-                                border: '1px solid #f59e0b', borderRadius: '8px',
+                                border: '1px solid var(--rp-warn-text)', borderRadius: '8px',
                                 cursor: 'pointer', fontWeight: 600, fontSize: '12px',
                                 whiteSpace: 'nowrap',
                             }}
@@ -142,8 +142,8 @@ export const ChatView: React.FC<Props> = ({ contact, interactions, onReportNoSho
                             onClick={onMarkLeadLost}
                             style={{
                                 padding: '7px 14px',
-                                backgroundColor: '#7f1d1d', color: '#fff',
-                                border: '1px solid #991b1b', borderRadius: '8px',
+                                backgroundColor: 'var(--rp-danger-text)', color: 'var(--surface-white)',
+                                border: '1px solid var(--rp-danger-text)', borderRadius: '8px',
                                 cursor: 'pointer', fontWeight: 600, fontSize: '12px',
                                 whiteSpace: 'nowrap',
                             }}
@@ -185,7 +185,7 @@ export const ChatView: React.FC<Props> = ({ contact, interactions, onReportNoSho
                                     padding: '10px 14px',
                                     borderRadius: isOut ? '16px 4px 16px 16px' : '4px 16px 16px 16px',
                                     backgroundColor: isOut ? 'var(--bg-active)' : 'var(--bg-secondary)',
-                                    boxShadow: '0 1px 3px rgba(0,0,0,0.3)',
+                                    boxShadow: '0 1px 3px var(--rp-shadow-tint)',
                                 }}>
                                     <div style={{ fontSize: '13px', color: 'var(--text-bright)', lineHeight: 1.5 }}>{msg.content}</div>
                                     <div style={{ fontSize: '10px', color: 'var(--text-muted)', marginTop: '5px', textAlign: 'right', display: 'flex', gap: '6px', justifyContent: 'flex-end', alignItems: 'center' }}>

@@ -37,7 +37,7 @@ export const MarkLostModal: React.FC<MarkLostModalProps> = ({ phone, name, onSub
   return (
     <div
       onClick={onClose}
-      style={{ position: 'fixed', inset: 0, zIndex: 1000, backgroundColor: 'var(--sheet-backdrop, rgba(0,0,0,0.45))', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
+      style={{ position: 'fixed', inset: 0, zIndex: 1000, backgroundColor: 'var(--sheet-backdrop, var(--rp-overlay-soft))', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
     >
       <div
         onClick={(e) => e.stopPropagation()}
@@ -52,12 +52,12 @@ export const MarkLostModal: React.FC<MarkLostModalProps> = ({ phone, name, onSub
         </p>
 
         <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 6 }}>
-          Reason <span style={{ color: '#ef4444' }}>*</span>
+          Reason <span style={{ color: 'var(--rp-danger-text)' }}>*</span>
         </label>
         <select
           value={reason}
           onChange={(e) => { setReason(e.target.value); setError(null); }}
-          style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: `1px solid ${!reason && error ? '#ef4444' : 'var(--border-secondary)'}`, background: 'var(--bg-input)', color: 'var(--text-primary)', marginBottom: 14 }}
+          style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: `1px solid ${!reason && error ? 'var(--rp-danger-text)' : 'var(--border-secondary)'}`, background: 'var(--bg-input)', color: 'var(--text-primary)', marginBottom: 14 }}
         >
           <option value="">Select a reason…</option>
           {LOST_REASONS.map((r) => <option key={r} value={r}>{r}</option>)}
@@ -74,7 +74,7 @@ export const MarkLostModal: React.FC<MarkLostModalProps> = ({ phone, name, onSub
           style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid var(--border-secondary)', background: 'var(--bg-input)', color: 'var(--text-primary)', resize: 'vertical', boxSizing: 'border-box' }}
         />
 
-        {error && <div style={{ marginTop: 12, fontSize: 13, color: '#ef4444' }}>{error}</div>}
+        {error && <div style={{ marginTop: 12, fontSize: 13, color: 'var(--rp-danger-text)' }}>{error}</div>}
 
         <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 18 }}>
           <button
@@ -89,7 +89,7 @@ export const MarkLostModal: React.FC<MarkLostModalProps> = ({ phone, name, onSub
             type="button"
             onClick={handleSubmit}
             disabled={submitting || !reason}
-            style={{ padding: '9px 18px', borderRadius: 10, border: 'none', background: !reason ? 'var(--bg-hover)' : '#ef4444', color: !reason ? 'var(--text-muted)' : '#fff', fontWeight: 700, cursor: !reason || submitting ? 'not-allowed' : 'pointer', minHeight: 40, opacity: submitting ? 0.7 : 1 }}
+            style={{ padding: '9px 18px', borderRadius: 10, border: 'none', background: !reason ? 'var(--bg-hover)' : 'var(--rp-danger-text)', color: !reason ? 'var(--text-muted)' : 'var(--surface-white)', fontWeight: 700, cursor: !reason || submitting ? 'not-allowed' : 'pointer', minHeight: 40, opacity: submitting ? 0.7 : 1 }}
           >
             {submitting ? 'Marking…' : 'Mark Lost'}
           </button>

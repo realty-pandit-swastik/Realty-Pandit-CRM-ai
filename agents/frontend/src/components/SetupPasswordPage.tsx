@@ -81,7 +81,7 @@ export function SetupPasswordPage() {
         }}>
             <div style={{
                 backgroundColor: 'var(--bg-secondary)', borderRadius: '12px', padding: '40px',
-                width: '400px', boxShadow: '0 4px 24px rgba(0,0,0,0.3)',
+                width: '400px', boxShadow: '0 4px 24px var(--rp-shadow-tint)',
             }}>
                 <div style={{ textAlign: 'center', marginBottom: '32px' }}>
                     <h1 style={{ color: 'var(--text-primary)', fontSize: '28px', margin: '0 0 8px' }}>
@@ -142,8 +142,8 @@ export function SetupPasswordPage() {
                         <button
                             type="submit" disabled={submitting}
                             style={{
-                                width: '100%', padding: '12px', backgroundColor: '#3b82f6',
-                                color: '#fff', border: 'none', borderRadius: '8px', fontSize: '15px',
+                                width: '100%', padding: '12px', backgroundColor: 'var(--blue-500)',
+                                color: 'var(--surface-white)', border: 'none', borderRadius: '8px', fontSize: '15px',
                                 fontWeight: 600, cursor: submitting ? 'wait' : 'pointer',
                                 opacity: submitting ? 0.7 : 1,
                             }}
@@ -165,8 +165,8 @@ export function SetupPasswordPage() {
                         <button
                             onClick={goToLogin}
                             style={{
-                                width: '100%', padding: '12px', backgroundColor: '#3b82f6',
-                                color: '#fff', border: 'none', borderRadius: '8px', fontSize: '15px',
+                                width: '100%', padding: '12px', backgroundColor: 'var(--blue-500)',
+                                color: 'var(--surface-white)', border: 'none', borderRadius: '8px', fontSize: '15px',
                                 fontWeight: 600, cursor: 'pointer',
                             }}
                         >

@@ -42,7 +42,7 @@ export const BuyerChatWorkflowPanel: React.FC<BuyerChatWorkflowPanelProps> = ({ 
             <div style={s.header}>
                 <button onClick={onBack} style={s.backBtn}><ArrowLeft size={16} /></button>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <Search size={18} style={{ color: '#2563eb' }} />
+                    <Search size={18} style={{ color: 'var(--blue-600)' }} />
                     <span style={{ fontWeight: 600, fontSize: '16px', color: 'var(--text-primary)' }}>Buyer Lead (Chat)</span>
                 </div>
                 <ProgressBadge progress={chat.progress} matching={chat.matchingPhase} />
@@ -96,8 +96,8 @@ function ProgressBadge({ progress, matching }: { progress: { current: number; to
     if (matching) {
         return (
             <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <span style={{ fontSize: '11px', color: '#2563eb', fontWeight: 600 }}>Matching Properties</span>
-                <div style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#2563eb', animation: 'pulse 1.5s ease-in-out infinite' }} />
+                <span style={{ fontSize: '11px', color: 'var(--blue-600)', fontWeight: 600 }}>Matching Properties</span>
+                <div style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: 'var(--blue-600)', animation: 'pulse 1.5s ease-in-out infinite' }} />
             </div>
         );
     }
@@ -109,7 +109,7 @@ function ProgressBadge({ progress, matching }: { progress: { current: number; to
                 {GROUP_LABELS[progress.group] || progress.group} · {pct}%
             </span>
             <div style={{ width: '60px', height: '4px', borderRadius: '2px', backgroundColor: 'var(--bg-tertiary)', overflow: 'hidden' }}>
-                <div style={{ width: `${pct}%`, height: '100%', backgroundColor: '#2563eb', borderRadius: '2px', transition: 'width 0.4s ease' }} />
+                <div style={{ width: `${pct}%`, height: '100%', backgroundColor: 'var(--blue-600)', borderRadius: '2px', transition: 'width 0.4s ease' }} />
             </div>
         </div>
     );
@@ -132,11 +132,11 @@ function BuyerChatBubble({ message, isLatest, sending, onQuickReply, onAction }:
     const isPropertyCard = (message.type as string) === 'property_card';
 
     const bubbleStyle: React.CSSProperties = isUser
-        ? { ...s.bubble, backgroundColor: '#2563eb', color: '#fff', marginLeft: 'auto', borderTopRightRadius: '4px' }
+        ? { ...s.bubble, backgroundColor: 'var(--blue-600)', color: 'var(--surface-white)', marginLeft: 'auto', borderTopRightRadius: '4px' }
         : isError
-            ? { ...s.bubble, backgroundColor: '#fef2f2', color: '#dc2626', borderTopLeftRadius: '4px' }
+            ? { ...s.bubble, backgroundColor: 'var(--rp-danger-bg)', color: 'var(--rp-danger-text)', borderTopLeftRadius: '4px' }
             : isSuccess
-                ? { ...s.bubble, backgroundColor: '#f0fdf4', color: '#16a34a', borderTopLeftRadius: '4px' }
+                ? { ...s.bubble, backgroundColor: 'var(--rp-success-bg)', color: 'var(--rp-success-text)', borderTopLeftRadius: '4px' }
                 : { ...s.bubble, backgroundColor: 'var(--bg-secondary)', color: 'var(--text-primary)', border: '1px solid var(--border-secondary)', borderTopLeftRadius: '4px' };
 
     return (
@@ -175,12 +175,12 @@ function BuyerChatBubble({ message, isLatest, sending, onQuickReply, onAction }:
                                 disabled={sending}
                                 style={{
                                     padding: '6px 12px', borderRadius: '16px', fontSize: '12px', fontWeight: 500,
-                                    border: '1px solid #2563eb', backgroundColor: 'transparent', color: '#2563eb',
+                                    border: '1px solid var(--blue-600)', backgroundColor: 'transparent', color: 'var(--blue-600)',
                                     cursor: sending ? 'not-allowed' : 'pointer', opacity: sending ? 0.5 : 1,
                                     transition: 'all 0.15s',
                                 }}
-                                onMouseEnter={e => { if (!sending) { (e.target as HTMLElement).style.backgroundColor = '#2563eb'; (e.target as HTMLElement).style.color = '#fff'; } }}
-                                onMouseLeave={e => { (e.target as HTMLElement).style.backgroundColor = 'transparent'; (e.target as HTMLElement).style.color = '#2563eb'; }}
+                                onMouseEnter={e => { if (!sending) { (e.target as HTMLElement).style.backgroundColor = 'var(--blue-600)'; (e.target as HTMLElement).style.color = 'var(--surface-white)'; } }}
+                                onMouseLeave={e => { (e.target as HTMLElement).style.backgroundColor = 'transparent'; (e.target as HTMLElement).style.color = 'var(--blue-600)'; }}
                             >
                                 {qr.label}
                             </button>
@@ -223,7 +223,7 @@ function PropertyCard({ property, matchIndex, totalAvailable, onAction, sending 
         <div style={{ borderRadius: '12px', border: '1px solid var(--border-secondary)', overflow: 'hidden', backgroundColor: 'var(--bg-secondary)' }}>
             {/* Image */}
             {images.length > 0 && (
-                <div style={{ position: 'relative', height: '180px', backgroundColor: '#f1f5f9', cursor: 'pointer' }}
+                <div style={{ position: 'relative', height: '180px', backgroundColor: 'var(--bg-secondary)', cursor: 'pointer' }}
                     onClick={() => setImgIdx(prev => (prev + 1) % images.length)}
                 >
                     <img
@@ -233,17 +233,17 @@ function PropertyCard({ property, matchIndex, totalAvailable, onAction, sending 
                     />
                     {/* Badges */}
                     <div style={{ position: 'absolute', top: '8px', left: '8px', display: 'flex', gap: '6px' }}>
-                        <span style={{ padding: '4px 8px', borderRadius: '6px', fontSize: '11px', fontWeight: 600, backgroundColor: 'rgba(37,99,235,0.9)', color: '#fff' }}>
+                        <span style={{ padding: '4px 8px', borderRadius: '6px', fontSize: '11px', fontWeight: 600, backgroundColor: 'var(--blue-600)', color: 'var(--surface-white)' }}>
                             #{matchIndex + 1}{totalAvailable > 0 ? ` of ${totalAvailable}` : ''}
                         </span>
                         {property.match_score > 0 && (
-                            <span style={{ padding: '4px 8px', borderRadius: '6px', fontSize: '11px', fontWeight: 600, backgroundColor: 'rgba(22,163,74,0.9)', color: '#fff' }}>
+                            <span style={{ padding: '4px 8px', borderRadius: '6px', fontSize: '11px', fontWeight: 600, backgroundColor: 'var(--rp-success-text)', color: 'var(--surface-white)' }}>
                                 {property.match_score}% match
                             </span>
                         )}
                     </div>
                     {images.length > 1 && (
-                        <span style={{ position: 'absolute', bottom: '8px', right: '8px', padding: '2px 8px', borderRadius: '10px', fontSize: '11px', backgroundColor: 'rgba(0,0,0,0.6)', color: '#fff' }}>
+                        <span style={{ position: 'absolute', bottom: '8px', right: '8px', padding: '2px 8px', borderRadius: '10px', fontSize: '11px', backgroundColor: 'var(--rp-overlay-soft)', color: 'var(--surface-white)' }}>
                             {imgIdx + 1}/{images.length}
                         </span>
                     )}
@@ -265,7 +265,7 @@ function PropertyCard({ property, matchIndex, totalAvailable, onAction, sending 
                 </div>
 
                 {/* Price */}
-                <div style={{ fontSize: '20px', fontWeight: 700, color: '#2563eb', marginBottom: '12px' }}>
+                <div style={{ fontSize: '20px', fontWeight: 700, color: 'var(--blue-600)', marginBottom: '12px' }}>
                     {property.display_price_formatted || `₹${property.display_price?.toLocaleString('en-IN')}`}
                 </div>
 
@@ -282,14 +282,14 @@ function PropertyCard({ property, matchIndex, totalAvailable, onAction, sending 
                     <button
                         onClick={() => onAction('__schedule_visit__')}
                         disabled={sending}
-                        style={{ ...s.actionBtn, backgroundColor: '#16a34a', color: '#fff', flex: 1 }}
+                        style={{ ...s.actionBtn, backgroundColor: 'var(--rp-success-text)', color: 'var(--surface-white)', flex: 1 }}
                     >
                         <Calendar size={14} /> Schedule Visit
                     </button>
                     <button
                         onClick={() => onAction('__next_property__')}
                         disabled={sending}
-                        style={{ ...s.actionBtn, backgroundColor: '#2563eb', color: '#fff', flex: 1 }}
+                        style={{ ...s.actionBtn, backgroundColor: 'var(--blue-600)', color: 'var(--surface-white)', flex: 1 }}
                     >
                         Next <ChevronRight size={14} />
                     </button>
@@ -376,8 +376,8 @@ function ChatInputBar({ onSend, disabled, inputType }: { onSend: (text: string) 
                 disabled={disabled || !text.trim()}
                 style={{
                     ...s.sendBtn,
-                    backgroundColor: text.trim() && !disabled ? '#2563eb' : 'var(--bg-tertiary)',
-                    color: text.trim() && !disabled ? '#fff' : 'var(--text-muted)',
+                    backgroundColor: text.trim() && !disabled ? 'var(--blue-600)' : 'var(--bg-tertiary)',
+                    color: text.trim() && !disabled ? 'var(--surface-white)' : 'var(--text-muted)',
                     cursor: text.trim() && !disabled ? 'pointer' : 'not-allowed',
                 }}
             >

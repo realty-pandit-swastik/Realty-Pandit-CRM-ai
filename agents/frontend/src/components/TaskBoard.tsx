@@ -9,6 +9,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { API_BASE_URL, authedFetch } from '../lib/api';
 import { useConfirm } from '../contexts/ConfirmContext';
 import { defaultReminderDate } from '../lib/defaultReminder';
+import './AdvancedAnalytics.css';
 
 interface Project {
   id: string;
@@ -256,7 +257,7 @@ export default function TaskBoard() {
 
   const renderKanbanView = () => {
     return (
-      <div className="flex gap-4 overflow-x-auto pb-4">
+      <div className="flex gap-4 overflow-x-auto pb-4" role="region" aria-label="Task board columns" tabIndex={0}>
         {STATUSES.map(status => {
           const statusTasks = getTasksByStatus(status);
           const statusConfig = STATUS_LABELS[status];
@@ -504,11 +505,11 @@ export default function TaskBoard() {
   }
 
   return (
-    <div className="p-6 max-w-7xl mx-auto">
+    <div className="rp-analytics rp-task-board p-6 max-w-7xl mx-auto">
       {/* Header */}
       <div className="mb-6">
-        <h1 className="text-3xl font-bold text-gray-900">📋 Task Management</h1>
-        <p className="text-gray-600 mt-1">Organize and track all tasks with AI-powered automation</p>
+        <h1 className="text-3xl font-bold text-gray-900">Task Management</h1>
+        <p className="text-gray-600 mt-1">Manage tasks, projects, and follow-ups.</p>
       </div>
 
       {/* Alerts */}
@@ -589,6 +590,7 @@ export default function TaskBoard() {
 
         <div className="flex gap-2">
           <select
+            aria-label="Project filter"
             value={selectedProject || ''}
             onChange={(e) => setSelectedProject(e.target.value || null)}
             className="px-3 py-2 border rounded-lg"

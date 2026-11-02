@@ -40,11 +40,11 @@ export const RevertToCustomerDialog: React.FC<Props> = ({ partnerId, partnerName
 
     return (
         <>
-            <div onClick={onClose} style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.55)', zIndex: 400 }} />
+            <div onClick={onClose} style={{ position: 'fixed', inset: 0, backgroundColor: 'var(--rp-overlay-soft)', zIndex: 400 }} />
             <div style={{
                 position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)',
                 backgroundColor: 'var(--bg-primary)', borderRadius: 14, width: 440, maxWidth: '94vw',
-                zIndex: 401, boxShadow: '0 20px 60px rgba(0,0,0,0.35)', padding: 20,
+                zIndex: 401, boxShadow: '0 20px 60px var(--rp-overlay-soft)', padding: 20,
             }}>
                 <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 4 }}>
                     ↩ Revert to customer
@@ -68,9 +68,9 @@ export const RevertToCustomerDialog: React.FC<Props> = ({ partnerId, partnerName
 
                 {error && (
                     <div style={{
-                        border: '1px solid #ef4444', backgroundColor: 'rgba(239,68,68,0.08)',
+                        border: '1px solid var(--rp-danger-text)', backgroundColor: 'var(--rp-danger-wash)',
                         borderRadius: 10, padding: '10px 12px', marginBottom: 14,
-                        fontSize: 12, color: '#ef4444',
+                        fontSize: 12, color: 'var(--rp-danger-text)',
                     }}>{error}</div>
                 )}
 
@@ -81,7 +81,7 @@ export const RevertToCustomerDialog: React.FC<Props> = ({ partnerId, partnerName
                     }}>Cancel</button>
                     <button type="button" onClick={submit} disabled={busy} style={{
                         padding: '8px 16px', borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: 'pointer',
-                        border: 'none', backgroundColor: '#f97316', color: '#fff', opacity: busy ? 0.5 : 1,
+                        border: 'none', backgroundColor: 'var(--rp-warn-text)', color: 'var(--surface-white)', opacity: busy ? 0.5 : 1,
                     }}>{busy ? 'Reverting…' : 'Revert to customer'}</button>
                 </div>
             </div>

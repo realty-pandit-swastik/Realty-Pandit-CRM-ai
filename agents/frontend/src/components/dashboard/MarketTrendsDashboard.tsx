@@ -112,7 +112,7 @@ export const MarketTrendsDashboard: React.FC = () => {
           }}
         >
           <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '8px' }}>Total Leads</div>
-          <div style={{ fontSize: '32px', fontWeight: '700', color: '#3b82f6' }}>{totalLeads}</div>
+          <div style={{ fontSize: '32px', fontWeight: '700', color: 'var(--blue-500)' }}>{totalLeads}</div>
         </div>
         <div
           style={{
@@ -123,7 +123,7 @@ export const MarketTrendsDashboard: React.FC = () => {
           }}
         >
           <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '8px' }}>Total Visits</div>
-          <div style={{ fontSize: '32px', fontWeight: '700', color: '#8b5cf6' }}>{totalVisits}</div>
+          <div style={{ fontSize: '32px', fontWeight: '700', color: 'var(--chart-5)' }}>{totalVisits}</div>
         </div>
         <div
           style={{
@@ -134,7 +134,7 @@ export const MarketTrendsDashboard: React.FC = () => {
           }}
         >
           <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '8px' }}>Total Sales</div>
-          <div style={{ fontSize: '32px', fontWeight: '700', color: '#10b981' }}>{totalSales}</div>
+          <div style={{ fontSize: '32px', fontWeight: '700', color: 'var(--rp-success-text)' }}>{totalSales}</div>
         </div>
         <div
           style={{
@@ -145,7 +145,7 @@ export const MarketTrendsDashboard: React.FC = () => {
           }}
         >
           <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '8px' }}>Conversion Rate</div>
-          <div style={{ fontSize: '32px', fontWeight: '700', color: '#f59e0b' }}>{conversionRate}%</div>
+          <div style={{ fontSize: '32px', fontWeight: '700', color: 'var(--rp-warn-text)' }}>{conversionRate}%</div>
         </div>
       </div>
 
@@ -176,9 +176,9 @@ export const MarketTrendsDashboard: React.FC = () => {
                 }}
               />
               <Legend wrapperStyle={{ fontSize: '14px', color: 'var(--text-primary)' }} />
-              <Line type="monotone" dataKey="leads" stroke="#3b82f6" strokeWidth={2} name="Leads" dot={{ r: 4 }} />
-              <Line type="monotone" dataKey="visits" stroke="#8b5cf6" strokeWidth={2} name="Visits" dot={{ r: 4 }} />
-              <Line type="monotone" dataKey="sales" stroke="#10b981" strokeWidth={2} name="Sales" dot={{ r: 4 }} />
+              <Line type="monotone" dataKey="leads" stroke="var(--blue-500)" strokeWidth={2} name="Leads" dot={{ r: 4 }} />
+              <Line type="monotone" dataKey="visits" stroke="var(--chart-5)" strokeWidth={2} name="Visits" dot={{ r: 4 }} />
+              <Line type="monotone" dataKey="sales" stroke="var(--rp-success-text)" strokeWidth={2} name="Sales" dot={{ r: 4 }} />
             </LineChart>
           </ResponsiveContainer>
         ) : (
