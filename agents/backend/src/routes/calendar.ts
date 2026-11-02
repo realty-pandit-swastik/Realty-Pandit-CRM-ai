@@ -5,11 +5,41 @@ import { CalendarService } from '../services/calendar';
 import { WhatsAppService } from '../services/whatsapp';
 import { notify } from '../services/notify';
 import { captureRouteError } from '../utils/capture';
+import { AppointmentStatus, AppointmentType, Inventory, Prisma } from '@prisma/client';
+import { z } from 'zod';
+import { sanitizationService } from '../services/sanitization_service';
+import { normalizePhone } from '../utils/phone';
+import { buildFullContactVisibilityFilter } from '../middleware/contact_visibility';
+import { getTeamIds } from '../utils/team_scope';
 
 const whatsappService = new WhatsAppService();
 
 const router = express.Router();
 const calendarService = new CalendarService();
+
+async function appointmentResponse<T extends { property: Inventory | null }>(appointment: T, agent: NonNullable<express.Request['agent']>) {
+    if (!appointment.property) return appointment;
+    return { ...appointment, property: sanitizationService.redactInventoryForStaff(appointment.property, {
+        agentId: agent.id,
+        isSuperBoss: agent.role === 'super_boss',
+        teamIds: await getTeamIds(agent),
+    }) };
+}
+
+function appointmentWhere(req: express.Request): Prisma.AppointmentWhereUniqueInput {
+    return { id: String(req.params.id), tenant_id: req.agent!.tenant_id,
+        ...(req.agent!.role === 'employee' ? { assigned_to_agent_id: req.agent!.id } : {}),
+        contact: { tenant_id: req.agent!.tenant_id },
+        OR: [{ property_id: null }, { property: { tenant_id: req.agent!.tenant_id } }],
+    };
+}
+
+const appointmentUpdate = z.object({
+    status: z.enum(AppointmentStatus).optional(), scheduled_at: z.iso.datetime({ offset: true }).optional(),
+    duration: z.number().int().positive().max(2147483647).optional(),
+    description: z.string().max(20000).optional(), notes: z.string().max(20000).optional(),
+    assigned_to_agent_id: z.string().min(1).optional(),
+});
 
 /**
  * GET /api/calendar/appointments
@@ -24,7 +54,18 @@ router.get('/appointments', authMiddleware, async (req, res) => {
         // Build filter based on role
         let whereClause: any = {
             tenant_id: req.agent!.tenant_id,
+            AND: [
+                { contact: { tenant_id: req.agent!.tenant_id } },
+                { OR: [{ property_id: null }, { property: { tenant_id: req.agent!.tenant_id } }] },
+            ],
         };
+        if (req.query.mine === 'true') whereClause.assigned_to_agent_id = userId;
+        if (req.query.upcoming === 'true') whereClause.AND.push({ status: { notIn: ['completed', 'cancelled', 'no_show', 'requested'] } });
+        const paginated = req.query.page !== undefined || req.query.limit !== undefined;
+        const page = Number(req.query.page || 1), limit = Number(req.query.limit || 25);
+        if (paginated && (!Number.isInteger(page) || page < 1 || page > 100000 || !Number.isInteger(limit) || limit < 1 || limit > 100)) {
+            return res.status(400).json({ error: 'Invalid pagination. Limit must be 1–100.' });
+        }
 
         // Date range filter
         if (startDate || endDate) {
@@ -72,6 +113,7 @@ router.get('/appointments', authMiddleware, async (req, res) => {
 
         const appointments = await prisma.appointment.findMany({
             where: whereClause,
+            ...(paginated ? { take: limit, skip: (page - 1) * limit } : {}),
             include: {
                 contact: {
                     select: {
@@ -98,15 +140,14 @@ router.get('/appointments', authMiddleware, async (req, res) => {
                     },
                 },
             },
-            orderBy: {
-                scheduled_at: 'asc',
-            },
+            orderBy: [{ scheduled_at: 'asc' }, { id: 'asc' }],
         });
 
         return res.json({
             success: true,
             appointments,
             count: appointments.length,
+            ...(paginated ? { total: await prisma.appointment.count({ where: whereClause }), page, limit } : {}),
         });
     } catch (error: any) {
         captureRouteError(error, req, { route: 'calendar#1' });
@@ -128,11 +169,11 @@ router.get('/appointments/:id', authMiddleware, async (req, res) => {
         const { id } = req.params;
 
         const appointment = await prisma.appointment.findUnique({
-            where: { id },
+            where: appointmentWhere(req),
             include: {
                 contact: true,
                 property: true,
-                assigned_to_agent: true,
+                assigned_to_agent: { select: { id: true, name: true, email: true, phone: true } },
                 tenant: true,
             },
         });
@@ -146,7 +187,7 @@ router.get('/appointments/:id', authMiddleware, async (req, res) => {
 
         return res.json({
             success: true,
-            appointment,
+            appointment: await appointmentResponse(appointment, req.agent!),
         });
     } catch (error: any) {
         captureRouteError(error, req, { route: 'calendar#2' });
@@ -165,10 +206,11 @@ router.get('/appointments/:id', authMiddleware, async (req, res) => {
  */
 router.post('/appointments', authMiddleware, async (req, res) => {
     try {
-        const {
+        let {
             contact_id,
             title,
             description,
+            notes,
             type,
             scheduled_at,
             duration = 30,
@@ -187,6 +229,27 @@ router.post('/appointments', authMiddleware, async (req, res) => {
             });
         }
 
+                const actor = req.agent!;
+        if (!['super_boss', 'manager', 'employee'].includes(actor.role)) return res.status(403).json({ error: 'Staff authentication required' });
+        if (typeof contact_id !== 'string' || typeof title !== 'string' || !title.trim() || title.length > 500 ||
+            !Object.values(AppointmentType).includes(type) || typeof scheduled_at !== 'string' || !Number.isFinite(new Date(scheduled_at).getTime()) ||
+            !Number.isInteger(Number(duration)) || Number(duration) <= 0 || Number(duration) > 1440 ||
+            (notes !== undefined && (typeof notes !== 'string' || notes.length > 20000)) ||
+            (description !== undefined && (typeof description !== 'string' || description.length > 20000))) return res.status(400).json({ error: 'Check the contact, visit type, date, duration and notes' });
+        const normalizedContact = normalizePhone(contact_id);
+        if (!normalizedContact) return res.status(400).json({ error: 'Enter a valid CRM contact phone' });
+        const contact = await prisma.contact.findFirst({ where: { phone_number: normalizedContact, tenant_id: actor.tenant_id,
+            AND: [await buildFullContactVisibilityFilter(actor.id, actor.role)] }, select: { phone_number: true } });
+        if (!contact) return res.status(404).json({ error: 'Contact is not accessible to your account' });
+        if (property_id && (typeof property_id !== 'string' || !await prisma.inventory.findFirst({ where: { id: property_id, tenant_id: actor.tenant_id }, select: { id: true } }))) return res.status(404).json({ error: 'Property is not available' });
+        const assignee = assigned_to_agent_id || actor.id;
+        const team = await getTeamIds(actor);
+        if (typeof assignee !== 'string' || (actor.role !== 'super_boss' && !team.includes(assignee)) ||
+            !await prisma.agent.findFirst({ where: { id: assignee, tenant_id: actor.tenant_id, status: 'active' }, select: { id: true } })) return res.status(400).json({ error: 'Choose an active authorized team member' });
+        contact_id = normalizedContact;
+        assigned_to_agent_id = assignee;
+        duration = Number(duration);
+
         // Calculate end_time
         const scheduledDate = new Date(scheduled_at);
         const endTime = new Date(scheduledDate.getTime() + duration * 60000);
@@ -196,6 +259,7 @@ router.post('/appointments', authMiddleware, async (req, res) => {
                 contact_id,
                 title,
                 description,
+                notes,
                 type,
                 scheduled_at: scheduledDate,
                 duration,
@@ -211,7 +275,7 @@ router.post('/appointments', authMiddleware, async (req, res) => {
             include: {
                 contact: true,
                 property: true,
-                assigned_to_agent: true,
+                assigned_to_agent: { select: { id: true, name: true, email: true, phone: true } },
             },
         });
 
@@ -276,7 +340,7 @@ router.post('/appointments', authMiddleware, async (req, res) => {
 
         return res.json({
             success: true,
-            appointment,
+            appointment: await appointmentResponse(appointment, req.agent!),
             message: 'Appointment created successfully',
         });
     } catch (error: any) {
@@ -296,40 +360,30 @@ router.post('/appointments', authMiddleware, async (req, res) => {
  */
 router.patch('/appointments/:id', authMiddleware, async (req, res) => {
     try {
-        const { id } = req.params;
-        const {
-            status,
-            scheduled_at,
-            duration,
-            description,
-            notes,
-            assigned_to_agent_id,
-        } = req.body;
-
-        const updateData: any = {};
-
-        if (status) updateData.status = status;
-        if (description) updateData.description = description;
-        if (notes) updateData.notes = notes;
-        if (assigned_to_agent_id) updateData.assigned_to_agent_id = assigned_to_agent_id;
-
-        if (scheduled_at) {
-            const scheduledDate = new Date(scheduled_at);
-            updateData.scheduled_at = scheduledDate;
-
-            if (duration) {
-                updateData.duration = duration;
-                updateData.end_time = new Date(scheduledDate.getTime() + duration * 60000);
-            }
+        const current = await prisma.appointment.findUnique({ where: appointmentWhere(req), select: { scheduled_at: true, duration: true } });
+        if (!current) return res.status(404).json({ error: 'Appointment not found' });
+        const parsed = appointmentUpdate.safeParse(req.body);
+        if (!parsed.success) return res.status(400).json({ error: 'Invalid appointment fields, status or date.' });
+        const { status, scheduled_at, duration, assigned_to_agent_id, ...fields } = parsed.data;
+        if (assigned_to_agent_id && ((req.agent!.role === 'employee' && assigned_to_agent_id !== req.agent!.id) ||
+            !await prisma.agent.findFirst({ where: { id: assigned_to_agent_id, tenant_id: req.agent!.tenant_id, status: 'active' }, select: { id: true } }))) {
+            return res.status(403).json({ error: 'Assignee is outside your access.' });
+        }
+        const updateData: Prisma.AppointmentUncheckedUpdateInput = { ...fields, status, assigned_to_agent_id };
+        if (scheduled_at !== undefined || duration !== undefined) {
+            const date = scheduled_at ? new Date(scheduled_at) : current.scheduled_at;
+            updateData.scheduled_at = date;
+            updateData.duration = duration ?? current.duration;
+            updateData.end_time = new Date(date.getTime() + (duration ?? current.duration) * 60000);
         }
 
         const appointment = await prisma.appointment.update({
-            where: { id },
+            where: appointmentWhere(req),
             data: updateData,
             include: {
                 contact: true,
                 property: true,
-                assigned_to_agent: true,
+                assigned_to_agent: { select: { id: true, name: true, email: true, phone: true } },
             },
         });
 
@@ -359,7 +413,7 @@ router.patch('/appointments/:id', authMiddleware, async (req, res) => {
 
         return res.json({
             success: true,
-            appointment,
+            appointment: await appointmentResponse(appointment, req.agent!),
             message: 'Appointment updated successfully',
         });
     } catch (error: any) {
@@ -379,10 +433,10 @@ router.patch('/appointments/:id', authMiddleware, async (req, res) => {
  */
 router.delete('/appointments/:id', authMiddleware, async (req, res) => {
     try {
-        const { id } = req.params;
+        if (!await prisma.appointment.findUnique({ where: appointmentWhere(req), select: { id: true } })) return res.status(404).json({ error: 'Appointment not found' });
 
         const appointment = await prisma.appointment.update({
-            where: { id },
+            where: appointmentWhere(req),
             data: { status: 'cancelled' },
         });
 

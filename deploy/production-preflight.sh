@@ -16,6 +16,14 @@ umask 077
 report=$(mktemp)
 trap 'rm -f "$report"' EXIT
 incomplete=0
+privileged_verified=0
+if [[ "$EUID" != 0 && -f "$(dirname "$0")/production-inspection.cjs" ]]; then
+  if node "$(dirname "$0")/production-inspection.cjs" verify > "$report"; then
+    cat "$report"
+    privileged_verified=1
+  fi
+fi
+if [[ "$privileged_verified" == 0 ]]; then
 for owner in root realty; do
   printf 'PM2 owner: %s\n' "$owner"
   if [[ "$owner" == root ]]; then
@@ -31,10 +39,14 @@ if sudo -n nginx -T > "$report" 2>&1; then
 else
   printf 'Nginx inspection unavailable\n'; incomplete=1
 fi
+fi
 curl -fsS http://127.0.0.1:7071/health
 printf '\nBackup metadata (no backup contents):\n'
 for folder in /var/backups/realty-pandit "$app_root/backups"; do
-  if [[ -d "$folder" && -r "$folder" && -x "$folder" ]]; then find "$folder" -maxdepth 2 -type f -printf '%TY-%Tm-%Td %TH:%TM %s %f\n' | sort | tail -20; else printf 'Backup metadata unavailable: %s\n' "$folder"; fi
+  if [[ -d "$folder" && -r "$folder" && -x "$folder" ]]; then
+    # Older root-owned backups are intentionally private; do not descend into them.
+    find "$folder" -maxdepth 2 \( -type d ! -readable -prune -printf 'Private backup directory: %f\n' \) -o \( -type f -printf '%TY-%Tm-%Td %TH:%TM %s %f\n' \) | sort | tail -20
+  else printf 'Backup metadata unavailable: %s\n' "$folder"; fi
 done
 cd "$current/backend"
 node <<'NODE'

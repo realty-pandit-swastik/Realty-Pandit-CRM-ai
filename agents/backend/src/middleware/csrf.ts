@@ -63,6 +63,8 @@ export function csrfMiddleware(req: Request, res: Response, next: NextFunction):
 
     // (4) Pre-login / public routes that don't have a CSRF token yet
     const csrfExempt = [
+        '/auth/mobile/login',
+        '/auth/mobile/refresh',
         '/auth/login',
         '/auth/setup',
         // /auth/refresh is CSRF-safe via cookie scoping alone:

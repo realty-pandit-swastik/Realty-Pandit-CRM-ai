@@ -7,7 +7,7 @@ vi.mock('../db', () => ({
     default: {
         $queryRaw: vi.fn().mockResolvedValue([]),
         $transaction: vi.fn(),
-        contact: { findUnique: vi.fn(), findMany: vi.fn(), update: vi.fn(), count: vi.fn() },
+        contact: { findFirst: vi.fn(), findUnique: vi.fn(), findMany: vi.fn(), update: vi.fn(), count: vi.fn() },
         transaction: { findUnique: vi.fn(), findMany: vi.fn(), update: vi.fn(), updateMany: vi.fn(), count: vi.fn() },
         interaction: { create: vi.fn(), count: vi.fn() },
         agent: { findUnique: vi.fn(), findFirst: vi.fn(), findMany: vi.fn() },
@@ -31,6 +31,8 @@ beforeEach(() => {
     vi.mocked(prisma.contact.findUnique).mockResolvedValue({
         phone_number: '+919000000001', name: 'Lost Lead', assigned_agent_id: 'staff-1', tenant_id: 'tenant-1',
     } as any);
+    vi.mocked(prisma.contact.findFirst).mockResolvedValue({ phone_number: '+919000000001' } as any);
+    vi.mocked(prisma.partnerAgent.findMany).mockResolvedValue([]);
     // No open deals — the loss lands on the contact only.
     vi.mocked(prisma.transaction.findMany).mockResolvedValue([]);
     vi.mocked(prisma.contact.update).mockResolvedValue({} as any);

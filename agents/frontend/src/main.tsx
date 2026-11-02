@@ -29,16 +29,22 @@ function maskPhone(value: string): string {
 const REDACT_KEYS = new Set([
   'password', 'password_confirm', 'new_password', 'old_password',
   'token', 'refresh_token', 'access_token', 'auth_token', 'jwt',
-  'otp', 'csrf_token',
+  'otp', 'csrf_token', 'launch_token', 'handoff_token', 'session_token', 'authorization',
   'razorpay_payment_id', 'razorpay_order_id', 'razorpay_signature',
 ]);
+function scrubHandoffUrl(value: string): string {
+  return value.replace(/((?:S\.handoff_token=|[#&]token=))[a-f0-9]{64}/gi, '$1[REDACTED]')
+    .replace(/("(?:launch_token|handoff_token|session_token|session)"\s*:\s*")[a-f0-9]{64}/gi, '$1[REDACTED]')
+    .replace(/(Bearer\s+)[a-f0-9]{64}/gi, '$1[REDACTED]');
+}
+
 const PHONE_KEY_HINTS = ['phone', 'mobile', 'whatsapp', 'msisdn', 'contact_number', 'phone_number'];
 
 function scrubObject(obj: any, depth = 0): void {
   if (!obj || typeof obj !== 'object' || depth > 5) return;
   for (const key of Object.keys(obj)) {
     const lower = key.toLowerCase();
-    if (REDACT_KEYS.has(lower)) {
+    if (REDACT_KEYS.has(lower) || (lower === 'session' && typeof obj[key] === 'string' && /^[a-f0-9]{64}$/i.test(obj[key]))) {
       obj[key] = '[REDACTED]';
       continue;
     }
@@ -46,6 +52,7 @@ function scrubObject(obj: any, depth = 0): void {
       obj[key] = maskPhone(obj[key]);
       continue;
     }
+    if (typeof obj[key] === 'string') obj[key] = scrubHandoffUrl(obj[key]);
     if (typeof obj[key] === 'object') scrubObject(obj[key], depth + 1);
   }
 }
@@ -68,12 +75,16 @@ if (GLITCHTIP_DSN) {
     ],
     integrations: [SentrySDK.browserTracingIntegration()],
     beforeSend(event) {
-      if (event.request?.data && typeof event.request.data === 'object') scrubObject(event.request.data);
+      if (typeof event.request?.data === 'string') event.request.data = scrubHandoffUrl(event.request.data);
+      else if (event.request?.data && typeof event.request.data === 'object') scrubObject(event.request.data);
       if (event.extra) scrubObject(event.extra);
       if (event.contexts) scrubObject(event.contexts);
+      if (event.request?.url) event.request.url = scrubHandoffUrl(event.request.url);
+      event.breadcrumbs?.forEach(breadcrumb => { if (breadcrumb.data) scrubObject(breadcrumb.data); });
       return event;
     },
     beforeBreadcrumb(breadcrumb) {
+      if (breadcrumb.data) scrubObject(breadcrumb.data);
       // Mask phone numbers in URLs (path params like /api/leads/+919876543210)
       if (typeof breadcrumb.data?.url === 'string') {
         breadcrumb.data.url = breadcrumb.data.url.replace(

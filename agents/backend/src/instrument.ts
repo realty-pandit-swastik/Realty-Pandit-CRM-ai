@@ -63,14 +63,14 @@ const REDACT_KEYS = new Set([
     'razorpay_payment_id',
     'razorpay_order_id',
     'razorpay_signature',
-]);
+].map(key => key.replace(/[_-]/g, '')));
 const PHONE_KEY_HINTS = ['phone', 'mobile', 'whatsapp', 'msisdn', 'contact_number', 'phone_number'];
 
 function scrubObject(obj: any, depth = 0): void {
     if (!obj || typeof obj !== 'object' || depth > 5) return;
     for (const key of Object.keys(obj)) {
         const lower = key.toLowerCase();
-        if (REDACT_KEYS.has(lower)) {
+        if (REDACT_KEYS.has(lower.replace(/[_-]/g, ''))) {
             obj[key] = '[REDACTED]';
             continue;
         }
@@ -98,13 +98,15 @@ if (GLITCHTIP_DSN) {
             // Scrub headers
             if (event.request?.headers) {
                 const h = event.request.headers as Record<string, any>;
-                delete h['authorization'];
-                delete h['cookie'];
-                delete h['x-csrf-token'];
-                delete h['x-api-key'];
+                for (const key of Object.keys(h)) {
+                    if (['authorization', 'cookie', 'x-csrf-token', 'x-api-key'].includes(key.toLowerCase())) delete h[key];
+                }
             }
             // Scrub request body
-            if (event.request?.data && typeof event.request.data === 'object') {
+            // Auth payloads and opaque serialized bodies must never enter error telemetry.
+            if (event.request && (/(?:^|\/)auth(?:\/|[?#]|$)/i.test(event.request.url || '') || typeof event.request.data === 'string')) {
+                delete event.request.data;
+            } else if (event.request?.data && typeof event.request.data === 'object') {
                 scrubObject(event.request.data);
             }
             // Scrub extras / contexts

@@ -50,6 +50,17 @@ Complete this under an approved maintenance window before enabling
 
 ## Release
 
+The restricted deployment account does not receive general PM2/nginx sudo access.
+Before a release, an administrator runs the reviewed
+`deploy/production-inspection.cjs record` on the VPS with
+`HOSTINGER_DEPLOY_PATH=/var/www/realty-pandit` and the accompanying
+`production-preflight.sh` in the same private directory. This executes the full
+privileged preflight and records a root-owned, non-writable report under
+`/var/lib/realty-pandit/operational-preflight.json`. The workflow verifies its
+ownership, one-hour expiry, active revision, inspected file hashes and script hash
+before accepting it. Changing a release/file/script requires a new inspection.
+No sudo permissions are broadened. Removing the certificate withdraws this proof.
+
 Merge a reviewed PR to `main`. The workflow tests, lints, builds, audits production
 dependencies, packages the exact Git SHA, builds it under `releases/<sha>`, switches
 `current` atomically, restarts services, verifies all three local endpoints, and
@@ -58,6 +69,14 @@ keeps at least three releases.
 Keep `run_migrations=false` unless the approved revision contains a reviewed,
 backward-compatible migration and a fresh restore-tested backup exists. Migration
 rollback is intentionally manual.
+
+For a disconnected backup run, `resume_backup` may name its private
+`release-<digits>` folder while its database dump is less than one hour old. The
+workflow restores the dump again, checks the live migration history still matches,
+rehearses the exact pending SQL, and re-extracts/verifies every upload by type, size
+and SHA-256. Original ownership remains in the archive; comparison does not require
+the restricted account to chown restored files. Backup age is measured from the
+dump, never reset by verification. SSH keepalives protect long archive operations.
 
 ## Verify
 

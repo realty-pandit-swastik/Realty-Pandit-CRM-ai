@@ -7,8 +7,22 @@ import express, { Request, Response } from 'express';
 import prisma from '../db';
 import { notify } from '../services/notify';
 import { captureRouteError } from '../utils/capture';
+import { authMiddleware } from '../middleware/auth';
+import { AppError } from '../middleware/error_handler';
+import { resolveTaskScope, validateTaskReferences, validateProjectReferences, TaskScope } from '../services/task_scope';
 
 const router = express.Router();
+const scopeOf = (res: Response): TaskScope => res.locals.taskScope;
+router.use(['/tasks', '/projects'], authMiddleware, async (req, res, next) => {
+  try {
+    res.locals.taskScope = await resolveTaskScope(req.agent!);
+    if (req.method === 'POST' || req.method === 'PATCH') {
+      if (req.baseUrl.endsWith('/projects')) validateProjectReferences(req.body, scopeOf(res));
+      else if (!req.path.endsWith('/bulk-import')) await validateTaskReferences(req.body, scopeOf(res));
+    }
+    next();
+  } catch (error) { next(error); }
+});
 
 // ===================================================================
 // PROJECTS
@@ -19,25 +33,34 @@ router.get('/projects', async (req: Request, res: Response) => {
   try {
     const { status, owner_id } = req.query;
 
-    const where: any = {};
+    const where: any = { AND: [scopeOf(res).projects] };
+    const paginated = req.query.page !== undefined || req.query.limit !== undefined;
+    const page = Number(req.query.page || 1), limit = Number(req.query.limit || 25);
+    if (paginated && (!Number.isInteger(page) || page < 1 || page > 100000 || !Number.isInteger(limit) || limit < 1 || limit > 100)) {
+      return res.status(400).json({ error: 'Invalid pagination. Limit must be 1–100.' });
+    }
     if (status) where.status = status;
     if (owner_id) where.owner_id = owner_id;
 
     const projects = await prisma.workProject.findMany({
       where,
+      ...(paginated ? { take: limit, skip: (page - 1) * limit } : {}),
       orderBy: [
         { status: 'asc' },
         { start_date: 'desc' },
+        { id: 'asc' },
       ],
       include: {
         _count: {
-          select: { tasks: true },
+          select: { tasks: { where: scopeOf(res).tasks } },
         },
       },
     });
 
-    res.json({ projects, total: projects.length });
+    const total = paginated ? await prisma.workProject.count({ where }) : projects.length;
+    res.json({ projects, total, ...(paginated ? { page, limit } : {}) });
   } catch (error: any) {
+    if (error instanceof AppError) return res.status(error.statusCode).json({ error: error.message });
         captureRouteError(error, req, { route: 'tasks#1' });
     console.error('Get projects error:', error);
     res.status(500).json({ error: 'Failed to fetch projects' });
@@ -47,10 +70,11 @@ router.get('/projects', async (req: Request, res: Response) => {
 // Get single project
 router.get('/projects/:id', async (req: Request, res: Response) => {
   try {
-    const project = await prisma.workProject.findUnique({
-      where: { id: req.params.id },
+    const project = await prisma.workProject.findFirst({
+      where: { id: String(req.params.id), AND: [scopeOf(res).projects] },
       include: {
-        tasks: {
+        tasks: req.query.include_tasks === 'false' ? false : {
+          where: scopeOf(res).tasks,
           orderBy: [
             { status: 'asc' },
             { priority: 'desc' },
@@ -66,6 +90,7 @@ router.get('/projects/:id', async (req: Request, res: Response) => {
 
     res.json(project);
   } catch (error: any) {
+    if (error instanceof AppError) return res.status(error.statusCode).json({ error: error.message });
         captureRouteError(error, req, { route: 'tasks#2' });
     console.error('Get project error:', error);
     res.status(500).json({ error: 'Failed to fetch project' });
@@ -97,13 +122,14 @@ router.post('/projects', async (req: Request, res: Response) => {
         status: status || 'ACTIVE',
         start_date: start_date ? new Date(start_date) : new Date(),
         end_date: end_date ? new Date(end_date) : null,
-        owner_id: owner_id || (req as any).agent?.id,
+        owner_id: owner_id || req.agent!.id,
         team_members: team_members || [],
       },
     });
 
     res.status(201).json(project);
   } catch (error: any) {
+    if (error instanceof AppError) return res.status(error.statusCode).json({ error: error.message });
         captureRouteError(error, req, { route: 'tasks#3' });
     console.error('Create project error:', error);
     res.status(500).json({ error: 'Failed to create project' });
@@ -123,6 +149,7 @@ router.patch('/projects/:id', async (req: Request, res: Response) => {
       team_members,
     } = req.body;
 
+    if (!await prisma.workProject.findFirst({ where: { id: String(req.params.id), AND: [scopeOf(res).projects] } })) return res.status(404).json({ error: 'Project not found' });
     const updateData: any = {};
     if (name !== undefined) updateData.name = name;
     if (description !== undefined) updateData.description = description;
@@ -133,12 +160,13 @@ router.patch('/projects/:id', async (req: Request, res: Response) => {
     if (team_members !== undefined) updateData.team_members = team_members;
 
     const project = await prisma.workProject.update({
-      where: { id: req.params.id },
+      where: { id: String(req.params.id), AND: [scopeOf(res).projects] },
       data: updateData,
     });
 
     res.json(project);
   } catch (error: any) {
+    if (error instanceof AppError) return res.status(error.statusCode).json({ error: error.message });
         captureRouteError(error, req, { route: 'tasks#4' });
     console.error('Update project error:', error);
     if (error.code === 'P2025') {
@@ -152,11 +180,12 @@ router.patch('/projects/:id', async (req: Request, res: Response) => {
 router.delete('/projects/:id', async (req: Request, res: Response) => {
   try {
     await prisma.workProject.delete({
-      where: { id: req.params.id },
+      where: { id: String(req.params.id), AND: [scopeOf(res).projects] },
     });
 
     res.json({ success: true, message: 'Project deleted' });
   } catch (error: any) {
+    if (error instanceof AppError) return res.status(error.statusCode).json({ error: error.message });
         captureRouteError(error, req, { route: 'tasks#5' });
     console.error('Delete project error:', error);
     if (error.code === 'P2025') {
@@ -185,7 +214,13 @@ router.get('/tasks', async (req: Request, res: Response) => {
       view,
     } = req.query;
 
-    const where: any = {};
+    const where: any = { AND: [scopeOf(res).tasks] };
+    const paginated = req.query.page !== undefined || req.query.limit !== undefined;
+    const page = Number(req.query.page || 1);
+    const limit = Number(req.query.limit || 25);
+    if (paginated && (!Number.isInteger(page) || page < 1 || page > 100000 || !Number.isInteger(limit) || limit < 1 || limit > 100)) {
+      return res.status(400).json({ error: 'Invalid pagination. Limit must be 1–100.' });
+    }
     if (project_id) where.project_id = project_id;
     if (assigned_to) where.assigned_to = assigned_to;
     if (status) where.status = status;
@@ -202,12 +237,14 @@ router.get('/tasks', async (req: Request, res: Response) => {
 
     const tasks = await prisma.task.findMany({
       where,
+      ...(paginated ? { take: limit, skip: (page - 1) * limit } : {}),
       orderBy: view === 'calendar'
-        ? [{ due_date: 'asc' }]
+        ? [{ due_date: 'asc' }, { id: 'asc' }]
         : [
             { status: 'asc' },
             { priority: 'desc' },
             { due_date: 'asc' },
+            { id: 'asc' },
           ],
       include: {
         project: {
@@ -219,8 +256,10 @@ router.get('/tasks', async (req: Request, res: Response) => {
       },
     });
 
-    res.json({ tasks, total: tasks.length });
+    const total = paginated ? await prisma.task.count({ where }) : tasks.length;
+    res.json({ tasks, total, ...(paginated ? { page, limit } : {}) });
   } catch (error: any) {
+    if (error instanceof AppError) return res.status(error.statusCode).json({ error: error.message });
         captureRouteError(error, req, { route: 'tasks#6' });
     console.error('Get tasks error:', error);
     res.status(500).json({ error: 'Failed to fetch tasks' });
@@ -230,10 +269,10 @@ router.get('/tasks', async (req: Request, res: Response) => {
 // Get single task
 router.get('/tasks/:id', async (req: Request, res: Response) => {
   try {
-    const task = await prisma.task.findUnique({
-      where: { id: req.params.id },
+    const task = await prisma.task.findFirst({
+      where: { id: String(req.params.id), AND: [scopeOf(res).tasks] },
       include: {
-        project: true,
+        project: { select: { id: true, name: true } },
       },
     });
 
@@ -243,6 +282,7 @@ router.get('/tasks/:id', async (req: Request, res: Response) => {
 
     res.json(task);
   } catch (error: any) {
+    if (error instanceof AppError) return res.status(error.statusCode).json({ error: error.message });
         captureRouteError(error, req, { route: 'tasks#7' });
     console.error('Get task error:', error);
     res.status(500).json({ error: 'Failed to fetch task' });
@@ -349,6 +389,7 @@ router.post('/tasks', async (req: Request, res: Response) => {
 
     res.status(201).json(task);
   } catch (error: any) {
+    if (error instanceof AppError) return res.status(error.statusCode).json({ error: error.message });
         captureRouteError(error, req, { route: 'tasks#8' });
     console.error('Create task error:', error);
     res.status(500).json({ error: 'Failed to create task' });
@@ -372,8 +413,8 @@ router.patch('/tasks/:id', async (req: Request, res: Response) => {
     } = req.body;
 
     // Get existing task to check for changes
-    const existingTask = await prisma.task.findUnique({
-      where: { id: req.params.id },
+    const existingTask = await prisma.task.findFirst({
+      where: { id: String(req.params.id), AND: [scopeOf(res).tasks] },
     });
 
     if (!existingTask) {
@@ -431,7 +472,7 @@ router.patch('/tasks/:id', async (req: Request, res: Response) => {
     if (tags !== undefined) updateData.tags = tags;
 
     const task = await prisma.task.update({
-      where: { id: req.params.id },
+      where: { id: String(req.params.id), AND: [scopeOf(res).tasks] },
       data: updateData,
       include: {
         project: {
@@ -498,6 +539,7 @@ router.patch('/tasks/:id', async (req: Request, res: Response) => {
 
     res.json(task);
   } catch (error: any) {
+    if (error instanceof AppError) return res.status(error.statusCode).json({ error: error.message });
         captureRouteError(error, req, { route: 'tasks#9' });
     console.error('Update task error:', error);
     if (error.code === 'P2025') {
@@ -511,8 +553,8 @@ router.patch('/tasks/:id', async (req: Request, res: Response) => {
 router.delete('/tasks/:id', async (req: Request, res: Response) => {
   try {
     // Get task before deleting to log interaction
-    const task = await prisma.task.findUnique({
-      where: { id: req.params.id },
+    const task = await prisma.task.findFirst({
+      where: { id: String(req.params.id), AND: [scopeOf(res).tasks] },
     });
 
     if (!task) {
@@ -520,7 +562,7 @@ router.delete('/tasks/:id', async (req: Request, res: Response) => {
     }
 
     await prisma.task.delete({
-      where: { id: req.params.id },
+      where: { id: String(req.params.id), AND: [scopeOf(res).tasks] },
     });
 
     // SSOT Integration: Create interaction log for task deletion
@@ -547,6 +589,7 @@ router.delete('/tasks/:id', async (req: Request, res: Response) => {
 
     res.json({ success: true, message: 'Task deleted' });
   } catch (error: any) {
+    if (error instanceof AppError) return res.status(error.statusCode).json({ error: error.message });
         captureRouteError(error, req, { route: 'tasks#10' });
     console.error('Delete task error:', error);
     if (error.code === 'P2025') {
@@ -571,6 +614,7 @@ router.post('/tasks/bulk-import', async (req: Request, res: Response) => {
 
     for (const taskData of tasks) {
       try {
+        await validateTaskReferences(taskData, scopeOf(res));
         // Validation
         if (!taskData.title || !taskData.assigned_to || !taskData.due_date) {
           errors.push({
@@ -659,6 +703,7 @@ router.post('/tasks/bulk-import', async (req: Request, res: Response) => {
       errors,
     });
   } catch (error: any) {
+    if (error instanceof AppError) return res.status(error.statusCode).json({ error: error.message });
         captureRouteError(error, req, { route: 'tasks#11' });
     console.error('Bulk import error:', error);
     res.status(500).json({ error: 'Failed to import tasks' });
@@ -670,7 +715,7 @@ router.get('/tasks/stats/summary', async (req: Request, res: Response) => {
   try {
     const { assigned_to } = req.query;
 
-    const where: any = {};
+    const where: any = { AND: [scopeOf(res).tasks] };
     if (assigned_to) where.assigned_to = assigned_to;
 
     const [
@@ -716,6 +761,7 @@ router.get('/tasks/stats/summary', async (req: Request, res: Response) => {
       completion_rate: total > 0 ? ((done / total) * 100).toFixed(1) : 0,
     });
   } catch (error: any) {
+    if (error instanceof AppError) return res.status(error.statusCode).json({ error: error.message });
         captureRouteError(error, req, { route: 'tasks#12' });
     console.error('Get task stats error:', error);
     res.status(500).json({ error: 'Failed to fetch statistics' });

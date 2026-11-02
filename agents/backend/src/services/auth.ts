@@ -180,13 +180,14 @@ export class AuthService {
             throw new Error('This Google account is not linked to an active partner agent.');
         }
 
-        const tenant = await prisma.tenant.findFirst({ select: { id: true } });
+        const { partnerTenantId } = await import('../utils/partner_scope');
+        const tenantId = await partnerTenantId(partner.id);
         const token = jwt.sign(
             {
                 id: partner.id,
                 email: partner.email || '',
                 role: 'partner',
-                tenant_id: tenant?.id,
+                tenant_id: tenantId,
                 phone: partner.phone_number,
                 partner_category: partner.partner_category,
                 parent_partner_id: partner.parent_partner_id,
@@ -203,7 +204,13 @@ export class AuthService {
     }
 
     public verifyToken(token: string): any {
-        return jwt.verify(token, JWT_SECRET);
+        const decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] });
+        // Refresh and builder/portal credentials are never staff API access tokens.
+        if (typeof decoded === 'string' || typeof decoded.id !== 'string' ||
+            typeof decoded.tenant_id !== 'string' || typeof decoded.email !== 'string' ||
+            !['super_boss', 'manager', 'employee', 'partner'].includes(decoded.role) ||
+            (decoded.token_use && decoded.token_use !== 'mobile_access')) throw new Error('Invalid access token');
+        return decoded;
     }
 
     public async refreshToken(token: string) {

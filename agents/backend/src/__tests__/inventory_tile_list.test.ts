@@ -155,6 +155,8 @@ describe('inventory tile list metadata', () => {
     });
 
     it('uses the same designation resolver and tenant boundary for the property detail contacts', async () => {
+        // requireInventoryTenant (tenant-isolation guard) looks the row up first.
+        vi.mocked(prisma.inventory.findFirst).mockResolvedValue({ id: 'property-1' } as any);
         vi.mocked(prisma.inventory.findUnique).mockResolvedValue({ ...listing, key_holder_type: 'EXTERNAL', key_holder_phone: '9000000001' } as any);
         const res = await request(app).get('/inventory/property-1/contacts');
         expect(res.status).toBe(200);

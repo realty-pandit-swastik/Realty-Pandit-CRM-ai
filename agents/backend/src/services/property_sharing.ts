@@ -13,6 +13,7 @@
 
 import prisma from '../db';
 import logger from '../utils/logger';
+import { WhatsAppSendError } from './whatsapp_errors';
 import { WhatsAppService } from './whatsapp';
 import { MatchingEngine, buildMatchCriteriaFromLead } from './matching_engine';
 import { checkBudgetSanity, budgetReaskPrompt } from '../utils/budget_sanity';
@@ -86,14 +87,19 @@ export async function resolveActiveDealId(phone: string): Promise<string | null>
  * photos + videos are on by default for EVERY recipient (client, partner, employee, self);
  * the PDF brochure is opt-in. Recipient type no longer decides the format.
  */
-export type ShareContent = { photos: boolean; videos: boolean; pdf: boolean };
+export type ShareContent = { photos: boolean; videos: boolean; pdf: boolean; media_urls?: string[]; first_photo?: string };
+export type PackageItemOutcome = { item: string; status: 'accepted' | 'blocked' | 'failed' | 'uncertain'; provider_id?: string; reason?: string; provider_code?: number };
+export type PackageOutcome = { status: 'accepted' | 'partial' | 'blocked' | 'failed' | 'uncertain'; items: PackageItemOutcome[] };
 export const DEFAULT_SHARE_CONTENT: ShareContent = { photos: true, videos: true, pdf: false };
 
 /** Coerce an untrusted request-body value into ShareContent; missing/invalid keys fall back to defaults. */
 export function parseShareContent(raw: any): ShareContent {
     const c = raw && typeof raw === 'object' ? raw : {};
-    const pick = (k: keyof ShareContent) => (typeof c[k] === 'boolean' ? c[k] : DEFAULT_SHARE_CONTENT[k]);
-    return { photos: pick('photos'), videos: pick('videos'), pdf: pick('pdf') };
+    const pick = (k: 'photos' | 'videos' | 'pdf') => (typeof c[k] === 'boolean' ? c[k] : DEFAULT_SHARE_CONTENT[k]);
+    const selection = c.media_urls;
+    if (selection !== undefined && (!Array.isArray(selection) || selection.length > 100 || selection.some((u: unknown) => typeof u !== 'string' || u.length > 2048) || new Set(selection).size !== selection.length)) throw new Error('Invalid media selection');
+    if (c.first_photo !== undefined && typeof c.first_photo !== 'string') throw new Error('Invalid first photo');
+    return { photos: pick('photos'), videos: pick('videos'), pdf: pick('pdf'), ...(selection !== undefined ? { media_urls: selection, first_photo: c.first_photo || '' } : {}) };
 }
 
 /**
@@ -104,11 +110,13 @@ export function parseShareContent(raw: any): ShareContent {
 export async function buildBrochureUrl(
     inv: any,
     partner?: { name?: string | null; phone_number?: string | null } | null,
+    selectedMedia?: string[],
 ): Promise<string> {
     const { signPdfToken } = await import('../utils/pdf_token');
     const exp = Math.floor(Date.now() / 1000) + BROCHURE_LINK_TTL_SEC;
-    const token = signPdfToken(inv.id, 'brandless', exp);
-    let pdfUrl = `${BROCHURE_API_BASE}/inventory/${inv.id}/brochure.pdf?variant=brandless&token=${token}`;
+    const selection = selectedMedia === undefined ? undefined : JSON.stringify(selectedMedia);
+    const token = signPdfToken(inv.id, selection === undefined ? 'brandless' : `brandless-media:${selection}`, exp);
+    let pdfUrl = `${BROCHURE_API_BASE}/inventory/${inv.id}/brochure.pdf?variant=brandless&token=${token}${selection === undefined ? '' : `&media=${encodeURIComponent(selection)}`}`;
     if (partner?.name) {
         pdfUrl += `&pn=${encodeURIComponent(partner.name)}&pp=${encodeURIComponent(partner.phone_number || '')}`;
     }
@@ -158,8 +166,9 @@ export async function sharePropertyToRecipient(
     inv: any,
     content: ShareContent = DEFAULT_SHARE_CONTENT,
     seq: { index: number; total: number } = { index: 0, total: 1 },
-): Promise<{ sent: boolean; pdfSent: boolean; pdfUrl: string | null; mode: ShareMode; partner: ShareModeResult['partner'] }> {
+): Promise<{ sent: boolean; pdfSent: boolean; pdfUrl: string | null; mode: ShareMode; partner: ShareModeResult['partner']; outcome?: PackageOutcome }> {
     const { mode, partner } = await resolveShareMode(phone);
+    if (content.media_urls !== undefined) return shareSelectedPackage(phone, inv, content, mode, partner, seq);
     const sent = await shareInventoryCard(phone, inv, content);
     let pdfSent = false;
     let pdfUrl: string | null = null;
@@ -794,4 +803,68 @@ async function sendPropertyCard(
         logger.warn(`[PropShare] ${preferred} unavailable (${(ePref as Error).message}); falling back to ${fallback}`);
         await whatsapp.sendTemplate(phone, fallback, params, imageUrl);
     }
+}
+
+/** Explicit native selection never falls back, queues retries or substitutes attachments. */
+export function selectedPropertyMedia(inv: { media_urls?: string[]; video_urls?: string[] }, content: ShareContent): string[] {
+    const urls = content.media_urls || [];
+    const owned = new Set([...(inv.media_urls || []), ...(inv.video_urls || [])]);
+    if (urls.some(url => !owned.has(url)) || (content.first_photo && (!urls.includes(content.first_photo) || /\.(mp4|mov|webm|3gp)(?:[?#]|$)/i.test(content.first_photo)))) throw new Error('Selected media does not belong to this property');
+    return content.first_photo ? [content.first_photo, ...urls.filter(url => url !== content.first_photo)] : urls;
+}
+async function shareSelectedPackage(phone: string, inv: any, content: ShareContent, mode: ShareMode, partner: ShareModeResult['partner'], seq: { index: number; total: number }) {
+    const urls = selectedPropertyMedia(inv, content);
+    const items: PackageItemOutcome[] = [];
+    const caption = buildCustomerPropertyShareText(inv);
+    const active = await SessionTracker.isSessionActive(phone);
+    let interrupted = false;
+    for (const [index, url] of urls.entries()) {
+        const video = /\.(mp4|mov|webm|3gp|m4v|avi|mkv|ogg)(?:[?#]|$)/i.test(url);
+        if (!active || interrupted || (video && !/\.(mp4|3gp)(?:[?#]|$)/i.test(url))) { items.push({ item: url, status: 'blocked', reason: !active ? 'A WhatsApp customer-service window is required for this selected package.' : interrupted ? 'Stopped after an earlier unconfirmed item.' : 'This video format is not supported by the provider.' }); continue; }
+        try {
+            const sendUrl = video ? (url.startsWith('/') ? `${API_BASE}${url}` : url) : url.startsWith('/uploads/') ? whatsappImageUrl(inv.id, url) : url;
+            const result = await whatsapp.sendPackageItemOnce(phone, video ? 'video' : 'image', sendUrl, index === 0 ? caption : undefined);
+            const id = result?.waMessageId;
+            items.push({ item: url, status: 'accepted', ...(typeof id === 'string' ? { provider_id: id } : {}) });
+        } catch (error) { items.push(packageFailureOutcome(url, error)); interrupted = true; }
+    }
+    if (!urls.length) {
+        if (!active) items.push({ item: 'details', status: 'blocked', reason: 'A WhatsApp customer-service window is required.' });
+        else try { const result = await whatsapp.sendPackageItemOnce(phone, 'text', caption); items.push({ item: 'details', status: 'accepted', ...(result.waMessageId ? { provider_id: result.waMessageId } : {}) }); }
+        catch (error) { items.push(packageFailureOutcome('details', error)); interrupted = true; }
+    }
+    let pdfUrl: string | null = null;
+    if (content.pdf) {
+        if (interrupted || !active) items.push({ item: 'brochure', status: 'blocked', reason: interrupted ? 'Stopped after an earlier unconfirmed item.' : 'A WhatsApp customer-service window is required.' });
+        else try { pdfUrl = await buildBrochureUrl(inv, partner, urls.filter(url => !/\.(mp4|mov|webm|3gp|m4v|avi|mkv|ogg)(?:[?#]|$)/i.test(url))); const result = await whatsapp.sendPackageItemOnce(phone, 'document', pdfUrl, caption); items.push({ item: 'brochure', status: 'accepted', ...(result.waMessageId ? { provider_id: result.waMessageId } : {}) }); }
+        catch (error) { items.push(packageFailureOutcome('brochure', error)); }
+    }
+    const accepted = items.filter(i => i.status === 'accepted').length;
+    const status: PackageOutcome['status'] = items.some(i => i.status === 'uncertain') ? (accepted ? 'partial' : 'uncertain') : accepted === items.length ? 'accepted' : accepted ? 'partial' : items.some(i => i.status === 'failed') ? 'failed' : 'blocked';
+    return { sent: accepted > 0, pdfSent: items.some(i => i.item === 'brochure' && i.status === 'accepted'), pdfUrl, mode, partner, outcome: { status, items } };
+}
+
+export function buildCustomerPropertyShareText(inv: any): string {
+    const specs = inv.specs || {};
+    const price = inv.display_price == null ? 'Price on request' : `₹${formatPrice(inv.display_price, undefined, inv.intent)}`;
+    const lines = [inv.flat_property_type?.name || inv.property_type_link?.name || prettifyType(inv.type),
+        `Property ID: ${inv.display_id || inv.id}`, inv.intent ? `Intent: ${inv.intent}` : '',
+        [inv.apartment_name, inv.locality, inv.city].filter(Boolean).join(', '), price];
+    for (const key of ['bhk', 'rooms', 'bathrooms', 'area', 'area_unit', 'plot-area', 'plot-area-unit', 'furnishing', 'facing']) {
+        if (specs[key] !== undefined && specs[key] !== null && specs[key] !== '') lines.push(`${prettifyType(key)}: ${String(specs[key])}`);
+    }
+    const floor = inv.display_floor ?? inv.floor_label ?? inv.floor_number;
+    if (floor !== undefined && floor !== null && floor !== '') lines.push(`Floor: ${floor}`);
+    if (Array.isArray(specs.amenities) && specs.amenities.length) lines.push(`Amenities: ${specs.amenities.join(', ')}`);
+    return lines.filter(Boolean).join('\n');
+}
+function packageFailureStatus(error: unknown): PackageItemOutcome['status'] {
+    if (!(error instanceof WhatsAppSendError) || !error.info.httpStatus || error.info.httpStatus >= 500) return 'uncertain';
+    return [131047, 131048, 131049, 130429].includes(error.info.code || 0) ? 'blocked' : 'failed';
+}
+
+function packageFailureOutcome(item: string, error: unknown): PackageItemOutcome {
+    const status = packageFailureStatus(error);
+    return { item, status, reason: status === 'uncertain' ? 'Provider outcome unknown. Check CRM activity before another send.' : status === 'blocked' ? 'Provider policy blocked this item. Review the package or use My WhatsApp.' : 'Provider rejected this item. Review its format and recipient.',
+        ...(error instanceof WhatsAppSendError && error.info.code ? { provider_code: error.info.code } : {}) };
 }

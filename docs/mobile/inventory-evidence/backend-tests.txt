@@ -1,0 +1,15 @@
+
+> backend@1.0.0 test
+> vitest run --maxWorkers=2
+
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - ESM syntax in a file loaded as CommonJS (vitest.config.ts:1:1). Use a `.mjs` extension or set `"type": "module"` in the closest package.json
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v4.1.11 /Users/avnish/realty-pandit-mobile/agents/backend
+
+
+ Test Files  104 passed | 2 skipped (106)
+      Tests  714 passed | 4 skipped (718)
+   Start at  08:37:05
+   Duration  32.63s (transform 3.69s, setup 1.34s, import 44.53s, tests 4.01s, environment 21ms)

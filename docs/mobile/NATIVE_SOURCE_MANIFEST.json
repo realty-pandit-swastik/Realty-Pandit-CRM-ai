@@ -1,0 +1,174 @@
+{
+  "scope": "Post-prepatch native-checkpoint application source inventory; package/native build configuration tracked separately. No JS source changes occurred after attachment final freeze through this inventory. Earlier draft proofs use the same lead/new-task/storage source; earlier FastRefresh routing observations are excluded.",
+  "files": [
+    {
+      "path": "app/(crm)/_layout.tsx",
+      "sha256": "46e75530548dd4e4f511d73267a71dc0ab388ddd041c54e7259fd64a41623e72"
+    },
+    {
+      "path": "app/(crm)/index.tsx",
+      "sha256": "d838d69982e47b5b36ff03f924e1601ebd7f590a62b39d5a4ad4fa736c029917"
+    },
+    {
+      "path": "app/(crm)/inventory.tsx",
+      "sha256": "f24bdcbed70e4d3418919d7cadfe3bf2b62ef1468cb9fb4563d7a13b97a8543c"
+    },
+    {
+      "path": "app/(crm)/leads.tsx",
+      "sha256": "34d61d27006aa05753873b9be750dbf2923cd20b093e5e9fda5f366bf675b077"
+    },
+    {
+      "path": "app/(crm)/more.tsx",
+      "sha256": "64c579704bddc5635e7708d5789fa87fa92f7ba110d6ebd9afcc1f776f8142f2"
+    },
+    {
+      "path": "app/(crm)/tasks.tsx",
+      "sha256": "93c1752ce3d544e2369aa8c2332b8a88baab08ddfc4b6db4abaf72f6d45cfe53"
+    },
+    {
+      "path": "app/_layout.tsx",
+      "sha256": "bfcd33fe07832ef2135e38af58715480041fe779894960e309a9cbdad37130dd"
+    },
+    {
+      "path": "app/deals/[id].tsx",
+      "sha256": "46d231cc69ec768ae74165e964d4502e8f114b8b76687123003b10a8ec9e3a1a"
+    },
+    {
+      "path": "app/deals/index.tsx",
+      "sha256": "1b351d854b649c614467dd76494c5090567895b209948bbe92d48c3f6d8e2382"
+    },
+    {
+      "path": "app/inventory/[id].tsx",
+      "sha256": "d1f00d12a10f5b1bc5c6f77344899e136c6328d2a9b7bacce62e2346d50e9228"
+    },
+    {
+      "path": "app/lead/[phone].tsx",
+      "sha256": "b62c7556d8fc0b4f366303e4ec4b35dd4d5ba86206d3b6d0d3a5794307e5903f"
+    },
+    {
+      "path": "app/login.tsx",
+      "sha256": "79fd10403b8ee1352290203fb919be4129f9c0327dc2a62c8b1da28a4d014179"
+    },
+    {
+      "path": "app/projects/[id].tsx",
+      "sha256": "4d8143341f66d64272a0e61c3825c3585d181bf3ae8fd22ccd4c9e9365ed873c"
+    },
+    {
+      "path": "app/projects/edit.tsx",
+      "sha256": "9851e8762afd3d4d305ff7079d79b0d5d51d5e4ee4ea0aa34c9bf9b6f3404792"
+    },
+    {
+      "path": "app/projects/index.tsx",
+      "sha256": "8855d67f7e3c92f7f2ba84709ee79c7d6deae92e3b1f137584f6ab504b0fa5ba"
+    },
+    {
+      "path": "app/projects/new.tsx",
+      "sha256": "58cd99c1de74627638c531b42225d17bdc0af59c0378634a142b85d8a2940209"
+    },
+    {
+      "path": "app/sessions.tsx",
+      "sha256": "9d7de9eb6ddd7114d612d662e5974bcdc7eefa2ff9aff18bd61596791f3ed95d"
+    },
+    {
+      "path": "app/task/[id].tsx",
+      "sha256": "e1b37e17bcc90fee68d512528ba1b57884864e343d17b235c73eba4334b7a152"
+    },
+    {
+      "path": "app/task/edit.tsx",
+      "sha256": "b65659101f99083c4f1fb7a1ee34a2e42340c0a61aebe2b5f454eb4417446083"
+    },
+    {
+      "path": "app/task/new.tsx",
+      "sha256": "c289e5a72919ecc11fdef75e007581484eafa4cc903280946dd5a7c0a1dc07c7"
+    },
+    {
+      "path": "app/visits/[id].tsx",
+      "sha256": "e00447bd3a4bf250a25c7bffdc946e2889c982e9f2d90f8c911a1fd83ffcbf2b"
+    },
+    {
+      "path": "app/visits.tsx",
+      "sha256": "3e46498a2ba836a15722c310c0c12fc3d9cb45575c57da7c550e5d09b6c180d5"
+    },
+    {
+      "path": "src/api/client.ts",
+      "sha256": "9c83923f0fafefcece79cf3da07ae2d4fca8fd966a8e7a2ee2ae85b39346e290"
+    },
+    {
+      "path": "src/api/contracts.ts",
+      "sha256": "dedd6a4eb83b34ae45c6a8f66421e56b2eaaedb36818715a3d2bc401f7802484"
+    },
+    {
+      "path": "src/components/Controls.tsx",
+      "sha256": "1f9b2fb3a6b011c87bd38aac8a5c750d7cde17e90cf9edc7282a1f55364a6398"
+    },
+    {
+      "path": "src/components/PagedList.tsx",
+      "sha256": "da6d5bd87f21318f784f06443a18cb4b4f567ebfbfb7799dd7a31c0c88566c06"
+    },
+    {
+      "path": "src/features/auth/Login.tsx",
+      "sha256": "1313436e0100e91353f6eb9135a8b05af3eb4b0872622b3066e1e3d2171a20ea"
+    },
+    {
+      "path": "src/features/auth/SessionProvider.tsx",
+      "sha256": "c0b5e0c290532bcc6e486a081ff51fbd12b75c58486c8177711629b4eb0d56d1"
+    },
+    {
+      "path": "src/features/crm/RecordLoading.tsx",
+      "sha256": "d86b615daa732b8c48bbe28a30a00ebe905203c0c0f1bbb61f618551edba7e52"
+    },
+    {
+      "path": "src/features/crm/useRecord.ts",
+      "sha256": "f2cde7039b65150203097b95778a56d1c24925f712d9487076ce89368cdb2292"
+    },
+    {
+      "path": "src/features/inventory/Attachments.tsx",
+      "sha256": "65f356dd63e8373648238e2338fa5322c8441b1f691df3e719befe8df6f53c9c"
+    },
+    {
+      "path": "src/features/inventory/attachmentFiles.ts",
+      "sha256": "6edd56169f8dcb10179c141f49011a037906eaf2bd2ad1a36be52deb246c8923"
+    },
+    {
+      "path": "src/features/tasks/Choice.tsx",
+      "sha256": "fc881fc8b32c39608f3a58e4e0527e9806f17b0662e1835ee7702f703df966a0"
+    },
+    {
+      "path": "src/features/tasks/ProjectForm.tsx",
+      "sha256": "11457054ee8a165483cf3f0e807dbff2b28ee18a85b662f115eb5564cb186475"
+    },
+    {
+      "path": "src/features/tasks/RecordList.tsx",
+      "sha256": "6558fd6da8d519e3476a993ec5a23a193b523b1da8c7f85e1b94ecae08fddb87"
+    },
+    {
+      "path": "src/features/tasks/contracts.ts",
+      "sha256": "a0fc5499fd5342cfdbd91f4e9e77f6763b5c814c7caff758dd49a0a7d89f7b0c"
+    },
+    {
+      "path": "src/features/tasks/invalidateWork.ts",
+      "sha256": "1bc6115b7fcdea2383b5bb48c2bcbc155ea00ab3fb958ff481518939fbb4b92f"
+    },
+    {
+      "path": "src/storage/draftContracts.ts",
+      "sha256": "8906df8e5fab53847878447089476b7e9cbb177f57000a38cb9cd132ed1616c9"
+    },
+    {
+      "path": "src/storage/drafts.ts",
+      "sha256": "2d38161faf416faca4b39a3abf228984e6d287190eeeb10485af744958e07ef9"
+    },
+    {
+      "path": "src/storage/session.ts",
+      "sha256": "4deefa42acf6ec840f846152197b7c461ea740fded01fad3cab002eb19534794"
+    },
+    {
+      "path": "src/storage/useEncryptedDraft.ts",
+      "sha256": "bc78c920fe91a5ec2ae04f7066c5a68c5790efa5546081bd7d573a63d568203b"
+    },
+    {
+      "path": "src/theme/tokens.ts",
+      "sha256": "241d5af592ac10228be08028d44a4ce392fba6cd6cb7b921c06cb7f7a0dda837"
+    }
+  ],
+  "aggregateSha256": "d0296426b456af592bd29e5ee02e3b0c74cdaa88d7d3139501fb3879db1a804c"
+}

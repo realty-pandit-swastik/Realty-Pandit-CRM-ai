@@ -200,6 +200,18 @@ export class WhatsAppService {
     }
 
     /** Send a direct image/video/document attachment and throw when Meta rejects it. */
+    /** Explicit packages are single-attempt: a timeout must never replay a provider send. */
+    public async sendPackageItemOnce(to: string, type: 'image' | 'video' | 'document' | 'text', content: string, caption?: string): Promise<SendResult> {
+        if (process.env.NODE_ENV === 'development') throw new Error('Provider sending is disabled in development.');
+        const payload = { messaging_product: 'whatsapp', to, type,
+            [type]: type === 'text' ? { body: content } : { link: content, ...(caption ? { caption } : {}) } };
+        const result = await this.sendWithRetry(payload, 1);
+        if (!result.waMessageId) throw new Error('Provider response did not confirm a message identifier.');
+        await recordOutbound({ to, messageType: type, body: type === 'text' ? content : caption,
+            mediaUrl: type === 'text' ? undefined : content, sentBy: 'property_sharing', waMessageId: result.waMessageId ?? null, error: result.error ?? null }).catch(() => {});
+        return result;
+    }
+
     public async sendMediaStrict(
         to: string,
         type: 'image' | 'video' | 'document',

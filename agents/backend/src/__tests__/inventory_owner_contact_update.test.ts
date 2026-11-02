@@ -44,14 +44,16 @@ const EXISTING: any = {
 };
 
 beforeEach(() => {
+    vi.mocked(prisma.inventory.findFirst).mockResolvedValue({ id: INV_ID, tenant_id: 'tenant-1' } as any);
     vi.clearAllMocks();
     role = 'super_boss';
     vi.mocked(prisma.inventory.findUnique).mockResolvedValue(EXISTING as any);
     // No active staff own a customer number by default → railguard passes.
     vi.mocked(prisma.agent.findMany).mockResolvedValue([] as any);
     vi.mocked(prisma.tenant.findFirst).mockResolvedValue({ id: 'tenant-1' } as any);
+    prisma.tenant.findUnique = vi.fn().mockResolvedValue({ id: 'tenant-1' });
     vi.mocked(prisma.contact.update).mockResolvedValue({} as any);
-    vi.mocked(prisma.contact.findUnique).mockResolvedValue({ name: 'New Owner Person' } as any);
+    vi.mocked(prisma.contact.findUnique).mockResolvedValue({ name: 'New Owner Person', tenant_id: 'tenant-1' } as any);
         vi.mocked(prisma.inventory.update).mockImplementation((async ({ data }: any) => ({ ...EXISTING, ...data })) as any);
 });
 
@@ -104,6 +106,7 @@ describe('PATCH /api/inventory/:id — owner contact change', () => {
         vi.mocked(prisma.inventory.findUnique).mockResolvedValue(EXISTING as any);
         vi.mocked(prisma.agent.findMany).mockResolvedValue([] as any);
         vi.mocked(prisma.tenant.findFirst).mockResolvedValue({ id: 'tenant-1' } as any);
+    prisma.tenant.findUnique = vi.fn().mockResolvedValue({ id: 'tenant-1' });
     vi.mocked(prisma.inventory.update).mockImplementation((async ({ data }: any) => ({ ...EXISTING, ...data })) as any);
 
         await request(app).patch(`/api/inventory/${INV_ID}`).send({ owner_phone: NEW_OWNER, owner_name: '   ' });

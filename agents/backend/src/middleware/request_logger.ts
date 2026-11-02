@@ -17,7 +17,8 @@ export function requestLogger(req: Request, res: Response, next: NextFunction) {
         const logData = {
             requestId,
             method: req.method,
-            path: req.originalUrl,
+            // Route templates retain diagnostics without customer identifiers or capability queries.
+            path: typeof req.route?.path === 'string' ? req.route.path : '[unmatched]',
             status: res.statusCode,
             duration: `${duration}ms`,
             ip: req.ip,

@@ -14,6 +14,7 @@ export const PERMISSIONS: Record<string, string[]> = {
         'view_inventory',
         'edit_inventory',
         'delete_inventory',
+        'manage_inventory',
         'manage_settings',
         'edit_contact',
         'view_all_tenants',

@@ -6,6 +6,7 @@ export default defineConfig({
         environment: 'node',
         setupFiles: ['./src/__tests__/setup.ts'],
         include: ['src/**/*.test.ts'],
+        exclude: ['src/integration/**'], // Real database/auth tests use vitest.mobile-integration.config.ts.
         coverage: {
             provider: 'v8',
             reporter: ['text', 'lcov'],

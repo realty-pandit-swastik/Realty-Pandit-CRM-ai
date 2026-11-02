@@ -1,0 +1,13 @@
+// AGP invokes Ninja directly, so CMAKE_BUILD_PARALLEL_LEVEL alone does not bound C++ jobs.
+gradle.beforeProject { project ->
+    project.afterEvaluate {
+        def android = project.extensions.findByName('android')
+        if (android != null) {
+            android.defaultConfig.externalNativeBuild.cmake.arguments.addAll([
+                '-DCMAKE_JOB_POOLS=rp_compile=2;rp_link=1',
+                '-DCMAKE_JOB_POOL_COMPILE=rp_compile',
+                '-DCMAKE_JOB_POOL_LINK=rp_link'
+            ])
+        }
+    }
+}

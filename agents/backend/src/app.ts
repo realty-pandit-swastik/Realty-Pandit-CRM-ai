@@ -1,3 +1,4 @@
+import personalWhatsAppHandoffs from './routes/personal_whatsapp_handoffs';
 
 import express from 'express';
 import path from 'path';
@@ -52,6 +53,9 @@ import internalToolsRouter from './routes/internal_tools'; // Panditji voice bot
 import { loginLimiter, authLimiter, publicLimiter, webhookLimiter, externalLimiter, agentLimiter, apiLimiter, workflowLimiter, chatLimiter } from './middleware/rate_limit';
 import { verifyMetaSignature } from './middleware/verify_meta_signature';
 import { csrfMiddleware } from './middleware/csrf';
+import mobileAuthRoutes from './routes/mobile_auth';
+import { blockPrivateUploads } from './middleware/private_uploads';
+import { mobileCredentialBoundary } from './middleware/mobile_credential_boundary';
 import { requestLogger } from './middleware/request_logger';
 import logger from './utils/logger';
 import { errorHandler } from './middleware/error_handler';
@@ -126,6 +130,7 @@ app.use(cors({
 
 // Cookie parser — must come before CSRF middleware and auth middleware
 app.use(cookieParser());
+app.use(mobileCredentialBoundary);
 
 // CSRF protection — double-submit cookie pattern
 // Exempts: safe methods, Bearer-authenticated requests, webhooks, public routes
@@ -214,7 +219,7 @@ h1{font-size:1.75rem;font-weight:700;margin-bottom:.5rem;background:linear-gradi
 // Call recordings contain private conversations; serve them only through the authenticated call route.
 app.use('/uploads/staff_calls', (_req, res) => res.sendStatus(404));
 app.use('/uploads/temp', (_req, res) => res.sendStatus(404));
-app.use('/uploads', express.static(path.join(process.cwd(), 'uploads'), {
+app.use('/uploads', blockPrivateUploads, express.static(path.join(process.cwd(), 'uploads'), {
     maxAge: process.env.NODE_ENV === 'production' ? '7d' : 0,
     immutable: process.env.NODE_ENV === 'production',
     setHeaders: (res, filepath) => {
@@ -245,6 +250,7 @@ app.post('/csp-report', express.json({ type: ['application/json', 'application/c
 // Public Routes (no auth required)
 // loginLimiter is applied only to POST /auth/login (5/min per IP)
 app.post('/auth/login', loginLimiter);
+app.use('/auth/mobile', authLimiter, mobileAuthRoutes);
 app.use('/auth', authLimiter, authRoutes);
 app.use('/user', publicLimiter, userAuthRoutes); // Customer user authentication
 app.use('/webhooks', webhookLimiter, webhookRoutes);
@@ -366,6 +372,8 @@ app.get('/api/team/google/callback', publicLimiter, async (req, res) => {
 });
 
 // API Routes (JWT auth)
+// Helper claims use narrow capabilities; create/cancel enforce staff auth in the router.
+app.use('/api/personal-whatsapp/handoffs', apiLimiter, personalWhatsAppHandoffs);
 app.use('/api', apiLimiter, apiRoutes);
 app.use('/api/leads', apiLimiter, leadRoutes);
 app.use('/api/calls', apiLimiter, staffCallRoutes); // Staff Call Intelligence
