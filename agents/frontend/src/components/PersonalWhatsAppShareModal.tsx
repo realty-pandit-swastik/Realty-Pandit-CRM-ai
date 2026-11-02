@@ -250,6 +250,79 @@ export default function PersonalWhatsAppShareModal({ inventoryIds, initialPhone,
         catch { setError('Could not copy. Select and copy the displayed property details.'); }
     }
 
+    function sendPropertyDetails() {
+        setError('');
+        const recipient = toDialablePhone(phone)?.replace(/^\+/, '') || phone.replace(/\D/g, '');
+        const cleanPhone = recipient.length === 10 ? '91' + recipient : recipient;
+        if (!cleanPhone) {
+            setError('Please enter or select a recipient phone number first.');
+            return;
+        }
+        const text = inventories.map(inv => caption(inv)).join('\n\n');
+        if (!text) {
+            setError('No property details to send.');
+            return;
+        }
+        window.open(`https://wa.me/${cleanPhone}?text=${encodeURIComponent(text)}`, '_blank');
+        setProgress(`✓ Property details opened in WhatsApp for +${cleanPhone}! Send the text, then tap Button 2 below to share media.`);
+    }
+
+    async function shareMediaAndPdf() {
+        setError('');
+        if (!chosen.length) {
+            setError('Select at least one property photo, video, or PDF.');
+            return;
+        }
+        setBusy(true);
+        setProgress('Preparing selected media and PDF for Android Share Sheet…');
+        try {
+            const filesToShare: File[] = [];
+            let total = 0;
+            for (const inv of chosen) {
+                const selection = selections[inv.id];
+                const ordered = orderedPropertyAttachments(propertyAttachments(inv, apiBase), selection);
+                const name = `property-${(inv.display_id || inv.id).replace(/[^a-zA-Z0-9-]/g, '')}`;
+                for (let i = 0; i < ordered.length; i++) {
+                    const attachment = ordered[i];
+                    setProgress(`Downloading ${attachment.label}…`);
+                    const response = await fetch(attachment.url, {
+                        credentials: new URL(attachment.url).origin === new URL(apiBase).origin ? 'include' : 'omit',
+                        signal: AbortSignal.timeout(60_000),
+                    });
+                    if (!response.ok) throw new Error(`${attachment.label} could not be downloaded.`);
+                    const blob = await downloadPersonalWhatsAppBlob(response, MAX_PERSONAL_SHARE_BYTES - total);
+                    total += blob.size;
+                    validatePersonalWhatsAppFile(blob, attachment.kind, attachment.label);
+                    const ext = blob.type.split('/')[1]?.replace('jpeg', 'jpg').replace('quicktime', 'mov') || (attachment.kind === 'video' ? 'mp4' : 'jpg');
+                    filesToShare.push(new File([blob], `${name}-${i + 1}.${ext}`, { type: blob.type }));
+                }
+                if (selection.pdf) {
+                    setProgress('Generating property brochure PDF…');
+                    const response = await client.post('/api/inventory/share-pdf', { inventory_ids: [inv.id], variant: 'brandless' }, { responseType: 'blob' });
+                    filesToShare.push(new File([response.data], `${name}-brochure.pdf`, { type: 'application/pdf' }));
+                }
+            }
+            if (!filesToShare.length) {
+                throw new Error('Select at least one photo, video, or PDF to share.');
+            }
+            if (navigator.share && navigator.canShare && navigator.canShare({ files: filesToShare })) {
+                setProgress('Opening Android Share Sheet… choose WhatsApp and your contact.');
+                await navigator.share({ files: filesToShare });
+                setHandedOff(true);
+                setProgress('Files sent to Android Share Sheet! Tap Send inside WhatsApp.');
+            } else {
+                throw new Error('Web Share files not supported by this browser. Use Android Chrome over HTTPS.');
+            }
+        } catch (err) {
+            if (active.current) {
+                setError(err instanceof Error ? err.message : 'Could not share files.');
+                setProgress('');
+            }
+        } finally {
+            if (active.current) setBusy(false);
+        }
+    }
+
     function keyboard(event: React.KeyboardEvent) {
         if (event.key === 'Escape' && !busy) onClose();
         if (event.key !== 'Tab') return;
@@ -288,11 +361,53 @@ export default function PersonalWhatsAppShareModal({ inventoryIds, initialPhone,
                     <label>Sending app <select value={sendingApp} onChange={e => { invalidate(); setSendingApp(e.target.value as AndroidSendingApp); }}>
                         <option value="com.whatsapp">WhatsApp</option><option value="com.whatsapp.w4b">WhatsApp Business</option>
                     </select></label></>}
+
+                {/* 2-Button Direct WhatsApp Share Flow */}
+                <div style={{ backgroundColor: 'var(--bg-secondary)', border: '2px solid #25D366', borderRadius: '12px', padding: '16px', margin: '16px 0' }}>
+                    <div style={{ fontWeight: 700, fontSize: '15px', color: '#25D366', marginBottom: '6px' }}>
+                        ⚡ 2-Button WhatsApp Sharing Flow
+                    </div>
+                    <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '12px' }}>
+                        Step 1 opens WhatsApp with the property details and puts this contact at the top. Step 2 opens the Android Share Sheet to send your selected photos, videos, or PDF brochure to that same contact.
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '10px' }}>
+                        <button
+                            type="button"
+                            onClick={sendPropertyDetails}
+                            disabled={busy}
+                            style={{
+                                padding: '12px 16px', borderRadius: '8px', border: 'none',
+                                backgroundColor: '#25D366', color: '#ffffff', fontSize: '13px', fontWeight: 700, cursor: 'pointer', textAlign: 'center'
+                            }}
+                        >
+                            1️⃣ Step 1: Send Property Details (WhatsApp)
+                        </button>
+                        <button
+                            type="button"
+                            onClick={shareMediaAndPdf}
+                            disabled={busy || !chosen.length}
+                            style={{
+                                padding: '12px 16px', borderRadius: '8px', border: 'none',
+                                backgroundColor: '#128c7e', color: '#ffffff', fontSize: '13px', fontWeight: 700, cursor: 'pointer', textAlign: 'center',
+                                opacity: (!chosen.length || busy) ? 0.6 : 1
+                            }}
+                        >
+                            2️⃣ Step 2: Share Media & PDF (Share Sheet)
+                        </button>
+                    </div>
+                </div>
+
                 {inventories.map(inv => {
                     const attachments = propertyAttachments(inv, apiBase);
                     const selection = selections[inv.id] || EMPTY_ATTACHMENT_SELECTION;
                     return <section className="personal-wa-property" key={inv.id}>
-                        <h3>{inv.display_id || inv.locality || inv.location || 'Property'}</h3>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                            <h3>{inv.display_id || inv.locality || inv.location || 'Property'}</h3>
+                            <div style={{ display: 'flex', gap: '6px' }}>
+                                <button type="button" onClick={() => update(inv.id, { urls: attachments.map(a => a.url), firstPhoto: attachments.find(a => a.kind === 'image')?.url || '', pdf: true })} style={{ fontSize: '11px', padding: '4px 8px' }}>Select All</button>
+                                <button type="button" onClick={() => update(inv.id, EMPTY_ATTACHMENT_SELECTION)} style={{ fontSize: '11px', padding: '4px 8px' }}>Deselect All</button>
+                            </div>
+                        </div>
                         <div className="personal-wa-gallery">{attachments.map(item => <div className="personal-wa-card" key={item.url}>
                             {item.kind === 'image' ? <img src={item.url} alt={item.label} loading="lazy" />
                                 : <video src={item.url} controls playsInline preload="metadata" aria-label={item.label} />}

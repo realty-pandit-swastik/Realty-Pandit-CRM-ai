@@ -1490,10 +1490,10 @@ const leadCycleStartOf = (lead: any): string => {
                             </div>
                         )}
                     </div>
-                    <div style={{ display: 'flex', gap: '6px' }}>
-                        <button type="button" onClick={handleExportCSV} style={{ ...outlineBtn, padding: '5px 10px', fontSize: '12px' }}>Export</button>
-                        <button type="button" onClick={loadData} style={{ ...outlineBtn, padding: '5px 10px', fontSize: '12px' }}>Refresh</button>
-                        <button type="button" onClick={openCreateModal} style={{ ...primaryBtn, padding: '5px 12px', fontSize: '12px' }}>+ Add Lead</button>
+                    <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                        {!isMobile && <button type="button" onClick={handleExportCSV} style={{ ...outlineBtn, padding: '5px 10px', fontSize: '12px' }}>Export</button>}
+                        <button type="button" onClick={loadData} title="Refresh" style={{ ...outlineBtn, padding: '5px 10px', fontSize: '12px' }}>{isMobile ? '🔄' : 'Refresh'}</button>
+                        <button type="button" onClick={openCreateModal} style={{ ...primaryBtn, padding: isMobile ? '5px 10px' : '5px 12px', fontSize: '12px' }}>+ Add Lead</button>
                     </div>
                 </div>
 
@@ -2071,7 +2071,7 @@ const leadCycleStartOf = (lead: any): string => {
             {selectedPhone && (
                 <>
                     <div onClick={closeDetail} style={{ position: 'fixed', inset: 0, backgroundColor: 'var(--rp-overlay-soft)', zIndex: 90 }} />
-                    <div style={{ position: 'fixed', top: 0, right: 0, bottom: 0, width: isMobile ? '100%' : '480px', maxWidth: isMobile ? '100%' : '95vw', backgroundColor: 'var(--bg-primary)', overflowY: 'auto', display: 'flex', flexDirection: 'column', zIndex: 91, boxShadow: '-4px 0 24px var(--rp-shadow-tint)', borderLeft: isMobile ? 'none' : '1px solid var(--border-secondary)' }}>
+                    <div style={{ position: 'fixed', top: 0, right: 0, bottom: 0, width: isMobile ? '100%' : '480px', maxWidth: isMobile ? '100%' : '95vw', backgroundColor: 'var(--bg-primary)', overflowY: 'auto', display: 'flex', flexDirection: 'column', zIndex: 91, boxShadow: '-4px 0 24px var(--rp-shadow-tint)', borderLeft: isMobile ? 'none' : '1px solid var(--border-secondary)', paddingBottom: isMobile ? '80px' : '20px' }}>
                         {detailLoading ? (
                             <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)' }}>Loading...</div>
                         ) : detailError ? (
@@ -2086,12 +2086,16 @@ const leadCycleStartOf = (lead: any): string => {
                         ) : leadDetail ? (
                             <>
                                 {/* Slide-over header */}
-                                <div style={{ padding: '20px', borderBottom: '1px solid var(--border-secondary)', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                                    <div>
-                                        <div style={{ fontWeight: 700, fontSize: '17px', color: 'var(--text-primary)', marginBottom: '4px' }}>{leadDetail.name || 'Unknown'}</div>
-                                        <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '8px' }}>
-                                            {leadDetail.phone_number}{leadDetail.email ? ` · ${leadDetail.email}` : ''}
-                                        </div>
+                                <div style={{ padding: isMobile ? '14px 16px' : '20px', borderBottom: '1px solid var(--border-secondary)', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
+                                        {isMobile && (
+                                            <button onClick={closeDetail} title="Back to Leads" style={{ background: 'none', border: 'none', color: 'var(--text-primary)', cursor: 'pointer', fontSize: '18px', padding: '2px 6px', fontWeight: 700 }}>←</button>
+                                        )}
+                                        <div>
+                                            <div style={{ fontWeight: 700, fontSize: '17px', color: 'var(--text-primary)', marginBottom: '4px' }}>{leadDetail.name || 'Unknown'}</div>
+                                            <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginBottom: '8px' }}>
+                                                {leadDetail.phone_number}{leadDetail.email ? ` · ${leadDetail.email}` : ''}
+                                            </div>
                                         <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
                                             <span style={{ backgroundColor: 'var(--rp-info-bg)', color: sourceColors[leadDetail.source] || 'var(--text-secondary)', padding: '4px 8px', borderRadius: 'var(--radius-control)', fontSize: '12px', fontWeight: 500 }}>{sourceLabels[leadDetail.source] || leadDetail.source}</span>
                                             <span style={{ backgroundColor: leadDetail.lead_status === 'hot' ? 'var(--rp-danger-bg)' : leadDetail.lead_status === 'warm' ? 'var(--rp-warn-bg)' : 'var(--bg-secondary)', color: leadDetail.lead_status === 'hot' ? 'var(--rp-danger-text)' : leadDetail.lead_status === 'warm' ? 'var(--rp-warn-text)' : 'var(--text-secondary)', padding: '2px 8px', borderRadius: '10px', fontSize: '11px', fontWeight: 600 }}>{leadDetail.lead_status.toUpperCase()}</span>
@@ -2106,6 +2110,7 @@ const leadCycleStartOf = (lead: any): string => {
                                                     style={{ backgroundColor: 'var(--blue-600)', color: 'var(--surface-white)', padding: '4px 8px', borderRadius: 'var(--radius-control)', fontSize: '12px', fontWeight: 500, textDecoration: 'none' }}>Call partner</a>
                                             )}
                                         </div>
+                                    </div>
                                     </div>
                                     <button onClick={closeDetail} style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '20px', padding: '4px 8px' }}>✕</button>
                                 </div>
