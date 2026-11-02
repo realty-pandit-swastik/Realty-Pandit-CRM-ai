@@ -1,14 +1,14 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import client from '../api/client';
-import { toDialablePhone } from '../lib/phone';
+import { toDialablePhone, isValidPhoneInput } from '../lib/phone';
 import { buildWhatsAppShareText } from '../lib/buildWhatsAppShareText';
-import {
-    propertyAttachments, orderedPropertyAttachments,
-    EMPTY_ATTACHMENT_SELECTION, MAX_PERSONAL_SHARE_BYTES,
-    isAndroidDevice, validatePersonalWhatsAppFile,
-    type AttachmentSelection, type PropertyAttachment
-} from '../lib/personalWhatsAppFiles';
+import { propertyAttachments, orderedPropertyAttachments, blobDataUrl, downloadPersonalWhatsAppBlob, EMPTY_ATTACHMENT_SELECTION,
+    MAX_PERSONAL_SHARE_BYTES, isAndroidDevice, validatePersonalWhatsAppFile, nativePropertyShareSteps, validateNativeShares,
+    type NativePropertyShare, type AttachmentSelection, type PreparedWhatsAppFile } from '../lib/personalWhatsAppFiles';
+import { personalWhatsAppStatus, preparePersonalWhatsAppShare, personalWhatsAppResult, type PersonalShareResult } from '../lib/personalWhatsAppBridge';
+import { androidHandoffPayload, androidHandoffLaunch, validateAndroidHandoff, type AndroidHandoff, type AndroidSendingApp } from '../lib/androidWhatsAppHandoff';
 import { ContactSearchField } from './ContactSearchField';
+import PersonalWhatsAppSetup from './PersonalWhatsAppSetup';
 import './PersonalWhatsAppShareModal.css';
 
 interface ShareInventory {
@@ -18,776 +18,451 @@ interface ShareInventory {
     video_urls?: string[];
     locality?: string;
     location?: string;
-    type?: string;
-    intent?: string;
-    price?: number | string;
-    display_price?: number | string;
-    flat_property_type?: { name: string };
-    specs?: Record<string, any>;
-    city?: string;
-    apartment_name?: string;
 }
 
 interface Props {
     inventoryIds: string[];
     initialPhone?: string | null;
-    initialName?: string | null;
     onClose: () => void;
     onSent?: () => void;
 }
 
-export default function PersonalWhatsAppShareModal({ inventoryIds, initialPhone, initialName, onClose, onSent }: Props) {
+export default function PersonalWhatsAppShareModal({ inventoryIds, initialPhone, onClose, onSent }: Props) {
     const idsKey = inventoryIds.join(',');
     const [inventories, setInventories] = useState<ShareInventory[]>([]);
-    const [loading, setLoading] = useState(true);
+    const [loadedKey, setLoadedKey] = useState('');
     const [loadError, setLoadError] = useState('');
-    const [phone, setPhone] = useState(initialPhone || '');
-    const [recipientName, setRecipientName] = useState(initialName || '');
-
-    // Per-inventory media selections: urls[], firstPhoto, pdf boolean, pdfVariant
     const [selections, setSelections] = useState<Record<string, AttachmentSelection>>({});
-    const [pdfVariants, setPdfVariants] = useState<Record<string, 'brandless' | 'branded'>>({});
-
-    const [detailsSent, setDetailsSent] = useState(false);
-    const [preparingMedia, setPreparingMedia] = useState(false);
-    const [progressText, setProgressText] = useState('');
+    const [phone, setPhone] = useState(initialPhone || '');
+    const [account, setAccount] = useState('');
+    const [checking, setChecking] = useState(false);
+    const [busy, setBusy] = useState(false);
     const [error, setError] = useState('');
-    const [successMessage, setSuccessMessage] = useState('');
-
+    const [progress, setProgress] = useState('');
+    const [outcome, setOutcome] = useState<PersonalShareResult | null>(null);
+    const [nativeSteps, setNativeSteps] = useState<NativePropertyShare[]>([]);
+    const [nativeIndex, setNativeIndex] = useState(0);
+    const [handedOff, setHandedOff] = useState(false);
+    const [androidMode, setAndroidMode] = useState<'helper' | 'manual'>('helper');
+    const [sendingApp, setSendingApp] = useState<AndroidSendingApp>('com.whatsapp');
+    const [handoff, setHandoff] = useState<AndroidHandoff | null>(null);
+    const [pilotState, setPilotState] = useState<'idle' | 'preparing' | 'ready' | 'opened' | 'cancelled' | 'expired' | 'failed'>('idle');
+    const handoffRef = useRef<AndroidHandoff | null>(null);
+    const preparingRef = useRef(false);
+    const generation = useRef(0);
+    const android = isAndroidDevice(navigator.userAgent);
+    const unsupportedMobile = !android && /iPhone|iPad|iPod/i.test(navigator.userAgent);
     const panel = useRef<HTMLDivElement>(null);
     const active = useRef(true);
     const apiBase = client.defaults.baseURL || window.location.origin;
-    const isAndroid = typeof navigator !== 'undefined' && isAndroidDevice(navigator.userAgent);
-    const hasWebShareFiles = typeof navigator !== 'undefined' && !!navigator.share && !!navigator.canShare;
+
+    const cancelPrepared = useCallback(() => {
+        const prepared = handoffRef.current;
+        handoffRef.current = null;
+        if (prepared) void client.post('/api/personal-whatsapp/handoffs/cancel', { launch_token: prepared.launch_token }).catch(() => {
+            if (active.current) setError('Could not confirm cancellation. The previous share may remain usable until it expires.');
+        });
+    }, []);
+
+    const invalidate = useCallback(() => {
+        generation.current++;
+        cancelPrepared(); setHandoff(null); setPilotState('idle');
+        setNativeSteps([]); setNativeIndex(0); setHandedOff(false); setProgress(''); setError('');
+    }, [cancelPrepared]);
 
     useEffect(() => {
+        invalidate(); setLoadedKey(''); setLoadError(''); setInventories([]); setSelections({});
         let alive = true;
-        setLoading(true);
-        setLoadError('');
-
-        Promise.all(idsKey.split(',').filter(Boolean).map(async id => {
+        Promise.all(idsKey.split(',').map(async id => {
             const response = await client.get(`/api/inventory/${encodeURIComponent(id)}`);
             return (response.data?.data ?? response.data) as ShareInventory;
         })).then(items => {
-            if (!alive) return;
-            setInventories(items);
-
-            // Initialize selections: select all media by default for convenience
-            const initSelections: Record<string, AttachmentSelection> = {};
-            const initVariants: Record<string, 'brandless' | 'branded'> = {};
-            items.forEach(inv => {
-                const attachments = propertyAttachments(inv, apiBase);
-                const allUrls = attachments.map(a => a.url);
-                const firstImg = attachments.find(a => a.kind === 'image')?.url || '';
-                initSelections[inv.id] = {
-                    urls: allUrls,
-                    firstPhoto: firstImg,
-                    pdf: true,
-                };
-                initVariants[inv.id] = 'brandless';
-            });
-            setSelections(initSelections);
-            setPdfVariants(initVariants);
-            setLoading(false);
-        }).catch(err => {
-            if (!alive) return;
-            setLoadError(err?.response?.data?.error || 'Could not load property details. Close and retry.');
-            setLoading(false);
-        });
-
+            if (alive) { setInventories(items); setLoadedKey(idsKey); setNativeSteps([]); setNativeIndex(0); setHandedOff(false); }
+        }).catch(() => { if (alive) setLoadError('Could not load the selected properties. Close and retry.'); });
         return () => { alive = false; };
-    }, [idsKey, apiBase]);
+    }, [idsKey, invalidate]);
 
     useEffect(() => {
         active.current = true;
+        const previous = document.activeElement as HTMLElement | null;
         panel.current?.focus();
-        return () => { active.current = false; };
-    }, []);
+        return () => { active.current = false; generation.current++; cancelPrepared(); previous?.focus(); };
+    }, [cancelPrepared]);
 
-    // Toggle specific media file
-    const toggleMediaUrl = (invId: string, url: string, attachments: PropertyAttachment[]) => {
-        const cur = selections[invId] || EMPTY_ATTACHMENT_SELECTION;
-        const exists = cur.urls.includes(url);
-        const nextUrls = exists ? cur.urls.filter(u => u !== url) : [...cur.urls, url];
-        const nextFirst = nextUrls.includes(cur.firstPhoto)
-            ? cur.firstPhoto
-            : attachments.find(a => a.kind === 'image' && nextUrls.includes(a.url))?.url || '';
+    const caption = (inv: ShareInventory) => [`Property ID: ${inv.display_id || inv.id}`,
+        buildWhatsAppShareText([{ inv, link: '' }], 'dealer')].filter(Boolean).join('\n').replace(/https?:\/\/\S+/gi, '').trim();
+    const chosen = inventories.filter(inv => {
+        const selection = selections[inv.id];
+        return selection && (selection.urls.length > 0 || selection.pdf);
+    });
 
-        setSelections(prev => ({
-            ...prev,
-            [invId]: { ...cur, urls: nextUrls, firstPhoto: nextFirst }
-        }));
-    };
+    useEffect(() => {
+        if (!handoff) return;
+        const timer = window.setTimeout(() => {
+            cancelPrepared(); setHandoff(null); setPilotState('expired');
+            setProgress('Prepared share expired. Prepare again; nothing was automatically retried.');
+        }, Math.max(0, handoff.expires_at - Date.now()));
+        return () => window.clearTimeout(timer);
+    }, [handoff, cancelPrepared]);
 
-    // Select all / none for a property
-    const toggleSelectAllMedia = (invId: string, attachments: PropertyAttachment[]) => {
-        const cur = selections[invId] || EMPTY_ATTACHMENT_SELECTION;
-        const allUrls = attachments.map(a => a.url);
-        const shouldSelectAll = cur.urls.length < allUrls.length;
-
-        setSelections(prev => ({
-            ...prev,
-            [invId]: {
-                ...cur,
-                urls: shouldSelectAll ? allUrls : [],
-                firstPhoto: shouldSelectAll ? (attachments.find(a => a.kind === 'image')?.url || '') : ''
+    async function prepareAndroid() {
+        if (preparingRef.current || handoffRef.current) return;
+        preparingRef.current = true;
+        const current = ++generation.current;
+        setBusy(true); setError(''); setPilotState('preparing'); setProgress('Preparing your selected recipient and attachments…');
+        try {
+            const payload = androidHandoffPayload(phone, sendingApp, inventories, selections, apiBase);
+            const response = await client.post('/api/personal-whatsapp/handoffs', payload);
+            const prepared = validateAndroidHandoff(response.data?.data ?? response.data);
+            if (!active.current || generation.current !== current) {
+                void client.post('/api/personal-whatsapp/handoffs/cancel', { launch_token: prepared.launch_token }).catch(() => {});
+                return;
             }
-        }));
-    };
+            handoffRef.current = prepared; setHandoff(prepared); setPilotState('ready');
+            setProgress('Ready. Open My WhatsApp to review the selected client and files in the helper. No message has been sent.');
+        } catch (err) {
+            if (active.current && generation.current === current) {
+                setPilotState('failed'); setProgress(''); setError(err instanceof Error ? err.message : 'Could not prepare the share. Prepare again.');
+            }
+        } finally { preparingRef.current = false; if (active.current) setBusy(false); }
+    }
 
-    // Toggle PDF
-    const togglePdf = (invId: string, checked: boolean) => {
-        const cur = selections[invId] || EMPTY_ATTACHMENT_SELECTION;
-        setSelections(prev => ({
-            ...prev,
-            [invId]: { ...cur, pdf: checked }
-        }));
-    };
+    function update(id: string, selection: AttachmentSelection) {
+        invalidate();
+        setSelections(previous => ({ ...previous, [id]: selection }));
+        setError(''); setProgress(''); setNativeSteps([]); setNativeIndex(0); setHandedOff(false);
+    }
 
-    // Build the share text
-    const getFormattedShareText = () => {
-        if (!inventories.length) return '';
-        const items = inventories.map(inv => ({ inv, link: '' }));
-        return buildWhatsAppShareText(items, 'dealer').replace(/https?:\/\/\S+/gi, '').trim();
-    };
+    async function checkConnection() {
+        setChecking(true); setError(''); setAccount('');
+        try { setAccount((await personalWhatsAppStatus()).account); }
+        catch (err) { setError(err instanceof Error ? err.message : 'Could not check WhatsApp.'); }
+        finally { setChecking(false); }
+    }
 
-    // Normalize phone number for wa.me
-    const getCleanPhone = () => {
-        if (!phone) return null;
-        let clean = toDialablePhone(phone)?.replace(/^\+/, '') || phone.replace(/\D/g, '');
-        if (clean.length === 10) clean = '91' + clean;
-        return clean;
-    };
+    async function send() {
+        if (android && androidMode === 'helper') { await prepareAndroid(); return; }
+        const recipient = isValidPhoneInput(phone) ? toDialablePhone(phone) : null;
+        if ((!android && !recipient) || !chosen.length) { setError('Choose at least one property photo or video, and a recipient for desktop sharing.'); return; }
+        setBusy(true); setError(''); setOutcome(null);
+        let handoffStarted = false;
+        try {
+            if (android) {
+                if (!window.isSecureContext || !navigator.share || !navigator.canShare) {
+                    throw new Error('This browser cannot share files. Use Android Chrome over HTTPS or desktop Chrome with the extension.');
+                }
+            } else {
+                setProgress('Checking your WhatsApp connection…');
+                const connection = await personalWhatsAppStatus();
+                setAccount(connection.account);
+            }
+            const files: PreparedWhatsAppFile[] = [];
+            const steps: NativePropertyShare[] = [];
+            let total = 0;
+            let count = 0;
+            async function append(blob: Blob, propertyId: string, filename: string, kind: PreparedWhatsAppFile['kind'], text = '') {
+                total += blob.size;
+                if (total > MAX_PERSONAL_SHARE_BYTES) throw new Error('Selected attachments exceed 40 MB. Choose fewer files.');
+                validatePersonalWhatsAppFile(blob, kind, filename);
+                if (++count > 100) throw new Error('Choose no more than 100 attachments per share.');
+                if (!android) files.push({ key: `${propertyId}-${files.length}`, propertyId, filename, kind, caption: text, data: await blobDataUrl(blob) });
+                return new File([blob], filename, { type: blob.type });
+            }
+            for (const inv of chosen) {
+                const selection = selections[inv.id];
+                const ordered = orderedPropertyAttachments(propertyAttachments(inv, apiBase), selection);
+                const text = caption(inv);
+                if (text.length > 1024) throw new Error('Property details exceed the 1,024-character caption limit. This property needs a shorter share summary.');
+                const name = `property-${(inv.display_id || inv.id).replace(/[^a-zA-Z0-9-]/g, '')}`;
+                const media: File[] = [];
+                let pdf: File | undefined;
+                for (let i = 0; i < ordered.length; i++) {
+                    const attachment = ordered[i];
+                    setProgress(`Preparing ${inv.display_id || 'property'} — ${attachment.label}…`);
+                    const response = await fetch(attachment.url, {
+                        credentials: new URL(attachment.url).origin === new URL(apiBase).origin ? 'include' : 'omit',
+                        signal: AbortSignal.timeout(60_000),
+                    });
+                    if (!response.ok) throw new Error(`${attachment.label} could not be downloaded. Nothing was sent.`);
+                    const blob = await downloadPersonalWhatsAppBlob(response, MAX_PERSONAL_SHARE_BYTES - total);
+                    const extension = blob.type.split('/')[1]?.replace('jpeg', 'jpg').replace('quicktime', 'mov') || 'bin';
+                    media.push(await append(blob, inv.id, `${name}-${i + 1}.${extension}`, attachment.kind, i === 0 ? text : ''));
+                }
+                if (selection.pdf) {
+                    setProgress('Preparing property PDF…');
+                    const response = await client.post('/api/inventory/share-pdf', { inventory_ids: [inv.id], variant: 'brandless' }, { responseType: 'blob' });
+                    pdf = await append(response.data, inv.id, `${name}-brochure.pdf`, 'document');
+                }
+                if (android) steps.push(...nativePropertyShareSteps(inv.id, inv.display_id || inv.locality || 'Property', text, media, pdf));
+            }
+            if (android) {
+                validateNativeShares(steps, data => navigator.canShare(data));
+                if (!active.current) return;
+                setNativeSteps(steps); setNativeIndex(0); setHandedOff(false);
+                setProgress('Files ready. Share each property, choosing WhatsApp and the recipient on your phone.');
+                return;
+            }
+            if (!active.current) return;
+            handoffStarted = true;
+            const requestId = await preparePersonalWhatsAppShare(recipient!, files);
+            setProgress('Confirm the sender, recipient, and attachments in the extension review tab.');
+            const deadline = Date.now() + 10 * 60 * 1000;
+            while (active.current && Date.now() < deadline) {
+                await new Promise(resolve => setTimeout(resolve, 2000));
+                if (!active.current) return;
+                const result = await personalWhatsAppResult(requestId);
+                if (result.status === 'pending' || result.status === 'sending') {
+                    setProgress(result.status === 'sending' ? 'Sending selected attachments through your WhatsApp Web…' : 'Waiting for your confirmation in the extension review tab…');
+                    continue;
+                }
+                setOutcome(result);
+                setProgress('');
+                if (result.status === 'sent') onSent?.();
+                return;
+            }
+            throw new Error('The share could not be confirmed. Check WhatsApp before starting another share.');
+        } catch (err) {
+            if (handoffStarted && active.current) setOutcome({ status: 'uncertain', results: [], error: 'Check the extension review tab and WhatsApp before preparing another share.' });
+            if (active.current) { setError(err instanceof Error ? err.message : 'Could not share. Check WhatsApp before retrying.'); setProgress(''); }
+        } finally { if (active.current) setBusy(false); }
+    }
 
-    // Total selected count
-    const totalMediaSelected = Object.values(selections).reduce((acc, s) => acc + s.urls.length, 0);
-    const totalPdfSelected = Object.values(selections).filter(s => s.pdf).length;
+    async function shareNative() {
+        const step = nativeSteps[nativeIndex];
+        if (!step || busy || loadedKey !== idsKey) return;
+        setBusy(true); setError(''); setProgress('');
+        try {
+            // Prepared files preserve user activation: invoke share before any asynchronous work.
+            await navigator.share({ files: step.files, ...(step.text ? { text: step.text } : {}) });
+            if (active.current) {
+                setHandedOff(true);
+                setProgress('Handed to share app. Check WhatsApp and tap Send there. Sending is not confirmed.');
+            }
+        } catch (err) {
+            if (active.current) setProgress(err instanceof Error && err.name === 'AbortError'
+                ? 'Sharing cancelled or no share target available. Files remain ready; no sent record was created.'
+                : 'Could not hand off these files. Retry, or change the selection and prepare again.');
+        } finally { if (active.current) setBusy(false); }
+    }
 
-    // ─────────────────────────────────────────────────────────────
-    // BUTTON 1: Just send property details to the person on WhatsApp
-    // ─────────────────────────────────────────────────────────────
-    const handleSendDetails = () => {
+    async function copyDetails(text: string) {
+        try { await navigator.clipboard.writeText(text); setProgress('Property details copied. Paste them into WhatsApp if its share preview omits them.'); }
+        catch { setError('Could not copy. Select and copy the displayed property details.'); }
+    }
+
+    function sendPropertyDetails() {
         setError('');
-        const cleanPhone = getCleanPhone();
+        const recipient = toDialablePhone(phone)?.replace(/^\+/, '') || phone.replace(/\D/g, '');
+        const cleanPhone = recipient.length === 10 ? '91' + recipient : recipient;
         if (!cleanPhone) {
             setError('Please enter or select a recipient phone number first.');
             return;
         }
-
-        const text = getFormattedShareText();
+        const text = inventories.map(inv => caption(inv)).join('\n\n');
         if (!text) {
-            setError('No property details available to send.');
+            setError('No property details to send.');
             return;
         }
+        window.open(`https://wa.me/${cleanPhone}?text=${encodeURIComponent(text)}`, '_blank');
+        setProgress(`✓ Property details opened in WhatsApp for +${cleanPhone}! Send the text, then tap Button 2 below to share media.`);
+    }
 
-        const waUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(text)}`;
-        window.open(waUrl, '_blank');
-        setDetailsSent(true);
-        setSuccessMessage(`✓ Property details opened in WhatsApp for +${cleanPhone}! Tap Send inside WhatsApp, then tap Button 2 below to send media.`);
-    };
-
-    // ─────────────────────────────────────────────────────────────
-    // BUTTON 2: Send selected media, videos, or property PDF via Android Share Sheet
-    // ─────────────────────────────────────────────────────────────
-    const handleShareMediaSheet = async () => {
+    async function shareMediaAndPdf() {
         setError('');
-        setSuccessMessage('');
-
-        if (totalMediaSelected === 0 && totalPdfSelected === 0) {
-            setError('Please select at least one photo, video, or the PDF brochure to share.');
+        if (!chosen.length) {
+            setError('Select at least one property photo, video, or PDF.');
             return;
         }
-
-        setPreparingMedia(true);
-        setProgressText('Preparing files for Android Share Sheet…');
-
+        setBusy(true);
+        setProgress('Preparing selected media and PDF for Android Share Sheet…');
         try {
             const filesToShare: File[] = [];
-            let totalBytes = 0;
-
-            for (const inv of inventories) {
-                const sel = selections[inv.id] || EMPTY_ATTACHMENT_SELECTION;
-                const attachments = propertyAttachments(inv, apiBase);
-                const ordered = orderedPropertyAttachments(attachments, sel);
-                const namePrefix = `property-${(inv.display_id || inv.id).replace(/[^a-zA-Z0-9-]/g, '')}`;
-
-                // 1. Download selected images & videos
+            let total = 0;
+            for (const inv of chosen) {
+                const selection = selections[inv.id];
+                const ordered = orderedPropertyAttachments(propertyAttachments(inv, apiBase), selection);
+                const name = `property-${(inv.display_id || inv.id).replace(/[^a-zA-Z0-9-]/g, '')}`;
                 for (let i = 0; i < ordered.length; i++) {
-                    const item = ordered[i];
-                    setProgressText(`Downloading ${item.label} (${i + 1}/${ordered.length})…`);
-
-                    const resp = await fetch(item.url, {
-                        credentials: new URL(item.url, window.location.href).origin === window.location.origin ? 'include' : 'omit',
-                        signal: AbortSignal.timeout(60_000)
+                    const attachment = ordered[i];
+                    setProgress(`Downloading ${attachment.label}…`);
+                    const response = await fetch(attachment.url, {
+                        credentials: new URL(attachment.url).origin === new URL(apiBase).origin ? 'include' : 'omit',
+                        signal: AbortSignal.timeout(60_000),
                     });
-
-                    if (!resp.ok) throw new Error(`Could not load ${item.label}. Nothing was shared.`);
-                    const blob = await resp.blob();
-                    totalBytes += blob.size;
-                    if (totalBytes > MAX_PERSONAL_SHARE_BYTES) {
-                        throw new Error('Selected media exceeds 40 MB total limit. Please deselect a few files.');
-                    }
-                    validatePersonalWhatsAppFile(blob, item.kind, item.label);
-
-                    const ext = blob.type.split('/')[1]?.replace('jpeg', 'jpg').replace('quicktime', 'mov') || (item.kind === 'video' ? 'mp4' : 'jpg');
-                    const file = new File([blob], `${namePrefix}-${i + 1}.${ext}`, { type: blob.type || (item.kind === 'video' ? 'video/mp4' : 'image/jpeg') });
-                    filesToShare.push(file);
+                    if (!response.ok) throw new Error(`${attachment.label} could not be downloaded.`);
+                    const blob = await downloadPersonalWhatsAppBlob(response, MAX_PERSONAL_SHARE_BYTES - total);
+                    total += blob.size;
+                    validatePersonalWhatsAppFile(blob, attachment.kind, attachment.label);
+                    const ext = blob.type.split('/')[1]?.replace('jpeg', 'jpg').replace('quicktime', 'mov') || (attachment.kind === 'video' ? 'mp4' : 'jpg');
+                    filesToShare.push(new File([blob], `${name}-${i + 1}.${ext}`, { type: blob.type }));
                 }
-
-                // 2. Generate PDF if selected
-                if (sel.pdf) {
-                    setProgressText('Generating property brochure PDF…');
-                    const variant = pdfVariants[inv.id] || 'brandless';
-                    const pdfResp = await client.post('/api/inventory/share-pdf', {
-                        inventory_ids: [inv.id],
-                        variant
-                    }, { responseType: 'blob' });
-
-                    const pdfBlob = new Blob([pdfResp.data], { type: 'application/pdf' });
-                    totalBytes += pdfBlob.size;
-                    if (totalBytes > MAX_PERSONAL_SHARE_BYTES) {
-                        throw new Error('Selected files with PDF exceed 40 MB. Please deselect some photos.');
-                    }
-                    validatePersonalWhatsAppFile(pdfBlob, 'document', 'brochure.pdf');
-                    const pdfFile = new File([pdfBlob], `${namePrefix}-brochure.pdf`, { type: 'application/pdf' });
-                    filesToShare.push(pdfFile);
+                if (selection.pdf) {
+                    setProgress('Generating property brochure PDF…');
+                    const response = await client.post('/api/inventory/share-pdf', { inventory_ids: [inv.id], variant: 'brandless' }, { responseType: 'blob' });
+                    filesToShare.push(new File([response.data], `${name}-brochure.pdf`, { type: 'application/pdf' }));
                 }
             }
-
             if (!filesToShare.length) {
-                throw new Error('No files ready to share.');
+                throw new Error('Select at least one photo, video, or PDF to share.');
             }
-
-            setProgressText('Opening Android Share Sheet…');
-
-            // Check Web Share API with files support
             if (navigator.share && navigator.canShare && navigator.canShare({ files: filesToShare })) {
-                await navigator.share({
-                    files: filesToShare,
-                    title: inventories[0]?.display_id ? `Property ${inventories[0].display_id}` : 'Property Media',
-                });
-                setSuccessMessage('✓ Handed off to Share Sheet! Select WhatsApp and tap the contact you previously sent details to.');
-                onSent?.();
-            } else if (navigator.share) {
-                // Device supports share but not this specific batch of files — try sharing media first
-                await navigator.share({
-                    files: filesToShare.slice(0, 10),
-                    title: 'Property Media',
-                });
-                setSuccessMessage('✓ Handed off to Share Sheet!');
-                onSent?.();
+                setProgress('Opening Android Share Sheet… choose WhatsApp and your contact.');
+                await navigator.share({ files: filesToShare });
+                setHandedOff(true);
+                setProgress('Files sent to Android Share Sheet! Tap Send inside WhatsApp.');
             } else {
-                // Fallback for desktop or browsers without navigator.share
-                // Download the files for the user
-                filesToShare.forEach(f => {
-                    const url = URL.createObjectURL(f);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = f.name;
-                    document.body.appendChild(a);
-                    a.click();
-                    document.body.removeChild(a);
-                    URL.revokeObjectURL(url);
-                });
-                setSuccessMessage(`✓ Downloaded ${filesToShare.length} file(s). You can attach them directly in WhatsApp Web.`);
+                throw new Error('Web Share files not supported by this browser. Use Android Chrome over HTTPS.');
             }
-        } catch (err: any) {
-            if (err?.name === 'AbortError') {
-                setProgressText('Share cancelled. Files remain ready.');
-            } else {
-                setError(err?.message || 'Failed to prepare or share media.');
+        } catch (err) {
+            if (active.current) {
+                setError(err instanceof Error ? err.message : 'Could not share files.');
+                setProgress('');
             }
         } finally {
-            setPreparingMedia(false);
-            setProgressText('');
+            if (active.current) setBusy(false);
         }
-    };
+    }
 
-    const handleCopyDetails = async () => {
-        try {
-            await navigator.clipboard.writeText(getFormattedShareText());
-            setSuccessMessage('✓ Property details copied to clipboard!');
-            setTimeout(() => setSuccessMessage(''), 3000);
-        } catch {
-            setError('Failed to copy to clipboard.');
-        }
-    };
+    function keyboard(event: React.KeyboardEvent) {
+        if (event.key === 'Escape' && !busy) onClose();
+        if (event.key !== 'Tab') return;
+        const nodes = panel.current?.querySelectorAll<HTMLElement>('button:not(:disabled),input:not(:disabled),select:not(:disabled),a[href],[tabindex="0"]');
+        if (!nodes?.length) return;
+        const first = nodes[0], last = nodes[nodes.length - 1];
+        if (event.shiftKey && (document.activeElement === first || document.activeElement === panel.current)) { event.preventDefault(); last.focus(); }
+        else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+    }
 
-    return (
-        <div className="personal-wa-overlay" onClick={e => e.target === e.currentTarget && !preparingMedia && onClose()}>
-            <div
-                className="personal-wa-panel"
-                ref={panel}
-                tabIndex={-1}
-                role="dialog"
-                aria-modal="true"
-                aria-labelledby="personal-wa-title"
-                style={{
-                    maxWidth: '680px',
-                    width: '100%',
-                    backgroundColor: 'var(--bg-primary, #0f172a)',
-                    border: '1px solid var(--border-secondary, #334155)',
-                    borderRadius: '16px',
-                    boxShadow: '0 24px 60px rgba(0,0,0,0.5)',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    maxHeight: '92vh',
-                    overflow: 'hidden',
-                }}
-            >
-                {/* Header */}
-                <div style={{
-                    padding: '16px 20px',
-                    borderBottom: '1px solid var(--border-secondary, #334155)',
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    flexShrink: 0,
-                    backgroundColor: 'var(--bg-secondary, #1e293b)'
-                }}>
-                    <div>
-                        <h2 id="personal-wa-title" style={{ margin: 0, fontSize: '18px', fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <span>📱</span> My WhatsApp Share
-                        </h2>
-                        <div style={{ fontSize: '12px', color: 'var(--text-muted, #94a3b8)', marginTop: '2px' }}>
-                            Send property details first, then share photos, videos & PDF via Android Share Sheet
-                        </div>
+    return <div className="personal-wa-overlay" onKeyDown={keyboard}>
+        <div className="personal-wa-panel" ref={panel} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="personal-wa-title">
+            <div className="personal-wa-heading"><h2 id="personal-wa-title">My WhatsApp — choose attachments</h2>
+                <button type="button" onClick={onClose} disabled={busy} aria-label="Close sharing">×</button></div>
+            {android ? <><p><strong>Android selected-client pilot — phone compatibility unverified.</strong> The helper attempts to open the selected number, including unsaved/new recipients. Review the recipient, attachments, order, and details before tapping Send in WhatsApp. Media and PDF are separate steps; sending is never confirmed by CRM.</p>
+                <p><a href="/my-whatsapp-setup" target="_blank" rel="noreferrer">Install / update the Android helper</a></p>
+                <fieldset disabled={busy}><legend>Android sharing method</legend>
+                    <label><input type="radio" name="android-mode" checked={androidMode === 'helper'} onChange={() => { invalidate(); setAndroidMode('helper'); }} />Selected client via Android helper (pilot)</label>{' '}
+                    <label><input type="radio" name="android-mode" checked={androidMode === 'manual'} onChange={() => { invalidate(); setAndroidMode('manual'); }} />Phone share sheet — choose recipient manually</label>
+                </fieldset>
+                {androidMode === 'manual' && <p>Prepare selected photos/videos, then choose WhatsApp and the recipient in your phone’s share sheet and tap Send. Each property is shared separately; its PDF is another step. Caption placement and order depend on WhatsApp. Unsaved recipients may not appear.</p>}</>
+                : unsupportedMobile ? <p role="alert">Use Android Chrome for phone sharing, or desktop Chrome with the My WhatsApp extension.</p>
+                    : <><PersonalWhatsAppSetup compact />
+                        <button type="button" onClick={checkConnection} disabled={busy || checking}>{checking ? 'Checking…' : 'Check sending account'}</button></>}
+            {account && <p>Sending account: +{account.split('@')[0]}</p>}
+            <p className="personal-wa-help">Selected files must total at most 40 MB; no more than 100 files per share.</p>
+            {loadError && <p role="alert">{loadError}</p>}
+            {loadedKey !== idsKey && !loadError && <p role="status">Loading property attachments…</p>}
+            <fieldset disabled={busy || !!outcome}>
+                <legend>Recipient</legend>
+                <label>WhatsApp number (include country code for international numbers)
+                    <input type="tel" value={phone} onChange={e => { invalidate(); setPhone(e.target.value); }} placeholder="Phone number" /></label>
+                <ContactSearchField label="Or choose a CRM contact" allowCreate={false} onContactSelected={contact => { invalidate(); setPhone(contact.phone || contact.sourceId || ''); }} />
+                {android && androidMode === 'manual' && <p>This number is a reminder. Select the final recipient inside WhatsApp for every share step.</p>}
+                {android && androidMode === 'helper' && <><p>The selected number is passed to the helper. Check the final WhatsApp preview before sending.</p>
+                    <label>Sending app <select value={sendingApp} onChange={e => { invalidate(); setSendingApp(e.target.value as AndroidSendingApp); }}>
+                        <option value="com.whatsapp">WhatsApp</option><option value="com.whatsapp.w4b">WhatsApp Business</option>
+                    </select></label></>}
+
+                {/* 2-Button Direct WhatsApp Share Flow */}
+                <div style={{ backgroundColor: 'var(--bg-secondary)', border: '2px solid #25D366', borderRadius: '12px', padding: '16px', margin: '16px 0' }}>
+                    <div style={{ fontWeight: 700, fontSize: '15px', color: '#25D366', marginBottom: '6px' }}>
+                        ⚡ 2-Button WhatsApp Sharing Flow
                     </div>
-                    <button
-                        type="button"
-                        onClick={onClose}
-                        disabled={preparingMedia}
-                        style={{
-                            background: 'none', border: 'none', color: 'var(--text-muted, #94a3b8)',
-                            fontSize: '22px', cursor: 'pointer', padding: '4px 8px', lineHeight: 1
-                        }}
-                        aria-label="Close"
-                    >
-                        ✕
-                    </button>
-                </div>
-
-                {/* Body (scrollable) */}
-                <div style={{ padding: '16px 20px', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '16px' }}>
-
-                    {/* Recipient Section */}
-                    <div style={{
-                        backgroundColor: 'var(--bg-secondary, #1e293b)',
-                        borderRadius: '12px',
-                        padding: '14px 16px',
-                        border: '1px solid var(--border-secondary, #334155)'
-                    }}>
-                        <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                            <span>👤</span> Recipient Contact
-                        </div>
-
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                            <div>
-                                <label style={{ fontSize: '12px', color: 'var(--text-secondary, #cbd5e1)', display: 'block', marginBottom: '4px' }}>
-                                    WhatsApp Phone Number
-                                </label>
-                                <input
-                                    type="tel"
-                                    value={phone}
-                                    onChange={e => { setPhone(e.target.value); setDetailsSent(false); }}
-                                    placeholder="e.g. 9876543210 or +91 98765 43210"
-                                    style={{
-                                        width: '100%',
-                                        padding: '10px 12px',
-                                        borderRadius: '8px',
-                                        border: '1px solid var(--border-secondary, #334155)',
-                                        backgroundColor: 'var(--bg-primary, #0f172a)',
-                                        color: 'var(--text-primary)',
-                                        fontSize: '14px',
-                                        boxSizing: 'border-box'
-                                    }}
-                                />
-                            </div>
-
-                            <ContactSearchField
-                                label="Or search CRM Contacts / Leads"
-                                allowCreate={false}
-                                onContactSelected={contact => {
-                                    setPhone(contact.phone || contact.sourceId || '');
-                                    setRecipientName(contact.name || '');
-                                    setDetailsSent(false);
-                                }}
-                            />
-
-                            {recipientName && (
-                                <div style={{ fontSize: '12px', color: '#60a5fa', fontWeight: 600 }}>
-                                    Selected: {recipientName} ({phone})
-                                </div>
-                            )}
-                        </div>
+                    <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '12px' }}>
+                        Step 1 opens WhatsApp with the property details and puts this contact at the top. Step 2 opens the Android Share Sheet to send your selected photos, videos, or PDF brochure to that same contact.
                     </div>
-
-                    {/* Loading or Error states */}
-                    {loading && (
-                        <div style={{ textAlign: 'center', padding: '24px', color: 'var(--text-muted)' }}>
-                            Loading property media…
-                        </div>
-                    )}
-
-                    {loadError && (
-                        <div style={{ padding: '12px 14px', borderRadius: '8px', backgroundColor: 'rgba(239,68,68,0.15)', color: '#ef4444', fontSize: '13px' }}>
-                            {loadError}
-                        </div>
-                    )}
-
-                    {/* Properties & Media Selection */}
-                    {!loading && inventories.map(inv => {
-                        const attachments = propertyAttachments(inv, apiBase);
-                        const sel = selections[inv.id] || EMPTY_ATTACHMENT_SELECTION;
-                        const allSelected = attachments.length > 0 && sel.urls.length === attachments.length;
-
-                        return (
-                            <div key={inv.id} style={{
-                                backgroundColor: 'var(--bg-secondary, #1e293b)',
-                                borderRadius: '12px',
-                                padding: '16px',
-                                border: '1px solid var(--border-secondary, #334155)'
-                            }}>
-                                {/* Property title + select all */}
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', flexWrap: 'wrap', gap: '8px' }}>
-                                    <div>
-                                        <div style={{ fontWeight: 700, fontSize: '15px', color: 'var(--text-primary)' }}>
-                                            {inv.display_id || inv.locality || 'Property'} {inv.type ? `(${inv.type})` : ''}
-                                        </div>
-                                        <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-                                            {[inv.apartment_name, inv.locality, inv.city].filter(Boolean).join(', ') || 'Address not specified'}
-                                        </div>
-                                    </div>
-
-                                    {attachments.length > 0 && (
-                                        <button
-                                            type="button"
-                                            onClick={() => toggleSelectAllMedia(inv.id, attachments)}
-                                            style={{
-                                                padding: '4px 10px',
-                                                borderRadius: '6px',
-                                                border: '1px solid var(--border-secondary)',
-                                                backgroundColor: 'var(--bg-tertiary, #334155)',
-                                                color: 'var(--text-primary)',
-                                                fontSize: '11px',
-                                                fontWeight: 600,
-                                                cursor: 'pointer'
-                                            }}
-                                        >
-                                            {allSelected ? '✕ Deselect All' : '✓ Select All Photos'}
-                                        </button>
-                                    )}
-                                </div>
-
-                                {/* Media Grid */}
-                                <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '8px', display: 'flex', justifyContent: 'space-between' }}>
-                                    <span>Select Photos & Videos ({sel.urls.length}/{attachments.length} selected):</span>
-                                </div>
-
-                                {attachments.length === 0 ? (
-                                    <div style={{ padding: '16px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '13px', border: '1px dashed var(--border-secondary)', borderRadius: '8px' }}>
-                                        No media available for this listing.
-                                    </div>
-                                ) : (
-                                    <div style={{
-                                        display: 'grid',
-                                        gridTemplateColumns: 'repeat(auto-fill, minmax(110px, 1fr))',
-                                        gap: '10px',
-                                        maxHeight: '260px',
-                                        overflowY: 'auto',
-                                        padding: '4px 2px',
-                                    }}>
-                                        {attachments.map(att => {
-                                            const isSelected = sel.urls.includes(att.url);
-                                            return (
-                                                <div
-                                                    key={att.url}
-                                                    onClick={() => toggleMediaUrl(inv.id, att.url, attachments)}
-                                                    style={{
-                                                        position: 'relative',
-                                                        borderRadius: '8px',
-                                                        overflow: 'hidden',
-                                                        border: isSelected ? '2px solid #3b82f6' : '1px solid var(--border-secondary, #475569)',
-                                                        backgroundColor: 'var(--bg-primary, #0f172a)',
-                                                        cursor: 'pointer',
-                                                        boxShadow: isSelected ? '0 0 0 1px #3b82f6' : 'none',
-                                                        transition: 'border-color 0.15s, transform 0.1s',
-                                                    }}
-                                                >
-                                                    {att.kind === 'image' ? (
-                                                        <img
-                                                            src={att.url}
-                                                            alt={att.label}
-                                                            loading="lazy"
-                                                            style={{ width: '100%', height: '80px', objectFit: 'cover', display: 'block' }}
-                                                        />
-                                                    ) : (
-                                                        <div style={{ width: '100%', height: '80px', backgroundColor: '#000', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: '20px' }}>
-                                                            ▶️
-                                                        </div>
-                                                    )}
-
-                                                    {/* Selection badge */}
-                                                    <div style={{
-                                                        position: 'absolute',
-                                                        top: '4px',
-                                                        left: '4px',
-                                                        width: '20px',
-                                                        height: '20px',
-                                                        borderRadius: '4px',
-                                                        backgroundColor: isSelected ? '#3b82f6' : 'rgba(0,0,0,0.6)',
-                                                        border: isSelected ? 'none' : '1px solid rgba(255,255,255,0.8)',
-                                                        color: '#fff',
-                                                        display: 'flex',
-                                                        alignItems: 'center',
-                                                        justifyContent: 'center',
-                                                        fontSize: '12px',
-                                                        fontWeight: 700,
-                                                    }}>
-                                                        {isSelected ? '✓' : ''}
-                                                    </div>
-
-                                                    <div style={{
-                                                        padding: '3px 6px',
-                                                        fontSize: '10px',
-                                                        fontWeight: 600,
-                                                        color: isSelected ? '#3b82f6' : 'var(--text-muted)',
-                                                        whiteSpace: 'nowrap',
-                                                        overflow: 'hidden',
-                                                        textOverflow: 'ellipsis',
-                                                        textAlign: 'center'
-                                                    }}>
-                                                        {att.label}
-                                                    </div>
-                                                </div>
-                                            );
-                                        })}
-                                    </div>
-                                )}
-
-                                {/* PDF Brochure Selection */}
-                                <div style={{
-                                    marginTop: '14px',
-                                    paddingTop: '12px',
-                                    borderTop: '1px solid var(--border-secondary)',
-                                    display: 'flex',
-                                    flexDirection: 'column',
-                                    gap: '8px'
-                                }}>
-                                    <label style={{
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        gap: '8px',
-                                        cursor: 'pointer',
-                                        fontSize: '13px',
-                                        fontWeight: 600,
-                                        color: 'var(--text-primary)',
-                                        userSelect: 'none'
-                                    }}>
-                                        <input
-                                            type="checkbox"
-                                            checked={sel.pdf}
-                                            onChange={e => togglePdf(inv.id, e.target.checked)}
-                                            style={{ width: '16px', height: '16px', accentColor: '#3b82f6' }}
-                                        />
-                                        <span>📄 Include Property PDF Brochure</span>
-                                    </label>
-
-                                    {sel.pdf && (
-                                        <div style={{ display: 'flex', gap: '8px', marginLeft: '24px', alignItems: 'center' }}>
-                                            <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Brochure variant:</span>
-                                            <button
-                                                type="button"
-                                                onClick={() => setPdfVariants(p => ({ ...p, [inv.id]: 'brandless' }))}
-                                                style={{
-                                                    padding: '3px 8px',
-                                                    borderRadius: '6px',
-                                                    fontSize: '11px',
-                                                    fontWeight: 600,
-                                                    border: pdfVariants[inv.id] === 'brandless' ? '1px solid #3b82f6' : '1px solid var(--border-secondary)',
-                                                    backgroundColor: pdfVariants[inv.id] === 'brandless' ? 'rgba(59,130,246,0.15)' : 'transparent',
-                                                    color: pdfVariants[inv.id] === 'brandless' ? '#60a5fa' : 'var(--text-muted)',
-                                                    cursor: 'pointer'
-                                                }}
-                                            >
-                                                🕶️ No Branding
-                                            </button>
-                                            <button
-                                                type="button"
-                                                onClick={() => setPdfVariants(p => ({ ...p, [inv.id]: 'branded' }))}
-                                                style={{
-                                                    padding: '3px 8px',
-                                                    borderRadius: '6px',
-                                                    fontSize: '11px',
-                                                    fontWeight: 600,
-                                                    border: pdfVariants[inv.id] === 'branded' ? '1px solid #3b82f6' : '1px solid var(--border-secondary)',
-                                                    backgroundColor: pdfVariants[inv.id] === 'branded' ? 'rgba(59,130,246,0.15)' : 'transparent',
-                                                    color: pdfVariants[inv.id] === 'branded' ? '#60a5fa' : 'var(--text-muted)',
-                                                    cursor: 'pointer'
-                                                }}
-                                            >
-                                                🏢 With RP Branding
-                                            </button>
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-                        );
-                    })}
-
-                    {/* Preview of Property Details Text (Collapsible) */}
-                    <div style={{
-                        backgroundColor: 'var(--bg-secondary, #1e293b)',
-                        borderRadius: '12px',
-                        padding: '12px 16px',
-                        border: '1px solid var(--border-secondary, #334155)'
-                    }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                            <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-secondary)' }}>
-                                📝 Property Details Message (Sent in Step 1)
-                            </div>
-                            <button
-                                type="button"
-                                onClick={handleCopyDetails}
-                                style={{
-                                    background: 'none',
-                                    border: 'none',
-                                    color: '#60a5fa',
-                                    fontSize: '11px',
-                                    fontWeight: 600,
-                                    cursor: 'pointer',
-                                    padding: '2px 6px'
-                                }}
-                            >
-                                📋 Copy Text
-                            </button>
-                        </div>
-                        <pre style={{
-                            margin: 0,
-                            padding: '10px',
-                            borderRadius: '8px',
-                            backgroundColor: 'var(--bg-primary, #0f172a)',
-                            color: 'var(--text-primary)',
-                            fontSize: '12px',
-                            lineHeight: 1.4,
-                            maxHeight: '120px',
-                            overflowY: 'auto',
-                            whiteSpace: 'pre-wrap',
-                            wordBreak: 'break-word',
-                            border: '1px solid var(--border-secondary)'
-                        }}>
-                            {getFormattedShareText() || 'Loading details…'}
-                        </pre>
-                    </div>
-
-                    {/* Feedback and Errors */}
-                    {error && (
-                        <div style={{ padding: '10px 14px', borderRadius: '8px', backgroundColor: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.3)', color: '#ef4444', fontSize: '13px' }}>
-                            {error}
-                        </div>
-                    )}
-                    {successMessage && (
-                        <div style={{ padding: '10px 14px', borderRadius: '8px', backgroundColor: 'rgba(34,197,94,0.15)', border: '1px solid rgba(34,197,94,0.3)', color: '#22c55e', fontSize: '13px' }}>
-                            {successMessage}
-                        </div>
-                    )}
-                    {progressText && (
-                        <div style={{ padding: '10px 14px', borderRadius: '8px', backgroundColor: 'rgba(59,130,246,0.15)', border: '1px solid rgba(59,130,246,0.3)', color: '#60a5fa', fontSize: '13px', textAlign: 'center' }}>
-                            ⏳ {progressText}
-                        </div>
-                    )}
-                </div>
-
-                {/* Footer with THE TWO BUTTONS */}
-                <div style={{
-                    padding: '16px 20px',
-                    borderTop: '1px solid var(--border-secondary, #334155)',
-                    backgroundColor: 'var(--bg-secondary, #1e293b)',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '10px',
-                    flexShrink: 0
-                }}>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '10px' }}>
-                        {/* BUTTON 1: Just send property details to the person */}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '10px' }}>
                         <button
                             type="button"
-                            onClick={handleSendDetails}
-                            disabled={preparingMedia || loading}
+                            onClick={sendPropertyDetails}
+                            disabled={busy}
                             style={{
-                                padding: '12px 16px',
-                                borderRadius: '10px',
-                                border: 'none',
-                                backgroundColor: '#25D366',
-                                color: '#ffffff',
-                                fontSize: '14px',
-                                fontWeight: 700,
-                                cursor: 'pointer',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                gap: '8px',
-                                boxShadow: '0 2px 8px rgba(37,211,102,0.3)',
-                                opacity: (preparingMedia || loading) ? 0.6 : 1,
-                                transition: 'transform 0.1s, opacity 0.15s'
+                                padding: '12px 16px', borderRadius: '8px', border: 'none',
+                                backgroundColor: '#25D366', color: '#ffffff', fontSize: '13px', fontWeight: 700, cursor: 'pointer', textAlign: 'center'
                             }}
                         >
-                            <span style={{ fontSize: '18px' }}>💬</span>
-                            <span>{detailsSent ? '✓ Details Sent — Open WhatsApp Again' : '1. Send Property Details to Person'}</span>
+                            1️⃣ Step 1: Send Property Details (WhatsApp)
                         </button>
-
-                        {/* BUTTON 2: Send selected media, videos, or PDF via Android Share Sheet */}
                         <button
                             type="button"
-                            onClick={handleShareMediaSheet}
-                            disabled={preparingMedia || loading || (totalMediaSelected === 0 && totalPdfSelected === 0)}
+                            onClick={shareMediaAndPdf}
+                            disabled={busy || !chosen.length}
                             style={{
-                                padding: '12px 16px',
-                                borderRadius: '10px',
-                                border: 'none',
-                                backgroundColor: '#3b82f6',
-                                color: '#ffffff',
-                                fontSize: '14px',
-                                fontWeight: 700,
-                                cursor: 'pointer',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                gap: '8px',
-                                boxShadow: '0 2px 8px rgba(59,130,246,0.3)',
-                                opacity: (preparingMedia || loading || (totalMediaSelected === 0 && totalPdfSelected === 0)) ? 0.6 : 1,
-                                transition: 'transform 0.1s, opacity 0.15s'
+                                padding: '12px 16px', borderRadius: '8px', border: 'none',
+                                backgroundColor: '#128c7e', color: '#ffffff', fontSize: '13px', fontWeight: 700, cursor: 'pointer', textAlign: 'center',
+                                opacity: (!chosen.length || busy) ? 0.6 : 1
                             }}
                         >
-                            <span style={{ fontSize: '18px' }}>📤</span>
-                            <span>
-                                {preparingMedia ? 'Preparing…' : `2. Share Media (${totalMediaSelected}${totalPdfSelected ? ' + PDF' : ''}) via Share Sheet`}
-                            </span>
-                        </button>
-                    </div>
-
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                            {isAndroid ? '🤖 Android Share Sheet targets WhatsApp recent contacts' : hasWebShareFiles ? '📱 Web Share supported' : '💻 Desktop / Web Mode'}
-                        </span>
-                        <button
-                            type="button"
-                            onClick={onClose}
-                            disabled={preparingMedia}
-                            style={{
-                                background: 'none',
-                                border: 'none',
-                                color: 'var(--text-muted)',
-                                fontSize: '13px',
-                                cursor: 'pointer',
-                                padding: '4px 8px'
-                            }}
-                        >
-                            Close
+                            2️⃣ Step 2: Share Media & PDF (Share Sheet)
                         </button>
                     </div>
                 </div>
-            </div>
+
+                {inventories.map(inv => {
+                    const attachments = propertyAttachments(inv, apiBase);
+                    const selection = selections[inv.id] || EMPTY_ATTACHMENT_SELECTION;
+                    return <section className="personal-wa-property" key={inv.id}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                            <h3>{inv.display_id || inv.locality || inv.location || 'Property'}</h3>
+                            <div style={{ display: 'flex', gap: '6px' }}>
+                                <button type="button" onClick={() => update(inv.id, { urls: attachments.map(a => a.url), firstPhoto: attachments.find(a => a.kind === 'image')?.url || '', pdf: true })} style={{ fontSize: '11px', padding: '4px 8px' }}>Select All</button>
+                                <button type="button" onClick={() => update(inv.id, EMPTY_ATTACHMENT_SELECTION)} style={{ fontSize: '11px', padding: '4px 8px' }}>Deselect All</button>
+                            </div>
+                        </div>
+                        <div className="personal-wa-gallery">{attachments.map(item => <div className="personal-wa-card" key={item.url}>
+                            {item.kind === 'image' ? <img src={item.url} alt={item.label} loading="lazy" />
+                                : <video src={item.url} controls playsInline preload="metadata" aria-label={item.label} />}
+                            <label><input type="checkbox" checked={selection.urls.includes(item.url)} onChange={() => {
+                                const urls = selection.urls.includes(item.url) ? selection.urls.filter(url => url !== item.url) : [...selection.urls, item.url];
+                                const firstPhoto = urls.includes(selection.firstPhoto) ? selection.firstPhoto : attachments.find(a => a.kind === 'image' && urls.includes(a.url))?.url || '';
+                                update(inv.id, { ...selection, urls, firstPhoto });
+                            }} />{item.label}</label>
+                            {item.kind === 'image' && selection.urls.includes(item.url) && <label><input type="radio" name={`first-${inv.id}`} checked={selection.firstPhoto === item.url}
+                                onChange={() => update(inv.id, { ...selection, firstPhoto: item.url })} />First photo with details</label>}
+                        </div>)}</div>
+                        {!attachments.length && <p>No property media available.</p>}
+                        <label><input type="checkbox" checked={selection.pdf} onChange={e => update(inv.id, { ...selection, pdf: e.target.checked })} />Include property PDF</label>
+                        {selection.urls.length > 0 || selection.pdf ? <>
+                            <h4>{android ? 'Property details supplied as share text' : 'First photo/video caption'}</h4><pre>{caption(inv)}</pre>
+                            {android && <button type="button" onClick={() => copyDetails(caption(inv))}>Copy property details</button>}
+                            <p>{selection.urls.length} media selected{selection.pdf ? ' + PDF' : ''}. Prepared order: chosen first photo, remaining photos, videos{android ? '; PDF shared separately.' : ', PDF. Video-only details go on the first video.'}</p>
+                            {!selection.urls.length && !(android && androidMode === 'helper') && <p role="alert">Choose at least one photo or video.</p>}
+                        </> : <p>Select only the photos and videos you want to send.</p>}
+                    </section>;
+                })}
+            </fieldset>
+            {error && <p className="personal-wa-error" role="alert">{error}</p>}
+            <p role="status" aria-live="polite">{progress}</p>
+            {android && androidMode === 'manual' && loadedKey === idsKey && nativeSteps.length > 0 && <section aria-label="Prepared shares">
+                <h3>Step {nativeIndex + 1} of {nativeSteps.length}: {nativeSteps[nativeIndex].label} — {nativeSteps[nativeIndex].kind}</h3>
+                {phone && <p>Intended recipient: {phone}. Check this recipient inside WhatsApp.</p>}
+                <p>{nativeSteps[nativeIndex].files.length} files ready. No CRM sent record will be created.</p>
+                {handedOff && <p>Check the WhatsApp chat before sharing this step again to avoid duplicates.</p>}
+                <button type="button" onClick={shareNative} disabled={busy}>{busy ? 'Opening share sheet…' : handedOff ? 'Share this step again' : 'Share to WhatsApp'}</button>{' '}
+                {nativeIndex + 1 < nativeSteps.length && <button type="button" disabled={busy || !handedOff} onClick={() => {
+                    setNativeIndex(i => i + 1); setHandedOff(false); setProgress('Choose WhatsApp and the recipient again for this step.');
+                }}>I checked WhatsApp — next step</button>}
+            </section>}
+            {android && androidMode === 'helper' && <section aria-label="Android pilot share">
+                <p>Pilot status: {pilotState}. No CRM sent record will be created.</p>
+                {handoff && <><p>Recipient: {phone}. App: {sendingApp === 'com.whatsapp' ? 'WhatsApp' : 'WhatsApp Business'}. Expires at {new Date(handoff.expires_at).toLocaleTimeString()}.</p>
+                    <button type="button" disabled={pilotState === 'opened'} onClick={() => {
+                        if (Date.now() >= handoff.expires_at) { invalidate(); setPilotState('expired'); setProgress('Prepared share expired. Prepare again.'); return; }
+                        setPilotState('opened'); setProgress('Helper launch requested. Check your phone; CRM cannot confirm the app opened or that anything was sent.');
+                        // Keep capabilities out of DOM links and click breadcrumbs; launch synchronously from this user gesture.
+                        window.location.assign(androidHandoffLaunch(handoff.launch_token, navigator.userAgent));
+                    }}>{pilotState === 'opened' ? 'Launch requested — check your phone' : 'Open My WhatsApp'}</button>{' '}
+                    <button type="button" onClick={() => { invalidate(); setPilotState('cancelled'); setProgress('Prepared share cancelled. Any WhatsApp preview already open must be closed on your phone.'); }}>Cancel prepared share</button>
+                    {pilotState === 'opened' && <p>If the helper did not open, install/update it from setup, then cancel this share and prepare again. App installation cannot be detected reliably.</p>}
+                </>}
+            </section>}
+            {outcome && <div role="status">
+                <p>{outcome.status === 'sent' ? 'WhatsApp acknowledged all selected attachments. Recipient delivery is not confirmed.'
+                    : outcome.status === 'cancelled' ? 'Sharing cancelled. No attachments were sent.' : outcome.error || 'Check WhatsApp before sharing again.'}</p>
+                {outcome.results.map(item => <p key={item.key}>{item.filename}: {item.status === 'sent' ? 'acknowledged by WhatsApp' : 'not confirmed'}</p>)}
+            </div>}
+            <div className="personal-wa-actions"><button type="button" onClick={onClose} disabled={busy}>Close</button>
+                <button type="button" onClick={send} disabled={unsupportedMobile || busy || checking || !!outcome || !chosen.length || loadedKey !== idsKey || !!loadError || (android && (androidMode === 'helper' ? !!handoff : nativeSteps.length > 0))}>
+                    {busy ? 'Preparing / sharing…' : android ? androidMode === 'helper' ? 'Prepare selected-client pilot' : 'Prepare manual share attachments' : 'Review and send from my WhatsApp'}</button></div>
         </div>
-    );
+    </div>;
 }
